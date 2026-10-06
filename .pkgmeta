@@ -1,0 +1,6 @@
+package-as: Cinematic
+
+ignore:
+  - Media
+  - Release
+  - .gitignore

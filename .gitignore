@@ -4,3 +4,6 @@
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Packaged zips for uploading
+Release/
