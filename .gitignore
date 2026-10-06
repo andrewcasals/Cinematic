@@ -1,0 +1,6 @@
+# Editor and OS leftovers
+*.bak
+*.tmp
+.DS_Store
+Thumbs.db
+.vscode/

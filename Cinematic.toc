@@ -1,0 +1,17 @@
+## Interface: 120100, 50504, 40402, 38000, 20506, 16001, 11509, 11508
+## Title: Cinematic
+## Notes: Fades the UI and adds letterbox bars between fights for a more cinematic feel.
+## Author: Andrew Casals
+## Version: 1.0.0
+## SavedVariables: CinematicDB
+
+Core.lua
+Frames.lua
+Chat.lua
+Effects.lua
+Camera.lua
+Tint.lua
+Tracking.lua
+Slash.lua
+Options.lua
+MinimapButton.lua

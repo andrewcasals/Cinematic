@@ -1,0 +1,8 @@
+<Bindings>
+	<Binding name="CINEMATIC_TOGGLE" header="CINEMATIC" category="ADDONS">
+		Cinematic_Toggle()
+	</Binding>
+	<Binding name="CINEMATIC_PEEK" runOnUp="true" category="ADDONS">
+		Cinematic_Peek(keystate == "down")
+	</Binding>
+</Bindings>
