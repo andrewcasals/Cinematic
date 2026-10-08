@@ -5,6 +5,11 @@
 
 local ADDON_NAME, ns = ...
 
+-- Retail (the main game) rather than a Classic client such as WoW Forever.
+-- Most differences are handled by checking whether an API or frame exists;
+-- this is for the few that differ by design (data files, retail-only options).
+ns.isRetail = WOW_PROJECT_ID ~= nil and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
+
 BINDING_HEADER_CINEMATIC = "Cinematic"
 BINDING_NAME_CINEMATIC_TOGGLE = "Cinematic: Toggle cinematic mode"
 BINDING_NAME_CINEMATIC_PEEK = "Cinematic: Peek at UI (hold)"
@@ -62,6 +67,7 @@ local DEFAULTS = {
 	tintPreviewHour = -1,  -- options-page preview of the time-of-day tint at this hour (-1 = now)
 	fadeChat = true,
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
+	alwaysShowWaypoint = false, -- keep retail's quest waypoint visible in cinematic mode
 	minimapForTracking = true, -- master switch for the minimapFor* tracking options below
 	minimapForHerbs = true,    -- keep the minimap visible while this tracking is active
 	minimapForMinerals = true,
@@ -295,6 +301,7 @@ DEFAULTS.idleOrbitStep = 40
 DEFAULTS.idleOrbitRandomDir = true -- pick clockwise or not afresh each time it starts
 DEFAULTS.debugCameraMode = false   -- print each camera mode change to chat
 DEFAULTS.debugFlyBy = false        -- print each fly-by's plan, start and end (/cine debug flybys)
+DEFAULTS.logDetail = false         -- also log game setting saves and restores, and music (/cine debug record)
 -- RP walking (moving in walk mode): its own page. The rotation is always
 -- "behind only" (walkOrbit* minus the mode), plus its own gentle zoom.
 DEFAULTS.walkOrbit = true          -- sway the camera behind you while walking
@@ -460,6 +467,7 @@ local peeking = false
 
 function ns.Print(msg)
 	print("|cffe0b050Cinematic:|r " .. msg)
+	ns.Log("chat", msg)
 end
 
 local function AnyShown(names)
@@ -586,6 +594,15 @@ local CITY_AREA_IDS = {
 	1638,        -- Thunder Bluff
 	1497,        -- Undercity
 	16544, 16560, -- City of Dalaran
+	-- Retail
+	15969,       -- Silvermoon City
+	3557,        -- The Exodar
+	3703,        -- Shattrath City
+	4395, 7502,  -- Dalaran (Northrend, Broken Isles)
+	8568, 8670,  -- Boralus, Dazar'alor
+	10565,       -- Oribos
+	13862,       -- Valdrakken
+	14771,       -- Dornogal
 }
 
 function ns.IsInCity()
@@ -710,9 +727,11 @@ function ns.ApplyCVarSet(set, want)
 				if ns.db.savedCVars[cvar] == nil then
 					ns.db.savedCVars[cvar] = original
 				end
+				ns.LogDetail("cvar", ("%s %s -> %s"):format(cvar, tostring(original), tostring(value)))
 				SetCVar(cvar, value)
 			end
 		elseif ns.db.savedCVars[cvar] ~= nil then
+			ns.LogDetail("cvar", ("%s back to %s"):format(cvar, tostring(ns.db.savedCVars[cvar])))
 			SetCVar(cvar, ns.db.savedCVars[cvar])
 			ns.db.savedCVars[cvar] = nil
 		end
@@ -729,6 +748,7 @@ local function RestoreSavedCVars()
 			local now = GetCVar(cvar)
 			local same = now == value or (tonumber(now) ~= nil and tonumber(now) == tonumber(value))
 			if not same then
+				ns.Log("cvar", ("%s put back to %s (left over)"):format(cvar, tostring(value)))
 				SetCVar(cvar, value)
 			end
 			ns.db.savedCVars[cvar] = nil
@@ -747,12 +767,14 @@ end
 function ns.SaveCVar(cvar)
 	if ns.db.savedCVars[cvar] == nil then
 		ns.db.savedCVars[cvar] = GetCVar(cvar)
+		ns.LogDetail("cvar", ("%s saved (%s)"):format(cvar, tostring(ns.db.savedCVars[cvar])))
 	end
 end
 
 function ns.RestoreCVar(cvar)
 	local value = ns.db.savedCVars[cvar]
 	if value ~= nil then
+		ns.LogDetail("cvar", ("%s back to %s"):format(cvar, tostring(value)))
 		SetCVar(cvar, value)
 		ns.db.savedCVars[cvar] = nil
 	end
@@ -763,11 +785,36 @@ local accumulated = 0
 local sinceScan = 0
 local TICK = 0.03
 
+-- Each step of the update runs protected: an error in one (the music, say)
+-- is logged and the rest carry on, and one that keeps repeating stops the
+-- addon for the session (see ns.ReportError in Diagnostics.lua).
+local stepFn, stepA, stepB, stepStack
+local function RunStep()
+	return stepFn(stepA, stepB)
+end
+local function StepHandler(err)
+	stepStack = debugstack(2)
+	return err
+end
+local function Step(fn, a, b)
+	if ns.IsSuspended() then
+		return nil -- stopped by an earlier step this tick: leave the rest
+	end
+	stepFn, stepA, stepB = fn, a, b
+	local ok, result = xpcall(RunStep, StepHandler)
+	stepFn, stepA, stepB = nil, nil, nil
+	if not ok then
+		ns.ReportError(result, stepStack, true)
+		return nil
+	end
+	return result
+end
+
 -- The orbit changes camera speed continuously, so it runs every frame; on the
 -- throttled tick its speed would change in visible steps.
 ns.orbitFrame = CreateFrame("Frame")
 local function OnOrbitUpdate(_, elapsed)
-	ns.UpdateOrbit(ns.lastCinematic, elapsed)
+	Step(ns.UpdateOrbit, ns.lastCinematic, elapsed)
 end
 
 -- Set at login (and on turning it on) when "start in cinematic mode" is on: the first cinematic tick
@@ -783,34 +830,149 @@ local function OnUpdate(_, elapsed)
 	end
 	elapsed, accumulated = accumulated, 0
 
+	-- A stop that came mid-glide (see PLAYER_STOPPED_MOVING): once the glide
+	-- ends, stop for real if you're not moving any more.
+	if ns.stopWhileGliding and not ns.GlidingSpeed() then
+		ns.stopWhileGliding = nil
+		if IsPlayerMoving and not IsPlayerMoving() then
+			ns.playerMoving = false
+			ns.autoRunning = false
+		end
+	end
+
 	-- Some frames (like the damage meter) are created on demand, so keep looking.
 	sinceScan = sinceScan + elapsed
 	if sinceScan >= ns.SCAN_INTERVAL then
 		sinceScan = 0
-		ns.BuildManagedList()
-		if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
+		Step(ns.BuildManagedList)
+		if ns.UpdateMinimapButton then Step(ns.UpdateMinimapButton) end
 	end
 
-	UpdateDroppedTarget()
-	local cinematic = ShouldBeCinematic(GetTime())
+	Step(UpdateDroppedTarget)
+	local cinematic = Step(ShouldBeCinematic, GetTime()) or false -- (an error: the normal UI)
 	if cinematic and GetTime() < startSnapUntil then
 		-- Start in cinematic mode: hide the UI at once instead of fading. The
 		-- letterbox bars still slide in at their usual pace.
 		startSnapUntil = 0
 		for _, entry in ipairs(ns.managed) do
-			ns.SetEntryAlpha(entry, 0)
+			Step(ns.SetEntryAlpha, entry, 0)
 		end
 	end
-	ns.UpdateFrames(cinematic, elapsed)
-	ns.UpdateLetterbox(cinematic, elapsed)
-	ns.UpdateTint(cinematic, elapsed)
-	ns.UpdateCVars(cinematic)
-	ns.UpdateMusic(cinematic, elapsed)
-	ns.UpdateAmbience(cinematic, elapsed)
-	ns.UpdatePlates(cinematic, elapsed)
-	ns.UpdateTooltip()
-	ns.UpdateTaxi()
-	ns.lastCinematic = cinematic
+	if cinematic ~= ns.lastCinematic then
+		ns.Log("state", cinematic and "cinematic" or "normal UI")
+	end
+	Step(ns.UpdateFrames, cinematic, elapsed)
+	Step(ns.UpdateLetterbox, cinematic, elapsed)
+	Step(ns.UpdateTint, cinematic, elapsed)
+	Step(ns.UpdateCVars, cinematic)
+	Step(ns.UpdateMusic, cinematic, elapsed)
+	Step(ns.UpdateAmbience, cinematic, elapsed)
+	Step(ns.UpdatePlates, cinematic, elapsed)
+	Step(ns.UpdateTooltip)
+	Step(ns.UpdateTaxi)
+	if not ns.IsSuspended() then
+		ns.lastCinematic = cinematic
+	end
+end
+
+-- The safety net: put everything the addon changes back as it was, each part
+-- on its own so one that fails doesn't stop the rest. Used when an error keeps
+-- repeating and by /cine panic.
+local function Try(fn, ...)
+	if fn then
+		local ok, err = pcall(fn, ...)
+		if not ok then
+			ns.Log("safety", "a restore step failed: " .. tostring(err))
+		end
+	end
+end
+
+local function RestoreEverything()
+	-- The camera: stop any turn or zoom in progress.
+	Try(ns.StopOrbitNow)
+	Try(ns.StopIdleZoomNow)
+	Try(ns.CancelDeathZoom)
+	for _, name in ipairs({ "MoveViewLeftStop", "MoveViewRightStop", "MoveViewUpStop", "MoveViewDownStop",
+		"MoveViewInStop", "MoveViewOutStop" }) do
+		Try(_G[name])
+	end
+	-- Sound, names and nameplates.
+	Try(ns.UpdateCVars, false)
+	Try(ns.StopMusicNow)
+	Try(ns.StopCombatMusicNow)
+	Try(ns.StopAmbienceNow)
+	Try(ns.ShowPlatesNow)
+	Try(ns.ApplyCVarSet, ns.FLIGHT_CVARS, false)
+	Try(ns.ApplyCVarSet, ns.RECENTER_CVARS, false)
+	-- The UI: every faded frame back, the bars and tint off (hidden outright
+	-- if their own update is what's failing).
+	for _, entry in ipairs(ns.managed or {}) do
+		Try(ns.SetEntryAlpha, entry, 1)
+	end
+	if not pcall(ns.UpdateLetterbox, false, 1e6) and ns.letterbox then
+		ns.letterbox:Hide()
+	end
+	if not pcall(ns.UpdateTint, false, 1e6) and _G.CinematicTint then
+		_G.CinematicTint:Hide()
+	end
+	if _G.CinematicFocus then
+		_G.CinematicFocus:Hide()
+	end
+	Try(GameTooltip.SetAlpha, GameTooltip, 1)
+	if not UIParent:IsShown() then
+		Try(ns.ToggleUI) -- hidden with the Hide the UI key
+	end
+	-- Anything still held (a game setting the parts above didn't cover).
+	Try(RestoreSavedCVars)
+	ns.lastCinematic = false
+end
+
+-- Stopped for the session (ns.Suspend), until /cine resume.
+local started, suspended = false, false
+local combatRetry = CreateFrame("Frame")
+combatRetry:SetScript("OnEvent", function(self)
+	self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+	if suspended then
+		RestoreEverything() -- nameplate settings can only change out of combat
+	end
+end)
+
+function ns.IsSuspended()
+	return suspended
+end
+
+function ns.Suspend(reason)
+	if suspended then
+		return
+	end
+	suspended = true
+	ticker:SetScript("OnUpdate", nil)
+	ns.orbitFrame:SetScript("OnUpdate", nil)
+	RestoreEverything()
+	if InCombatLockdown() then
+		combatRetry:RegisterEvent("PLAYER_REGEN_ENABLED")
+	end
+	ns.Log("safety", "stopped: " .. reason)
+	ns.Print(("|cffff4040stopped for this session|r (%s) and put your UI and settings back. " ..
+		"/cine log has the details for a bug report; /cine resume starts it again."):format(reason))
+end
+
+function ns.Resume()
+	if not suspended then
+		return false
+	end
+	suspended = false
+	ns.ResetErrorWindows()
+	lastBusy = GetTime()
+	ns.letterboxDirty = true
+	if ns.RefreshTint then ns.RefreshTint() end
+	if _G.CinematicFocus then _G.CinematicFocus:Show() end
+	if started then
+		ticker:SetScript("OnUpdate", OnUpdate)
+		ns.orbitFrame:SetScript("OnUpdate", OnOrbitUpdate)
+	end
+	ns.Log("safety", "resumed")
+	return true
 end
 
 -- Global entry points for Bindings.xml
@@ -827,6 +989,9 @@ end
 function Cinematic_Toggle()
 	ns.SetEnabled(not ns.db.enabled)
 	ns.Print(ns.db.enabled and "enabled" or "disabled")
+	if ns.IsSuspended() then
+		ns.Print("(still stopped after an error: /cine resume starts it again)")
+	end
 end
 
 function Cinematic_FlyBy()
@@ -899,7 +1064,6 @@ local function EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
 	ns.db.savedCVars = ns.db.savedCVars or {}
-	ns.db.musicTrace = ns.db.musicTrace or {} -- temporary: see MusicTrace in Effects.lua
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
 	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = true, LocalDefense = true }
 	ns.db.flightTimes = ns.db.flightTimes or {}
@@ -935,7 +1099,25 @@ ns.DEFAULTS = DEFAULTS
 -- Walking is 2.5, running backwards 4.5, running 7.
 local WALK_SPEED_MAX = 3.5
 local AUTORUN_INFER_AFTER = 1 -- seconds of moving with no movement key held = auto-run
+-- Skyriding (retail): your speed through the air while gliding, else nil.
+-- The usual speed reading and the moving/stopped events don't follow a glide
+-- well, so the gliding info is asked instead.
+function ns.GlidingSpeed()
+	if not (C_PlayerInfo and C_PlayerInfo.GetGlidingInfo) then
+		return nil
+	end
+	local ok, gliding, _, speed = pcall(C_PlayerInfo.GetGlidingInfo)
+	if not ok or (issecretvalue and (issecretvalue(gliding) or issecretvalue(speed))) or not gliding then
+		return nil
+	end
+	return type(speed) == "number" and speed or 0
+end
+
 function ns.GetPlayerSpeed()
+	local gliding = ns.GlidingSpeed()
+	if gliding and gliding > 0 then
+		return gliding
+	end
 	local ok, speed = pcall(GetUnitSpeed, "player")
 	if not ok or speed == nil or (issecretvalue and issecretvalue(speed)) then
 		return nil
@@ -1312,6 +1494,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db[k] == nil then ns.db[k] = v end
 		end
 		EnsureTables()
+		ns.InitLog()
 		SLASH_CINEMATIC1 = "/cine"
 		SLASH_CINEMATIC2 = "/cinematic"
 		SlashCmdList.CINEMATIC = ns.HandleSlash
@@ -1395,8 +1578,11 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		ns.CreateLetterbox()
 		ns.CreateTint()
 		lastBusy = GetTime()
-		self:SetScript("OnUpdate", OnUpdate)
-		ns.orbitFrame:SetScript("OnUpdate", OnOrbitUpdate)
+		started = true
+		if not suspended then
+			self:SetScript("OnUpdate", OnUpdate)
+			ns.orbitFrame:SetScript("OnUpdate", OnOrbitUpdate)
+		end
 	elseif event == "LOADING_SCREEN_DISABLED" then
 		ns.stillSince = nil -- the AFK timer starts once you can see the world
 	elseif event == "PLAYER_ENTERING_WORLD" then
@@ -1447,8 +1633,14 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		ns.playerMoving = true
 		ns.movingSince = GetTime()
 	elseif event == "PLAYER_STOPPED_MOVING" then
-		ns.playerMoving = false
-		ns.autoRunning = false -- auto-run ends when you stop
+		if ns.GlidingSpeed() then
+			-- Skyriding: this can come mid-glide. You're still flying (on
+			-- auto-run, say), so carry on; the tick checks again once you land.
+			ns.stopWhileGliding = true
+		else
+			ns.playerMoving = false
+			ns.autoRunning = false -- auto-run ends when you stop
+		end
 	elseif event == "NAME_PLATE_UNIT_ADDED" then
 		-- New plates start fully visible; match them to the current fade and
 		-- the Nameplates page's choices.

@@ -6,12 +6,14 @@
 ## X-Curse-Project-ID: 1730730
 ## SavedVariables: CinematicDB
 
+Diagnostics.lua
 Core.lua
 HideUI.lua
 Frames.lua
 Chat.lua
 Effects.lua
 FlightTimes.lua
+FlightTimes_Retail.lua
 Camera.lua
 QuestCam.lua
 Tint.lua

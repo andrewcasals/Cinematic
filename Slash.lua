@@ -1,6 +1,18 @@
 -- Cinematic: the /cine slash commands.
 local _, ns = ...
 
+-- What the commands print goes in the log too (/cine log), so troubleshooting
+-- output can be sent in one paste. The help lists are left out.
+local logPrints = true
+local function print(...)
+	if logPrints then
+		local parts = {}
+		for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+		ns.Log("cmd", table.concat(parts, " "))
+	end
+	_G.print(...)
+end
+
 local function OnOff(value)
 	return value and "|cff40ff40on|r" or "|cffff4040off|r"
 end
@@ -61,6 +73,7 @@ local function Heading(text)
 end
 
 local function PrintHelp()
+	logPrints = false
 	ns.Print("commands")
 	Heading("General")
 	print("  /cine - toggle cinematic mode (also /cine on, /cine off)")
@@ -88,11 +101,17 @@ local function PrintHelp()
 	end
 	Heading("More")
 	print("  /cine debug help - troubleshooting commands")
+	print("  /cine log - copy the log and your setup for a bug report (/cine log clear empties it)")
+	print("  /cine panic - stop for this session and put your UI and settings back (/cine resume to restart)")
 	print("  Keybinds (toggle, hold-to-peek, hide the UI, fly-by) are on the Keybinds settings page.")
+	logPrints = true
 end
 
 local function PrintDebugHelp()
 	ns.Print("troubleshooting commands")
+	logPrints = false
+	print("  /cine log - copy the log for a bug report: what's printed below goes in it too")
+	print("  /cine debug record - also log game setting changes and music in detail (again to stop)")
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
@@ -127,19 +146,45 @@ local function PrintDebugHelp()
 	print("  /cine timetest [name] - show the time-of-day change title now (all: each in turn)")
 	print("  /cine soundtest <id> - play a game sound by its ID (stops after 10 seconds)")
 	print("  /cine songtest [file ID] - play a random death song, or any music file (again to stop)")
+	logPrints = true
 end
 
 function ns.HandleSlash(msg)
 	local cmd, arg = msg:lower():match("^%s*(%S*)%s*(.-)%s*$")
 	local num = tonumber(arg)
+	if cmd ~= "log" then
+		ns.Log("cmd", "/cine " .. msg)
+	end
 
-	if cmd == "" or cmd == "toggle" then
+	if cmd == "log" then
+		if arg == "clear" then
+			ns.ClearLog()
+			ns.Print("log cleared")
+		else
+			ns.ShowLog()
+		end
+	elseif cmd == "panic" then
+		if ns.IsSuspended() then
+			ns.Print("already stopped: /cine resume starts it again")
+		else
+			ns.Suspend("/cine panic")
+		end
+	elseif cmd == "resume" then
+		ns.Print(ns.Resume() and "started again" or "isn't stopped")
+	elseif cmd == "debug" and arg == "record" then
+		ns.db.logDetail = not ns.db.logDetail
+		ns.Print("detailed logging (game settings, music): " .. OnOff(ns.db.logDetail) ..
+			(ns.db.logDetail and ". Reproduce the problem, then /cine log." or ""))
+	elseif cmd == "" or cmd == "toggle" then
 		Cinematic_Toggle()
 	elseif cmd == "config" or cmd == "options" then
 		ns.OpenOptions()
 	elseif cmd == "on" or cmd == "off" then
 		ns.SetEnabled(cmd == "on")
 		ns.Print(ns.db.enabled and "enabled" or "disabled")
+		if ns.IsSuspended() then
+			ns.Print("(still stopped after an error: /cine resume starts it again)")
+		end
 	elseif cmd == "delay" and num and num >= 0 then
 		ns.db.delay = num
 		ns.Print("fade delay set to " .. num .. "s")

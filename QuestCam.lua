@@ -576,6 +576,9 @@ local function OnEvent(_, event)
 end
 
 local function OnUpdate(_, elapsed)
+	if ns.IsSuspended() then
+		return -- stopped after an error (Diagnostics.lua)
+	end
 	local now = GetTime()
 	-- (The moves carry on after the window closes, going back.)
 	StepMove(movers.yaw, elapsed)

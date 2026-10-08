@@ -67,8 +67,12 @@ local ZONE_MOODS = {
 	golden = { { 1, 0.9, 0.7 }, "Golden" },      -- warm harvest gold
 	autumn = { { 1, 0.88, 0.76 }, "Autumn" },    -- rust and amber, red rock and turning leaves
 	summer = { { 0.95, 0.97, 0.96 }, "Summer" }, -- clear and fresh, tames red ground, keeps blue skies
+	fel = { { 0.84, 1, 0.76 }, "Fel" },          -- sickly bright green, demon-scorched land
+	void = { { 0.84, 0.76, 0.96 }, "Void" },     -- deeper violet than twilight
 }
--- Zones by area ID, so names match in any client language.
+-- Zones by area ID, so names match in any client language. IDs a client
+-- doesn't have are skipped, so retail's zones sit here too. Matching is by
+-- name, so zones that share one (the two Nagrands) share a mood.
 local ZONE_AREA_IDS = {
 	[1] = "snow", [618] = "snow", [36] = "snow",                       -- Dun Morogh, Winterspring, Alterac Mountains
 	[440] = "desert", [1377] = "desert", [3] = "desert",               -- Tanaris, Silithus, Badlands
@@ -95,10 +99,78 @@ local ZONE_AREA_IDS = {
 	[148] = "moonlit", [493] = "twilight",                             -- Darkshore, Moonglade
 	[357] = "swamp",                                                   -- Feralas
 	[16] = "autumn",                                                   -- Azshara
+	-- Retail: zones split or renamed since Classic
+	[4709] = "savanna",                                                -- Southern Barrens
+	[5339] = "swamp", [5287] = "swamp",                                -- Stranglethorn Vale, The Cape of Stranglethorn
+	[4706] = "gloomy", [4714] = "forest",                              -- Ruins of Gilneas, Gilneas (worgen start)
+	[616] = "forest",                                                  -- Mount Hyjal
+	-- The Burning Crusade
+	[3483] = "dusty", [3522] = "dusty",                                -- Hellfire Peninsula, Blade's Edge Mountains
+	[3521] = "twilight", [3523] = "twilight",                          -- Zangarmarsh, Netherstorm
+	[3519] = "autumn",                                                 -- Terokkar Forest
+	[3518] = "summer",                                                 -- Nagrand (Outland; same name as Draenor's)
+	[3520] = "moonlit",                                                -- Shadowmoon Valley (Outland; same name as Draenor's)
+	[3703] = "hearth",                                                 -- Shattrath City
+	[3433] = "gloomy",                                                 -- Ghostlands
+	[4080] = "airy",                                                   -- Isle of Quel'Danas
+	[3524] = "summer", [3525] = "dusty", [3557] = "twilight",          -- Azuremyst Isle, Bloodmyst Isle, The Exodar
+	-- Wrath of the Lich King
+	[3537] = "snow", [65] = "snow", [67] = "snow", [4197] = "snow",    -- Borean Tundra, Dragonblight, The Storm Peaks, Wintergrasp
+	[210] = "moonlit",                                                 -- Icecrown
+	[394] = "forest", [3711] = "swamp",                                -- Grizzly Hills, Sholazar Basin
+	[66] = "gloomy",                                                   -- Zul'Drak
+	[2817] = "twilight", [4395] = "twilight",                          -- Crystalsong Forest, Dalaran (Northrend)
+	-- Cataclysm
+	[5034] = "desert", [5733] = "volcanic",                            -- Uldum, Molten Front
+	[5095] = "gloomy", [5389] = "gloomy",                              -- Tol Barad, Tol Barad Peninsula
+	[4737] = "summer", [4720] = "swamp",                               -- Kezan, The Lost Isles
+	-- Mists of Pandaria
+	[5785] = "forest", [5805] = "golden",                              -- The Jade Forest, Valley of the Four Winds
+	[6134] = "swamp", [6661] = "swamp",                                -- Krasarang Wilds, Isle of Giants
+	[5841] = "snow", [5842] = "savanna",                               -- Kun-Lai Summit, Townlong Steppes
+	[6138] = "sickly", [5840] = "hearth",                              -- Dread Wastes, Vale of Eternal Blossoms
+	[6507] = "gloomy",                                                 -- Isle of Thunder
+	[6757] = "summer", [5736] = "summer",                              -- Timeless Isle, The Wandering Isle
+	-- Warlords of Draenor
+	[6720] = "snow", [6721] = "dusty",                                 -- Frostfire Ridge, Gorgrond
+	[6662] = "autumn", [6722] = "autumn",                              -- Talador, Spires of Arak
+	[6719] = "moonlit", [6755] = "summer",                             -- Shadowmoon Valley (Draenor), Nagrand (Draenor)
+	[6723] = "fel",                                                    -- Tanaan Jungle
+	-- Legion
+	[7334] = "autumn", [7558] = "forest",                              -- Azsuna, Val'sharah
+	[7503] = "summer", [7541] = "gloomy",                              -- Highmountain, Stormheim
+	[7637] = "twilight", [7502] = "twilight",                          -- Suramar, Dalaran (Broken Isles)
+	[7543] = "fel",                                                    -- Broken Shore
+	[8574] = "fel", [8899] = "fel", [8701] = "twilight",               -- Krokuun, Antoran Wastes, Eredath (Argus)
+	-- Battle for Azeroth
+	[8567] = "summer", [9042] = "summer", [8721] = "autumn",           -- Tiragarde Sound, Stormsong Valley, Drustvar
+	[8499] = "swamp", [8500] = "swamp", [8501] = "desert",             -- Zuldazar, Nazmir, Vol'dun
+	[10052] = "moonlit", [10290] = "dusty",                            -- Nazjatar, Mechagon
+	-- Shadowlands
+	[10534] = "airy", [11462] = "sickly",                              -- Bastion, Maldraxxus
+	[11510] = "twilight", [10413] = "dusky",                           -- Ardenweald, Revendreth
+	[11400] = "gloomy", [13570] = "gloomy",                            -- The Maw, Korthia
+	[13536] = "airy",                                                  -- Zereth Mortis
+	-- Dragonflight
+	[13644] = "autumn", [13645] = "summer",                            -- The Waking Shores, Ohn'ahran Plains
+	[13646] = "snow", [13647] = "airy",                                -- The Azure Span, Thaldraszus
+	[14022] = "forge",                                                 -- Zaralek Cavern
+	[14529] = "forest", [15105] = "forest",                            -- Emerald Dream, Amirdrassil
+	-- The War Within
+	[14717] = "summer", [14795] = "forge",                             -- Isle of Dorn, The Ringing Deeps
+	[14838] = "golden", [14752] = "void",                              -- Hallowfall, Azj-Kahet
+	[15347] = "forge", [16093] = "forge",                              -- Undermine (two IDs, one name)
+	[10416] = "gloomy", [15336] = "void",                              -- Siren Isle, K'aresh
+	-- Midnight
+	[15968] = "golden", [15969] = "hearth",                            -- Eversong Woods, Silvermoon City
+	[16215] = "airy",                                                  -- Isle of Quel'Danas (Midnight)
+	[15947] = "forest",                                                -- Zul'Aman
+	[15355] = "twilight",                                              -- Harandar
+	[16648] = "void",                                                  -- Voidstorm
 }
 -- Mood order for the options page.
 local ZONE_MOOD_ORDER = { "snow", "desert", "savanna", "swamp", "blight", "volcanic", "forest", "dusky", "forge", "hearth", "dusty",
-	"sickly", "airy", "moonlit", "gloomy", "twilight", "golden", "autumn", "summer" }
+	"sickly", "airy", "moonlit", "gloomy", "twilight", "golden", "autumn", "summer", "fel", "void" }
 -- At a border the old mood fades out, there's a pause with no mood (the land
 -- either side blends for a while, and snow under an ember tint looks red), then
 -- the new mood fades in. The pause is longer in the air, where you see

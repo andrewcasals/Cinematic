@@ -2600,8 +2600,14 @@ local function CreateCombatPanel()
 		heading:SetPoint("TOPLEFT", columnTop, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
 	end
 
+	local rows = {} -- the frames this client has
+	for _, item in ipairs(ns.COMBAT_SHOW) do
+		if ns.OptionAvailable(item) then
+			rows[#rows + 1] = item
+		end
+	end
 	local lastLabel
-	for r, item in ipairs(ns.COMBAT_SHOW) do
+	for r, item in ipairs(rows) do
 		local y = -16 - (r - 1) * ROW_HEIGHT
 		local rowLabel = Label(content, "GameFontHighlight", item.label)
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
@@ -3051,6 +3057,16 @@ local function CreateFramesPanel()
 		"Keeps the whole minimap visible in cinematic mode: the map, its ring, zone text " ..
 		"and the Cinematic button.")
 	content.alwaysMinimap:SetPoint("TOPLEFT", keepHelp, "BOTTOMLEFT", -2, -10)
+	local aboveTracking = content.alwaysMinimap
+
+	-- Retail's quest waypoint (the marker in the world showing where to go).
+	if ns.OptionAvailable({ retail = true }) then
+		local waypoint = Check(content, "alwaysShowWaypoint", "Always show the quest waypoint",
+			"Keeps the marker showing where your tracked quest or map pin is, with its " ..
+			"distance, visible in cinematic mode. Off, it fades with the rest of the UI.")
+		waypoint:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
+		aboveTracking = waypoint
+	end
 
 	-- Or only while tracking; the kinds of tracking below only apply while it's on.
 	local trackingMaster = Check(content, "minimapForTracking", "Keep minimap open while tracking",
@@ -3059,7 +3075,7 @@ local function CreateFramesPanel()
 			ns.GetDB().minimapForTracking = value
 			Refresh()
 		end)
-	trackingMaster:SetPoint("TOPLEFT", content.alwaysMinimap, "BOTTOMLEFT", 0, -2)
+	trackingMaster:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
 	local TRACKING_TIP = "While this tracking is active, the minimap stays up during cinematic " ..
 		"mode so you can spot nodes or creatures."
 	local previousTracking = trackingMaster

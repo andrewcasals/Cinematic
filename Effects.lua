@@ -121,24 +121,19 @@ local musicWritten
 -- When the addon last started music this session (for music fatigue).
 local musicStartedAt
 
--- Music trace (temporary, for tracking down the music volume left at 0): every
--- write to the music volume or on/off, with who made it, kept in the saved
--- settings (musicTrace) so it can be read after a /reload. The addon's own fade
--- steps are only logged when they reach or leave 0.
-local MUSIC_TRACE_MAX = 300
+-- Music trace (for tracking down the music volume left at 0): every write to
+-- the music volume or on/off, with who made it, in the log while detailed
+-- logging is on (/cine debug record). The addon's own fade steps are only
+-- logged when they reach or leave 0.
 local fadeWriting, lastFadeZero = false, nil
 
 local function MusicTrace(text)
-	if not (ns.db and ns.db.musicTrace) then
+	if not (ns.db and ns.db.logDetail) then
 		return
 	end
-	local trace = ns.db.musicTrace
-	trace[#trace + 1] = ("%s %.1f %s | managing %s saved %s written %s"):format(date("%H:%M:%S"), GetTime(),
-		text, tostring(ns.music.managing), tostring(ns.db.savedCVars and ns.db.savedCVars.Sound_MusicVolume),
-		tostring(musicWritten))
-	while #trace > MUSIC_TRACE_MAX do
-		table.remove(trace, 1)
-	end
+	ns.Log("music", ("%.1f %s | managing %s saved %s written %s"):format(GetTime(), text,
+		tostring(ns.music.managing), tostring(ns.db.savedCVars and ns.db.savedCVars.Sound_MusicVolume),
+		tostring(musicWritten)))
 end
 ns.MusicTrace = MusicTrace
 

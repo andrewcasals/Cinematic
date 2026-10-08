@@ -13,7 +13,7 @@ local FRAME_GROUPS = {
 		"PetActionBarFrame", "PetActionBar", "PossessBarFrame", "PossessActionBar",
 		"MicroButtonAndBagsBar", "MicroMenuContainer", "BagsBar",
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
-		"StatusTrackingBarManager",
+		"StatusTrackingBarManager", "ExtraActionBarFrame", "ZoneAbilityFrame",
 	},
 	sidebars = { "MultiBarLeft", "MultiBarRight" },
 	player = { "PlayerFrame", "PetFrame", "TotemFrame" },
@@ -30,6 +30,9 @@ local FRAME_GROUPS = {
 	misc = { "DurabilityFrame" },
 	swing = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" },
 	meters = { "DamageMeter" },
+	-- Retail's quest waypoint: the marker in the world, with its distance,
+	-- that shows where a tracked quest or map pin is.
+	waypoint = { "SuperTrackedFrame" },
 	chat = {
 		"GeneralDockManager", "ChatFrameMenuButton", "ChatFrameChannelButton",
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
@@ -93,10 +96,11 @@ local function AddFrame(frame, group)
 	ns.managed[#ns.managed + 1] = entry
 
 	-- Chat frames manage their own alpha (the input bar sits faint until you
-	-- press Enter). Track the alpha Blizzard last asked for, fade relative to
-	-- it, and return to it rather than to fully opaque. Only chat frames are
-	-- hooked, to keep away from protected frames like action bars.
-	if group == "chat" then
+	-- press Enter), and so does the waypoint (it dims as you look past it).
+	-- Track the alpha Blizzard last asked for, fade relative to it, and return
+	-- to it rather than to fully opaque. Only these are hooked, to keep away
+	-- from protected frames like action bars.
+	if group == "chat" or group == "waypoint" then
 		entry.baseAlpha = frame:GetAlpha()
 		hooksecurefunc(frame, "SetAlpha", function(self, alpha)
 			if entry.settingAlpha then
@@ -392,7 +396,7 @@ ns.COMBAT_SHOW = {
 		"MultiCastSlotButton3", "MultiCastSlotButton4",
 		"MultiCastActionPage1", "MultiCastActionPage2", "MultiCastActionPage3", "TotemFrame",
 	} },
-	{ key = "swing", label = "Swing timer", default = true,
+	{ key = "swing", label = "Swing timer", default = true, retail = false,
 		frames = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
 	{ key = "micro", label = "Micro menu and bags", default = true,
 		frames = { "MicroButtonAndBagsBar", "MicroMenuContainer", "BagsBar" } },
@@ -400,7 +404,29 @@ ns.COMBAT_SHOW = {
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
 		"StatusTrackingBarManager",
 	} },
+	{ key = "extra", label = "Extra action and zone ability", default = true, retail = true,
+		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
 }
+
+-- Whether an option belongs on this client, for the options pages to skip
+-- the rest: retail = true or false limits it to retail or to Classic clients.
+-- Otherwise an option about frames needs one of them to exist. (Frames made
+-- later, like the swing timer, are marked by client instead, since the pages
+-- are built as the addon loads.)
+function ns.OptionAvailable(item)
+	if item.retail ~= nil then
+		return item.retail == ns.isRetail
+	end
+	if item.frames then
+		for _, name in ipairs(item.frames) do
+			if _G[name] then
+				return true
+			end
+		end
+		return false
+	end
+	return true
+end
 
 -- When an enemy is targeted out of combat, a separate list applies
 -- (db.targetShow); by default just the target and its target.
@@ -408,7 +434,7 @@ local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
 	player = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
-	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true,
+	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
 }
 
 function ns.IsCombatShowOn(key)
@@ -728,9 +754,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 		local target = 1
 		local chatShowing = (ns.chatPeekUntil[entry.frame] or 0) > now
 			or (typing and entry.group == "chat")
-		local tracking = (ns.db.alwaysShowMinimap
+		local tracking = ((ns.db.alwaysShowMinimap
 				or (ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused))
-			and entry.group == "minimap"
+			and entry.group == "minimap")
+			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
 		local fightingShown = combatShown and entry.name and combatShown[entry.name]
 		if not fightingShown and entry.group == "buffs" and cinematic and buffPeekUntil > now then
 			fightingShown = true -- new or refreshed aura: show buffs briefly, normal fade speeds
@@ -780,6 +807,7 @@ end
 -- the ten mostly unused chat frame slots don't clutter the list.
 local GROUP_LABELS = {}
 for _, group in ipairs(ns.HOVER_GROUPS) do GROUP_LABELS[group[1]] = group[2] end
+GROUP_LABELS.waypoint = "Quest waypoint" -- (no hover settings of its own)
 
 local function IsBuiltInName(name)
 	if name:find("^ChatFrame%d+$") or name:find("^ChatFrame%d+EditBox$") then

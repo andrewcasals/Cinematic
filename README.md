@@ -1,6 +1,6 @@
 # Cinematic
 
-Make WoW Forever's Azeroth feel like a film. Cinematic quietly fades your UI away whenever things are calm and brings it back the moment you need it. Meanwhile the camera, colour and music turn every flight, campfire, quest and stroll into a scene.
+Make Azeroth feel like a film, on WoW Forever and on retail. Cinematic quietly fades your UI away whenever things are calm and brings it back the moment you need it. Meanwhile the camera, colour and music turn every flight, campfire, quest and stroll into a scene.
 
 ## The UI gets out of the way
 
@@ -17,10 +17,10 @@ Make WoW Forever's Azeroth feel like a film. Cinematic quietly fades your UI awa
 
 Each situation has its own camera, and they hand over seamlessly:
 
-* **Flight Cam:** swings behind you at takeoff, sways through the journey, and settles behind you before landing. Known flight times mean it's ready on routes you haven't flown yet. Random fly-bys turn the camera slowly round to look back at the view, then return.
+* **Flight Cam:** swings behind you at takeoff, sways through the journey, and settles behind you before landing. Known flight times (for WoW Forever and retail) mean it's ready on routes you haven't flown yet. Random fly-bys turn the camera slowly round to look back at the view, then return.
 * **AFK Cam:** stand still for a while, or go AFK, and the camera slowly sweeps around your character and drifts in and out.
 * **RP Walk Cam:** switch to walking and the camera sways gently behind you. It holds steady through turns, then glides round to your new heading.
-* **Auto-run Cam:** a travel camera that looks ahead down the road and drifts in and out as you go.
+* **Auto-run Cam:** a travel camera that looks ahead down the road and drifts in and out as you go. On retail it keeps going when you auto-run on a skyriding mount.
 * **Cozy Cam:** rest by a campfire, `/sit`, `/sleep`, `/dance`, `/kneel`, sit in a chair, or draw your weapon for a hero shot. The camera swings round to face you, comes in close, and sways softly.
 * **Vista Cam:** `/stare` out at the view and the camera lines up behind you, lowers, and takes it in.
 * **Fish Cam:** cast Fishing and the camera settles behind you with the bobber in view. Right-click to cast again.
@@ -34,7 +34,7 @@ Each situation has its own camera, and they hand over seamlessly:
 
 * **Screen tints:** warm, cool, night, dusk, sepia, dreamy or your own colour, with a vignette. The strength drifts gently over time so it never feels static.
 * **Time of day:** the world shifts from moonlit blue to dawn pink to golden hour, following game time or your own clock. Each phase can be tuned.
-* **Zone moods:** pale blue snowfields, sandy deserts, sickly plaguelands, a smoky Ironforge, a golden Westfall and many more. They fade smoothly at zone borders. Areas such as Theramore can have their own moods, and you can set any zone or area to the colour you want.
+* **Zone moods:** pale blue snowfields, sandy deserts, sickly plaguelands, a smoky Ironforge, a golden Westfall and many more. On retail that covers every expansion, from Outland's fel-scorched Hellfire to Midnight's Voidstorm. They fade smoothly at zone borders. Areas such as Theramore can have their own moods, and you can set any zone or area to the colour you want.
 * **Inn glow:** step into an inn and the outdoor tint lifts for a warm, firelit glow.
 * **Weather:** rain, snow and sandstorms grey or colour the scene, on clients that report weather.
 * **A time-of-day title** under the zone name ("Dusk", "Night") on login and as the day turns, with a fitting sound: a rooster, bells, frogs, an owl or a wolf.
@@ -54,5 +54,15 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus Events, Look, Audio, Combat, Nameplates, Chat, Frames and Keybinds.
 * **Keybinds** to toggle cinematic mode, peek at the UI, hide the UI, trigger a fly-by, or start any camera on demand.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.
+
+## Which game?
+
+Made on WoW Forever and works on retail too. Settings that only apply to one game, such as the swing timer or the extra action button, only show up there. Each game keeps its own settings.
+
+## Found a bug?
+
+Type **`/cine log`**, press Ctrl+C and paste the result into your report. It holds the addon's recent history, any Lua errors and a summary of your setup (game version, changed settings, other addons). It doesn't include your character's name or realm.
+
+If the addon keeps hitting an error, it stops itself for the session and puts your UI and game settings back. **`/cine panic`** does the same by hand, and **`/cine resume`** starts it again.
 
 Made with AI assistance. Original artwork. Feedback and ideas welcome!

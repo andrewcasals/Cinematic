@@ -6,7 +6,11 @@
 -- FLIGHT_TIMES[faction][from][to] = seconds. Flight points are keyed by
 -- floor(x * 100000000), x from TaxiNodePosition (the flight map position);
 -- Camera.lua matches them loosely in case the map is slightly off.
+-- (Retail uses FlightTimes_Retail.lua instead: its flight map is different.)
 local _, ns = ...
+if ns.isRetail then
+	return
+end
 
 ns.FLIGHT_TIMES = {
 	Alliance = {

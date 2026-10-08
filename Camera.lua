@@ -1964,7 +1964,12 @@ function ns.ReportCameraMode(mode)
 		return
 	end
 	reportedMode = mode
-	ns.Print("camera mode: " .. (mode and (mode .. " camera") or "none"))
+	local text = "camera mode: " .. (mode and (mode .. " camera") or "none")
+	if ns.db.debugCameraMode then
+		ns.Print(text) -- (which logs it too)
+	else
+		ns.Log("state", text)
+	end
 end
 
 -- Turning the option on prints the current mode straight away.
@@ -2046,7 +2051,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		travel = nil -- weapon drawn while walking: the cozy camera in front instead
 	end
 	local T = travel and TRAVEL[travel]
-	if ns.db.debugCameraMode then
+	do -- (logged always; printed with /cine debug modes)
 		ns.ReportCameraMode((deathCam and "death") or (cinematic and ((onTaxi and ns.FlightCameraOn() and "flight")
 			or (travel == "walk" and "RP walk") or (travel == "run" and "auto-run")
 			or (vista and "vista") or (fish and "fish") or (cozy and "cozy")
@@ -2835,7 +2840,30 @@ local function NearestNode(set, x)
 	return best
 end
 
+-- Retail's base data is keyed by name, without the ", Zone" the flight map
+-- adds. Either direction will do: a flight back takes about as long.
+local function NodeKey(name)
+	return name:match("^(.-)%s*,") or name
+end
+
+local function BaseFlightTimeByName(from, to)
+	local times = ns.FLIGHT_TIMES_BY_NAME[UnitFactionGroup("player") or ""]
+	if not (times and from and to) then
+		return nil
+	end
+	for _, pair in ipairs({ { from, to }, { NodeKey(from), NodeKey(to) } }) do
+		local a, b = pair[1], pair[2]
+		local time = (times[a] and times[a][b]) or (times[b] and times[b][a])
+		if time then
+			return time
+		end
+	end
+end
+
 local function BaseFlightTime(fromIndex, toIndex)
+	if ns.FLIGHT_TIMES_BY_NAME then
+		return BaseFlightTimeByName(TaxiNodeName(fromIndex), TaxiNodeName(toIndex))
+	end
 	local times = ns.FLIGHT_TIMES and ns.FLIGHT_TIMES[UnitFactionGroup("player") or ""]
 	if not (times and TaxiNodePosition) then
 		return nil
