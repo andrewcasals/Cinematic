@@ -55,4 +55,4 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Keybinds** to toggle cinematic mode, peek at the UI, hide the UI, trigger a fly-by, or start any camera on demand.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.
 
-Original artwork. Feedback and ideas welcome!
+Made with AI assistance. Original artwork. Feedback and ideas welcome!
