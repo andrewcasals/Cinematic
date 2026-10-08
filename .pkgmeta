@@ -4,3 +4,4 @@ ignore:
   - Media
   - Release
   - .gitignore
+  - CinematicDev.toc

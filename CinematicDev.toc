@@ -1,0 +1,21 @@
+## Interface: 120100, 50504, 40402, 38000, 20506, 16001, 11509, 11508
+## Title: Cinematic |cffff8800(Dev)|r
+## Notes: Development copy of Cinematic. Don't enable it together with the released Cinematic.
+## Author: Andrew Casals
+## Version: dev
+## SavedVariables: CinematicDB
+
+Core.lua
+HideUI.lua
+Frames.lua
+Chat.lua
+Effects.lua
+FlightTimes.lua
+Camera.lua
+QuestCam.lua
+Tint.lua
+Focus.lua
+Tracking.lua
+Slash.lua
+Options.lua
+MinimapButton.lua

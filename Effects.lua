@@ -118,11 +118,101 @@ ns.music = { managing = false, level = 0, volume = 1 }
 -- their change wins over any fade or mute.
 local MUSIC_VOLUME_EPSILON = 0.005
 local musicWritten
+-- When the addon last started music this session (for music fatigue).
+local musicStartedAt
+
+-- Music trace (temporary, for tracking down the music volume left at 0): every
+-- write to the music volume or on/off, with who made it, kept in the saved
+-- settings (musicTrace) so it can be read after a /reload. The addon's own fade
+-- steps are only logged when they reach or leave 0.
+local MUSIC_TRACE_MAX = 300
+local fadeWriting, lastFadeZero = false, nil
+
+local function MusicTrace(text)
+	if not (ns.db and ns.db.musicTrace) then
+		return
+	end
+	local trace = ns.db.musicTrace
+	trace[#trace + 1] = ("%s %.1f %s | managing %s saved %s written %s"):format(date("%H:%M:%S"), GetTime(),
+		text, tostring(ns.music.managing), tostring(ns.db.savedCVars and ns.db.savedCVars.Sound_MusicVolume),
+		tostring(musicWritten))
+	while #trace > MUSIC_TRACE_MAX do
+		table.remove(trace, 1)
+	end
+end
+ns.MusicTrace = MusicTrace
+
+local function TraceMusicWrite(name, value)
+	if name ~= "Sound_MusicVolume" and name ~= "Sound_EnableMusic" then
+		return
+	end
+	if fadeWriting then
+		local zero = tonumber(value) == 0
+		if zero == lastFadeZero then
+			return
+		end
+		lastFadeZero = zero
+		MusicTrace(("fade %s = %s"):format(name, tostring(value)))
+		return
+	end
+	local stack = (debugstack(3, 4, 0) or ""):gsub("Interface/AddOns/", ""):gsub("\n", " < ")
+	MusicTrace(("SET %s = %s by %s"):format(name, tostring(value), stack:sub(1, 300)))
+end
+
+if C_CVar and C_CVar.SetCVar then
+	hooksecurefunc(C_CVar, "SetCVar", TraceMusicWrite)
+else
+	hooksecurefunc("SetCVar", TraceMusicWrite)
+end
+
+-- Changes made outside Lua (the game itself) only show up as this event.
+local traceFrame = CreateFrame("Frame")
+traceFrame:RegisterEvent("CVAR_UPDATE")
+traceFrame:SetScript("OnEvent", function(_, _, name, value)
+	if name == "Sound_MusicVolume" or name == "Sound_EnableMusic" or name == "MUSIC_VOLUME"
+		or name == "ENABLE_MUSIC" then
+		MusicTrace(("CVAR_UPDATE %s = %s (now %s)"):format(tostring(name), tostring(value),
+			tostring(GetCVar("Sound_MusicVolume"))))
+	end
+end)
+
+-- The game's Music slider moves in 5% steps. With the sound settings open, it
+-- snaps each value the addon writes to the nearest step and writes that back
+-- (0.524 becomes 0.5, and the first steps of a fade in become 0). That's the
+-- slider, not the player: it mustn't be taken as a new volume.
+local MUSIC_SLIDER_STEP = 0.05
+
+local function IsSliderSnap(actual, written)
+	local steps = actual / MUSIC_SLIDER_STEP
+	return math.abs(steps - math.floor(steps + 0.5)) < 0.001
+		and math.abs(actual - written) < MUSIC_SLIDER_STEP / 2 + 0.0001
+end
 
 local function SetMusicVolume(volume)
 	local text = ("%.3f"):format(volume)
 	musicWritten = tonumber(text)
+	fadeWriting = true
 	SetCVar("Sound_MusicVolume", text)
+	fadeWriting = false
+	-- Snapped by the slider during the write itself: that's the value now.
+	local actual = tonumber(GetCVar("Sound_MusicVolume"))
+	if actual and math.abs(actual - musicWritten) > MUSIC_VOLUME_EPSILON then
+		MusicTrace(("snapped by the slider %.3f -> %.3f"):format(musicWritten, actual))
+		musicWritten = actual
+	end
+end
+
+-- Your music volume (musicVolume) is remembered: it's updated whenever you
+-- change it (and, while the addon isn't touching it, follows the setting), and
+-- put back at login and /reload, so a volume the addon left turned down, or one
+-- something else wrote, can't stick.
+function ns.RestoreMusicVolume()
+	local volume = ns.db.musicVolume
+	local now = tonumber(GetCVar("Sound_MusicVolume"))
+	if volume and not (now and math.abs(now - volume) <= MUSIC_VOLUME_EPSILON) then
+		MusicTrace(("RESTORE your volume %s -> %.3f"):format(tostring(now), volume))
+		SetCVar("Sound_MusicVolume", ("%.3f"):format(volume))
+	end
 end
 
 -- The player's new music volume, if they changed it since the addon last wrote it.
@@ -131,7 +221,12 @@ local function PlayerMusicVolume()
 		return nil
 	end
 	local actual = tonumber(GetCVar("Sound_MusicVolume"))
-	if actual and math.abs(actual - musicWritten) > MUSIC_VOLUME_EPSILON then
+	if actual and math.abs(actual - musicWritten) > MUSIC_VOLUME_EPSILON and IsSliderSnap(actual, musicWritten) then
+		-- (A snap that came a moment after the write.)
+		MusicTrace(("snapped by the slider later %.3f -> %.3f"):format(musicWritten, actual))
+		musicWritten = actual
+	elseif actual and math.abs(actual - musicWritten) > MUSIC_VOLUME_EPSILON then
+		MusicTrace(("DETECTED player change %.3f -> %.3f"):format(musicWritten, actual))
 		if ns.musicDebug then
 			ns.Print(("music: you changed the volume %.2f -> %.2f"):format(musicWritten, actual))
 		end
@@ -225,15 +320,17 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	local fighting = handlesMusic and ns.db.musicOffInCombat
 		and now - combatMusic.lastFightAt < ns.db.musicCombatResume
 	local flying = handlesMusic and ns.db.musicOffOnFlights and UnitOnTaxi("player")
-	-- Music belongs to the camera modes (flying, RP walking, standing still):
-	-- once you move on from one, it fades out, and a fresh track comes in when
-	-- the next one starts. With pause on landing, a flight's music fades out as
-	-- you touch down, without waiting for you to move.
+	-- Music belongs to the camera modes (flying, RP walking, standing still,
+	-- vista, cozy, fishing...): once you move on from one, it fades out, and a
+	-- fresh track comes in when the next one starts. With pause on landing, a
+	-- flight's music fades out as you touch down, without waiting for you to move.
+	-- (Any camera mode lifts the pause: vista, cozy and fish start straight away
+	-- from their emote, before standing still would count.)
 	local onTaxi = UnitOnTaxi("player")
 	local landed = combatMusic.wasOnTaxi and not onTaxi
 	combatMusic.wasOnTaxi = onTaxi
 	if not (handlesMusic and (ns.db.musicPauseWhenMoving or ns.db.musicPauseOnLanding))
-		or (ns.InCameraMode and ns.InCameraMode()) then
+		or (ns.CameraMode and ns.CameraMode()) then
 		combatMusic.movingPaused = false
 	elseif (ns.db.musicPauseWhenMoving and ns.playerMoving) or (ns.db.musicPauseOnLanding and landed) then
 		combatMusic.movingPaused = true
@@ -288,8 +385,10 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 			combatMusic.original = tonumber(ns.db.savedCVars.Sound_MusicVolume) or 1
 			combatMusic.ducking = true
 		end
-		SetMusicVolume(combatMusic.original * duck)
+		-- Fully faded out, music is switched off and the slider goes back to
+		-- your own volume (it only reads lower while actually fading).
 		SetMuteMusicOff("musicOff", silent)
+		SetMusicVolume(silent and combatMusic.original or combatMusic.original * duck)
 	elseif combatMusic.ducking and duck >= 1 then
 		ns.RestoreCVar("Sound_MusicVolume")
 		ns.RestoreCVar("Sound_EnableMusic")
@@ -422,19 +521,43 @@ function ns.SetDeathSong(on)
 	end
 end
 
+-- Changing the music volume while it plays is your new volume: the song plays
+-- on at it, it's saved as yours straight away, and it's what you're left with
+-- afterwards (UpdateMusic then sees the change and lifts any fade or mute).
 local function UpdateDeathSong()
 	if deathSong.file and not deathSong.playing then
 		deathSong.enable, deathSong.volume = GetCVar("Sound_EnableMusic"), GetCVar("Sound_MusicVolume")
 		-- Your own volume: the addon may have it faded or ducked right now.
+		deathSong.written = tonumber(ns.db.savedCVars.Sound_MusicVolume or deathSong.volume) or 1
+		deathSong.changed = false
 		SetCVar("Sound_EnableMusic", 1)
 		SetCVar("Sound_MusicVolume", ns.db.savedCVars.Sound_MusicVolume or deathSong.volume)
-		deathSong.playing = pcall(PlayMusic, deathSong.file)
+		-- (Counts as playing even if PlayMusic fails, so the settings found
+		-- above aren't taken again from the ones just written.)
+		deathSong.playing = true
+		pcall(PlayMusic, deathSong.file)
 		if ns.DeathTestLog then ns.DeathTestLog("death song playing") end
-	elseif not deathSong.file and deathSong.playing then
+	elseif deathSong.file then
+		local actual = tonumber(GetCVar("Sound_MusicVolume"))
+		if actual and math.abs(actual - deathSong.written) > MUSIC_VOLUME_EPSILON then
+			if ns.musicDebug then
+				ns.Print(("music: you changed the volume %.2f -> %.2f (death song)"):format(deathSong.written, actual))
+			end
+			deathSong.written, deathSong.changed = actual, true
+			ns.db.musicVolume = actual
+			if ns.db.savedCVars.Sound_MusicVolume ~= nil then
+				ns.db.savedCVars.Sound_MusicVolume = tostring(actual)
+				combatMusic.original = actual
+				if ns.music.managing then
+					ns.music.volume = actual
+				end
+			end
+		end
+	elseif deathSong.playing then
 		deathSong.playing = false
 		pcall(StopMusic)
 		SetCVar("Sound_EnableMusic", deathSong.enable)
-		SetCVar("Sound_MusicVolume", deathSong.volume)
+		SetCVar("Sound_MusicVolume", deathSong.changed and ("%.3f"):format(deathSong.written) or deathSong.volume)
 	end
 end
 
@@ -508,6 +631,7 @@ function ns.UpdateMusic(cinematic, elapsed)
 	-- it: that's their new volume, to play at now and come back to afterwards.
 	local playerVolume = PlayerMusicVolume()
 	if playerVolume then
+		ns.db.musicVolume = playerVolume
 		ns.db.savedCVars.Sound_MusicVolume = tostring(playerVolume)
 		combatMusic.original = playerVolume
 		if ns.music.managing then
@@ -517,26 +641,30 @@ function ns.UpdateMusic(cinematic, elapsed)
 			end
 		end
 	end
+	if not playerVolume and ns.db.savedCVars.Sound_MusicVolume == nil then
+		-- The addon isn't touching the volume: whatever it's set to is yours.
+		ns.db.musicVolume = tonumber(GetCVar("Sound_MusicVolume")) or ns.db.musicVolume
+	end
 	local switchedOn = (combatMusic.musicOff or combatMusic.managedOff) and GetCVar("Sound_EnableMusic") == "1"
 	UpdateCombatMusic(elapsed, playerVolume ~= nil or switchedOn)
 	if want and not ns.music.managing then
 		if GetCVar("Sound_EnableMusic") == "1" then
 			return
 		end
-		-- Music fatigue: started music recently? Stay quiet this time. (Saved as
-		-- real time, so a /reload doesn't reset it.)
-		local last = ns.db.lastMusicStartedAt
-		if ns.db.musicFatigue > 0 and last and time() - last < ns.db.musicFatigue * 60
+		-- Music fatigue: started music recently? Stay quiet this time. (Not
+		-- saved, so it starts over on each login and /reload.)
+		if ns.db.musicFatigue > 0 and musicStartedAt and GetTime() - musicStartedAt < ns.db.musicFatigue * 60
 			and not FatigueOverridden() then
 			return
 		end
-		ns.db.lastMusicStartedAt = time()
+		musicStartedAt = GetTime()
 		ns.db.lastMusicZone = GetRealZoneText()
 		ns.SaveCVar("Sound_EnableMusic")
 		ns.SaveCVar("Sound_MusicVolume")
 		ns.music.managing = true
 		ns.music.level = 0
 		ns.music.volume = tonumber(ns.db.savedCVars.Sound_MusicVolume) or 1
+		MusicTrace(("START managed music, your volume %s"):format(tostring(ns.music.volume)))
 		-- It fades in to your own volume, so with that at 0 nothing is heard.
 		if ns.music.volume <= 0 and not ns.music.warnedSilent then
 			ns.music.warnedSilent = true
@@ -554,7 +682,8 @@ function ns.UpdateMusic(cinematic, elapsed)
 	local duck = MusicDuck()
 	if ns.music.level ~= target or duck < 1 or ns.music.combatApplied then
 		ns.music.level = ns.Approach(ns.music.level, target, elapsed, ns.db.musicFadeTime)
-		SetMusicVolume(ns.music.volume * ns.music.level * duck)
+		-- (Switched off while muted: the slider shows your own volume meanwhile.)
+		SetMusicVolume(combatMusic.managedOff and ns.music.volume or ns.music.volume * ns.music.level * duck)
 		-- Keep writing until the mute / song swap level is back to full.
 		ns.music.combatApplied = duck < 1
 	end

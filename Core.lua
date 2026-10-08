@@ -899,6 +899,7 @@ local function EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
 	ns.db.savedCVars = ns.db.savedCVars or {}
+	ns.db.musicTrace = ns.db.musicTrace or {} -- temporary: see MusicTrace in Effects.lua
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
 	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = true, LocalDefense = true }
 	ns.db.flightTimes = ns.db.flightTimes or {}
@@ -1303,7 +1304,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"cozyCrackle", "cursorTuck", "cursorTuckFlight", "cursorTuckIdle", "cursorTuckCozy",
 			"cursorTuckVista", "cursorTuckWalk", "cursorTuckRun", "cursorTuckOther", "cursorTuckDelay",
 			"flyByDistance", "flyByMinDistance", "flyByMaxDistance", "flyByTrace", "flyByLower",
-			"cameraInputPause", "questCamRandomSide", "questCamLeft",
+			"cameraInputPause", "questCamRandomSide", "questCamLeft", "lastMusicStartedAt",
 		}) do
 			ns.db[key] = nil
 		end
@@ -1315,7 +1316,9 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		SLASH_CINEMATIC2 = "/cinematic"
 		SlashCmdList.CINEMATIC = ns.HandleSlash
 	elseif event == "PLAYER_LOGIN" then
+		ns.MusicTrace(("LOGIN volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 		RestoreSavedCVars()
+		ns.RestoreMusicVolume()
 		ns.SyncPlateCVars()
 		ns.SyncNameCVars()
 		ns.PruneBuiltInExtras()
@@ -1422,6 +1425,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			startSnapUntil = GetTime() + START_SNAP_WINDOW
 		end
 	elseif event == "PLAYER_LOGOUT" then
+		ns.MusicTrace(("LOGOUT volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 		-- Put the player's music/name/nameplate settings back before they're saved.
 		ns.UpdateCVars(false)
 		ns.StopIdleZoomNow()
@@ -1436,6 +1440,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		if ns.db.musicOffOnLogout then
 			SetCVar("Sound_EnableMusic", 0)
 		end
+		ns.MusicTrace(("LOGOUT done volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 	elseif event == "PLAYER_LEVEL_UP" then
 		ns.levelUpUntil = GetTime() + ns.LEVEL_UP_WINDOW
 	elseif event == "PLAYER_STARTED_MOVING" then
