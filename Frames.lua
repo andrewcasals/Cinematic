@@ -215,7 +215,8 @@ local function HasIssueReporterText(frame, depth)
 	for _, region in ipairs({ frame:GetRegions() }) do
 		if region.GetText then
 			local text = region:GetText()
-			if type(text) == "string" and text:find("Issue") and text:find("Reporter") then
+			if type(text) == "string" and not (issecretvalue and issecretvalue(text))
+				and text:find("Issue") and text:find("Reporter") then
 				return true
 			end
 		end
