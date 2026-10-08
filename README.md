@@ -1,6 +1,6 @@
 # Cinematic
 
-Make Azeroth feel like a film, on WoW Forever and on retail. Cinematic quietly fades your UI away whenever things are calm and brings it back the moment you need it. Meanwhile the camera, colour and music turn every flight, campfire, quest and stroll into a scene.
+Immerse yourself in the World of Warcraft. Cinematic quietly fades your UI away whenever things are calm and brings it back the moment you need it. Meanwhile the camera, colour and music turn every flight, campfire, quest and stroll into a scene.
 
 ## The UI gets out of the way
 
@@ -57,7 +57,7 @@ Each situation has its own camera, and they hand over seamlessly:
 
 ## Which game?
 
-Made on WoW Forever and works on retail too. Settings that only apply to one game, such as the swing timer or the extra action button, only show up there. Each game keeps its own settings.
+Cinematic supports every WoW game mode, from retail to the Classic versions. It's made first and foremost for WoW Forever, so that's where it's tested most, but please report issues from any version. Settings that only apply to one game, such as the swing timer or the extra action button, only show up there. Each game keeps its own settings.
 
 ## Found a bug?
 
@@ -65,4 +65,4 @@ Type **`/cine log`**, press Ctrl+C and paste the result into your report. It hol
 
 If the addon keeps hitting an error, it stops itself for the session and puts your UI and game settings back. **`/cine panic`** does the same by hand, and **`/cine resume`** starts it again.
 
-Made with AI assistance. Original artwork. Feedback and ideas welcome!
+Made with AI assistance. Feedback and ideas welcome!
