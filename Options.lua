@@ -733,10 +733,10 @@ local function CreateCameraPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(cameraPanel, "GameFontHighlightSmall",
-		"While cinematic mode is on, the camera comes alive in seven situations, each with its " ..
+		"While cinematic mode is on, the camera comes alive in eight situations, each with its " ..
 		"own page: Flight (on flight paths), AFK (once you've stood still a while, or go AFK), " ..
-		"Cozy (campfires and emotes), Vista (/stare), Fish (fishing), RP Walk (moving in walk " ..
-		"mode) and Auto-run. Death Cam turns round your body when you die, and Quest Cam swings " ..
+		"Cozy (campfires and emotes), Tele (casting your Hearthstone or a teleport), Vista " ..
+		"(/stare), Fish (fishing), RP Walk (auto-walking) and Auto-run. Moving by hand cancels them all. Death Cam turns round your body when you die, and Quest Cam swings " ..
 		"behind you at quest givers. The Events page picks which camera each emote or event " ..
 		"starts. Everything goes back to normal when the UI returns. The settings here apply to " ..
 		"all of them.")
@@ -1162,6 +1162,10 @@ local QUEST_CAMERAS = {
 	{ value = "quest", text = "Quest camera" },
 	{ value = "none", text = "No camera" },
 }
+local TELE_CAMERAS = {
+	{ value = "tele", text = "Tele camera" },
+	{ value = "none", text = "No camera" },
+}
 local EVENT_TIPS = {
 	Campfire = "Standing or sitting still with any of the buffs listed below (like Welcoming Campfire).",
 	Sit = "Doing the emote (or pressing the sit key). Moving, jumping or another emote ends it.",
@@ -1171,8 +1175,18 @@ local EVENT_TIPS = {
 	Chair = "Right-clicking a seat to sit on it; standing up ends it. Seats are recognised by name, " ..
 		"using the words below.",
 	Weapon = "Unsheathing your weapon out of combat, for a \"hero shot\". Putting it away, running or " ..
-		"combat ends it. With the cozy camera it carries on while you RP walk (the camera swings " ..
-		"round in front as you walk, even with Stop on move).",
+		"combat ends it. With the cozy camera it carries on while you auto-walk (the camera " ..
+		"swings round in front as you walk, even with Stop on move).",
+	Hearth = "Casting your Hearthstone (or Astral Recall, or any spell with \"Hearthstone\" in its " ..
+		"name). The tele camera swings round in front of you and spins faster and faster as it " ..
+		"zooms in, until you go. It's set on the Tele Cam page. The cast doesn't bring the UI back " ..
+		"or pause the camera.",
+	Teleport = "Casting a teleport (a mage's \"Teleport: Stormwind\" and the like, or a druid's " ..
+		"Teleport: Moonglade). The tele camera, as for the Hearthstone (Tele Cam page).",
+	Logout = "Logging out or quitting where the game counts down 20 seconds first (out in the " ..
+		"world). In an inn or a city, logging out is instant, so there's nothing to see. Moving, " ..
+		"jumping, casting or Cancel ends it. It comes before any other event (a Hearthstone or " ..
+		"teleport cast calls it off).",
 	Stare = "Doing the emote while standing still. Moving, jumping or another emote ends it.",
 	Fishing = "Casting Fishing. It carries on after the cast ends (looting, casting again) until " ..
 		"you move or jump. The cast doesn't bring the UI back or pause the camera.",
@@ -1191,8 +1205,9 @@ local function CreateEventsPanel()
 	local title = Label(content, "GameFontNormalLarge", "Events")
 	title:SetPoint("TOPLEFT", 16, -16)
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; the latest " ..
-		"emote wins, then a drawn weapon, a campfire and going AFK. Taking a flight has the flight " ..
+		"What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; a " ..
+		"Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a " ..
+		"drawn weapon and a campfire. Taking a flight has the flight " ..
 		"camera, and talking to a quest giver the quest camera. How each camera moves is set on its " ..
 		"own page. RP walk, auto-run and death start by themselves.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
@@ -1209,9 +1224,10 @@ local function CreateEventsPanel()
 		"Leave it empty to start right away. Moving, jumping or another emote starts the wait over."
 	local stopHeader = Label(content, "GameFontNormal", "Stop on move")
 	stopHeader:SetPoint("LEFT", header, "LEFT", STOP_X, 0)
-	local stopTip = "Moving or jumping ends the camera until the event starts afresh (the weapon " ..
-		"drawn again, the buff gained again, AFK again). Off: the camera waits while you move and " ..
-		"carries on once you stand still. Emotes and seats always end when you move or jump."
+	local stopTip = "Auto-running or auto-walking ends the camera until the event starts afresh " ..
+		"(the weapon drawn again, the buff gained again, AFK again). Off: the camera waits while you " ..
+		"auto-run and carries on once you stand still. Moving by hand always ends every event, as do " ..
+		"moving or jumping for emotes and seats."
 
 	local previous, dx = header, 0
 	for _, event in ipairs(ns.EVENTS) do
@@ -1226,7 +1242,7 @@ local function CreateEventsPanel()
 		Tooltip(hover, EVENT_TIPS[event.key])
 
 		local choices = (event.key == "Flight" and FLIGHT_CAMERAS) or (event.key == "Quest" and QUEST_CAMERAS)
-			or EVENT_CAMERAS
+			or ((event.key == "Hearth" or event.key == "Teleport") and TELE_CAMERAS) or EVENT_CAMERAS
 		local camera = Dropdown(content, key .. "Camera", choices, 150)
 		if not camera then
 			-- No modern dropdown on this client: a button that steps through them.
@@ -1514,9 +1530,9 @@ end
 local function CreateWalkPanel()
 	CreateCameraModePanel({
 		name = "RP Walk Cam",
-		description = "While you're moving in walk mode (walk/run key). Stop and stand, and the " ..
-			"AFK camera takes over after its delay. Walking is recognised from your " ..
-			"speed; /cine walk shows what the addon thinks.",
+		description = "While you're auto-walking (auto-run in walk mode). Walking by hand cancels " ..
+			"the camera, as all moving by hand does. Stop and stand, and the AFK camera takes over. " ..
+			"Walking is recognised from your speed; /cine walk shows what the addon thinks.",
 		instantKey = "walkInstant", instantWhen = "walk",
 		combatWaitKey = "walkCombatWait", inputPauseKey = "walkInputPause",
 		inputPauseTip = "Keep it short, so it's back in time if you need to steer.",
@@ -1743,6 +1759,99 @@ local function CreateQuestPanel()
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Quest Cam")
+end
+
+local function CreateTelePanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Tele Cam")
+	title:SetPoint("TOPLEFT", 16, -16)
+	local subtitle = Label(content, "GameFontHighlightSmall", "Casting your Hearthstone or a " ..
+		"teleport, the camera swings round in front of you, quickly enough to be there before you " ..
+		"go, then spins round you faster and faster as it zooms in. Cancel the cast and it goes " ..
+		"back to where it was; once you're there, it swings round behind you. Its music, haze and " ..
+		"tooltips follow the Cozy Cam's settings. The events on the Events page can also make it " ..
+		"wait a moment.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+	local function IfOn(db) return db.eventHearthCamera ~= "none" or db.eventTeleportCamera ~= "none" end
+
+	local stack = Stack(subtitle, "label")
+	stack:Header(content, "Starting")
+	for _, event in ipairs({
+		{ key = "eventHearthCamera", label = "When you cast your Hearthstone",
+			tip = "Same as the \"Cast your Hearthstone\" event on the Events page. Also Astral Recall, " ..
+				"and any spell with \"Hearthstone\" in its name (Dalaran, Garrison, the toys)." },
+		{ key = "eventTeleportCamera", label = "When you cast a teleport",
+			tip = "Same as the \"Cast a teleport\" event on the Events page: a mage's \"Teleport: " ..
+				"Stormwind\" and the like, or a druid's Teleport: Moonglade." },
+	}) do
+		local check = stack:Add(Check(content, event.key, event.label, event.tip,
+			function(value)
+				ns.GetDB()[event.key] = value and "tele" or "none"
+				Refresh()
+			end), "check")
+		check.Refresh = function(self) self:SetChecked(ns.GetDB()[event.key] ~= "none") end
+	end
+
+	-- Left column: rotation, and after the cast
+	local rotationHeader = stack:Header(content, "Rotation")
+	local early = stack:Add(Slider(content, "teleArriveEarly", "Round in front of you", 0, 6, 0.5,
+		"%.1f sec before you go"), "slider")
+	Tooltip(early, "The swing round to face you is timed to get there this long before the cast " ..
+		"ends. More is a quicker swing.")
+	GreyUnless(early, IfOn)
+	local accel = stack:Add(Slider(content, "teleSpinAccel", "Then speeds up by", 0, 30, 1,
+		"%d° per sec, each sec"), "slider")
+	Tooltip(accel, "Once round in front, the spin keeps going and picks up speed until you go. " ..
+		"0 keeps a steady speed.")
+	GreyUnless(accel, IfOn)
+	local top = stack:Add(Slider(content, "teleSpinMax", "Top speed", 30, 360, 10, "%d° per sec"), "slider")
+	Tooltip(top, "The spin never goes faster than this.")
+	GreyUnless(top, IfOn)
+	local level = stack:Add(Slider(content, "teleLevel", "Bring the camera down", -30, 80, 5, "%d°"), "slider")
+	Tooltip(level, "As it swings round, the camera also comes down toward the ground (negative: up).")
+	GreyUnless(level, IfOn)
+
+	local combatWait = stack:Add(Slider(content, "teleCombatWait", "Wait after combat", 0, 120, 5,
+		function(value) return value == 0 and "Off" or ("%d sec"):format(value) end), "slider")
+	Tooltip(combatWait, "After a fight, the tele camera holds off this long before starting (its " ..
+		"spin and zoom both). Off starts it as soon as the fight is over. (Its own wait: the Cozy " ..
+		"Cam's doesn't apply.)")
+	GreyUnless(combatWait, IfOn)
+
+	stack:Header(content, "Cancelling and arriving")
+	local back = stack:Add(Check(content, "teleReturn", "Turn back if you cancel",
+		"Moving, jumping or Esc cancels the cast: the spin slows to a stop and turns back to where " ..
+		"the camera was before you started. Off: it stops where it is."), "check")
+	GreyUnless(back, IfOn)
+	local behind = stack:Add(Check(content, "teleBehind", "Swing behind you where you arrive",
+		"Once you're there (after the loading screen, if there is one), the camera swings round " ..
+		"behind you."), "check")
+	GreyUnless(behind, IfOn)
+
+	-- Right column: zoom
+	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
+	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
+	local right = Stack(zoomHeader)
+	local zoom = right:Add(Check(content, "teleZoom", "Zoom in over the cast",
+		"The camera starts zooming in as the cast starts, and is still coming in as you go."), "check")
+	zoom:HookScript("OnClick", Refresh)
+	GreyUnless(zoom, IfOn)
+	local function IfZoom(db) return IfOn(db) and db.teleZoom end
+	local close = right:Add(Slider(content, "teleZoomClose", "Zoom in to about", 1.5, 20, 0.5, "%.1f yards"), "slider")
+	Tooltip(close, "Where the zoom ends as the cast does, if you're further out. Closer already, it " ..
+		"stays where it is. Arriving, the camera is back at your own distance.")
+	GreyUnless(close, IfZoom)
+	local zoomBack = right:Add(Slider(content, "teleZoomBackTime", "If you cancel, zoom back out in",
+		0.5, 3, 0.25, "%.2f sec"), "slider")
+	Tooltip(zoomBack, "Cancelling the cast, the camera zooms back out to your own distance this quickly.")
+	GreyUnless(zoomBack, IfZoom)
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Tele Cam")
 end
 
 -- Blizzard's colour picker; the setup API changed in newer clients.
@@ -3310,6 +3419,7 @@ CreateEventsPanel()
 CreateFlightPanel()
 CreateStandingPanel()
 CreateCozyPanel()
+CreateTelePanel()
 CreateVistaPanel()
 CreateFishPanel()
 CreateWalkPanel()

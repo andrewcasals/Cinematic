@@ -107,6 +107,7 @@ local CAMERA_ZOOMS = {
 	{ "Flight camera", "taxiZoom" },
 	{ "AFK camera", "idleZoom" },
 	{ "Cozy camera", "cozyZoom" },
+	{ "Tele camera", "teleZoom" },
 	{ "Vista camera", "vistaZoom" },
 	{ "Fish camera", "fishZoom" },
 	{ "RP walk camera", "walkZoom" },

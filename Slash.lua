@@ -553,6 +553,13 @@ function ns.HandleSlash(msg)
 		if not f.hooked then
 			ns.Print("flight: this client has no TakeTaxiNode, so routes can't be noted")
 		end
+		if f.talent then
+			ns.Print("flight: Frequent Flier is learned, so flights are timed 20% faster")
+		end
+		if f.scale ~= 1 then
+			ns.Print(("flight: flights take %d%% of their first timed length (sped up or slowed since)"):format(
+				f.scale * 100 + 0.5))
+		end
 		if f.pending then
 			ns.Print(("flight: noted %s %s ago, waiting for takeoff"):format(f.pending, s(f.pendingAge)))
 		end
@@ -672,8 +679,10 @@ function ns.HandleSlash(msg)
 		local state
 		if not ns.walking then
 			state = "running (walk mode off)"
+		elseif ns.playerMoving and ns.MovingManually and ns.MovingManually() then
+			state = "walking by hand - no RP walk camera (auto-walk for it)"
 		elseif ns.playerMoving then
-			state = "walking - RP walk camera " .. (ns.db.walkOrbit and "on" or "switched off in settings")
+			state = "auto-walking - RP walk camera " .. (ns.db.walkOrbit and "on" or "switched off in settings")
 		else
 			state = "walk mode on, standing still"
 		end

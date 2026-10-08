@@ -363,6 +363,24 @@ DEFAULTS.fishOrbitDriftSpeed = 0.3 -- (vista: 0.5)
 for _, key in ipairs({ "Distance", "In", "Time", "Pause", "Random", "Ease", "PastMax" }) do
 	DEFAULTS["fishZoom" .. key] = DEFAULTS["vistaZoom" .. key]
 end
+-- Tele camera (casting your Hearthstone or a teleport): the cozy camera's
+-- swing round to face you, only quicker, then a spin round you that speeds up
+-- until you go, zooming in over the cast. (Its sway settings are the cozy camera's.)
+DEFAULTS.teleArriveEarly = 3       -- seconds before the cast ends that the swing gets round in front
+DEFAULTS.teleSpinAccel = 8         -- degrees per second it speeds up by, each second, once round
+DEFAULTS.teleSpinMax = 120         -- degrees per second, at most
+DEFAULTS.teleLevel = 15            -- degrees it brings the camera down as it swings round
+DEFAULTS.teleZoom = true           -- zoom in over the cast
+DEFAULTS.teleZoomClose = 4         -- yards it zooms in to (if you're further out)
+DEFAULTS.teleReturn = true         -- cancelled: turn back to where the camera was
+DEFAULTS.teleZoomBackTime = 0.5    -- seconds to zoom back out to your distance on a cancel
+DEFAULTS.teleBehind = true         -- arrived: swing the camera round behind you
+-- (Its zoom is one move in over the cast, then a hold: no random zooms.)
+for key, value in pairs({
+	Distance = 0, In = 0, Time = 1, Pause = 1, PauseVary = 0, Random = false, Ease = 0.5, PastMax = false,
+}) do
+	DEFAULTS["teleZoom" .. key] = value
+end
 -- Death camera: a slow, steady turn round your body while you're dead.
 DEFAULTS.deathOrbit = true         -- turn the camera slowly while dead (until you release)
 DEFAULTS.deathOrbitDelay = 0       -- seconds after dying before it starts (0: the rise
@@ -413,6 +431,7 @@ DEFAULTS.idleCombatWait = 0
 DEFAULTS.walkCombatWait = 15
 DEFAULTS.runCombatWait = 30
 DEFAULTS.cozyCombatWait = 30
+DEFAULTS.teleCombatWait = 0 -- (hearthing out after a fight is common)
 DEFAULTS.vistaCombatWait = 0
 DEFAULTS.fishCombatWait = 0
 -- Slow zoom settings likewise: idleZoom* for standing still, taxiZoom* for
@@ -575,7 +594,8 @@ local function IsBusy()
 	local corpse = Flag(UnitIsDead("player")) and not Flag(UnitIsGhost("player"))
 	return (corpse and not (ns.IsDeathCinematic and ns.IsDeathCinematic()))
 		or (ns.db.revealOnCast and (Flag(UnitCastingInfo("player")) or Flag(UnitChannelInfo("player")))
-			and not (ns.IsFishingEvent and ns.IsFishingEvent()))
+			and not (ns.IsFishingEvent and ns.IsFishingEvent())
+			and not (ns.IsDepartEvent and ns.IsDepartEvent()))
 		or CursorBusy()
 		or AnyRevealFrameShown()
 end
@@ -1400,6 +1420,14 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.eventFishingCamera == "vista" then ns.db.eventFishingCamera = nil end
 			ns.db.fishCamV1 = true
 		end
+		-- The Hearthstone and teleport events used the cozy camera before the tele
+		-- camera existed: that saved choice moves over to it.
+		if not ns.db.teleCamV1 then
+			for _, key in ipairs({ "eventHearthCamera", "eventTeleportCamera" }) do
+				if ns.db[key] == "cozy" then ns.db[key] = nil end
+			end
+			ns.db.teleCamV1 = true
+		end
 		if not ns.db.cozySettingsV8 then -- a slower sway
 			if ns.db.cozyOrbitMoveTime == 12 then ns.db.cozyOrbitMoveTime = nil end
 			ns.db.cozySettingsV8 = true
@@ -1512,6 +1540,8 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		-- followed (you log in running), and corrected from your actual speed
 		-- whenever you move and the speed can be read (it's secret at times).
 		ns.walking = false
+		-- RP walking: auto-walking (auto-run in walk mode). Walking by hand
+		-- cancels the camera modes like any other movement (ns.MovingManually).
 		ns.IsRPWalking = function()
 			if not ns.playerMoving then
 				return false
@@ -1523,7 +1553,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			else
 				ns.walkingFromSpeed = false
 			end
-			return ns.walking
+			return ns.walking and not ns.MovingManually()
 		end
 		if ToggleRun then
 			hooksecurefunc("ToggleRun", function() ns.walking = not ns.walking end)
@@ -1541,8 +1571,16 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			end
 			return IsMouseButtonDown("LeftButton") and IsMouseButtonDown("RightButton")
 		end
+		-- Moving by hand: a movement key held, or steering with both mouse
+		-- buttons. The camera modes only carry on through auto-run and
+		-- auto-walk: moving by hand cancels them all, and the standing-still
+		-- timer starts over once you stop (a safety net, so a camera never
+		-- carries on, or starts, while you're steering yourself).
+		ns.MovingManually = function()
+			return ns.playerMoving and AnyMovementKey()
+		end
 		ns.IsAutoRunning = function()
-			if not ns.playerMoving or UnitOnTaxi("player") then
+			if not ns.playerMoving or UnitOnTaxi("player") or AnyMovementKey() then
 				return false
 			end
 			if not ns.autoRunning and GetTime() - (ns.movingSince or GetTime()) > AUTORUN_INFER_AFTER

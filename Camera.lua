@@ -63,7 +63,7 @@ local idleZoom = { active = false, saved = nil }
 local turnKeys = { left = false, right = false }
 -- Events that start a standing-still camera, in the order the Events page
 -- lists them. Each has its own settings: event<key>Camera (which camera:
--- "cozy", "vista", "fish", "afk" or "none") and event<key>Delay (seconds the event
+-- "cozy", "vista", "fish", "afk", "tele" or "none") and event<key>Delay (seconds the event
 -- has to last first; nil starts it right away). Once it counts, the camera
 -- starts and the UI fades at once. The emotes and seats always end as you move
 -- or jump; those marked stopsOnMove (a state that carries on as you move) have
@@ -76,6 +76,9 @@ ns.EVENTS = {
 	{ key = "Kneel", label = "/kneel", camera = "cozy" },
 	{ key = "Chair", label = "Sitting in a chair or on a bench", camera = "cozy" },
 	{ key = "Weapon", label = "Unsheathe your weapon (Z)", camera = "cozy", stopsOnMove = true },
+	{ key = "Hearth", label = "Cast your Hearthstone", camera = "tele" },
+	{ key = "Teleport", label = "Cast a teleport", camera = "tele" },
+	{ key = "Logout", label = "Log out (the 20-second countdown)", camera = "cozy" },
 	{ key = "Stare", label = "/stare", camera = "vista" },
 	{ key = "Fishing", label = "Cast Fishing", camera = "fish" },
 	{ key = "AFK", label = "Go AFK", camera = "afk", stopsOnMove = true },
@@ -114,6 +117,157 @@ local EMOTE_EVENTS = {
 	DANCE = "Dance", KNEEL = "Kneel", STARE = "Stare",
 }
 local emoteEvent -- the event for the emote (or seat) you're doing, or nil
+
+-- Hearthstone and teleports: casting one counts like an emote until the cast
+-- ends (you're whisked away, or it's interrupted), for the tele camera: the
+-- cozy camera's swing round to face you, quicker so it's round before you go
+-- (DepartTimeLeft), then a spin that speeds up, zooming in over the cast.
+-- Cancelled, it turns back and zooms back out; gone, the camera swings round
+-- behind you where you arrive.
+-- Hearthstone itself and Astral Recall by ID, and any spell whose name holds
+-- "Hearthstone" in your game language (Dalaran, Garrison, the toys). Teleports:
+-- the mage city ones by ID, and any spell named like "Teleport: Stormwind" in
+-- your game language (the part up to the colon), Moonglade and newer cities too.
+do
+	local HEARTH_IDS = { [8690] = true, [556] = true }
+	local TELEPORT_IDS = { [3561] = true, [3562] = true, [3563] = true, [3565] = true, [3566] = true, [3567] = true }
+	local MIN_SWING = 1.5  -- seconds, at least, for the swing round
+	local BEHIND_TIME = 1.5 -- seconds the swing behind you takes where you arrive
+	local castEndsAt -- when the cast ends (GetTime), while casting one
+	local castCamera = false -- that cast's event has the tele camera
+	-- "Hearth", "Teleport" or nil for a spell.
+	local function DepartEvent(spellID)
+		local ok, event = pcall(function()
+			if HEARTH_IDS[spellID] then
+				return "Hearth"
+			elseif TELEPORT_IDS[spellID] then
+				return "Teleport"
+			end
+			local GetName = (C_Spell and C_Spell.GetSpellName) or function(id) return (GetSpellInfo(id)) end
+			local name = spellID and GetName(spellID)
+			if not name then
+				return nil
+			end
+			local hearthName = GetName(8690)
+			if hearthName and name:find(hearthName, 1, true) then
+				return "Hearth"
+			end
+			-- "Teleport: Stormwind" -> "Teleport:" (a full-width colon in some languages)
+			local example = GetName(3561)
+			local colon = example and (example:find(":", 1, true) or example:find(string.char(239, 188, 154), 1, true))
+			if colon then
+				local prefix = example:sub(1, colon)
+				if name:sub(1, #prefix) == prefix then
+					return "Teleport"
+				end
+			end
+		end)
+		return ok and event or nil
+	end
+	local departWatcher = CreateFrame("Frame")
+	departWatcher:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+	departWatcher:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
+	departWatcher:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
+	departWatcher:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
+	departWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+
+	-- Gone: once you're there (after the loading screen, if there is one),
+	-- swing the camera round behind you.
+	local behindPending, loading = false, false
+	local function SwingBehind()
+		if behindPending then
+			behindPending = false
+			ns.CenterCamera(BEHIND_TIME, 360, 120)
+		end
+	end
+	local arrivalWatcher = CreateFrame("Frame")
+	for _, event in ipairs({ "LOADING_SCREEN_ENABLED", "LOADING_SCREEN_DISABLED", "PLAYER_ENTERING_WORLD" }) do
+		pcall(arrivalWatcher.RegisterEvent, arrivalWatcher, event)
+	end
+	arrivalWatcher:SetScript("OnEvent", function(_, event)
+		if event == "LOADING_SCREEN_ENABLED" then
+			loading = true
+		elseif behindPending then
+			loading = false
+			C_Timer.After(0.2, SwingBehind) -- (a moment for the world to settle)
+		end
+	end)
+
+	departWatcher:SetScript("OnEvent", function(_, event, _, _, spellID)
+		local depart = DepartEvent(spellID)
+		if not depart then
+			return
+		elseif event ~= "UNIT_SPELLCAST_START" and event ~= "UNIT_SPELLCAST_SUCCEEDED"
+			and ns.Flag(UnitCastingInfo("player")) then
+			return -- still casting (pressing it again fails, but the cast goes on)
+		end
+		-- (Remembered from the start: moving ends the event before the cast's end comes in.)
+		local camera = castCamera
+		if event == "UNIT_SPELLCAST_SUCCEEDED" and castEndsAt then
+			-- You're off: the spin and zoom stop where they are (the zoom jumps
+			-- back to your distance), and the camera goes behind you on arrival.
+			castEndsAt = nil
+			if emoteEvent == depart then
+				emoteEvent = nil
+			end
+			if camera then
+				ns.StopOrbitNow()
+				ns.orbit.spin, ns.orbit.returnPending, ns.orbit.back = false, false, nil
+				ns.StopIdleZoomNow()
+				if ns.stillSince then
+					ns.stillSince = GetTime() -- (no AFK camera in the moment before you go)
+				end
+				if ns.db.teleBehind and ns.db.enabled then
+					behindPending, loading = true, false
+					C_Timer.After(1, function()
+						if not loading then SwingBehind() end -- (no loading screen)
+					end)
+				end
+			end
+			return
+		elseif event ~= "UNIT_SPELLCAST_START" and castEndsAt and camera then
+			-- Cancelled (moved, jumped, Esc): the spin turns back to where the
+			-- camera was (the zoom goes back quickly: EndIdleZoom), and the AFK
+			-- camera's wait starts over rather than taking over straight away.
+			if ns.orbit.spin and ns.db.teleReturn then
+				ns.orbit.returnPending = true
+			end
+			if ns.stillSince then
+				ns.stillSince = GetTime()
+			end
+		end
+		if event == "UNIT_SPELLCAST_START" then
+			emoteEvent = depart
+			if ns.EndLogoutEvent then ns.EndLogoutEvent() end -- (casting calls a logout off)
+			castCamera, behindPending = ns.IsDepartEvent(), false
+			ns.lastEmote = { token = depart:upper(), via = "cast", at = GetTime() }
+			local ok, endMS = pcall(function() return select(5, UnitCastingInfo("player")) end)
+			if ok and type(endMS) == "number" and not (issecretvalue and issecretvalue(endMS)) then
+				castEndsAt = endMS / 1000
+			else
+				castEndsAt = GetTime() + 10 -- (the usual cast)
+			end
+		else
+			castEndsAt = nil
+			if emoteEvent == depart then
+				emoteEvent = nil
+			end
+		end
+	end)
+	-- Casting your Hearthstone or a teleport: the seconds the cozy camera has to
+	-- swing round (and zoom in) so it's in front of you before the cast ends;
+	-- nil otherwise.
+	function ns.DepartTimeLeft()
+		if (emoteEvent ~= "Hearth" and emoteEvent ~= "Teleport") or not castEndsAt then
+			return nil
+		end
+		return math.max(MIN_SWING, castEndsAt - GetTime() - ns.db.teleArriveEarly)
+	end
+	-- ...and the seconds left on the cast itself (the zoom in takes them all).
+	function ns.DepartCastLeft()
+		return ns.DepartTimeLeft() and math.max(MIN_SWING, castEndsAt - GetTime())
+	end
+end
 
 -- Fishing: casting it counts like an emote, so it carries on after the cast
 -- ends (looting, recasting) until you move or jump. All ranks share the name.
@@ -797,6 +951,9 @@ end
 local function EventCamera(key)
 	local camera = key and ns.db["event" .. key .. "Camera"]
 	if camera and camera ~= "none" then
+		if key == "Hearth" or key == "Teleport" then
+			return "tele" -- (its only camera; early test versions saved "cozy")
+		end
 		return camera
 	end
 end
@@ -804,6 +961,12 @@ end
 -- Fishing with a camera set for it: the cast doesn't count as busy casting.
 function ns.IsFishingEvent()
 	return emoteEvent == "Fishing" and ns.db ~= nil and EventCamera("Fishing") ~= nil
+end
+
+-- The same for your Hearthstone or a teleport.
+function ns.IsDepartEvent()
+	return (emoteEvent == "Hearth" or emoteEvent == "Teleport") and ns.db ~= nil
+		and EventCamera(emoteEvent) ~= nil
 end
 
 -- The event happening now and its camera, before any wait (see ActiveEvent).
@@ -843,6 +1006,45 @@ do
 		return not stoppedByMove[key]
 	end
 
+	-- Logging out (or quitting) with the 20-second countdown. Where logging out
+	-- is instant (an inn, a city) there's no countdown, and no event. Moving,
+	-- jumping, casting or Cancel ends it. The game's cancel event isn't relied
+	-- on alone (a logout left "on" would hold every other camera off): the
+	-- countdown box closing, moving, or still being here once the countdown's
+	-- run out all end it too.
+	local LOGOUT_COUNTDOWN = 20 -- seconds
+	local LOGOUT_POPUP_GRACE = 1 -- seconds for the countdown box to show
+	local logoutAt -- when the countdown started, while it's on
+	local logoutWatcher = CreateFrame("Frame")
+	for _, event in ipairs({ "PLAYER_CAMPING", "PLAYER_QUITING", "LOGOUT_CANCEL", "PLAYER_ENTERING_WORLD" }) do
+		pcall(logoutWatcher.RegisterEvent, logoutWatcher, event)
+	end
+	logoutWatcher:SetScript("OnEvent", function(_, event)
+		logoutAt = (event == "PLAYER_CAMPING" or event == "PLAYER_QUITING") and GetTime() or nil
+	end)
+	local function LoggingOut()
+		if not logoutAt then
+			return false
+		end
+		local since = GetTime() - logoutAt
+		local boxGone = false
+		if since > LOGOUT_POPUP_GRACE and StaticPopup_FindVisible then
+			local ok, shown = pcall(function()
+				return StaticPopup_FindVisible("CAMP") or StaticPopup_FindVisible("QUIT")
+			end)
+			boxGone = ok and not shown
+		end
+		if boxGone or since > LOGOUT_COUNTDOWN + 2 then
+			logoutAt = nil
+			return false
+		end
+		return true
+	end
+	-- (For casting your Hearthstone or a teleport: that calls a logout off too.)
+	function ns.EndLogoutEvent()
+		logoutAt = nil
+	end
+
 	function CurrentEvent()
 		if not ns.db or UnitOnTaxi("player") then
 			return nil
@@ -851,6 +1053,18 @@ do
 		local campfire = EventLive("Campfire", atCampfire)
 		local afk = EventLive("AFK", ns.Flag(UnitIsAFK("player")))
 		if ns.playerMoving then
+			logoutAt = nil -- (moving calls a logout off)
+			if ns.MovingManually and ns.MovingManually() then
+				-- Moving by hand: every event ends, even those set to carry on
+				-- through moving (they start afresh: the weapon drawn again...).
+				-- Only auto-run and auto-walk carry the cameras on.
+				for _, event in ipairs(ns.EVENTS) do
+					if EventOn(event.key) then
+						stoppedByMove[event.key] = true
+					end
+				end
+				return nil
+			end
 			-- Moving ends them all, except a weapon drawn while RP walking for the
 			-- cozy camera: it swings round in front of you as you walk (a "hero walk").
 			local heroWalk = weapon and EventCamera("Weapon") == "cozy" and ns.IsRPWalking and ns.IsRPWalking()
@@ -869,8 +1083,12 @@ do
 		if ns.manualCam then
 			return "Manual", ns.manualCam -- started from a key binding (Cinematic_StartCam)
 		end
-		for _, key in ipairs({ emoteEvent or false, weapon and "Weapon", campfire and "Campfire",
-			afk and "AFK" }) do
+		-- A Hearthstone or teleport cast first (it calls a logout off anyway),
+		-- then logging out, then going AFK (it comes after whatever you were
+		-- doing: AFK while sitting is the AFK camera), then the rest.
+		local departing = (emoteEvent == "Hearth" or emoteEvent == "Teleport") and emoteEvent
+		for _, key in ipairs({ departing, LoggingOut() and "Logout", afk and "AFK", emoteEvent or false,
+			weapon and "Weapon", campfire and "Campfire" }) do
 			local camera = key and EventCamera(key)
 			if camera then
 				return key, camera
@@ -881,8 +1099,9 @@ do
 end
 
 -- The event that picks the standing-still camera now, and its camera ("cozy",
--- "vista", "fish" or "afk"), or nil. The latest emote (or seat) wins, then a drawn
--- weapon, a campfire buff and going AFK; one set to no camera is passed over.
+-- "vista", "fish", "afk" or "tele"), or nil. A Hearthstone or teleport cast
+-- comes first, then logging out, going AFK, the latest emote (or seat), a
+-- drawn weapon and a campfire buff; one set to no camera is passed over.
 -- An event with a delay counts only once it has lasted that many seconds.
 local lastEvent, eventSince = nil, 0
 function ns.ActiveEvent()
@@ -918,9 +1137,16 @@ function ns.IsFish()
 	return select(2, ns.ActiveEvent()) == "fish"
 end
 
--- Cozy: the camera swings round to face you and sways in front.
+-- Cozy: the camera swings round to face you and sways in front. The tele
+-- camera is the cozy camera too, with its own spin and zoom (ns.IsTele).
 function ns.IsCozy()
-	return select(2, ns.ActiveEvent()) == "cozy"
+	local camera = select(2, ns.ActiveEvent())
+	return camera == "cozy" or camera == "tele"
+end
+
+-- Tele: casting your Hearthstone or a teleport.
+function ns.IsTele()
+	return select(2, ns.ActiveEvent()) == "tele"
 end
 
 -- An event set to the AFK camera: it starts without waiting out its delay.
@@ -944,7 +1170,7 @@ local lastCombatAt = -math.huge
 -- setting, in seconds; 0: no wait). Looked up by mode ("run") or orbit prefix
 -- ("runOrbit"). The death camera has none: it runs in combat by design.
 local COMBAT_WAIT_KEY = {}
-for _, mode in ipairs({ "taxi", "idle", "walk", "run", "cozy", "vista", "fish" }) do
+for _, mode in ipairs({ "taxi", "idle", "walk", "run", "cozy", "vista", "fish", "tele" }) do
 	COMBAT_WAIT_KEY[mode] = mode .. "CombatWait"
 	COMBAT_WAIT_KEY[mode .. "Orbit"] = mode .. "CombatWait"
 end
@@ -1015,7 +1241,7 @@ local steerLowered = false
 
 local function PitchCenter()
 	if orbitPrefix == "cozyOrbit" then
-		return -ns.db.cozyLevel
+		return ns.IsTele() and -ns.db.teleLevel or -ns.db.cozyLevel
 	elseif orbitPrefix == "vistaOrbit" then
 		return -ns.db.vistaLevel
 	elseif orbitPrefix == "fishOrbit" then
@@ -1093,6 +1319,69 @@ local function WrapAngle(angle)
 	return angle
 end
 
+-- The Hearthstone and teleport spin (the cozy camera while you cast one): the
+-- swing round eases in, then keeps speeding up until you go. Cancel the cast
+-- and it brakes, then turns back to where the camera was before it started.
+-- (In a do block: this file is at Lua's 200-local limit.)
+do
+	local SPIN_BRAKE = 1.5  -- seconds to brake to a stop once the cast is cancelled
+	local RETURN_SPEED = 45 -- degrees per second (about) for the turn back
+	local RETURN_MIN = 1.5  -- seconds, at least, for the turn back
+
+	-- The spin's yaw speed now (degrees per second, unsigned), and whether it's
+	-- still going (false once it has braked to a stop after a cancel).
+	function ns.SpinSpeed(elapsed)
+		local o = ns.orbit
+		local T, ease, t = o.sweepTime, o.ease, o.t
+		if ns.DepartTimeLeft() then
+			-- (At least as fast as a half-turn swing: from in front of you already,
+			-- say straight after the cozy camera, the swing is short, but the spin
+			-- carries on past the front anyway, so it shouldn't set off at a crawl.)
+			local base = math.max(math.abs(o.yawDelta), 180) / (T * (1 - ease))
+			local speed = t < ease * T and base * EaseShape(t, T, ease) or base + ns.db.teleSpinAccel * (t - ease * T)
+			o.spinSpeed = math.min(speed, math.max(base, ns.db.teleSpinMax))
+			return o.spinSpeed, true
+		end
+		o.brakeT = (o.brakeT or 0) + elapsed
+		local f = math.min(1, o.brakeT / SPIN_BRAKE)
+		return (o.spinSpeed or 0) * (1 + math.cos(math.pi * f)) / 2, f < 1
+	end
+
+	-- After a cancelled spin has stopped: turn back to the starting view (angle
+	-- and tilt 0, where the cozy camera began). Returns true while it's turning.
+	-- Moving the camera yourself drops it.
+	function ns.StepSpinReturn(elapsed, adjusting)
+		local o = ns.orbit
+		if o.returnPending then
+			o.returnPending = false
+			if not adjusting then
+				local yaw, pitch = WrapAngle(-o.angle), -o.pitch
+				o.back = { yaw = yaw, pitch = pitch, t = 0,
+					T = math.max(RETURN_MIN, math.abs(yaw) / RETURN_SPEED, math.abs(pitch) / RETURN_SPEED) }
+			end
+		end
+		local back = o.back
+		if not back then
+			return false
+		end
+		back.t = back.t + elapsed
+		if adjusting or back.t >= back.T then
+			StopAxis(ns.yawAxis)
+			StopAxis(ns.pitchAxis)
+			o.back = nil
+			return false
+		end
+		-- One smooth swell (no cruise), from a standstill to a standstill.
+		local shape = EaseShape(back.t, back.T, 0.5) / (back.T * 0.5)
+		local yawSpeed, pitchSpeed = back.yaw * shape, back.pitch * shape
+		MoveAxis(ns.yawAxis, math.abs(yawSpeed), yawSpeed > 0)
+		MoveAxis(ns.pitchAxis, math.abs(pitchSpeed), pitchSpeed > 0)
+		o.angle = WrapAngle(o.angle + yawSpeed * elapsed)
+		o.pitch = o.pitch + pitchSpeed * elapsed
+		return true
+	end
+end
+
 -- Back mode: random target in [-limit, limit] at least minChange from the
 -- current angle, chosen uniformly over the allowed stretches.
 local function PickBackTarget(limit, current)
@@ -1121,13 +1410,17 @@ end
 
 local function PlanNextSweep()
 	local mode = OrbitSetting("Mode")
+	ns.orbit.spin = false
+	-- The tele camera's spin, not yet started this cast: it starts with this
+	-- move, even from in front (say, sitting by a fire as you cast).
+	local teleSwing = ARC_CENTER[orbitPrefix] and ns.IsTele() and ns.DepartTimeLeft() ~= nil and not ns.orbit.teleSpun
 	if mode == "back" then
 		-- Angles are worked relative to the swing's centre (in front for cozy).
 		local arc = OrbitSetting("BackArc")
 		local center = ArcCenter(orbitPrefix)
 		local relative = WrapAngle(ns.orbit.angle - center)
 		local target
-		if ARC_CENTER[orbitPrefix] and math.abs(relative) > 2 * arc then
+		if ARC_CENTER[orbitPrefix] and (math.abs(relative) > 2 * arc or teleSwing) then
 			-- Cozy, swinging round from far off: stop short at the near edge of the
 			-- sway, so it can flow on the same way across the centre.
 			-- (From straight behind, either way round is as short: pick one.)
@@ -1152,6 +1445,9 @@ local function PlanNextSweep()
 			target = target * (0.4 + 0.6 * math.abs(target) / arc)
 		end
 		ns.orbit.yawDelta = WrapAngle(center + target - ns.orbit.angle)
+		if teleSwing and math.abs(ns.orbit.yawDelta) < 1 then
+			ns.orbit.yawDelta = ns.orbit.cozyDir -- (already there: the spin still needs a way to go)
+		end
 		local pitchTarget = PitchCenter() + RandomPitchTarget()
 		if orbitPrefix == "runOrbit" then
 			-- Auto-run: never below the lowest tilt (steering lowering included).
@@ -1175,11 +1471,18 @@ local function PlanNextSweep()
 	ns.orbit.ease = OrbitSetting("Ease")
 	if mode == "back" or mode == "random" then
 		ns.orbit.sweepTime = math.max(ORBIT_MIN_SWEEP_TIME, OrbitSetting("MoveTime"))
-		if ARC_CENTER[orbitPrefix] and math.abs(ns.orbit.yawDelta) > 2 * OrbitSetting("BackArc") then
+		if ARC_CENTER[orbitPrefix] and (math.abs(ns.orbit.yawDelta) > 2 * OrbitSetting("BackArc") or teleSwing) then
 			-- The cozy camera's first swing round to face you is a long one: take
 			-- it slowly, but get going quickly (a short ease-in).
 			ns.orbit.sweepTime = math.max(ns.orbit.sweepTime, math.abs(ns.orbit.yawDelta) / COZY_TURN_SPEED)
 			ns.orbit.ease = math.min(ns.orbit.ease, COZY_START_EASE)
+			-- The tele camera: quicker, to be in front of you before you go, and it
+			-- never eases out: it keeps spinning round you, faster and faster,
+			-- until you're gone (ns.SpinSpeed).
+			if teleSwing then
+				ns.orbit.sweepTime = math.max(ORBIT_MIN_SWEEP_TIME, math.min(ns.orbit.sweepTime, ns.DepartTimeLeft()))
+				ns.orbit.spin, ns.orbit.spinSpeed, ns.orbit.brakeT, ns.orbit.teleSpun = true, 0, 0, true
+			end
 		end
 	else
 		-- The larger move cruises at the configured speed; the other is scaled to
@@ -1197,6 +1500,7 @@ end
 -- noDrift holds still (used while the takeoff swing is moving the camera).
 local function BeginPause(startT, noDrift, forceDrift)
 	ns.orbit.phase, ns.orbit.t, ns.orbit.pauseStart = "pause", startT, startT
+	ns.orbit.spin = false
 	ns.orbit.noDrift = noDrift or false
 	ns.orbit.forceDrift = forceDrift or false
 	if OrbitSetting("Mode") == "back" then
@@ -1267,7 +1571,7 @@ local ZOOM_CLOSEST = 1              -- yards: never zoom in past this
 -- The active zoom profile's value: idleZoom* standing still, taxiZoom* flying,
 -- walkZoom* while RP walking.
 local ZOOM_PREFIX = { taxi = "taxiZoom", walk = "walkZoom", run = "runZoom", idle = "idleZoom",
-	cozy = "cozyZoom", vista = "vistaZoom", fish = "fishZoom" }
+	cozy = "cozyZoom", vista = "vistaZoom", fish = "fishZoom", tele = "teleZoom" }
 local function ZoomSetting(key)
 	local value = ns.db[ZOOM_PREFIX[idleZoom.context] .. key]
 	if Indoors() then
@@ -1626,6 +1930,10 @@ local function StartIdleZoom()
 	if idleZoom.context == "cozy" then
 		-- Cozy: the first move comes in to the close-up, getting going quickly.
 		PlanPath(ZoomBase(), COZY_ZOOM_START, COZY_ZOOM_EASE, "move")
+	elseif idleZoom.context == "tele" then
+		-- Tele: in to its close-up over the whole cast, getting going at once
+		-- (a short ease in; it's still coming in as you go).
+		PlanPath(math.min(idleZoom.saved, ns.db.teleZoomClose), ns.DepartCastLeft() or 10, 0.15, "move")
 	else
 		PlanZoom(idleZoom.saved + ZoomSetting("Distance")) -- the first move always pulls back
 	end
@@ -1665,7 +1973,9 @@ local function EndIdleZoom(restore)
 	idleZoom.active = false
 	if restore and idleZoom.saved and GetCameraZoom then
 		idleZoom.restoring = true
-		PlanPath(idleZoom.saved, ZOOM_RESTORE_TIME, 0.5, "restore")
+		-- (The tele zoom only ends early on a cancelled cast: back quickly then.)
+		PlanPath(idleZoom.saved, idleZoom.context == "tele" and ns.db.teleZoomBackTime or ZOOM_RESTORE_TIME,
+			0.5, "restore")
 	else
 		FinishRestore()
 	end
@@ -1743,6 +2053,8 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 		end
 	elseif travel == "cozy" then
 		allowed = ns.db.cozyZoom -- (cozy already means still, or walking weapon-drawn)
+	elseif travel == "tele" then
+		allowed = ns.db.teleZoom
 	elseif travel == "vista" then
 		allowed = ns.db.vistaZoom -- (vista already means still)
 	elseif travel == "fish" then
@@ -1994,13 +2306,15 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- at a campfire is still cozy.)
 	local casting = ns.db.cameraPauseCasting
 		and (ns.Flag(UnitCastingInfo("player")) or ns.Flag(UnitChannelInfo("player")))
-		and not ns.IsFishingEvent()
+		and not ns.IsFishingEvent() and not ns.IsDepartEvent()
 	if onTaxi or active or atNPC or inMenu or (casting and not ns.IsCozy()) then
 		ns.stillSince = nil
 	elseif not ns.stillSince then
-		-- Stopping from the RP walk camera goes straight into the standing-still
-		-- camera: its timer counts as already run (for the tint, tooltips and
-		-- music too), so there's no gap between the two.
+		-- Stopping from the RP walk or auto-run camera goes straight into the
+		-- standing-still camera: its timer counts as already run (for the tint,
+		-- tooltips and music too), so there's no gap between the two. Those
+		-- only run on auto-walk and auto-run; moving by hand last means the
+		-- timer starts afresh (walkHandoff is cleared as you do).
 		ns.stillSince = walkHandoff and (now - ns.db.idleOrbitDelay) or now
 		walkHandoff = false
 	end
@@ -2014,8 +2328,12 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	local vista = ns.IsVista()
 	local fish = ns.IsFish()
 	local cozy = ns.IsCozy()
+	local tele = cozy and ns.IsTele()
 	if not cozy then
 		cozySessionStarted = false -- the next cozy spell swings round afresh
+	end
+	if not tele then
+		ns.orbit.teleSpun = false -- the next cast spins afresh
 	end
 	local afk = ns.IsEventAFK()
 	if ns.stillSince and (cozy or vista or fish or afk) and now - ns.stillSince < ns.db.idleOrbitDelay then
@@ -2041,8 +2359,9 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	end
 	ns.ApplyCVarSet(ns.DEATH_CVARS, followOff)
 	ns.UpdateDeathTilt(deathCam, elapsed)
-	-- RP walk camera: only while actually moving in walk mode. Stop and stand,
-	-- and it's the standing-still camera again (after its usual delay).
+	-- RP walk camera: only while auto-walking (auto-run in walk mode; walking by
+	-- hand cancels the cameras). Stop and stand, and it's the standing-still
+	-- camera again.
 	-- Auto-running (not walking) gets the auto-run camera, set up the same way.
 	local walking = not onTaxi and ns.IsRPWalking and ns.IsRPWalking()
 	local autoRunning = not onTaxi and not walking and ns.IsAutoRunning and ns.IsAutoRunning()
@@ -2054,7 +2373,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	do -- (logged always; printed with /cine debug modes)
 		ns.ReportCameraMode((deathCam and "death") or (cinematic and ((onTaxi and ns.FlightCameraOn() and "flight")
 			or (travel == "walk" and "RP walk") or (travel == "run" and "auto-run")
-			or (vista and "vista") or (fish and "fish") or (cozy and "cozy")
+			or (vista and "vista") or (fish and "fish") or (tele and "tele") or (cozy and "cozy")
 			or (ns.stillSince and now - ns.stillSince >= ns.db.idleOrbitDelay and "AFK"))) or nil)
 	end
 	if travel and cinematic then
@@ -2063,7 +2382,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		walkHandoff = false -- running or flying: the next stop starts the timer afresh
 	end
 	-- (Dead: the death camera has the zoom.)
-	UpdateIdleZoom(cinematic and not dead, onTaxi, travel or (vista and "vista") or (fish and "fish") or (cozy and "cozy") or nil, now, elapsed)
+	UpdateIdleZoom(cinematic and not dead, onTaxi, travel or (vista and "vista") or (fish and "fish") or (tele and "tele") or (cozy and "cozy") or nil, now, elapsed)
 
 	local turning, turned = IsTurning(elapsed) -- every frame, to keep the last facing current
 	if turning then
@@ -2119,14 +2438,15 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		and ((onTaxi and ns.db.taxiOrbit and ns.FlightCameraOn() and not ns.orbit.settling) or (travel and ns.db[T.orbit])
 			or (vista and ns.db.vistaOrbit and not ns.IsRotationBlocked())
 			or (fish and ns.db.fishOrbit and not ns.IsRotationBlocked())
-			or (cozy and ns.db.cozyOrbit and not ns.IsRotationBlocked())
+			or (cozy and (ns.db.cozyOrbit or tele) and not ns.IsRotationBlocked())
 			or (idle and not ns.IsRotationBlocked() and not (ns.db.indoorNoSweep and Indoors()))))
 	local prefix = deathCam and "deathOrbit" or onTaxi and "taxiOrbit" or ((travel and ns.db[T.orbit]) and T.orbit)
 		or ((vista and ns.db.vistaOrbit) and "vistaOrbit")
 		or ((fish and ns.db.fishOrbit) and "fishOrbit")
-		or ((cozy and ns.db.cozyOrbit) and "cozyOrbit") or "idleOrbit"
+		or ((cozy and (ns.db.cozyOrbit or tele)) and "cozyOrbit") or "idleOrbit"
 	-- Fresh out of a fight: this mode may wait a while before starting.
-	want = want and ns.CombatWaitOver(prefix, now)
+	-- (The tele camera turns with the cozy camera's rotation, but has its own wait.)
+	want = want and ns.CombatWaitOver((tele and prefix == "cozyOrbit") and "tele" or prefix, now)
 	local footHandoff = ns.orbit.level > 0 and orbitPrefix ~= prefix
 		and FOOT_ORBIT[orbitPrefix] and FOOT_ORBIT[prefix]
 	-- Into the vista camera with another one still moving (the standing-still
@@ -2136,8 +2456,15 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		-- Standing still <-> RP walk: no stop and restart. The current move or
 		-- pause plays out, and the next move follows on from where the camera
 		-- is (for walking, that eases it back behind you).
+		if prefix == "cozyOrbit" and tele and orbitPrefix ~= "cozyOrbit" then
+			-- Into the tele camera from another (the AFK turn, a walk): their
+			-- angles don't say where you're facing, so it starts afresh, as if
+			-- from behind you.
+			ns.orbit.angle, ns.orbit.pitch = 0, 0
+		end
 		orbitPrefix = prefix
 		ns.orbit.level = 1
+		ns.orbit.returnPending, ns.orbit.back = false, nil -- (another camera: no turn back)
 		if prefix == "idleOrbit" then
 			ns.orbit.randomRight = math.random() < 0.5 -- a fresh direction each time
 		end
@@ -2165,6 +2492,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 			-- (taking off mid-rotation): begin afresh with the right profile.
 			StopOrbitMove()
 			orbitPrefix = prefix
+			ns.orbit.returnPending, ns.orbit.back = false, nil -- (another camera: no turn back)
 			if prefix == "idleOrbit" then
 				ns.orbit.randomRight = math.random() < 0.5 -- a fresh direction each time
 			end
@@ -2244,7 +2572,21 @@ function ns.UpdateOrbit(cinematic, elapsed)
 			and ORBIT_QUICK_STOP_TIME or ORBIT_STOP_TIME
 		ns.orbit.level = ns.Approach(ns.orbit.level, 0, elapsed, stopTime)
 	end
+	-- The tele camera taking over from the cozy one (sat by a fire, then cast),
+	-- or picking up after you moved the camera: no swing round, but its spin
+	-- starts now.
+	if tele and want and orbitPrefix == "cozyOrbit" and ns.orbit.level > 0 and not ns.orbit.teleSpun then
+		-- Taking over from the AFK camera's continuous turn: no easing that out
+		-- first (it would end in a pause, cancelling the spin).
+		ns.orbit.continuous, ns.orbit.contFade = false, nil
+		ns.orbit.phase, ns.orbit.t = "move", 0
+		PlanNextSweep()
+	end
 	if ns.orbit.level <= 0 then
+		-- A cancelled Hearthstone or teleport spin: turn back to where it started.
+		if ns.StepSpinReturn(elapsed, adjusting) then
+			return
+		end
 		if yawExtra ~= 0 then
 			-- No sway, but a turn to hold or glide: drive the yaw for that alone.
 			StopOrbitTilt()
@@ -2298,7 +2640,9 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- Drift: a steady creep that never stops. It runs under the moves too, so a
 	-- move starts and ends at drift speed instead of at a standstill, and it
 	-- changes speed or direction gradually (over about DRIFT_RAMP seconds).
-	local driftOn = (OrbitSetting("Drift") or ns.orbit.forceDrift) and not ns.orbit.noDrift
+	-- (Not under the Hearthstone or teleport spin: it would wobble its speed past your front.)
+	local spinning = ns.orbit.spin and ns.orbit.phase == "move"
+	local driftOn = (OrbitSetting("Drift") or ns.orbit.forceDrift) and not ns.orbit.noDrift and not spinning
 	local driftTarget = 0
 	if driftOn then
 		local positive
@@ -2337,7 +2681,31 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	local yawVel = driftSmooth -- signed degrees per second, before the level
 	if ns.orbit.phase == "move" then
 		local T = ns.orbit.sweepTime
-		if ns.orbit.t >= T then
+		if spinning then
+			-- The Hearthstone or teleport spin: the swing round eases in, then keeps
+			-- speeding up (no easing out); the tilt still settles at its target.
+			-- Cancelled, it brakes to a stop (and turns back once stopped:
+			-- ns.StepSpinReturn).
+			local ease = ns.orbit.ease or OrbitSetting("Ease")
+			local cruise = T * (1 - ease)
+			local t = ns.orbit.t
+			local speed, going = ns.SpinSpeed(elapsed)
+			yawVel = ns.orbit.yawDelta > 0 and speed or -speed
+			if not going then
+				StopOrbitTilt()
+				BeginPause(0, true) -- (no drift: the turn back follows once the level is down)
+				if want then
+					-- Still a cozy camera (at a campfire, say): it sways on from here.
+					ns.orbit.returnPending = false
+				end
+			elseif t < T then
+				local pitchSpeed = ns.orbit.level * math.abs(ns.orbit.pitchDelta) * EaseShape(t, T, ease) / cruise
+				MoveAxis(ns.pitchAxis, pitchSpeed, ns.orbit.pitchDelta > 0)
+				ns.orbit.pitch = ns.orbit.pitch + (ns.orbit.pitchDelta > 0 and pitchSpeed or -pitchSpeed) * elapsed
+			else
+				StopOrbitTilt()
+			end
+		elseif ns.orbit.t >= T then
 			StopOrbitTilt() -- the yaw carries on drifting
 			-- Behind only always drifts a little after a move, drift setting or not.
 			local startT = 0
@@ -2614,10 +2982,45 @@ ns.SETTLE_TURN, ns.SETTLE_ZOOM = FLYBY.SETTLE_TURN, FLYBY.SETTLE_ZOOM
 -- start on time (you're moving the camera, say) waits, until its share is over.
 local autoFlyBys = { times = {} }
 
+-- WoW Forever's Frequent Flier legacy talent (spell 1225490): flight path
+-- mounts fly 20% faster, so every flight takes 1/1.2 of the time. Checked
+-- directly, so the first flight after learning (or unlearning) it is already
+-- timed right. (Constants inside the functions: this file is at Lua's
+-- 200-local limit.)
+local function TalentFlightScale()
+	return (IsPlayerSpell and IsPlayerSpell(1225490)) and 1 / 1.2 or 1
+end
+
 -- How long a route takes (seconds): your own timed flight of it, or nil
--- until you've flown it once. (See ns.UpdateTaxi.)
+-- until you've flown it once. (See ns.UpdateTaxi.) Saved times are at a
+-- common speed (without the talent); the talent and flightSpeedScale turn
+-- them into today's. flightSpeedScale catches anything else that changes
+-- every flight's speed, learned from one flight instead of one per route.
 local function KnownFlightTime(route)
-	return route and ns.db.flightTimes[route]
+	local base = route and ns.db.flightTimes[route]
+	return base and base * (ns.db.flightSpeedScale or 1) * TalentFlightScale()
+end
+
+-- On landing: save the route's time. A route already known that took a
+-- clearly different time (more than FLIGHT_SCALE_SLACK off) means every flight
+-- has sped up or slowed down, so the scale follows it. One odd flight that
+-- sets it wrong is put right by the next one.
+local function RecordFlightTime(route, seconds)
+	local FLIGHT_SCALE_SLACK = 0.08
+	seconds = seconds / TalentFlightScale() -- (saved as if without the talent)
+	local scale = ns.db.flightSpeedScale or 1
+	local base = ns.db.flightTimes[route]
+	if base and base > 0 then
+		local ratio = seconds / base
+		if math.abs(ratio - scale) > scale * FLIGHT_SCALE_SLACK and ratio > 0.5 and ratio < 2 then
+			scale = math.abs(ratio - 1) > 0.01 and ratio or 1
+			ns.db.flightSpeedScale = scale ~= 1 and scale or nil
+			if ns.db.debugFlyBy then
+				ns.Print(("flight: flights now take %d%% of the time they used to"):format(scale * 100 + 0.5))
+			end
+		end
+	end
+	ns.db.flightTimes[route] = seconds / scale
 end
 
 local function PlanAutoFlyBys()
@@ -2866,7 +3269,8 @@ function ns.GetFlightDebug()
 		route = ns.flight.route, elapsed = ns.flight.start and ns.flight.route and now - ns.flight.start,
 		known = KnownFlightTime(ns.flight.route),
 		left = FlightTimeLeft(), settling = ns.orbit.settling,
-		hooked = TakeTaxiNode ~= nil,
+		hooked = TakeTaxiNode ~= nil, scale = ns.db.flightSpeedScale or 1,
+		talent = TalentFlightScale() ~= 1,
 	}
 end
 
@@ -2910,7 +3314,7 @@ function ns.UpdateTaxi()
 		flightSince, flightCamStarted = ns.flight.start or now, false
 	elseif ns.wasOnTaxi and not onTaxi then
 		if ns.flight.route then
-			ns.db.flightTimes[ns.flight.route] = now - ns.flight.start
+			RecordFlightTime(ns.flight.route, now - ns.flight.start)
 		end
 		ns.flight.route = nil
 		ns.db.currentFlight = nil
