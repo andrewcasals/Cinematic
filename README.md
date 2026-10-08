@@ -17,7 +17,7 @@ Make Azeroth feel like a film, on WoW Forever and on retail. Cinematic quietly f
 
 Each situation has its own camera, and they hand over seamlessly:
 
-* **Flight Cam:** swings behind you at takeoff, sways through the journey, and settles behind you before landing. Known flight times (for WoW Forever and retail) mean it's ready on routes you haven't flown yet. Random fly-bys turn the camera slowly round to look back at the view, then return.
+* **Flight Cam:** swings behind you at takeoff, sways through the journey, and settles behind you before landing. Each route is timed as you fly it, so the next time it knows when you'll land. Random fly-bys turn the camera slowly round to look back at the view, then return.
 * **AFK Cam:** stand still for a while, or go AFK, and the camera slowly sweeps around your character and drifts in and out.
 * **RP Walk Cam:** switch to walking and the camera sways gently behind you. It holds steady through turns, then glides round to your new heading.
 * **Auto-run Cam:** a travel camera that looks ahead down the road and drifts in and out as you go. On retail it keeps going when you auto-run on a skyriding mount.

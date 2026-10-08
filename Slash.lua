@@ -554,13 +554,12 @@ function ns.HandleSlash(msg)
 			ns.Print("flight: this client has no TakeTaxiNode, so routes can't be noted")
 		end
 		if f.pending then
-			ns.Print(("flight: noted %s %s ago, waiting for takeoff (base time %s)"):format(
-				f.pending, s(f.pendingAge), f.pendingBase and s(f.pendingBase) or "none found"))
+			ns.Print(("flight: noted %s %s ago, waiting for takeoff"):format(f.pending, s(f.pendingAge)))
 		end
 		if f.onTaxi then
 			ns.Print(("flight: route %s, %s in, known time %s, left %s, settle at %s left (%s)"):format(
 				f.route or "unknown (not noted at the flight master)", s(f.elapsed),
-				s(f.known) .. (f.knownIsBase and " (base)" or ""), s(f.left),
+				s(f.known), s(f.left),
 				s(ns.db.taxiSettleLead), f.settling and "settling now"
 					or not ns.db.taxiSettle and "settle is off"
 					or not f.route and "can't settle: no route"

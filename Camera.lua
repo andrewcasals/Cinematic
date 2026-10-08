@@ -2614,13 +2614,19 @@ ns.SETTLE_TURN, ns.SETTLE_ZOOM = FLYBY.SETTLE_TURN, FLYBY.SETTLE_ZOOM
 -- start on time (you're moving the camera, say) waits, until its share is over.
 local autoFlyBys = { times = {} }
 
+-- How long a route takes (seconds): your own timed flight of it, or nil
+-- until you've flown it once. (See ns.UpdateTaxi.)
+local function KnownFlightTime(route)
+	return route and ns.db.flightTimes[route]
+end
+
 local function PlanAutoFlyBys()
 	local plan = { times = {}, key = flightSince }
 	if flightSince == -math.huge then
 		return plan -- (resumed mid-flight: they're only planned as you take off)
 	end
 	local start = ns.flight.start or flightSince
-	local duration = ns.flight.start and KnownFlightTime(ns.flight.route, ns.flight.base)
+	local duration = ns.flight.start and KnownFlightTime(ns.flight.route)
 	local length = ns.db.flyByTurnTime + ns.db.flyByHold + ns.db.flyByBackTime + 3 -- (+ lining up)
 	if duration then
 		local a = math.min(ns.db.taxiFlyByFrom, ns.db.taxiFlyByTo) / 100
@@ -2670,7 +2676,7 @@ function ns.UpdateAutoFlyBy(now, onTaxi, cinematic, adjusting)
 			for _, slot in ipairs(autoFlyBys.times) do
 				times[#times + 1] = ("in %d sec"):format(math.max(0, slot.at - now))
 			end
-			local duration = KnownFlightTime(ns.flight.route, ns.flight.base)
+			local duration = KnownFlightTime(ns.flight.route)
 			ns.Print(("fly-by: random ones planned for this flight (%s): %s"):format(
 				flightSince == -math.huge and "resumed after a reload, so none"
 					or duration and ("%d sec long"):format(duration) or "route not timed yet",
@@ -2820,81 +2826,30 @@ ns.FLIGHT_CVARS = { values = { cameraSmoothStyle = "0" } }
 -- (start > destination, read from the flight map when TakeTaxiNode is called)
 -- is timed from takeoff to landing and saved. Later flights on the same route
 -- know when they'll land, so the camera can settle behind the character first.
--- Routes not timed yet fall back on the base times in FlightTimes.lua, looked
--- up when the destination is picked; a timed flight then replaces them.
 local TAXI_PICK_WINDOW = 30 -- seconds between picking a destination and takeoff
-local NODE_SLACK = 0.002    -- how far off the flight map a base time's flight point can be
-local pendingRoute, pendingRouteAt, pendingBase
-ns.flight = {}           -- route, start, base (time) for the flight in progress
-
--- The base data keys flight points by floor(x * 100000000) on the flight map:
--- the nearest key to x, if any is within NODE_SLACK.
-local function NearestNode(set, x)
-	local best, bestOff
-	for key in pairs(set) do
-		local off = math.abs(key / 100000000 - x)
-		if off <= (bestOff or NODE_SLACK) then
-			best, bestOff = key, off
-		end
-	end
-	return best
-end
-
--- Retail's base data is keyed by name, without the ", Zone" the flight map
--- adds. Either direction will do: a flight back takes about as long.
-local function NodeKey(name)
-	return name:match("^(.-)%s*,") or name
-end
-
-local function BaseFlightTimeByName(from, to)
-	local times = ns.FLIGHT_TIMES_BY_NAME[UnitFactionGroup("player") or ""]
-	if not (times and from and to) then
-		return nil
-	end
-	for _, pair in ipairs({ { from, to }, { NodeKey(from), NodeKey(to) } }) do
-		local a, b = pair[1], pair[2]
-		local time = (times[a] and times[a][b]) or (times[b] and times[b][a])
-		if time then
-			return time
-		end
-	end
-end
-
-local function BaseFlightTime(fromIndex, toIndex)
-	if ns.FLIGHT_TIMES_BY_NAME then
-		return BaseFlightTimeByName(TaxiNodeName(fromIndex), TaxiNodeName(toIndex))
-	end
-	local times = ns.FLIGHT_TIMES and ns.FLIGHT_TIMES[UnitFactionGroup("player") or ""]
-	if not (times and TaxiNodePosition) then
-		return nil
-	end
-	local fromX, toX = TaxiNodePosition(fromIndex), TaxiNodePosition(toIndex)
-	local from = fromX and NearestNode(times, fromX)
-	local to = from and toX and NearestNode(times[from], toX)
-	return to and times[from][to]
-end
+local pendingRoute, pendingRouteAt
+ns.flight = {}           -- route and start (time) of the flight in progress
 
 function ns.HookTaxiRoutes()
 	if not TakeTaxiNode then
 		return
 	end
 	hooksecurefunc("TakeTaxiNode", function(index)
-		local from, fromIndex
+		local from
 		for i = 1, (NumTaxiNodes and NumTaxiNodes() or 0) do
 			if TaxiNodeGetType(i) == "CURRENT" then
-				from, fromIndex = TaxiNodeName(i), i
+				from = TaxiNodeName(i)
 			end
 		end
 		local to = TaxiNodeName(index)
 		if from and to then
 			pendingRoute, pendingRouteAt = from .. " > " .. to, GetTime()
-			pendingBase = BaseFlightTime(fromIndex, index)
 		end
 	end)
 end
 
 local function FlightTimeLeft()
-	local duration = KnownFlightTime(ns.flight.route, ns.flight.base)
+	local duration = KnownFlightTime(ns.flight.route)
 	if not duration then
 		return nil
 	end
@@ -2909,9 +2864,7 @@ function ns.GetFlightDebug()
 		onTaxi = UnitOnTaxi("player"),
 		pending = pendingRoute, pendingAge = pendingRoute and now - pendingRouteAt,
 		route = ns.flight.route, elapsed = ns.flight.start and ns.flight.route and now - ns.flight.start,
-		known = KnownFlightTime(ns.flight.route, ns.flight.base),
-		knownIsBase = ns.flight.route and not ns.db.flightTimes[ns.flight.route] and ns.flight.base ~= nil,
-		pendingBase = pendingRoute and pendingBase,
+		known = KnownFlightTime(ns.flight.route),
 		left = FlightTimeLeft(), settling = ns.orbit.settling,
 		hooked = TakeTaxiNode ~= nil,
 	}
@@ -2947,11 +2900,11 @@ function ns.UpdateTaxi()
 		ns.orbit.angle, ns.orbit.pitch = 0, 0 -- assume the camera starts behind the character
 		ns.orbit.settling, ns.orbit.zoomSettled = false, false
 		if pendingRoute and now - pendingRouteAt < TAXI_PICK_WINDOW then
-			ns.flight.route, ns.flight.start, ns.flight.base = pendingRoute, now, pendingBase
+			ns.flight.route, ns.flight.start = pendingRoute, now
 		end
-		pendingRoute, pendingBase = nil, nil
+		pendingRoute = nil
 		ns.db.currentFlight = ns.flight.route
-			and { route = ns.flight.route, start = ns.flight.start, base = ns.flight.base } or nil
+			and { route = ns.flight.route, start = ns.flight.start } or nil
 		-- (Saved, so a /reload on the way still knows it.)
 		ns.db.takeoffZoom = ns.PlayerZoom()
 		flightSince, flightCamStarted = ns.flight.start or now, false
@@ -2959,7 +2912,7 @@ function ns.UpdateTaxi()
 		if ns.flight.route then
 			ns.db.flightTimes[ns.flight.route] = now - ns.flight.start
 		end
-		ns.flight.route, ns.flight.base = nil, nil
+		ns.flight.route = nil
 		ns.db.currentFlight = nil
 		ns.orbit.settling, ns.orbit.zoomSettled = false, false
 		local takenOver = ns.FlightTakenOver() -- (before the flight's forgotten)
@@ -2982,8 +2935,8 @@ function ns.UpdateTaxi()
 		-- (GetTime carries on across reloads, so its start still lines up.)
 		local saved = ns.db.currentFlight
 		if not ns.flight.route and saved and saved.route and saved.start and now >= saved.start
-			and now - saved.start < (KnownFlightTime(saved.route, saved.base) or 600) + 60 then
-			ns.flight.route, ns.flight.start, ns.flight.base = saved.route, saved.start, saved.base
+			and now - saved.start < (KnownFlightTime(saved.route) or 600) + 60 then
+			ns.flight.route, ns.flight.start = saved.route, saved.start
 		else
 			ns.db.currentFlight = nil
 		end

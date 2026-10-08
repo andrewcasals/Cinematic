@@ -12,8 +12,6 @@ HideUI.lua
 Frames.lua
 Chat.lua
 Effects.lua
-FlightTimes.lua
-FlightTimes_Retail.lua
 Camera.lua
 QuestCam.lua
 Tint.lua
