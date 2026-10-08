@@ -5,4 +5,25 @@
 	<Binding name="CINEMATIC_PEEK" runOnUp="true" category="ADDONS">
 		Cinematic_Peek(keystate == "down")
 	</Binding>
+	<Binding name="CINEMATIC_HIDEUI" category="ADDONS">
+		Cinematic_ToggleUI()
+	</Binding>
+	<Binding name="CINEMATIC_FLYBY" category="ADDONS">
+		Cinematic_FlyBy()
+	</Binding>
+	<Binding name="CINEMATIC_CAM_IDLE" category="ADDONS">
+		Cinematic_StartCam("idle")
+	</Binding>
+	<Binding name="CINEMATIC_CAM_COZY" category="ADDONS">
+		Cinematic_StartCam("cozy")
+	</Binding>
+	<Binding name="CINEMATIC_CAM_VISTA" category="ADDONS">
+		Cinematic_StartCam("vista")
+	</Binding>
+	<Binding name="CINEMATIC_CAM_FISH" category="ADDONS">
+		Cinematic_StartCam("fish")
+	</Binding>
+	<Binding name="CINEMATIC_CAM_DEATH" category="ADDONS">
+		Cinematic_StartCam("death")
+	</Binding>
 </Bindings>

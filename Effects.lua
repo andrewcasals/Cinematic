@@ -8,28 +8,81 @@ ns.letterboxDirty = false
 -- values are saved on the way in and put back on the way out. Originals are
 -- also kept in the saved variables so a crash or disconnect can't leave names
 -- switched off for good. CVars this client doesn't have are skipped.
-local CVAR_SETS = {
-	{
-		option = "hideNames",
-		values = {
-			UnitNameOwn = "0", UnitNameNPC = "0", UnitNameHostleNPC = "0",
-			UnitNameInteractiveNPC = "0", UnitNameFriendlySpecialNPCName = "0",
-			UnitNameNonCombatCreatureName = "0",
-			UnitNameFriendlyPlayerName = "0", UnitNameFriendlyMinionName = "0",
-			UnitNameFriendlyPetName = "0", UnitNameFriendlyGuardianName = "0",
-			UnitNameFriendlyTotemName = "0",
-			UnitNameEnemyPlayerName = "0", UnitNameEnemyMinionName = "0",
-			UnitNameEnemyPetName = "0", UnitNameEnemyGuardianName = "0",
-			UnitNameEnemyTotemName = "0",
-		},
-	},
+-- Names, in the groups the Nameplates page lists. In cinematic mode each group
+-- hides with "Hide names" unless its nameKeep<key> option keeps it up.
+ns.NAME_GROUPS = {
+	{ key = "Mobs", label = "Hostile and neutral mobs",
+		cvars = { "UnitNameHostleNPC", "UnitNameNonCombatCreatureName" } },
+	{ key = "NPCs", label = "Friendly NPCs",
+		cvars = { "UnitNameNPC", "UnitNameInteractiveNPC", "UnitNameFriendlySpecialNPCName" } },
+	{ key = "Own", label = "Players of your faction", cvars = { "UnitNameFriendlyPlayerName" } },
+	{ key = "Other", label = "Players of the other faction", cvars = { "UnitNameEnemyPlayerName" } },
+	{ key = "Pets", label = "Pets", cvars = { "UnitNameFriendlyPetName", "UnitNameEnemyPetName" } },
+	{ key = "Minions", label = "Minions and guardians",
+		cvars = {
+			"UnitNameFriendlyMinionName", "UnitNameEnemyMinionName",
+			"UnitNameFriendlyGuardianName", "UnitNameEnemyGuardianName",
+		} },
+	{ key = "Totems", label = "Totems", cvars = { "UnitNameFriendlyTotemName", "UnitNameEnemyTotemName" } },
+	{ key = "Self", label = "Your own name", cvars = { "UnitNameOwn" } },
 }
+
+local CVAR_SETS = {}
+for _, group in ipairs(ns.NAME_GROUPS) do
+	local values = {}
+	for _, cvar in ipairs(group.cvars) do values[cvar] = "0" end
+	CVAR_SETS[#CVAR_SETS + 1] = { option = "hideNames", unless = "nameKeep" .. group.key, values = values }
+end
+
+-- The player's own setting for a group of names (what comes back after
+-- cinematic mode), or nil when this client has none of its settings.
+function ns.GetNamesShown(group)
+	local any = false
+	for _, cvar in ipairs(group.cvars) do
+		local value = ns.db.savedCVars[cvar] or GetCVar(cvar)
+		if value ~= nil then
+			any = true
+			if value == "0" then
+				return false
+			end
+		end
+	end
+	return any or nil
+end
+
+function ns.SetNamesShown(group, shown)
+	local value = shown and "1" or "0"
+	for _, cvar in ipairs(group.cvars) do
+		if ns.db.savedCVars[cvar] ~= nil then
+			ns.db.savedCVars[cvar] = value -- hidden for cinematic mode: comes back like this
+		elseif GetCVar(cvar) ~= nil and GetCVar(cvar) ~= value then
+			SetCVar(cvar, value)
+		end
+	end
+end
+
+-- The game's name settings follow the Nameplates page's Show ticks
+-- (nameShow<key>), set at login and whenever the page changes, like the
+-- nameplate settings. A tick never set yet starts from the game's own setting.
+function ns.SyncNameCVars()
+	for _, group in ipairs(ns.NAME_GROUPS) do
+		local key = "nameShow" .. group.key
+		if ns.db[key] == nil then
+			ns.db[key] = ns.GetNamesShown(group) -- stays nil where this client has none
+		else
+			ns.SetNamesShown(group, ns.db[key])
+		end
+	end
+end
 
 -- Switched off once plates have faded out (so invisible plates can't be
 -- clicked). Can't be changed during combat lockdown.
 local PLATE_CVARS = {
 	secure = true,
-	values = { nameplateShowEnemies = "0", nameplateShowFriends = "0", nameplateShowFriendlyNPCs = "0" },
+	values = {
+		nameplateShowEnemies = "0", nameplateShowFriends = "0", nameplateShowFriendlyPlayers = "0",
+		nameplateShowFriendlyNPCs = "0",
+	},
 }
 
 -- Floating combat text (damage and healing numbers, like "+10" from a heal or
@@ -49,7 +102,8 @@ local COMBAT_TEXT_CVARS = {
 
 function ns.UpdateCVars(cinematic)
 	for _, set in ipairs(CVAR_SETS) do
-		ns.ApplyCVarSet(set, cinematic and ns.db[set.option] or false)
+		local want = cinematic and ns.db[set.option] and not (set.unless and ns.db[set.unless])
+		ns.ApplyCVarSet(set, want or false)
 	end
 	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not inCombat) or false)
@@ -59,11 +113,39 @@ end
 -- volume and back. If music was already on, it's left completely alone.
 ns.music = { managing = false, level = 0, volume = 1 }
 
+-- The music volume the addon last wrote (nil while it isn't touching it). If
+-- the CVar no longer matches, the player changed it in the sound settings, and
+-- their change wins over any fade or mute.
+local MUSIC_VOLUME_EPSILON = 0.005
+local musicWritten
+
+local function SetMusicVolume(volume)
+	local text = ("%.3f"):format(volume)
+	musicWritten = tonumber(text)
+	SetCVar("Sound_MusicVolume", text)
+end
+
+-- The player's new music volume, if they changed it since the addon last wrote it.
+local function PlayerMusicVolume()
+	if not musicWritten then
+		return nil
+	end
+	local actual = tonumber(GetCVar("Sound_MusicVolume"))
+	if actual and math.abs(actual - musicWritten) > MUSIC_VOLUME_EPSILON then
+		if ns.musicDebug then
+			ns.Print(("music: you changed the volume %.2f -> %.2f"):format(musicWritten, actual))
+		end
+		musicWritten = actual
+		return actual
+	end
+end
+
 function ns.StopMusicNow()
 	if ns.music.managing then
 		ns.RestoreCVar("Sound_EnableMusic")
 		ns.RestoreCVar("Sound_MusicVolume")
 		ns.music.managing = false
+		musicWritten = nil
 	end
 end
 
@@ -77,6 +159,45 @@ local COMBAT_MUSIC_FADE = 1
 local combatMusic = { level = 1, ducking = false, original = 1, musicOff = false, managedOff = false,
 	lastFightAt = -math.huge }
 
+-- New song swap: rather than cutting the current track dead, it fades out,
+-- music is switched off for a moment (so the game picks a fresh track), then
+-- the new one fades in. phase is nil, "out", "gap" or "in".
+local SONG_SWAP_FADE_OUT = 1.5
+local NEW_SONG_GAP = 0.2
+local songSwap = { level = 1, phase = nil, gapUntil = 0 }
+
+local function UpdateSongSwap(elapsed)
+	if songSwap.phase == "out" then
+		songSwap.level = ns.Approach(songSwap.level, 0, elapsed, SONG_SWAP_FADE_OUT)
+		if songSwap.level <= 0 then
+			SetCVar("Sound_EnableMusic", 0)
+			songSwap.phase = "gap"
+			songSwap.gapUntil = GetTime() + NEW_SONG_GAP
+		end
+	elseif songSwap.phase == "gap" then
+		if GetTime() >= songSwap.gapUntil then
+			-- Switch back on unless a mute has since taken over (it brings a fresh
+			-- track itself when it ends), the addon's music stopped and put the
+			-- player's setting back, or something else already did.
+			if combatMusic.level > 0 and songSwap.managed == ns.music.managing
+				and GetCVar("Sound_EnableMusic") == "0" then
+				SetCVar("Sound_EnableMusic", 1)
+			end
+			songSwap.phase = "in"
+		end
+	elseif songSwap.phase == "in" then
+		songSwap.level = ns.Approach(songSwap.level, 1, elapsed, ns.db.musicFadeTime)
+		if songSwap.level >= 1 then
+			songSwap.phase = nil
+		end
+	end
+end
+
+-- The volume share left after the combat/place mutes and any song swap.
+local function MusicDuck()
+	return combatMusic.level * songSwap.level
+end
+
 -- Once fully faded out, music is switched off rather than left playing at
 -- zero volume; switching it back on when the mute ends makes the game start a
 -- fresh track (instead of resuming one halfway through) as it fades back in.
@@ -87,7 +208,10 @@ local function SetMuteMusicOff(flag, off)
 	end
 end
 
-local function UpdateCombatMusic(elapsed)
+-- playerOverride: the player changed the music volume (or switched music back
+-- on) during a mute. That lifts the mute until it clears by itself or a new
+-- reason to mute comes up (a fight starting while you walk on, say).
+local function UpdateCombatMusic(elapsed, playerOverride)
 	-- Muted while fighting (if chosen) or in a place chosen under "Mute music in".
 	-- Only when the addon handles music at all: with "Play music in cinematic
 	-- mode" off, the player's volumes are left alone (any ducking eases back).
@@ -103,15 +227,34 @@ local function UpdateCombatMusic(elapsed)
 	local flying = handlesMusic and ns.db.musicOffOnFlights and UnitOnTaxi("player")
 	-- Music belongs to the camera modes (flying, RP walking, standing still):
 	-- once you move on from one, it fades out, and a fresh track comes in when
-	-- the next one starts.
-	if not (handlesMusic and ns.db.musicPauseWhenMoving) or (ns.InCameraMode and ns.InCameraMode()) then
+	-- the next one starts. With pause on landing, a flight's music fades out as
+	-- you touch down, without waiting for you to move.
+	local onTaxi = UnitOnTaxi("player")
+	local landed = combatMusic.wasOnTaxi and not onTaxi
+	combatMusic.wasOnTaxi = onTaxi
+	if not (handlesMusic and (ns.db.musicPauseWhenMoving or ns.db.musicPauseOnLanding))
+		or (ns.InCameraMode and ns.InCameraMode()) then
 		combatMusic.movingPaused = false
-	elseif ns.playerMoving then
+	elseif (ns.db.musicPauseWhenMoving and ns.playerMoving) or (ns.db.musicPauseOnLanding and landed) then
 		combatMusic.movingPaused = true
 		combatMusic.pauseFade = true
 	end
-	local otherMute = fighting or flying or (handlesMusic and ns.IsMusicBlocked())
-	local target = (otherMute or combatMusic.movingPaused) and 0 or 1
+	local blocked = handlesMusic and ns.IsMusicBlocked()
+	local moving = combatMusic.movingPaused
+	if playerOverride then
+		combatMusic.override = { fighting = fighting, flying = flying, blocked = blocked, moving = moving }
+		combatMusic.level = 1
+	end
+	local o = combatMusic.override
+	if o and (not (fighting or flying or blocked or moving) or (fighting and not o.fighting)
+		or (flying and not o.flying) or (blocked and not o.blocked) or (moving and not o.moving)) then
+		combatMusic.override = nil
+	end
+	if combatMusic.override then
+		fighting, flying, blocked, moving = false, false, false, false
+	end
+	local otherMute = fighting or flying or blocked
+	local target = (otherMute or moving) and 0 or 1
 	-- The move-on pause fades at its own speed, out and back in again; the
 	-- other mutes use the quick fade.
 	if otherMute or combatMusic.level >= 1 then
@@ -122,6 +265,8 @@ local function UpdateCombatMusic(elapsed)
 		combatMusic.level = ns.Approach(combatMusic.level, target, elapsed, fade)
 	end
 	local silent = combatMusic.level <= 0
+	UpdateSongSwap(elapsed)
+	local duck = MusicDuck()
 
 	if ns.music.managing then
 		-- The addon's own music: UpdateMusic applies the level to the volume; here
@@ -132,19 +277,24 @@ local function UpdateCombatMusic(elapsed)
 	combatMusic.managedOff = false -- the addon's music has stopped; its on/off was restored
 
 	-- The player's own music: save its volume and on/off, then duck it.
-	if combatMusic.level < 1 and (GetCVar("Sound_EnableMusic") == "1" or combatMusic.musicOff) then
-		if not combatMusic.ducking then
+	-- (A song swap ducks it the same way; during the swap's gap music is off, so
+	-- the volume just holds until the new track comes in.)
+	if duck < 1 and (GetCVar("Sound_EnableMusic") == "1" or combatMusic.musicOff) then
+		-- (Saved again if the addon's own music put the volume back meanwhile:
+		-- ducking on without a saved copy would leave it turned down for good.)
+		if not combatMusic.ducking or ns.db.savedCVars.Sound_MusicVolume == nil then
 			ns.SaveCVar("Sound_MusicVolume")
 			ns.SaveCVar("Sound_EnableMusic")
 			combatMusic.original = tonumber(ns.db.savedCVars.Sound_MusicVolume) or 1
 			combatMusic.ducking = true
 		end
-		SetCVar("Sound_MusicVolume", ("%.3f"):format(combatMusic.original * combatMusic.level))
+		SetMusicVolume(combatMusic.original * duck)
 		SetMuteMusicOff("musicOff", silent)
-	elseif combatMusic.ducking and combatMusic.level >= 1 then
+	elseif combatMusic.ducking and duck >= 1 then
 		ns.RestoreCVar("Sound_MusicVolume")
 		ns.RestoreCVar("Sound_EnableMusic")
 		combatMusic.ducking, combatMusic.musicOff = false, false
+		musicWritten = nil
 	end
 end
 
@@ -153,28 +303,26 @@ function ns.StopCombatMusicNow()
 		ns.RestoreCVar("Sound_MusicVolume")
 		ns.RestoreCVar("Sound_EnableMusic")
 		combatMusic.ducking = false
+		musicWritten = nil
 	end
-	combatMusic.musicOff, combatMusic.managedOff = false, false
+	combatMusic.musicOff, combatMusic.managedOff, combatMusic.override = false, false, nil
 	combatMusic.level = 1
+	songSwap.level, songSwap.phase = 1, nil
 end
 
--- Times music starts despite music fatigue: on a flight, once the
--- standing-still timer has run, or in a different zone from the last music.
+-- The death song picked for this death (a music file ID), or nil; see SetDeathSong.
+local deathSong = { file = nil, playing = false }
+
+-- Each camera mode's "Play music" setting (Audio page): as that camera starts,
+-- a fresh song, even if music played recently (music fatigue).
+local MUSIC_CAM = { flight = "musicCamFlight", idle = "musicCamIdle", cozy = "musicCamCozy",
+	vista = "musicCamVista", fish = "musicCamFish", walk = "musicCamWalk", run = "musicCamRun" }
+
+-- Times music starts despite music fatigue: in a camera mode set to play
+-- music, or in a different zone from the last music.
 local function FatigueOverridden()
-	if ns.db.fatigueIgnoreOnFlights and UnitOnTaxi("player") then
-		return true
-	end
-	local stillSince = ns.GetStillSince()
-	if ns.db.fatigueIgnoreWhenWalking and ns.IsRPWalking and ns.IsRPWalking() then
-		return true
-	end
-	if ns.db.fatigueIgnoreWhenAutoRun and ns.IsAutoRunning and ns.IsAutoRunning() then
-		return true
-	end
-	if ns.db.fatigueIgnoreWhenCozy and ns.IsCozy and ns.IsCozy() then
-		return true
-	end
-	if ns.db.fatigueIgnoreWhenIdle and stillSince and GetTime() - stillSince >= ns.db.idleOrbitDelay then
+	local mode = ns.CameraMode and ns.CameraMode()
+	if mode and MUSIC_CAM[mode] and ns.db[MUSIC_CAM[mode]] then
 		return true
 	end
 	local zone = GetRealZoneText()
@@ -185,92 +333,163 @@ local function FatigueOverridden()
 	return false
 end
 
--- New song: music is switched off and back on a moment later, which makes the
--- game start a fresh track. Happens as the flight rotation starts (or at
--- takeoff with flight rotation off) and as the standing-still camera starts,
--- once per flight / per spell of standing still. Skipped if music isn't
--- playing, or on flights while muted there (a fresh track comes on landing).
-local NEW_SONG_GAP = 0.2
+-- New song: the current track fades out, music is switched off and back on,
+-- which makes the game start a fresh track, and that fades in (see songSwap).
+-- Happens as the flight rotation starts (or at takeoff with flight rotation
+-- off) and as the standing-still camera starts, once per flight / per spell of
+-- standing still. Skipped if music isn't playing, or on flights while muted
+-- there (a fresh track comes on landing).
 local wasOnTaxiForMusic = false
-local restartToken = 0
 local songFlight = false -- this flight already got its new song
 local songStillSince     -- the standing-still spell that already got one
 -- RP walking: a new song when you set off, but not for every pause. Stopping
 -- for less than this long and walking on counts as the same walk.
 local WALK_SONG_GAP = 20
-local lastWalkingAt = -math.huge
-local lastStillCameraAt = -math.huge -- last moment the standing-still camera's timer had run
-local lastAutoRunAt = -math.huge
-local lastCozyAt = -math.huge
+local lastModeAt = {} -- camera mode -> when it was last running (walk, run, cozy, vista, fish)
+
+-- Switching straight from one camera mode to another (vista to cozy, idle to
+-- walking...) keeps the song that's playing: only a mode started from none
+-- brings a new one. A gap of up to MODE_HANDOVER seconds between the two
+-- still counts as switching.
+local MODE_HANDOVER = 2
+local modeNow, modeSeenAt, modeHandover = nil, -math.huge, false
+
+local function NoteCameraMode()
+	local mode = ns.CameraMode and ns.CameraMode()
+	if not mode then
+		return
+	end
+	local now = GetTime()
+	if now - modeSeenAt >= MODE_HANDOVER then
+		modeHandover = false -- started from no camera mode
+	elseif mode ~= modeNow then
+		modeHandover = true
+	end
+	modeNow = mode
+	modeSeenAt = now
+end
 
 local function RestartMusic()
 	if not ns.db.musicInCinematic or GetCVar("Sound_EnableMusic") ~= "1" then
 		return
 	end
-	restartToken = restartToken + 1
-	local token = restartToken
-	SetCVar("Sound_EnableMusic", 0)
-	C_Timer.After(NEW_SONG_GAP, function()
-		-- Only switch back on if nothing else touched music in between.
-		if token == restartToken and GetCVar("Sound_EnableMusic") == "0" then
-			SetCVar("Sound_EnableMusic", 1)
-		end
-	end)
+	-- Carrying on from another camera mode: the song already playing stays.
+	NoteCameraMode()
+	if modeHandover then
+		return
+	end
+	-- Already swapping, or the addon's music is still fading in (it's a fresh
+	-- track already) or out: cutting it now would only make it skip.
+	if songSwap.phase or (ns.music.managing and ns.music.level < 1) then
+		return
+	end
+	-- Muted or mid-mute: the mute brings a fresh track in when it ends.
+	if combatMusic.level < 1 then
+		return
+	end
+	songSwap.phase = "out"
+	songSwap.managed = ns.music.managing
 end
 
 local function NewSongForFlight()
-	if songFlight or not ns.db.musicNewSongOnFlights or ns.db.musicOffOnFlights then
+	if songFlight or not ns.db.musicCamFlight or ns.db.musicOffOnFlights then
 		return
 	end
 	songFlight = true
 	RestartMusic()
 end
 
--- Called by the camera when a rotation starts ("taxiOrbit" or "idleOrbit").
+-- Death song: while the death camera runs, a song of its own plays in place of
+-- the zone music, picked at random from deathSongFiles (music file IDs,
+-- comma-separated). It needs game music on.
+function ns.PickDeathSong()
+	local files = {}
+	for id in (ns.db.deathSongFiles or ""):gmatch("%d+") do
+		files[#files + 1] = tonumber(id)
+	end
+	return files[math.random(math.max(1, #files))]
+end
+
+-- It plays straight away at your music volume, switching game music on if it's
+-- off; the music manager (UpdateMusic) stands aside meanwhile, and the music
+-- settings it found are put back afterwards.
+function ns.SetDeathSong(on)
+	deathSong.file = on and ns.db.deathSong and ns.PickDeathSong() or nil
+	if on and ns.DeathTestLog then
+		ns.DeathTestLog(("death song: %s (song option %s, game music %s)"):format(
+			tostring(deathSong.file), tostring(ns.db.deathSong),
+			GetCVar("Sound_EnableMusic") == "1" and "on" or "off - switching it on"))
+	end
+end
+
+local function UpdateDeathSong()
+	if deathSong.file and not deathSong.playing then
+		deathSong.enable, deathSong.volume = GetCVar("Sound_EnableMusic"), GetCVar("Sound_MusicVolume")
+		-- Your own volume: the addon may have it faded or ducked right now.
+		SetCVar("Sound_EnableMusic", 1)
+		SetCVar("Sound_MusicVolume", ns.db.savedCVars.Sound_MusicVolume or deathSong.volume)
+		deathSong.playing = pcall(PlayMusic, deathSong.file)
+		if ns.DeathTestLog then ns.DeathTestLog("death song playing") end
+	elseif not deathSong.file and deathSong.playing then
+		deathSong.playing = false
+		pcall(StopMusic)
+		SetCVar("Sound_EnableMusic", deathSong.enable)
+		SetCVar("Sound_MusicVolume", deathSong.volume)
+	end
+end
+
+-- Called by the camera when a rotation starts ("taxiOrbit", "idleOrbit"...).
 -- It also restarts after you move the camera; only the first start counts.
+-- (The other cameras get their fresh song in UpdateMusic, as they start.)
 function ns.OnRotationStart(prefix)
 	if prefix == "taxiOrbit" then
 		NewSongForFlight()
-	elseif ns.db.musicNewSongWhenIdle and ns.stillSince and songStillSince ~= ns.stillSince then
+	elseif prefix == "idleOrbit" and ns.db.musicCamIdle and ns.stillSince and songStillSince ~= ns.stillSince then
 		songStillSince = ns.stillSince
 		RestartMusic()
 	end
 end
 
+-- /cine debug music: a chat line whenever the music state changes. Levels are
+-- shown as 0, "part" or 1 so a fade doesn't print every step.
+local lastMusicReport
+local function Bucket(level)
+	return level <= 0 and "0" or level >= 1 and "1" or "part"
+end
+
+local function ReportMusic(cinematic)
+	if not ns.musicDebug then
+		return
+	end
+	local volume = tonumber(GetCVar("Sound_MusicVolume")) or -1
+	local report = ("music: cine %s mode %s | managing %s level %s vol %.2f | mute %s%s%s | swap %s | duck %s | saved %s | game: music %s volume %s"):format(
+		tostring(cinematic), tostring(ns.CameraMode and ns.CameraMode()),
+		tostring(ns.music.managing), Bucket(ns.music.level), ns.music.volume,
+		Bucket(combatMusic.level), combatMusic.movingPaused and " (moved)" or "",
+		combatMusic.override and " (overridden)" or "",
+		tostring(songSwap.phase), tostring(combatMusic.ducking),
+		tostring(ns.db.savedCVars.Sound_MusicVolume), GetCVar("Sound_EnableMusic"),
+		volume <= 0 and "0" or volume >= (ns.music.managing and ns.music.volume or combatMusic.original) - 0.01
+			and ("%.2f"):format(volume) or "fading")
+	if report ~= lastMusicReport then
+		lastMusicReport = report
+		ns.Print(report)
+	end
+end
+
 function ns.UpdateMusic(cinematic, elapsed)
+	ReportMusic(cinematic)
 	local now = GetTime()
-	local still = ns.GetStillSince()
-	if still and now - still >= ns.db.idleOrbitDelay then
-		lastStillCameraAt = now
-	end
-	-- RP walking and auto-running: a new song when you set off, but not when
-	-- carrying straight on from another camera mode (they hand over seamlessly),
-	-- and not for a short pause in the same walk or run.
-	local walking = ns.IsRPWalking and ns.IsRPWalking()
-	local autoRunning = ns.IsAutoRunning and ns.IsAutoRunning()
-	local fromStill = now - lastStillCameraAt < 1
-	if walking then
-		local fromRun = now - lastAutoRunAt < 1
-		if now - lastWalkingAt > WALK_SONG_GAP and ns.db.musicNewSongWhenWalking
-			and not fromStill and not fromRun then
+	NoteCameraMode()
+	-- RP walk, auto-run, cozy, vista and fish: a new song as the camera starts,
+	-- but not for a short break in the same walk, run or spell (nor when
+	-- carrying straight on from another camera mode; see RestartMusic).
+	local mode = ns.CameraMode and ns.CameraMode()
+	if mode and mode ~= "flight" and mode ~= "idle" and MUSIC_CAM[mode] then
+		if now - (lastModeAt[mode] or -math.huge) > WALK_SONG_GAP and ns.db[MUSIC_CAM[mode]] then
 			RestartMusic()
 		end
-		lastWalkingAt = now
-	elseif autoRunning then
-		local fromWalk = now - lastWalkingAt < 1
-		if now - lastAutoRunAt > WALK_SONG_GAP and ns.db.musicNewSongWhenAutoRun
-			and not fromStill and not fromWalk then
-			RestartMusic()
-		end
-		lastAutoRunAt = now
-	end
-	-- Cozy camera: a new song as it starts; standing up briefly and settling
-	-- back down counts as the same spell.
-	if ns.IsCozy and ns.IsCozy() then
-		if now - lastCozyAt > WALK_SONG_GAP and ns.db.musicNewSongWhenCozy then
-			RestartMusic()
-		end
-		lastCozyAt = now
+		lastModeAt[mode] = now
 	end
 	local onTaxi = UnitOnTaxi("player")
 	if onTaxi ~= wasOnTaxiForMusic then
@@ -280,8 +499,26 @@ function ns.UpdateMusic(cinematic, elapsed)
 			NewSongForFlight() -- no rotation to wait for: new song at takeoff
 		end
 	end
-	UpdateCombatMusic(elapsed)
+	UpdateDeathSong()
+	if deathSong.file then
+		return -- the death song has the music for now
+	end
 	local want = cinematic and ns.db.musicInCinematic
+	-- The player changed the music volume while the addon was fading or muting
+	-- it: that's their new volume, to play at now and come back to afterwards.
+	local playerVolume = PlayerMusicVolume()
+	if playerVolume then
+		ns.db.savedCVars.Sound_MusicVolume = tostring(playerVolume)
+		combatMusic.original = playerVolume
+		if ns.music.managing then
+			ns.music.volume = playerVolume
+			if want then
+				ns.music.level = 1
+			end
+		end
+	end
+	local switchedOn = (combatMusic.musicOff or combatMusic.managedOff) and GetCVar("Sound_EnableMusic") == "1"
+	UpdateCombatMusic(elapsed, playerVolume ~= nil or switchedOn)
 	if want and not ns.music.managing then
 		if GetCVar("Sound_EnableMusic") == "1" then
 			return
@@ -300,7 +537,13 @@ function ns.UpdateMusic(cinematic, elapsed)
 		ns.music.managing = true
 		ns.music.level = 0
 		ns.music.volume = tonumber(ns.db.savedCVars.Sound_MusicVolume) or 1
-		SetCVar("Sound_MusicVolume", 0)
+		-- It fades in to your own volume, so with that at 0 nothing is heard.
+		if ns.music.volume <= 0 and not ns.music.warnedSilent then
+			ns.music.warnedSilent = true
+			ns.Print("your game music volume is 0, so cinematic music can't be heard. " ..
+				"Turn Music up in the game's Sound settings.")
+		end
+		SetMusicVolume(0)
 		SetCVar("Sound_EnableMusic", 1)
 	end
 	if not ns.music.managing then
@@ -308,11 +551,12 @@ function ns.UpdateMusic(cinematic, elapsed)
 	end
 
 	local target = want and 1 or 0
-	if ns.music.level ~= target or combatMusic.level < 1 or ns.music.combatApplied then
+	local duck = MusicDuck()
+	if ns.music.level ~= target or duck < 1 or ns.music.combatApplied then
 		ns.music.level = ns.Approach(ns.music.level, target, elapsed, ns.db.musicFadeTime)
-		SetCVar("Sound_MusicVolume", ("%.3f"):format(ns.music.volume * ns.music.level * combatMusic.level))
-		-- Keep writing until the combat level is back to full.
-		ns.music.combatApplied = combatMusic.level < 1
+		SetMusicVolume(ns.music.volume * ns.music.level * duck)
+		-- Keep writing until the mute / song swap level is back to full.
+		ns.music.combatApplied = duck < 1
 	end
 	if ns.music.level == 0 and not want then
 		ns.StopMusicNow()
@@ -434,57 +678,354 @@ function ns.GetAmbienceDebug()
 	}
 end
 
--- Campfire crackle: while the cozy camera runs at a campfire (one of its buffs),
--- a fire loop plays; it fades out when the cozy camera ends or you leave the
--- fire. If the sound stops by itself, it's started again.
-local CRACKLE_SOUND = 3347      -- CampFireSmallLoop (3240 is Elwynn Campfire Loop)
-local CRACKLE_FADE_MS = 1500
-local crackleHandle
-
-local function StopCrackle()
-	if crackleHandle then
-		StopSound(crackleHandle, CRACKLE_FADE_MS)
-		crackleHandle = nil
-	end
-end
-
-local function StartCrackle()
-	local ok, willPlay, handle = pcall(PlaySound, CRACKLE_SOUND, "SFX", false, true)
-	if ok and willPlay then
-		crackleHandle = handle
-	end
-end
-
-local crackleWatcher = CreateFrame("Frame")
-crackleWatcher:RegisterEvent("SOUNDKIT_FINISHED")
-crackleWatcher:SetScript("OnEvent", function(_, _, handle)
-	if handle == crackleHandle then
-		crackleHandle = nil -- ended by itself; UpdateCrackle starts it again if still wanted
-	end
-end)
-
-function ns.UpdateCrackle(cinematic)
-	local want = cinematic and ns.db.cozyCrackle and ns.IsCozy and ns.IsCozy()
-		and ns.IsAtCampfire and ns.IsAtCampfire()
-	if want and not crackleHandle then
-		StartCrackle()
-	elseif not want then
-		StopCrackle()
+-- The game resets a plate's alpha itself (for one, when its unit enters
+-- combat), so while a plate is faded or hidden, any alpha the game sets is
+-- put straight back to ours. At full alpha the game is left to do as it likes.
+local function KeepPlateAlpha(frame, alpha)
+	local wanted = frame.cinematicAlpha
+	if wanted and alpha ~= wanted and not frame.cinematicSetting then
+		frame.cinematicSetting = true
+		frame:SetAlpha(wanted)
+		frame.cinematicSetting = false
 	end
 end
 
 function ns.SetPlateAlpha(plate, alpha)
 	if plate and plate.UnitFrame and not (plate.IsForbidden and plate:IsForbidden()) then
-		plate.UnitFrame:SetAlpha(alpha)
+		local frame = plate.UnitFrame
+		if not frame.cinematicHooked then
+			frame.cinematicHooked = true
+			hooksecurefunc(frame, "SetAlpha", KeepPlateAlpha)
+		end
+		frame.cinematicAlpha = alpha < 1 and alpha or nil
+		frame.cinematicSetting = true
+		frame:SetAlpha(alpha)
+		frame.cinematicSetting = false
 	end
 end
 
-local function SetAllPlatesAlpha(alpha)
+-- The game's (localized) name for the Totem creature type.
+local TOTEM_TYPE = "Totem"
+if C_CreatureInfo and C_CreatureInfo.GetCreatureTypeInfo then
+	local ok, info = pcall(C_CreatureInfo.GetCreatureTypeInfo, 11)
+	if ok and type(info) == "table" and info.name then
+		TOTEM_TYPE = info.name
+	end
+end
+
+local function Known(value)
+	return not (issecretvalue and issecretvalue(value))
+end
+
+-- The Nameplates page sorts plates into mobs (hostile or neutral), friendly
+-- NPCs, your own faction's players, the other faction's, totems, and pets
+-- (anything else a player controls: pets, minions, guardians). nil when the
+-- game won't say (secret values in combat): such plates just follow the fade.
+local function PlateKind(unit)
+	local ok, isPlayer = pcall(UnitIsPlayer, unit)
+	if not ok or not Known(isPlayer) then
+		return nil
+	end
+	if not isPlayer then
+		local okType, creatureType = pcall(UnitCreatureType, unit)
+		if okType and Known(creatureType) and creatureType == TOTEM_TYPE then
+			return "Totems"
+		end
+		local okControl, controlled = pcall(UnitPlayerControlled, unit)
+		if not okControl or not Known(controlled) then
+			return nil
+		end
+		if controlled then
+			return "Pets"
+		end
+		local okFriend, friend = pcall(UnitIsFriend, "player", unit)
+		return okFriend and Known(friend) and friend and "NPCs" or "Mobs"
+	end
+	local okFaction, faction = pcall(UnitFactionGroup, unit)
+	local mine = UnitFactionGroup("player")
+	if not okFaction or type(faction) ~= "string" or (issecretvalue and issecretvalue(faction))
+		or (faction ~= "Alliance" and faction ~= "Horde") then
+		return nil
+	end
+	return faction == mine and "Own" or "Other"
+end
+
+-- Any kind ticked to stay up in cinematic mode keeps the plates switched on.
+ns.PLATE_KINDS = { "Mobs", "NPCs", "Own", "Other", "Pets", "Totems" }
+
+local function AnyPlatesKeptCinematic()
+	for _, kind in ipairs(ns.PLATE_KINDS) do
+		if ns.db["plateCinematic" .. kind] then
+			return true
+		end
+	end
+	return false
+end
+
+local function TargetKeptUp()
+	return ns.db.plateAlwaysTarget and UnitExists("target")
+end
+
+-- Name icons (nameIcon<kind>, the Names table's "Use custom icon" column):
+-- while names are hidden in cinematic mode, units of a ticked kind get a small
+-- icon where their nameplate would be. The icon sits on the plate itself, not
+-- its UnitFrame, so it stays up while the UnitFrame is faded out; the plates
+-- are kept switched on for it, like a kind ticked to stay up.
+local FACTION_ICONS = {
+	Alliance = "Interface\\TargetingFrame\\UI-PVP-Alliance",
+	Horde = "Interface\\TargetingFrame\\UI-PVP-Horde",
+}
+local PVP_COORDS = { 0, 0.62, 0, 0.62 } -- the PvP icons sit in the top left of a larger texture
+local SPELL_COORDS = { 0.08, 0.92, 0.08, 0.92 } -- trims a spell icon's border
+local FULL_COORDS = { 0, 1, 0, 1 }
+
+-- Each kind's icon: a texture path (or a function giving one), its coords and
+-- optionally a size (a share of MARK_SIZE).
+local NAME_ICONS = {
+	Mobs = { "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", FULL_COORDS },
+	NPCs = { "Interface\\GossipFrame\\GossipGossipIcon", FULL_COORDS },
+	Own = { function() return FACTION_ICONS[UnitFactionGroup("player") or ""] end, PVP_COORDS },
+	Other = { function()
+		return FACTION_ICONS[UnitFactionGroup("player") == "Horde" and "Alliance" or "Horde"]
+	end, PVP_COORDS },
+	Pets = { "Interface\\Icons\\Ability_Hunter_BeastTaming", SPELL_COORDS, 0.6 },
+	Totems = { "Interface\\Icons\\Spell_Nature_StoneSkinTotem", SPELL_COORDS },
+}
+ns.NAME_ICON_KINDS = NAME_ICONS
+local MARK_SIZE = 24
+
+local function IconOn(kind)
+	return ns.db["nameIcon" .. kind] and ns.db["plateShow" .. kind] and true or false
+end
+
+local function AnyNameIcons()
+	if not ns.db.hideNames then
+		return false
+	end
+	for kind in pairs(NAME_ICONS) do
+		if IconOn(kind) then
+			return true
+		end
+	end
+	return false
+end
+
+-- How visible a plate's mark is: the reverse of the plate itself, so as the
+-- plate fades out the mark fades in, and back again on the way out.
+local function FlaggedForPvP(unit)
+	local ok, flagged = pcall(UnitIsPVP, unit)
+	return ok and Known(flagged) and flagged and true or false
+end
+
+local function SetPlateMark(plate, unit, kind, plateAlpha)
+	local alpha = 0
+	if kind and NAME_ICONS[kind] and ns.db.hideNames and IconOn(kind)
+		and (ns.lastCinematic or ns.plates.level < 1)
+		and (not ns.db["nameIconPvP" .. kind] or FlaggedForPvP(unit)) then
+		alpha = 1 - plateAlpha
+	end
+	local mark = plate.cinematicMark
+	if alpha <= 0 then
+		if mark then
+			mark:Hide()
+		end
+		return
+	end
+	if not mark then
+		mark = plate:CreateTexture(nil, "OVERLAY")
+		mark:SetPoint("CENTER", plate, "CENTER", 0, 0)
+		-- The game dims plates other than your target's (and far ones): the
+		-- mark keeps its own alpha so every one shows as clearly as the target's.
+		if mark.SetIgnoreParentAlpha then
+			mark:SetIgnoreParentAlpha(true)
+		end
+		plate.cinematicMark = mark
+	end
+	local icon = NAME_ICONS[kind]
+	local texture = icon[1]
+	if type(texture) == "function" then
+		texture = texture()
+	end
+	mark:SetTexture(texture)
+	mark:SetTexCoord(unpack(icon[2]))
+	local size = MARK_SIZE * (icon[3] or 1) -- set each time: a plate is reused for other kinds
+	mark:SetSize(size, size)
+	mark:SetAlpha(alpha)
+	mark:Show()
+end
+
+-- Kinds hidden in fights (plateCombat<kind> off) come out of combat at 0 and
+-- only rise again as far as the shared fade level lets them, rather than
+-- jumping to it: it's still at 1 from the fight, so they'd flash up before
+-- fading out again. kind -> highest alpha allowed (nil for no limit).
+local combatCap = {}
+
+-- Whether some plates need an alpha other than the shared fade level.
+local function PlatesFiltered()
+	if next(combatCap) then
+		return true
+	end
+	local inCombat = InCombatLockdown()
+	for _, kind in ipairs(ns.PLATE_KINDS) do
+		if not ns.db["plateShow" .. kind] or (inCombat and not ns.db["plateCombat" .. kind]) then
+			return true
+		end
+	end
+	return ns.plates.level < 1 and (AnyPlatesKeptCinematic() or TargetKeptUp() or AnyNameIcons())
+end
+
+local function IsTarget(unit)
+	local ok, same = pcall(UnitIsUnit, unit, "target")
+	return ok and Known(same) and same
+end
+
+local function PlateAlpha(unit)
+	if unit and ns.db.plateAlwaysTarget and IsTarget(unit) then
+		return 1
+	end
+	local kind = unit and PlateKind(unit)
+	if kind then
+		if not ns.db["plateShow" .. kind] then
+			return 0
+		end
+		-- Plates can't be switched off in fights, only made invisible.
+		if InCombatLockdown() and not ns.db["plateCombat" .. kind] then
+			return 0
+		end
+		local cap = combatCap[kind] or 1
+		if ns.db["plateCinematic" .. kind] then
+			return cap
+		end
+		return math.min(ns.plates.level, cap)
+	end
+	return ns.plates.level
+end
+
+function ns.RefreshPlate(plate, unit)
+	if not plate then
+		return
+	end
+	unit = unit or plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+	local alpha = PlateAlpha(unit)
+	if alpha < 1 or PlatesFiltered() then
+		ns.SetPlateAlpha(plate, alpha)
+	elseif plate.UnitFrame then
+		plate.UnitFrame.cinematicAlpha = nil -- a reused plate: let go of its last unit's alpha
+	end
+	if not (plate.IsForbidden and plate:IsForbidden()) then
+		SetPlateMark(plate, unit, unit and PlateKind(unit), alpha) -- a reused plate: its last unit's mark goes
+	end
+end
+
+local function RefreshAllPlates()
 	if not (C_NamePlate and C_NamePlate.GetNamePlates) then
 		return
 	end
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+		local alpha = PlateAlpha(unit)
 		ns.SetPlateAlpha(plate, alpha)
+		if not (plate.IsForbidden and plate:IsForbidden()) then
+			SetPlateMark(plate, unit, unit and PlateKind(unit), alpha)
+		end
+	end
+end
+
+-- The game's own nameplate settings follow the Nameplates page's Show ticks:
+-- set at login and whenever the page changes, overriding the game's options
+-- (and the V keys) from then on. A setting shared by several kinds (enemy
+-- plates cover mobs and the other faction) is on while any of them shows.
+local PLATE_KIND_CVARS = {
+	Mobs = { "nameplateShowEnemies" },
+	NPCs = { "nameplateShowFriendlyNPCs" },
+	Own = { "nameplateShowFriends", "nameplateShowFriendlyPlayers" }, -- older and newer clients' names
+	Other = { "nameplateShowEnemies" },
+	Pets = {
+		"nameplateShowEnemyPets", "nameplateShowEnemyMinions", "nameplateShowEnemyGuardians",
+		"nameplateShowFriendlyPets", "nameplateShowFriendlyMinions", "nameplateShowFriendlyGuardians",
+	},
+	Totems = { "nameplateShowEnemyTotems", "nameplateShowFriendlyTotems" },
+}
+
+local plateSyncPending = false
+
+function ns.SyncPlateCVars()
+	if InCombatLockdown() then
+		plateSyncPending = true -- nameplate settings are locked in fights: after this one
+		return
+	end
+	plateSyncPending = false
+	local wanted = {}
+	for _, kind in ipairs(ns.PLATE_KINDS) do
+		for _, cvar in ipairs(PLATE_KIND_CVARS[kind]) do
+			wanted[cvar] = wanted[cvar] or (ns.db["plateShow" .. kind] and true or false)
+		end
+	end
+	for cvar, on in pairs(wanted) do
+		local value = on and "1" or "0"
+		if ns.db.savedCVars[cvar] ~= nil then
+			ns.db.savedCVars[cvar] = value -- hidden for cinematic mode: comes back like this
+		elseif GetCVar(cvar) ~= nil and GetCVar(cvar) ~= value then
+			SetCVar(cvar, value)
+		end
+	end
+end
+
+-- For /cine debug plates: the game's plate settings, the fade, and how each
+-- visible plate (and the target) is sorted.
+function ns.PrintPlatesDebug()
+	local function cvar(name)
+		local value = GetCVar(name)
+		local saved = ns.db.savedCVars[name]
+		return ("%s=%s%s"):format(name, tostring(value), saved and (" (saved " .. saved .. ")") or "")
+	end
+	ns.Print(cvar("nameplateShowEnemies") .. ", " .. cvar("nameplateShowFriends") .. ", " ..
+		cvar("nameplateShowFriendlyNPCs") .. ", " .. cvar("nameplateMaxDistance"))
+	-- Settings only some clients have, listed where they exist.
+	local extra = {}
+	for _, name in ipairs({ "nameplateShowEnemyPlayers", "nameplateShowFriendlyPlayers", "nameplateShowAll",
+		"nameplateShowOnlyNames", "nameplateShowOnlyNameForFriendlyPlayerUnits" }) do
+		if GetCVar(name) ~= nil then
+			extra[#extra + 1] = cvar(name)
+		end
+	end
+	if #extra > 0 then
+		ns.Print(table.concat(extra, ", "))
+	end
+	ns.Print(("icons: hideNames=%s, other=%s, own=%s"):format(tostring(ns.db.hideNames),
+		tostring(ns.db.nameIconOther), tostring(ns.db.nameIconOwn)))
+	ns.Print(("fade level=%.2f, switched off=%s, filtered=%s, kept in cinematic=%s, cinematic=%s, combat=%s"):format(
+		ns.plates.level, tostring(ns.plates.off), tostring(PlatesFiltered()),
+		tostring(AnyPlatesKeptCinematic()), tostring(ns.lastCinematic), tostring(InCombatLockdown())))
+	local function describe(unit)
+		local name = UnitName(unit)
+		local isPlayer, faction = UnitIsPlayer(unit), UnitFactionGroup(unit)
+		return ("%s: kind=%s, alpha=%.2f, can attack=%s, player=%s, faction=%s"):format(
+			Known(name) and tostring(name) or "?", tostring(PlateKind(unit)), PlateAlpha(unit),
+			tostring(UnitCanAttack("player", unit)),
+			Known(isPlayer) and tostring(isPlayer) or "secret", Known(faction) and tostring(faction) or "secret")
+	end
+	local plates = C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}
+	-- Plates the game has locked away from addons aren't in the usual list.
+	local all = C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates(true) or {}
+	local units = 0
+	for i = 1, 40 do
+		if UnitExists("nameplate" .. i) then
+			units = units + 1
+		end
+	end
+	ns.Print(("%d plates up (%d counting locked ones, %d nameplate units)"):format(#plates, #all, units))
+	for i, plate in ipairs(plates) do
+		if i > 8 then break end
+		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+		local shown = plate.UnitFrame and ("%.2f"):format(plate.UnitFrame:GetAlpha()) or "-"
+		local mark = plate.cinematicMark
+		local marked = mark and mark:IsShown() and (", mark %.2f"):format(mark:GetAlpha()) or ""
+		ns.Print(("  %s (unit %s, frame alpha %s%s)"):format(unit and describe(unit) or "?", tostring(unit), shown, marked))
+	end
+	if UnitExists("target") then
+		local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit("target")
+		ns.Print("target " .. describe("target") .. (plate and ", has a plate" or ", NO plate"))
 	end
 end
 
@@ -496,22 +1037,56 @@ function ns.ShowPlatesNow()
 	end
 end
 
+local platesWereFiltered = false
+
 function ns.UpdatePlates(cinematic, elapsed)
 	-- Nameplate settings can't change in combat, so plates show for every
 	-- fight (even when staying cinematic) and hide again afterwards.
+	if plateSyncPending and not InCombatLockdown() then
+		ns.SyncPlateCVars()
+	end
 	local hide = cinematic and ns.db.hidePlates and not InCombatLockdown()
-	if not hide then
+	local keep = AnyPlatesKeptCinematic() or TargetKeptUp() or AnyNameIcons()
+	if not hide or keep then
 		ns.ShowPlatesNow()
 	end
 
 	local target = hide and 0 or 1
-	if ns.plates.level ~= target then
+	local changed = ns.plates.level ~= target
+	if changed then
 		local duration = target > ns.plates.level and ns.db.fadeInTime or ns.db.fadeOutTime
 		ns.plates.level = ns.Approach(ns.plates.level, target, elapsed, duration)
-		SetAllPlatesAlpha(ns.plates.level)
 	end
+	-- Kinds hidden in fights: held at 0 in combat, then let back up at the
+	-- fade-in speed, but only while plates are on their way in. Heading out
+	-- (cinematic again), they stay hidden until the fade has caught up.
+	local inCombat = InCombatLockdown()
+	for _, kind in ipairs(ns.PLATE_KINDS) do
+		if inCombat and not ns.db["plateCombat" .. kind] then
+			combatCap[kind] = 0
+		elseif combatCap[kind] then
+			local cinematicKept = ns.db["plateCinematic" .. kind]
+			if hide and not cinematicKept then
+				if ns.plates.level <= combatCap[kind] then
+					combatCap[kind] = nil -- the fade is below the limit now: it takes over
+				end
+			else
+				combatCap[kind] = ns.Approach(combatCap[kind], 1, elapsed, ns.db.fadeInTime)
+				if combatCap[kind] >= 1 then
+					combatCap[kind] = nil
+				end
+			end
+			changed = true
+		end
+	end
+	-- One more pass after filtering stops, to put every plate back.
+	local filtered = PlatesFiltered()
+	if changed or filtered or platesWereFiltered then
+		RefreshAllPlates()
+	end
+	platesWereFiltered = filtered
 
-	if hide and ns.plates.level == 0 and not ns.plates.off and not InCombatLockdown() then
+	if hide and not keep and ns.plates.level == 0 and not ns.plates.off and not InCombatLockdown() then
 		ns.ApplyCVarSet(PLATE_CVARS, true)
 		ns.plates.off = true
 	end
@@ -523,19 +1098,27 @@ end
 -- cinematic: fading them fought Blizzard's own tooltip alpha and flickered.
 ns.lastCinematic = false
 
+-- Minimap blips (tracked herbs, party members) use a world-style tooltip; with
+-- the cursor on the minimap it's always left showing.
+local function OverMinimap()
+	return Minimap ~= nil and Minimap:IsVisible() and Minimap:IsMouseOver()
+end
+
 local function IsWorldTooltip()
 	local owner = GameTooltip:GetOwner()
-	return owner == nil or owner == UIParent or owner == WorldFrame
+	return (owner == nil or owner == UIParent or owner == WorldFrame) and not OverMinimap()
 end
 
 -- World tooltips hide in cinematic mode (fadeTooltip), or only in the camera
 -- modes, each chosen on its own (tooltipOff*).
 local TOOLTIP_OFF_IN = {
 	flight = "tooltipOffFlight", idle = "tooltipOffIdle", cozy = "tooltipOffCozy",
-	walk = "tooltipOffWalk", run = "tooltipOffRun",
+	walk = "tooltipOffWalk", run = "tooltipOffRun", vista = "tooltipOffVista",
+	fish = "tooltipOffFish",
 }
-local function ShouldHideTooltip()
-	if not (ns.lastCinematic and GameTooltip:IsShown() and IsWorldTooltip()) then
+-- Whether world tooltips are hidden right now (not whether one is up).
+local function HidingWorldTooltips()
+	if not ns.lastCinematic then
 		return false
 	end
 	if ns.db.fadeTooltip then
@@ -545,18 +1128,270 @@ local function ShouldHideTooltip()
 	return mode ~= nil and ns.db[TOOLTIP_OFF_IN[mode]] or false
 end
 
--- Catches each new world tooltip the moment it appears (a hidden tooltip shows
--- again for the next thing you mouse over, so this runs every time).
-function ns.OnTooltipShow(self)
-	if ShouldHideTooltip() then
-		self:Hide()
+local function ShouldHideTooltip()
+	return GameTooltip:IsShown() and IsWorldTooltip() and HidingWorldTooltips()
+end
+
+-- Reveal after hovering (tooltipReveal): the tooltip is hidden outright as
+-- usual (anything gentler flashed it as it appeared), and its contents noted.
+-- If you're still on the same thing after tooltipRevealDelay seconds it's put
+-- back: a unit's from the mouseover, an object's from the noted lines (the game
+-- has no way to ask about an object again). An object counts as left once the
+-- cursor moves or goes over the UI, or the view moves (walking, flying, turning,
+-- the camera orbiting); a unit once it's no longer the mouseover.
+-- A put-back tooltip is the add-on's own, so it's also taken down that way.
+local held, shown, revealedName, revealing
+local CURSOR_SLACK = 12 -- UI pixels the cursor may drift over an object
+
+-- Fades every frame (the tick is too coarse for a short fade). Fading out ends
+-- by hiding the tooltip; anything else hiding or showing it stops the fade.
+local fader = CreateFrame("Frame")
+fader:Hide()
+local fadeFrom, fadeTo, fadeStart
+
+local function StopFade()
+	if fader:IsShown() then
+		fader:Hide()
+		GameTooltip:SetAlpha(1)
 	end
 end
 
--- Covers a tooltip that was already up when cinematic mode started.
-function ns.UpdateTooltip()
-	if ShouldHideTooltip() then
+local function StartFade(to)
+	fadeFrom, fadeTo, fadeStart = GameTooltip:GetAlpha(), to, GetTime()
+	fader:Show()
+end
+
+fader:SetScript("OnUpdate", function(self)
+	local fadeTime = ns.db.tooltipFadeTime or 0
+	local t = fadeTime > 0 and (GetTime() - fadeStart) / fadeTime or 1
+	if t < 1 then
+		GameTooltip:SetAlpha(fadeFrom + (fadeTo - fadeFrom) * t)
+		return
+	end
+	self:Hide()
+	if fadeTo == 0 then
 		GameTooltip:Hide()
+	end
+	GameTooltip:SetAlpha(1)
+end)
+
+local function TooltipName()
+	local ok, text = pcall(function() return GameTooltipTextLeft1 and GameTooltipTextLeft1:GetText() end)
+	return ok and text or nil
+end
+
+-- A name that can't be compared (secret) counts as the same thing.
+local function SameName(a, b)
+	local ok, same = pcall(function() return a == b end)
+	return not ok or same
+end
+
+-- Optional trace for /cine debug tooltip: what the tooltip did and why.
+local function Trace(what, ...)
+	local log = ns.tooltipTrace
+	if log and #log < 60 then
+		log[#log + 1] = ("%.2f %s"):format(GetTime() - log.started, what:format(...))
+	end
+end
+
+-- Each line on its own, so one odd line (no text, an icon, a secret value)
+-- doesn't lose the rest. Blank lines are kept as spacers.
+local function NoteLines(tooltip)
+	local lines = {}
+	local ok, count = pcall(tooltip.NumLines, tooltip)
+	for i = 1, ok and count or 0 do
+		pcall(function()
+			local left, right = _G["GameTooltipTextLeft" .. i], _G["GameTooltipTextRight" .. i]
+			local line = { left = left:GetText() or " ", lr = { left:GetTextColor() } }
+			if right and right:IsShown() and right:GetText() then
+				line.right, line.rr = right:GetText(), { right:GetTextColor() }
+			end
+			lines[#lines + 1] = line
+		end)
+	end
+	return lines
+end
+
+local function MouseOverWorld()
+	local focus
+	if GetMouseFoci then
+		focus = GetMouseFoci()[1]
+	elseif GetMouseFocus then
+		focus = GetMouseFocus()
+	end
+	return focus == nil or focus == WorldFrame
+end
+
+-- Where the player is and faces. An object is only found by what's under the
+-- cursor, and a parked cursor stays still while flying or turning moves the
+-- world under it, so the view moving counts as leaving the object too.
+local VIEW_SLACK_YARDS = 0.5
+local VIEW_SLACK_FACING = math.rad(2)
+
+-- Secret values (the game hiding them from addons) can't be compared, so
+-- they count as unknown.
+local function Readable(value)
+	return type(value) == "number" and not (issecretvalue and issecretvalue(value))
+end
+
+local function PlayerView()
+	local okPos, y, x = pcall(UnitPosition, "player")
+	local okFacing, facing = pcall(GetPlayerFacing)
+	if not (okPos and Readable(x) and Readable(y)) then
+		x, y = nil, nil
+	end
+	if not (okFacing and Readable(facing)) then
+		facing = nil
+	end
+	return x, y, facing
+end
+
+local function ViewMoved(note)
+	local ok, speed = pcall(GetUnitSpeed, "player")
+	if (ok and Readable(speed) and speed > 0) or UnitOnTaxi("player") or IsMouselooking()
+		or (ns.yawAxis and ns.yawAxis.moving) or (ns.pitchAxis and ns.pitchAxis.moving) then
+		return true
+	end
+	local x, y, facing = PlayerView()
+	local moved = false
+	pcall(function()
+		if x and note.px and (math.abs(x - note.px) > VIEW_SLACK_YARDS or math.abs(y - note.py) > VIEW_SLACK_YARDS) then
+			moved = true
+		end
+		if facing and note.facing then
+			local turn = math.abs(facing - note.facing) % (2 * math.pi)
+			if math.min(turn, 2 * math.pi - turn) > VIEW_SLACK_FACING then
+				moved = true
+			end
+		end
+	end)
+	return moved
+end
+
+local function HoldBack(tooltip)
+	if ns.db.tooltipReveal then
+		local name = TooltipName()
+		if held and SameName(name, held.name) then
+			-- The game showing the same thing again (a unit refreshing): keep counting.
+			Trace("same again: %s", tostring(name))
+		else
+			local ok, _, unit = pcall(tooltip.GetUnit, tooltip)
+			local x, y = GetCursorPosition()
+			local px, py, facing = PlayerView()
+			held = {
+				name = name, unit = ok and unit or nil, x = x, y = y,
+				px = px, py = py, facing = facing,
+				lines = not (ok and unit) and NoteLines(tooltip) or nil,
+				at = GetTime() + (ns.db.tooltipRevealDelay or 0),
+			}
+			Trace("hold %s (%s, %d lines)", tostring(name), held.unit and "unit" or "object",
+				held.lines and #held.lines or 0)
+		end
+	end
+	revealedName = nil
+	StopFade()
+	tooltip:Hide()
+end
+
+local function StillOver(note)
+	if note.unit then
+		return UnitExists("mouseover")
+	end
+	local x, y = GetCursorPosition()
+	local slack = CURSOR_SLACK * UIParent:GetEffectiveScale()
+	return math.abs(x - note.x) <= slack and math.abs(y - note.y) <= slack and MouseOverWorld()
+		and not ViewMoved(note)
+end
+
+local function Reveal()
+	local tooltip, note = GameTooltip, held
+	held = nil
+	revealing = true
+	StopFade()
+	local ok, err = pcall(GameTooltip_SetDefaultAnchor, tooltip, UIParent)
+	if note.unit then
+		ok, err = pcall(tooltip.SetUnit, tooltip, "mouseover")
+	else
+		-- A line that won't go back is skipped rather than losing the tooltip.
+		for _, line in ipairs(note.lines) do
+			pcall(function()
+				if line.right then
+					tooltip:AddDoubleLine(line.left, line.right, line.lr[1], line.lr[2], line.lr[3],
+						line.rr[1], line.rr[2], line.rr[3])
+				else
+					tooltip:AddLine(line.left, line.lr[1], line.lr[2], line.lr[3])
+				end
+			end)
+		end
+		if #note.lines > 0 then
+			ok, err = pcall(tooltip.Show, tooltip)
+		end
+	end
+	Trace("reveal %s (%d lines) ok=%s %s", tostring(note.name), note.lines and #note.lines or -1,
+		tostring(ok), ok and "" or tostring(err))
+	revealing = false
+	revealedName, shown = TooltipName(), note
+	if tooltip:IsShown() then
+		tooltip:SetAlpha(0)
+		StartFade(1)
+	end
+end
+
+-- Catches each new world tooltip the moment it appears (a hidden tooltip shows
+-- again for the next thing you mouse over, so this runs every time).
+function ns.OnTooltipShow(self)
+	if revealing then
+		return
+	end
+	if ns.tooltipTrace then
+		local owner = self:GetOwner()
+		Trace("show %s owner=%s world=%s hiding=%s", tostring(TooltipName()),
+			tostring(owner and (owner:GetName() or "unnamed")), tostring(IsWorldTooltip()),
+			tostring(HidingWorldTooltips()))
+	end
+	StopFade() -- something new: never leave it part-faded
+	if not ShouldHideTooltip() then
+		return
+	end
+	if revealedName and SameName(TooltipName(), revealedName) then
+		return -- the revealed one refreshing
+	end
+	HoldBack(self)
+end
+
+function ns.OnTooltipHide()
+	StopFade()
+end
+
+-- Runs on the tick: counts down a held tooltip, and covers a tooltip that was
+-- already up when cinematic mode started.
+function ns.UpdateTooltip()
+	-- Gone, or taken over by a UI element's tooltip (left alone).
+	if shown and not (GameTooltip:IsShown() and IsWorldTooltip()) then
+		shown, revealedName = nil, nil
+	end
+	if shown and not StillOver(shown) then
+		Trace("left %s, fading out", tostring(shown.name))
+		shown, revealedName = nil, nil
+		StartFade(0)
+		return
+	end
+	if held then
+		if not (ns.db.tooltipReveal and HidingWorldTooltips() and StillOver(held)) then
+			if ns.tooltipTrace then
+				local x, y = GetCursorPosition()
+				Trace("drop %s: reveal=%s hiding=%s moved=%.0f,%.0f overWorld=%s overMinimap=%s mouseover=%s view=%s",
+					tostring(held.name), tostring(ns.db.tooltipReveal), tostring(HidingWorldTooltips()),
+					x - held.x, y - held.y, tostring(MouseOverWorld()), tostring(OverMinimap()),
+					tostring(UnitExists("mouseover")), tostring(not held.unit and ViewMoved(held)))
+			end
+			held = nil
+		elseif GetTime() >= held.at then
+			Reveal()
+		end
+	elseif not (fader:IsShown() and fadeTo == 0) -- let a fade-out finish
+		and ShouldHideTooltip() and not (revealedName and SameName(TooltipName(), revealedName)) then
+		HoldBack(GameTooltip)
 	end
 end
 
@@ -578,6 +1413,7 @@ function ns.CreateLetterbox()
 	ns.letterbox.bottom:SetPoint("BOTTOMRIGHT")
 
 	ns.letterbox:Hide()
+	ns.AddOverlay(ns.letterbox)
 end
 
 function ns.UpdateLetterbox(cinematic, elapsed)

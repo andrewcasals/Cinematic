@@ -26,6 +26,7 @@ local ORBIT_QUICK_STOP_TIME = 0.4 -- ease-out when the player moves or grabs the
 local ORBIT_MIN_SWEEP_TIME = 0.5 -- avoid near-instant sweeps for tiny moves
 local ORBIT_SPEED_EPSILON = 0.02 -- skip restarts for speed changes under 2%
 local DRIFT_RAMP = 1.5           -- seconds for the drift to ease in, or turn round
+local DRIFT_SMOOTH = 0.6         -- seconds of smoothing on top, so it never starts or stops sharply
 local ORBIT_RESTART_INTERVAL = 0.05 -- at most 20 speed changes per second per axis
 local ORBIT_BIG_CHANGE = 0.3 -- speed changes over 30% skip that limit
 
@@ -56,15 +57,325 @@ local function CallCameraFunction(name, ...)
 	_G[name](...)
 	drivingCamera = false
 end
+ns.CallCameraFunction = CallCameraFunction -- (for the quest cam's tilt)
 
 local idleZoom = { active = false, saved = nil }
 local turnKeys = { left = false, right = false }
--- Cozy camera emotes: emote token -> the setting that switches it on.
-local COZY_EMOTES = {
-	SIT = "cozySit", SLEEP = "cozySleep", LAYDOWN = "cozySleep", LIE = "cozySleep",
-	DANCE = "cozyDance", KNEEL = "cozyKneel",
+-- Events that start a standing-still camera, in the order the Events page
+-- lists them. Each has its own settings: event<key>Camera (which camera:
+-- "cozy", "vista", "fish", "afk" or "none") and event<key>Delay (seconds the event
+-- has to last first; nil starts it right away). Once it counts, the camera
+-- starts and the UI fades at once. The emotes and seats always end as you move
+-- or jump; those marked stopsOnMove (a state that carries on as you move) have
+-- event<key>StopOnMove: moving or jumping ends it until it starts afresh.
+ns.EVENTS = {
+	{ key = "Campfire", label = "Resting with a listed buff (campfire)", camera = "cozy", stopsOnMove = true },
+	{ key = "Sit", label = "/sit (or press the sit key)", camera = "cozy" },
+	{ key = "Sleep", label = "/sleep or /lie down", camera = "cozy" },
+	{ key = "Dance", label = "/dance", camera = "cozy" },
+	{ key = "Kneel", label = "/kneel", camera = "cozy" },
+	{ key = "Chair", label = "Sitting in a chair or on a bench", camera = "cozy" },
+	{ key = "Weapon", label = "Unsheathe your weapon (Z)", camera = "cozy", stopsOnMove = true },
+	{ key = "Stare", label = "/stare", camera = "vista" },
+	{ key = "Fishing", label = "Cast Fishing", camera = "fish" },
+	{ key = "AFK", label = "Go AFK", camera = "afk", stopsOnMove = true },
+	-- Not a standing-still camera: its choices are the flight camera or none.
+	{ key = "Flight", label = "Take a flight", camera = "flight" },
+	-- Nor this: the quest cam (QuestCam.lua) or none.
+	{ key = "Quest", label = "Talk to a quest giver", camera = "quest" },
 }
-local cozyEmote -- the setting key for the emote you're doing, or nil
+for _, event in ipairs(ns.EVENTS) do
+	ns.DEFAULTS["event" .. event.key .. "Camera"] = event.camera
+	if event.stopsOnMove then
+		ns.DEFAULTS["event" .. event.key .. "StopOnMove"] = true
+	end
+end
+ns.DEFAULTS.eventWeaponDelay = 3
+
+-- Seconds an event has to last before its camera starts (0: right away).
+local function EventDelay(key)
+	return tonumber(ns.db["event" .. key .. "Delay"]) or 0
+end
+
+-- Taking a flight: it counts once the flight has lasted its delay. The flight
+-- camera runs then, unless the event is set to no camera.
+local flightSince -- when this flight took off, or nil on the ground
+local flightCamStarted = false -- this flight's camera has started (takeoff swing done)
+function ns.FlightStarted()
+	return ns.db ~= nil and UnitOnTaxi("player") and flightSince ~= nil
+		and GetTime() - flightSince >= EventDelay("Flight")
+end
+function ns.FlightCameraOn()
+	return ns.FlightStarted() and ns.db.eventFlightCamera ~= "none"
+end
+-- Emote token -> its event. Over once you move, jump or do another emote.
+local EMOTE_EVENTS = {
+	SIT = "Sit", SLEEP = "Sleep", LAYDOWN = "Sleep", LIE = "Sleep",
+	DANCE = "Dance", KNEEL = "Kneel", STARE = "Stare",
+}
+local emoteEvent -- the event for the emote (or seat) you're doing, or nil
+
+-- Fishing: casting it counts like an emote, so it carries on after the cast
+-- ends (looting, recasting) until you move or jump. All ranks share the name.
+do
+	local FISHING_IDS = { [7620] = true, [7731] = true, [7732] = true, [18248] = true }
+	local function SpellName(id)
+		if C_Spell and C_Spell.GetSpellName then
+			return C_Spell.GetSpellName(id)
+		elseif GetSpellInfo then
+			return (GetSpellInfo(id))
+		end
+	end
+	local function IsFishingSpell(spellID)
+		local ok, fishing = pcall(function()
+			return FISHING_IDS[spellID] or (spellID and SpellName(spellID) == SpellName(7620))
+		end)
+		return ok and fishing and true or false
+	end
+	local fishingWatcher = CreateFrame("Frame")
+	fishingWatcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player")
+	fishingWatcher:SetScript("OnEvent", function(_, _, _, _, spellID)
+		if IsFishingSpell(spellID) then
+			emoteEvent = "Fishing"
+			ns.lastEmote = { token = "FISHING", via = "cast", at = GetTime() }
+		end
+	end)
+
+	-- The player cast bar while it shows Fishing: kept invisible (hideFishingCastBar).
+	-- The bar sets itself back to full alpha as each cast starts, so its own
+	-- events are followed and the alpha set again after them.
+	local function UpdateCastBar(bar)
+		if not ns.db or not ns.db.hideFishingCastBar then
+			if bar.cinematicFishingHidden then
+				bar.cinematicFishingHidden = nil
+				if bar:IsShown() then bar:SetAlpha(1) end
+			end
+			return
+		end
+		local ok, fishing = pcall(function()
+			local name, _, _, _, _, _, _, spellID = UnitChannelInfo("player")
+			return name ~= nil and IsFishingSpell(spellID or 0) or (name ~= nil and name == SpellName(7620))
+		end)
+		if ok and fishing then
+			bar.cinematicFishingHidden = true
+			bar:SetAlpha(0)
+		elseif bar.cinematicFishingHidden and (UnitCastingInfo("player") or UnitChannelInfo("player")) then
+			bar.cinematicFishingHidden = nil -- another cast: the bar shows it as usual
+			bar:SetAlpha(1)
+		end
+	end
+	local castBarWatcher = CreateFrame("Frame")
+	castBarWatcher:RegisterEvent("PLAYER_LOGIN")
+	castBarWatcher:SetScript("OnEvent", function()
+		for _, name in ipairs({ "PlayerCastingBarFrame", "CastingBarFrame" }) do
+			local bar = _G[name]
+			if bar and bar.HookScript then
+				bar:HookScript("OnEvent", UpdateCastBar)
+				bar:HookScript("OnShow", UpdateCastBar)
+			end
+		end
+	end)
+
+	-- Right-click to recast (fishRightClickCast): while the fish camera is on
+	-- and no bobber is out, a right-click in the world clicks a secure button
+	-- that casts Fishing. Every cast still comes from your own click (addons
+	-- can't cast by themselves). While the bobber is out, the loot window is
+	-- open or you're in combat, right-click is left alone (to click the bobber).
+	local castButton -- the secure button, made at login
+	local AFTER_COMBAT = 5 -- seconds after a fight before right-click casts again (time to loot)
+	local combatSeenAt = -math.huge
+	local BOTH_BUTTONS_WINDOW = 0.25 -- seconds: a left-click this close before the right one counts as both
+	local leftDownAt = -math.huge
+	local leftWatcher = CreateFrame("Frame")
+	leftWatcher:RegisterEvent("GLOBAL_MOUSE_DOWN")
+	leftWatcher:SetScript("OnEvent", function(_, _, button)
+		if button == "LeftButton" then
+			leftDownAt = GetTime()
+		end
+	end)
+	local bound = false
+	local channelEndedAt = -math.huge
+	local function SetRecast(on)
+		if on == bound or InCombatLockdown() then
+			return -- (bindings can't change in combat)
+		end
+		bound = on
+		if on then
+			SetOverrideBindingClick(castButton, true, "BUTTON2", castButton:GetName())
+		else
+			ClearOverrideBindings(castButton)
+		end
+	end
+	local recastWatcher = CreateFrame("Frame")
+	recastWatcher:RegisterEvent("PLAYER_LOGIN")
+	recastWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+	recastWatcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player")
+	recastWatcher:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_LOGIN" then
+			castButton = CreateFrame("Button", "CinematicFishingCastButton", UIParent, "SecureActionButtonTemplate")
+			castButton:SetAttribute("type", "spell")
+			castButton:SetAttribute("spell", SpellName(7620))
+			-- Click on key down or up, as the game's action buttons do (not both:
+			-- that would cast twice).
+			castButton:RegisterForClicks(GetCVarBool("ActionButtonUseKeyDown") and "AnyDown" or "AnyUp")
+			-- Both mouse buttons together runs you forward: no cast then. (Out
+			-- of combat, so the spell can be taken off just for this click.)
+			castButton:SetScript("PreClick", function(self)
+				local both = IsMouseButtonDown("LeftButton") or GetTime() - leftDownAt < BOTH_BUTTONS_WINDOW
+				if not InCombatLockdown() then
+					self:SetAttribute("type", not both and "spell" or nil)
+				end
+			end)
+		elseif event == "PLAYER_REGEN_DISABLED" then
+			combatSeenAt = GetTime()
+			SetRecast(false) -- a fight: right-click attacks as usual (cleared just before lockdown)
+		else
+			channelEndedAt = GetTime()
+		end
+	end)
+	-- A fishing pole in your main hand (fishPoleRightClickCast): right-click casts
+	-- the first time too, standing still out of the fish camera. Not while
+	-- the mouse is on a unit or an object you just moused over (an NPC,
+	-- a mailbox, a corpse to loot): right-click is theirs.
+	local poleEquipped = false
+	local function CheckPole()
+		local itemID = GetInventoryItemID("player", 16)
+		local info = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+		local classID, subclassID
+		if itemID and info then
+			classID, subclassID = select(6, info(itemID))
+		end
+		poleEquipped = classID == 2 and subclassID == 20 -- weapon: fishing pole
+	end
+	local poleWatcher = CreateFrame("Frame")
+	poleWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+	poleWatcher:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+	poleWatcher:SetScript("OnEvent", function() pcall(CheckPole) end)
+	-- World objects under the mouse: their tooltip appearing (it may be hidden
+	-- straight away by the tooltip options), and the mouse staying near there.
+	local objectAt, objectX, objectY = -math.huge, 0, 0
+	GameTooltip:HookScript("OnShow", function(self)
+		local owner = self:GetOwner()
+		if owner == nil or owner == UIParent or owner == WorldFrame then
+			objectAt = GetTime()
+			objectX, objectY = GetCursorPosition()
+		end
+	end)
+	-- "Your cast didn't land in fishable water": likely a pole left equipped
+	-- away from water, so right-click casting stands aside for fishMissPause sec.
+	-- Moving and then standing still for MISS_SETTLE seconds ends it early: a
+	-- new spot to fish from.
+	local MISS_SETTLE = 1
+	local missedAt = -math.huge
+	local movedSinceMiss = false
+	local stoppedAt -- standing still again since this time, after moving
+	local missWatcher = CreateFrame("Frame")
+	missWatcher:RegisterEvent("UI_ERROR_MESSAGE")
+	-- "Skill not high enough": fishing water (or clicking something) beyond your
+	-- skill. Moving won't fix that, so right-click casting stands aside for
+	-- SKILL_PAUSE seconds whatever you do. (The game's own name for the message
+	-- isn't certain, so a few likely ones are tried, and the English text.)
+	local SKILL_PAUSE = 30
+	local skillBlockedUntil = -math.huge
+	local function IsSkillError(message)
+		for _, name in ipairs({ "ERR_SKILL_NOT_HIGH_ENOUGH",
+			"SPELL_FAILED_MIN_SKILL", "SPELL_FAILED_FISHING_TOO_LOW" }) do
+			local text = _G[name]
+			if type(text) == "string" then
+				-- (One with a number or name filled in: the part before that.)
+				local fixed = text:match("^(.-)%%") or text
+				if message == text or (#fixed >= 8 and message:sub(1, #fixed) == fixed) then
+					return true
+				end
+			end
+		end
+		return message == "Skill not high enough"
+	end
+	-- (Curly or straight apostrophes, either way.)
+	local function Plain(text)
+		return (text:gsub("\226\128\153", "'"))
+	end
+	local function IsMissError(message)
+		return (type(SPELL_FAILED_NOT_FISHABLE) == "string" and Plain(message) == Plain(SPELL_FAILED_NOT_FISHABLE))
+			or Plain(message) == "Your cast didn't land in fishable water"
+	end
+	ns.fishErrorDebug = {} -- for /dump: the last red error seen, and what it was taken for
+	local function OnErrorText(message, via)
+		if type(message) ~= "string" or (issecretvalue and issecretvalue(message)) then
+			return
+		end
+		local taken
+		if IsMissError(message) then
+			missedAt, movedSinceMiss, stoppedAt = GetTime(), false, nil
+			taken = "miss"
+		elseif (poleEquipped or (ns.IsFish and ns.IsFish())) and IsSkillError(message) then
+			skillBlockedUntil = GetTime() + SKILL_PAUSE
+			taken = "skill"
+		end
+		ns.fishErrorDebug = { message = message, via = via, taken = taken, at = GetTime() }
+	end
+	missWatcher:SetScript("OnEvent", function(_, _, a, b)
+		OnErrorText(type(b) == "string" and b or a, "event") -- (message second on newer clients)
+	end)
+	-- The same red text as it reaches the screen, in case a client sends it
+	-- some other way than the event.
+	if UIErrorsFrame and UIErrorsFrame.AddMessage then
+		hooksecurefunc(UIErrorsFrame, "AddMessage", function(_, message) OnErrorText(message, "screen") end)
+	end
+	local OBJECT_REACH = 40 -- pixels (UI scale aside) the mouse can wander and still be on it
+	local function MouseOnSomething()
+		if UnitExists("mouseover") then
+			return true
+		end
+		if GetTime() - objectAt > 30 then
+			return false
+		end
+		local x, y = GetCursorPosition()
+		return (x - objectX) ^ 2 + (y - objectY) ^ 2 < OBJECT_REACH ^ 2
+	end
+
+	recastWatcher:SetScript("OnUpdate", function()
+		if not castButton then
+			return
+		end
+		-- Right button held: the binding stays as it was pressed. Swapping it
+		-- mid-press sends the release to the other binding, so a right-drag
+		-- begun as the game's (turning) never got its stop and stayed stuck.
+		local rightHeld = IsMouseButtonDown("RightButton")
+		if missedAt > -math.huge then
+			if ns.playerMoving then
+				movedSinceMiss, stoppedAt = true, nil
+			elseif movedSinceMiss then
+				stoppedAt = stoppedAt or GetTime()
+				if GetTime() - stoppedAt >= MISS_SETTLE then
+					missedAt, movedSinceMiss, stoppedAt = -math.huge, false, nil -- settled somewhere new
+				end
+			end
+		end
+		local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+		if inCombat then
+			combatSeenAt = GetTime()
+		end
+		local fishCam = ns.IsFish and ns.IsFish()
+		local pole = ns.db and ns.db.fishPoleRightClickCast and poleEquipped and not fishCam
+			and not ns.playerMoving and not IsMounted() and not UnitOnTaxi("player")
+			and not ns.Flag(UnitIsDeadOrGhost("player")) and not MouseOnSomething()
+		-- (In the fish camera only units count: the spot you just looted the
+		-- bobber at would otherwise keep right-click from casting again there.)
+		-- (Left button held: right-click is the game's, so both together run you forward.)
+		local want = ns.db and ns.db.fishRightClickCast and not IsMouseButtonDown("LeftButton")
+			and ((fishCam and not UnitExists("mouseover")) or pole)
+			and not UnitChannelInfo("player") and not UnitCastingInfo("player")
+			and GetTime() - channelEndedAt >= (tonumber(ns.db.fishRecastDelay) or 0.5)
+			and GetTime() - missedAt >= (tonumber(ns.db.fishMissPause) or 30)
+			and GetTime() >= skillBlockedUntil
+			and not (LootFrame and LootFrame:IsShown())
+			and not inCombat and GetTime() - combatSeenAt >= AFTER_COMBAT
+		if not rightHeld then
+			SetRecast(want and true or false)
+		end
+	end)
+end
 
 -- Sitting on a chair or bench: there's no event for it, so it's pieced
 -- together. The world tooltip's name is noted as it appears (before the
@@ -106,17 +417,18 @@ local mouseCameraHeld = false
 -- stops managing it (no snapping back later). Also counts as camera input.
 local function OnPlayerZoom()
 	if not drivingCamera then
+		-- Zoomed yourself on a flight: your distance stays at landing (see
+		-- taxiLandZoom), rather than going back to the one you took off with.
+		if UnitOnTaxi("player") and ns.db then
+			ns.db.takeoffZoom = nil
+		end
 		if CancelIdleZoom then CancelIdleZoom() end
+		if ns.CancelDeathZoom then ns.CancelDeathZoom() end
 		lastCameraInput = GetTime()
 	end
 end
 
 function ns.HookCameraInput()
-	-- Any click brings a tucked cursor back.
-	local clickWatcher = CreateFrame("Frame")
-	clickWatcher:RegisterEvent("GLOBAL_MOUSE_DOWN")
-	clickWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
-	clickWatcher:SetScript("OnEvent", function() if ns.UntuckCursor then ns.UntuckCursor() end end)
 	-- Seats: note world tooltip names, watch right-clicks and the snap.
 	GameTooltip:HookScript("OnShow", function(self)
 		local owner = self:GetOwner()
@@ -136,7 +448,7 @@ function ns.HookCameraInput()
 	local seatX, seatY
 	local function Seated(how)
 		seatClickAt = -math.huge
-		cozyEmote = "cozyChair"
+		emoteEvent = "Chair" -- the latest choice wins
 		ns.lastEmote = { token = "CHAIR", via = how .. " on " .. tostring(lastWorldName), at = GetTime() }
 	end
 	local seatWatcher = CreateFrame("Frame")
@@ -174,7 +486,10 @@ function ns.HookCameraInput()
 			return
 		end
 		ns.lastEmote = { token = token, via = via, at = GetTime() }
-		cozyEmote = COZY_EMOTES[token:upper()]
+		local event = EMOTE_EVENTS[token:upper()]
+		if event or emoteEvent ~= "Fishing" then -- (a /wave doesn't end fishing)
+			emoteEvent = event
+		end
 	end
 	if DoEmote then
 		hooksecurefunc("DoEmote", function(token) OnEmote(token, "DoEmote") end)
@@ -235,12 +550,17 @@ function ns.HookCameraInput()
 	if SitStandOrDescendStart then
 		hooksecurefunc("SitStandOrDescendStart", function()
 			if not IsFlying or not IsFlying() then
-				cozyEmote = (cozyEmote == nil) and "cozySit" or nil -- the sit key toggles
+				-- The sit key toggles (from a /stare, it sits you down).
+				emoteEvent = (emoteEvent == nil or emoteEvent == "Stare" or emoteEvent == "Fishing") and "Sit" or nil
 			end
 		end)
 	end
 	if JumpOrAscendStart then
-		hooksecurefunc("JumpOrAscendStart", function() cozyEmote = nil end) -- jumping stands you up
+		hooksecurefunc("JumpOrAscendStart", function() -- jumping stands you up
+			emoteEvent = nil
+			ns.manualCam = nil
+			ns.StopEventsOnMove()
+		end)
 	end
 	for _, name in ipairs({ "CameraZoomIn", "CameraZoomOut" }) do
 		if _G[name] then
@@ -257,7 +577,7 @@ function ns.HookCameraInput()
 	end
 	for _, name in ipairs({ "CameraOrSelectOrMoveStart", "TurnOrActionStart" }) do
 		if _G[name] then
-			hooksecurefunc(name, function() mouseCameraHeld = true end)
+			hooksecurefunc(name, function() mouseCameraHeld = GetTime() end) -- (when it was pressed)
 		end
 	end
 	for _, name in ipairs({ "CameraOrSelectOrMoveStop", "TurnOrActionStop" }) do
@@ -278,66 +598,13 @@ function ns.HookCameraInput()
 	end
 end
 
--- (The addon's own cursor tuck uses mouse-steering mode too; that isn't you.)
-local cursorTucked = false
 local function IsMouseOnCamera()
-	return mouseCameraHeld or (IsMouselooking and IsMouselooking() and not cursorTucked) or false
-end
-
--- Cursor tuck: there's no way to move the cursor, but mouse-steering mode
--- (like holding the right button) hides it. Once the cursor has been still for
--- a while in cinematic mode, with nothing open that needs it, steering mode is
--- switched on; any click, the mouse turning you, typing, a window, combat or
--- the end of cinematic mode switches it off and the cursor comes back.
-local cursorX, cursorY, cursorStillSince = nil, nil, 0
-local CURSOR_TUCK_IN = {
-	flight = "cursorTuckFlight", idle = "cursorTuckIdle", cozy = "cursorTuckCozy",
-	walk = "cursorTuckWalk", run = "cursorTuckRun",
-}
-local tuckFacing
-
-local function Untuck()
-	if cursorTucked then
-		cursorTucked = false
-		if IsMouselooking and IsMouselooking() then
-			pcall(MouselookStop)
-		end
+	-- Fishing: a quick click (right-clicking the bobber) isn't moving the camera;
+	-- only holding the button down a moment is.
+	if mouseCameraHeld and ns.IsFishingEvent and ns.IsFishingEvent() then
+		return GetTime() - mouseCameraHeld >= 0.4
 	end
-end
-
-ns.UntuckCursor = Untuck
-
-function ns.UpdateCursorTuck(cinematic)
-	local now = GetTime()
-	local x, y = GetCursorPosition()
-	if x ~= cursorX or y ~= cursorY then
-		cursorX, cursorY, cursorStillSince = x, y, now
-	end
-	local ok, facing = pcall(GetPlayerFacing)
-	facing = (ok and type(facing) == "number" and not (issecretvalue and issecretvalue(facing))) and facing or nil
-
-	-- Wanted in this camera mode (or, outside them, at other times)?
-	local mode = ns.CameraMode and ns.CameraMode()
-	local wanted = ns.db[mode and CURSOR_TUCK_IN[mode] or "cursorTuckOther"]
-	local blocked = not cinematic or not wanted or InCombatLockdown()
-		or GetCursorInfo() ~= nil or (ns.IsChatActive and ns.IsChatActive())
-		or (ns.MouseWindowOpen and ns.MouseWindowOpen())
-		or IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")
-
-	if cursorTucked then
-		local turned = facing and tuckFacing and math.abs(facing - tuckFacing) > 0.01
-		if blocked or turned or not IsMouselooking() then
-			Untuck()
-			cursorStillSince = now -- don't tuck straight back
-		end
-		return
-	end
-	if not blocked and now - cursorStillSince >= ns.db.cursorTuckDelay
-		and not (IsMouselooking and IsMouselooking()) then
-		if pcall(MouselookStart) and IsMouselooking() then
-			cursorTucked, tuckFacing = true, facing
-		end
-	end
+	return mouseCameraHeld and true or (IsMouselooking and IsMouselooking()) or false
 end
 
 -- Turning left or right, by keys or mouse: the facing direction changing
@@ -432,7 +699,7 @@ local walkHandoff = false
 -- Cozy camera triggers. Buffs: any from the player's list (names or spell
 -- IDs, cozyBuffs), checked whenever your buffs change. Emotes: followed from
 -- the emote calls, and over once you move, jump or do another emote.
--- (COZY_EMOTES and cozyEmote are declared near the top, for the input hooks.)
+-- (EMOTE_EVENTS and emoteEvent are declared near the top, for the input hooks.)
 local atCampfire = false
 local function HasBuffNamed(name)
 	local id = tonumber(name)
@@ -486,13 +753,26 @@ end
 
 -- The weapon trigger: only a weapon you drew yourself out of combat, and never
 -- in combat. One drawn for a fight (and still out after it) doesn't count
--- until it's put away and drawn again.
-local weaponWasDrawn, weaponDrawnCalmly = false, false
+-- until it's put away and drawn again. Nor does one already out as you log in
+-- or reload (weaponWasDrawn is nil until the first look after loading in).
+local weaponWasDrawn, weaponDrawnCalmly = nil, false
+campfireWatcher:HookScript("OnEvent", function(_, event)
+	if event == "PLAYER_ENTERING_WORLD" then
+		weaponWasDrawn, weaponDrawnCalmly = nil, false
+	end
+end)
 local function WeaponCozy()
 	local drawn = WeaponDrawn()
 	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+	if weaponWasDrawn == nil then
+		weaponWasDrawn = drawn -- loading in: whatever's out already doesn't count
+	end
 	if drawn and not weaponWasDrawn then
-		weaponDrawnCalmly = not inCombat
+		-- (Casting Fishing brings the pole out: that draw doesn't count.)
+		weaponDrawnCalmly = not inCombat and emoteEvent ~= "Fishing"
+		if weaponDrawnCalmly then
+			emoteEvent = nil -- drawn after an emote: the latest choice wins
+		end
 	end
 	if not drawn or inCombat then
 		weaponDrawnCalmly = false
@@ -513,21 +793,139 @@ function ns.GetWeaponDebug()
 	}
 end
 
--- Cozy: one of the triggers while you're standing (or sitting) still.
+-- The camera an event is set to on the Events page, or nil for none.
+local function EventCamera(key)
+	local camera = key and ns.db["event" .. key .. "Camera"]
+	if camera and camera ~= "none" then
+		return camera
+	end
+end
+
+-- Fishing with a camera set for it: the cast doesn't count as busy casting.
+function ns.IsFishingEvent()
+	return emoteEvent == "Fishing" and ns.db ~= nil and EventCamera("Fishing") ~= nil
+end
+
+-- The event happening now and its camera, before any wait (see ActiveEvent).
+-- Its helpers sit in a do block: this file is at Lua's 200-local limit.
+local CurrentEvent
+do
+	-- Events set to stop on moving that you've moved or jumped during: passed
+	-- over until they end (weapon put away, buff gone, back from AFK) and start afresh.
+	local stoppedByMove = {}
+	local function EventOn(key)
+		if key == "Weapon" then
+			return weaponDrawnCalmly
+		elseif key == "Campfire" then
+			return atCampfire
+		elseif key == "AFK" then
+			return ns.Flag(UnitIsAFK("player"))
+		end
+	end
+	-- Moving or jumping now: stop the events that are on and set to stop.
+	function ns.StopEventsOnMove(except)
+		if not ns.db then
+			return
+		end
+		for _, event in ipairs(ns.EVENTS) do
+			if event.stopsOnMove and event.key ~= except and ns.db["event" .. event.key .. "StopOnMove"]
+				and EventOn(event.key) then
+				stoppedByMove[event.key] = true
+			end
+		end
+	end
+	-- Whether an event's state counts now (on, and not stopped by moving).
+	local function EventLive(key, on)
+		if not on then
+			stoppedByMove[key] = nil -- ended: the next one starts afresh
+			return false
+		end
+		return not stoppedByMove[key]
+	end
+
+	function CurrentEvent()
+		if not ns.db or UnitOnTaxi("player") then
+			return nil
+		end
+		local weapon = EventLive("Weapon", WeaponCozy())
+		local campfire = EventLive("Campfire", atCampfire)
+		local afk = EventLive("AFK", ns.Flag(UnitIsAFK("player")))
+		if ns.playerMoving then
+			-- Moving ends them all, except a weapon drawn while RP walking for the
+			-- cozy camera: it swings round in front of you as you walk (a "hero walk").
+			local heroWalk = weapon and EventCamera("Weapon") == "cozy" and ns.IsRPWalking and ns.IsRPWalking()
+			ns.StopEventsOnMove(heroWalk and "Weapon")
+			if heroWalk then
+				return "Weapon", "cozy"
+			end
+			return nil
+		end
+		if ns.db.cameraPauseAtNPCs and ns.NPCWindowOpen and ns.NPCWindowOpen() then
+			return nil -- talking to an NPC: waits until the window closes
+		end
+		if ns.db.cameraPauseInMenus and ns.MenuWindowOpen and ns.MenuWindowOpen() then
+			return nil -- in a menu or game window: waits until it closes
+		end
+		if ns.manualCam then
+			return "Manual", ns.manualCam -- started from a key binding (Cinematic_StartCam)
+		end
+		for _, key in ipairs({ emoteEvent or false, weapon and "Weapon", campfire and "Campfire",
+			afk and "AFK" }) do
+			local camera = key and EventCamera(key)
+			if camera then
+				return key, camera
+			end
+		end
+		return nil
+	end
+end
+
+-- The event that picks the standing-still camera now, and its camera ("cozy",
+-- "vista", "fish" or "afk"), or nil. The latest emote (or seat) wins, then a drawn
+-- weapon, a campfire buff and going AFK; one set to no camera is passed over.
+-- An event with a delay counts only once it has lasted that many seconds.
+local lastEvent, eventSince = nil, 0
+function ns.ActiveEvent()
+	local key, camera = CurrentEvent()
+	local now = GetTime()
+	if key ~= lastEvent then
+		lastEvent, eventSince = key, now
+	end
+	if key and now - eventSince < EventDelay(key) then
+		return nil
+	end
+	return key, camera
+end
+
+-- For /cine debug emote: the event happening now, and how long until it counts.
+function ns.GetEventDebug()
+	local key, camera = CurrentEvent()
+	local wait = 0
+	if key and key == lastEvent then
+		wait = math.max(0, EventDelay(key) - (GetTime() - eventSince))
+	end
+	return key, camera, wait
+end
+
+-- Vista: the camera lines up behind you and sways gently there, looking out
+-- the way you're facing.
+function ns.IsVista()
+	return select(2, ns.ActiveEvent()) == "vista"
+end
+
+-- Fish: the vista camera with a narrower sway, for fishing.
+function ns.IsFish()
+	return select(2, ns.ActiveEvent()) == "fish"
+end
+
+-- Cozy: the camera swings round to face you and sways in front.
 function ns.IsCozy()
-	if not ns.db or UnitOnTaxi("player") then
-		return false
-	end
-	if ns.playerMoving then
-		-- Moving ends cozy, except a weapon drawn while RP walking: the camera
-		-- swings round in front of you as you walk (a "hero walk").
-		return ns.db.cozyWeapon and ns.IsRPWalking and ns.IsRPWalking() and WeaponCozy() or false
-	end
-	if ns.db.cameraPauseAtNPCs and ns.NPCWindowOpen and ns.NPCWindowOpen() then
-		return false -- talking to an NPC: waits until the window closes
-	end
-	return (ns.db.cozyBuffsOn and atCampfire) or (cozyEmote ~= nil and ns.db[cozyEmote])
-		or (ns.db.cozyWeapon and WeaponCozy()) or false
+	return select(2, ns.ActiveEvent()) == "cozy"
+end
+
+-- An event set to the AFK camera: it starts without waiting out its delay.
+function ns.IsEventAFK()
+	return select(2, ns.ActiveEvent()) == "afk"
 end
 local RECENTER_TIME = 5 -- seconds a swing back behind you lasts
 local recenterUntil = 0
@@ -542,6 +940,19 @@ local CALM_CENTER_RAMP = 0.8
 local CALM_CENTER_YAW = 70
 local CALM_CENTER_PITCH = 40
 local lastCombatAt = -math.huge
+-- Each camera mode can hold off for a while after a fight (its <mode>CombatWait
+-- setting, in seconds; 0: no wait). Looked up by mode ("run") or orbit prefix
+-- ("runOrbit"). The death camera has none: it runs in combat by design.
+local COMBAT_WAIT_KEY = {}
+for _, mode in ipairs({ "taxi", "idle", "walk", "run", "cozy", "vista", "fish" }) do
+	COMBAT_WAIT_KEY[mode] = mode .. "CombatWait"
+	COMBAT_WAIT_KEY[mode .. "Orbit"] = mode .. "CombatWait"
+end
+-- (On ns, not a local: UpdateOrbit is close to Lua's upvalue limit.)
+function ns.CombatWaitOver(mode, now)
+	local key = COMBAT_WAIT_KEY[mode]
+	return not key or now - lastCombatAt >= (ns.db[key] or 0)
+end
 local lastAnyTurnAt = -math.huge
 local followArmed = false -- turn hold-and-glide ready (not armed mid-turn)
 -- Steering a lot: this many turns started within the window means the glide
@@ -587,7 +998,7 @@ end
 -- Each camera has a fixed style (no mode choice): steady sweeps standing
 -- still, swings behind you on flights and while RP walking.
 local FIXED_MODE = { idleOrbit = "sweep", taxiOrbit = "back", walkOrbit = "back", runOrbit = "back",
-	cozyOrbit = "back" }
+	cozyOrbit = "back", vistaOrbit = "back", fishOrbit = "back", deathOrbit = "sweep" }
 -- The swing's centre: behind you (0), or in front for the cozy camera.
 local ARC_CENTER = { cozyOrbit = 180 }
 local function ArcCenter(prefix)
@@ -605,6 +1016,10 @@ local steerLowered = false
 local function PitchCenter()
 	if orbitPrefix == "cozyOrbit" then
 		return -ns.db.cozyLevel
+	elseif orbitPrefix == "vistaOrbit" then
+		return -ns.db.vistaLevel
+	elseif orbitPrefix == "fishOrbit" then
+		return -ns.db.fishLevel
 	elseif (orbitPrefix == "runOrbit" or orbitPrefix == "walkOrbit") and steeringNow then
 		return -STEER_LOWER
 	end
@@ -629,10 +1044,12 @@ local TRAVEL = {
 }
 -- Standing still and the travel modes hand over seamlessly between each other.
 local FOOT_ORBIT = { idleOrbit = true, walkOrbit = true, runOrbit = true, cozyOrbit = true }
-local FOOT_ZOOM = { idle = true, walk = true, run = true, cozy = true }
+-- (The vista and fish cameras always start afresh, so they can line up behind you first.)
+local FOOT_ZOOM = { idle = true, walk = true, run = true, cozy = true, vista = true, fish = true }
 -- Modes that line up behind you before they start (cozy then swings round).
-local LINEUP_ORBIT = { walkOrbit = true, runOrbit = true }
-local TRAVEL_ORBIT = { walkOrbit = true, runOrbit = true }
+local LINEUP_ORBIT = { walkOrbit = true, runOrbit = true, vistaOrbit = true, fishOrbit = true }
+-- Modes whose sway favours angles near directly behind (the way you face).
+local TRAVEL_ORBIT = { walkOrbit = true, runOrbit = true, vistaOrbit = true, fishOrbit = true }
 -- Indoors (with the indoor limits on): smaller swings and zoom, so the
 -- camera doesn't keep pushing into walls and ceilings.
 local function Indoors()
@@ -646,6 +1063,9 @@ end
 local function OrbitSetting(key)
 	if key == "Mode" then
 		return FIXED_MODE[orbitPrefix]
+	end
+	if key == "Right" and ns.db[orbitPrefix .. "RandomDir"] then
+		return ns.orbit.randomRight -- picked as the AFK or death camera starts
 	end
 	local value = ns.db[orbitPrefix .. key]
 	if (key == "BackArc" or key == "MinChange") and Indoors() then
@@ -732,7 +1152,12 @@ local function PlanNextSweep()
 			target = target * (0.4 + 0.6 * math.abs(target) / arc)
 		end
 		ns.orbit.yawDelta = WrapAngle(center + target - ns.orbit.angle)
-		ns.orbit.pitchDelta = PitchCenter() + RandomPitchTarget() - ns.orbit.pitch
+		local pitchTarget = PitchCenter() + RandomPitchTarget()
+		if orbitPrefix == "runOrbit" then
+			-- Auto-run: never below the lowest tilt (steering lowering included).
+			pitchTarget = math.max(pitchTarget, -OrbitSetting("PitchFloor"))
+		end
+		ns.orbit.pitchDelta = pitchTarget - ns.orbit.pitch
 	elseif mode == "random" then
 		-- Uniform over the allowed arc (everything outside +-min of the current
 		-- angle), then take the shorter way round.
@@ -767,47 +1192,44 @@ end
 
 -- Enter the pause phase. startT is where the pause clock starts: 0 for a full
 -- pause, closer to taxiOrbitPause for a shorter one. Drift, if on, creeps on in
--- the direction of the last move, or back toward the start in the behind modes
--- so it never pushes past their arc. noDrift holds still (used while the
--- takeoff swing is moving the camera).
+-- the direction of the last move; in the behind modes it eases to a stop before
+-- the edge of the swing (see UpdateOrbit) rather than turning back there.
+-- noDrift holds still (used while the takeoff swing is moving the camera).
 local function BeginPause(startT, noDrift, forceDrift)
 	ns.orbit.phase, ns.orbit.t, ns.orbit.pauseStart = "pause", startT, startT
 	ns.orbit.noDrift = noDrift or false
 	ns.orbit.forceDrift = forceDrift or false
 	if OrbitSetting("Mode") == "back" then
-		-- Carry on gently the way the last move went, unless the drift would
-		-- run past the swing limit before the pause ends; then head back in.
+		-- Carry on gently the way the last move went. (Turning back at the
+		-- swing limit would brake and reverse within a second: a visible jolt.
+		-- Near the limit it eases to a stop instead; the next move heads back.)
 		local lastPositive = ns.orbit.yawDelta >= 0
 		if ns.orbit.yawDelta == 0 then
 			lastPositive = math.random() < 0.5
 		end
-		local pauseLength = OrbitSetting("Pause") - startT
-		local distance = OrbitSetting("DriftSpeed") * math.max(0, pauseLength - DRIFT_RAMP)
-		local relative = WrapAngle(ns.orbit.angle - ArcCenter(orbitPrefix))
-		local landing = relative + (lastPositive and distance or -distance)
-		if math.abs(landing) <= OrbitSetting("BackArc") then
-			ns.orbit.driftPositive = lastPositive
-		else
-			ns.orbit.driftPositive = relative < 0
-		end
+		ns.orbit.driftPositive = lastPositive
 	else
 		ns.orbit.driftPositive = ns.orbit.yawDelta >= 0
 	end
 end
 
+local StopOrbitTilt -- defined with the death tilt below
+
 local function StopOrbitMove()
 	StopAxis(ns.yawAxis)
-	StopAxis(ns.pitchAxis)
+	StopOrbitTilt()
 end
 
 function ns.StopOrbitNow()
 	StopOrbitMove()
 	ns.orbit.level = 0
 	ns.orbit.continuous, ns.orbit.contFade = false, nil
-	ns.orbit.driftVel = 0
+	ns.orbit.driftVel, ns.orbit.driftSmooth = 0, 0
 end
 
 local CenterCamera -- defined with the flight-start code below
+-- (On ns too, for the quest cam in QuestCam.lua.)
+function ns.CenterCamera(...) return CenterCamera(...) end
 
 -- Standing still: no movement and not dragging the camera. Turning on the spot
 -- with the mouse counts as active, so the orbit never fights the player.
@@ -820,7 +1242,7 @@ local function IsAdjustingCamera(now, shortPause)
 	if IsMouseOnCamera() then
 		lastCameraInput = now
 	end
-	local pause = shortPause or ns.db.cameraInputPause
+	local pause = shortPause or ns.db.idleInputPause
 	return now - lastCameraInput < pause
 end
 
@@ -845,7 +1267,7 @@ local ZOOM_CLOSEST = 1              -- yards: never zoom in past this
 -- The active zoom profile's value: idleZoom* standing still, taxiZoom* flying,
 -- walkZoom* while RP walking.
 local ZOOM_PREFIX = { taxi = "taxiZoom", walk = "walkZoom", run = "runZoom", idle = "idleZoom",
-	cozy = "cozyZoom" }
+	cozy = "cozyZoom", vista = "vistaZoom", fish = "fishZoom" }
 local function ZoomSetting(key)
 	local value = ns.db[ZOOM_PREFIX[idleZoom.context] .. key]
 	if Indoors() then
@@ -856,6 +1278,14 @@ local function ZoomSetting(key)
 		end
 	end
 	return value
+end
+-- The pause before the next random zoom: Pause, give or take up to PauseVary.
+-- The roll is kept as a fraction so a profile switch mid-pause rescales it.
+local function RollZoomPause()
+	idleZoom.pauseRoll = math.random() * 2 - 1
+end
+local function ZoomPause()
+	return math.max(0, ZoomSetting("Pause") + (idleZoom.pauseRoll or 0) * (ZoomSetting("PauseVary") or 0))
 end
 local zoomWasIndoors = false
 local INDOOR_ZOOM_IN_TIME = 3 -- seconds to glide in when you walk indoors pulled back
@@ -898,6 +1328,30 @@ local function PlanPath(target, duration, ease, phase)
 	idleZoom.delta = math.max(ZOOM_CLOSEST, target) - idleZoom.from
 	idleZoom.duration, idleZoom.ease = math.max(0.5, duration), ease
 	idleZoom.phase, idleZoom.t = phase, 0
+end
+
+-- Landing (taxiLandZoom): glide back to the distance you had at takeoff,
+-- undoing the flight's slow zoom. Zooming yourself on the way counts as your
+-- choice: the distance then stays where you put it (see OnPlayerZoom).
+-- (Kept on ns: this file is at Lua's limit of 200 locals.)
+
+-- Your own zoom distance: the slow zoom's starting point while it's running
+-- (or gliding back), the camera's otherwise.
+function ns.PlayerZoom()
+	if (idleZoom.active or idleZoom.restoring) and idleZoom.saved then
+		return idleZoom.saved
+	end
+	return GetCameraZoom and GetCameraZoom()
+end
+
+-- Glides back to distance over 2 seconds.
+function ns.ZoomBackTo(distance, seconds)
+	if not GetCameraZoom or math.abs(GetCameraZoom() - distance) < ZOOM_RESTORE_DONE then
+		return
+	end
+	idleZoom.active = false
+	idleZoom.saved, idleZoom.restoring = distance, true
+	PlanPath(distance, seconds or 2, 0.5, "restore")
 end
 
 local function PlanZoom(target)
@@ -946,10 +1400,214 @@ local function CorrectZoomToward(desired)
 	return err
 end
 
+-- Death camera tilt and zoom: raises the camera to look down on your body (by
+-- deathLevel degrees, from wherever it was) and pulls back deathZoom yards, then
+-- lowers it by as much again and returns to your distance once you release or
+-- come back. tilt.amount is how far it's raised so far. Each change of target
+-- is one eased move, tilt and zoom together. There's no reading the camera's
+-- angle, so the tilt is counted; the zoom follows the real distance (see
+-- CorrectZoomToward) and stops if you zoom yourself.
+-- The game won't turn and tilt the camera at once (a tilt holds the turn), so
+-- the orbit waits for the rise: ns.orbit.deathRisen says it's done.
+-- The tilt doesn't use MoveAxis: small, changing speed multipliers on the
+-- "view up" command come out far too fast. Instead the tilt speed setting
+-- itself is set and "view up" (or down) sent at the normal rate. To ease in
+-- and out (a sudden start shows as a snap) the setting is stepped along the
+-- usual ease curve: the move is sent once and the setting changed as it goes
+-- (re-sending it showed as a snap). It stops once it has covered the distance;
+-- your setting then comes back.
+local DEATH_TILT_TIME = 3 -- seconds for the full tilt, up or down
+local TILT_SPEED_CVAR = "cameraPitchMoveSpeed"
+local TILT_EASE = 0.35     -- share of the tilt spent speeding up (and again slowing down)
+local TILT_STEP = 0.1      -- seconds between speed changes, at most
+local TILT_MIN_SPEED = 1   -- degrees per second: the slowest step sent
+
+local TILT_RESTORE_DELAY = 0.3 -- seconds after stopping before your tilt speed comes back
+
+-- /cine deathtest, and real deaths after /cine debug death, print what the
+-- death camera does and when (seconds since you died).
+function ns.DeathTestLog(text)
+	if GetTime() < (ns.deathTestUntil or 0) or ns.deathDebug then
+		ns.Print(("%.2fs %s"):format(GetTime() - (ns.orbit.deadSince or GetTime()), text))
+	end
+end
+
+local function StopDeathTilt()
+	if ns.orbit.tilting then
+		ns.DeathTestLog("tilt stopped")
+	end
+	StopAxis(ns.pitchAxis)
+	ns.orbit.tilting = false
+	-- (Put back a moment later, so the end of the tilt can't run at full speed.)
+	C_Timer.After(TILT_RESTORE_DELAY, function()
+		if not ns.orbit.tilting then
+			ns.RestoreCVar(TILT_SPEED_CVAR)
+		end
+	end)
+end
+
+local function StartDeathTilt(delta, T)
+	StopDeathTilt()
+	ns.SaveCVar(TILT_SPEED_CVAR)
+	ns.orbit.tilting = true
+	ns.DeathTestLog(("tilt %s %.0f° over %.1fs (zoom %.1f, combat %s, your tilt speed %s)"):format(
+		delta > 0 and "up" or "down", math.abs(delta), T, GetCameraZoom and GetCameraZoom() or -1,
+		tostring(InCombatLockdown()), tostring(ns.db.savedCVars[TILT_SPEED_CVAR])))
+end
+
+-- Send the tilt at this speed (degrees per second), if it's changed enough.
+-- live: the move goes out once, and after that only the speed setting changes
+-- (every frame it changes by more than TILT_LIVE_CHANGE), so there are no
+-- restarts to hitch on. (The death tilt; its start snapped with restarts.)
+local TILT_LIVE_CHANGE = 0.02
+local function SendTiltSpeed(tilt, speed, positive, live)
+	local now = GetTime()
+	if live and tilt.sent then
+		if math.abs(speed - tilt.sent) > tilt.sent * TILT_LIVE_CHANGE then
+			SetCVar(TILT_SPEED_CVAR, ("%.2f"):format(speed))
+			tilt.sent = speed
+		end
+		return
+	end
+	if tilt.sent and (now - tilt.sentAt < TILT_STEP or math.abs(speed - tilt.sent) <= tilt.sent * 0.1) then
+		return
+	end
+	SetCVar(TILT_SPEED_CVAR, ("%.2f"):format(speed))
+	if not tilt.sent and math.abs((tonumber(GetCVar(TILT_SPEED_CVAR)) or 0) - speed) > 0.1 then
+		ns.DeathTestLog(("tilt speed didn't take: asked %.2f, got %s"):format(speed,
+			tostring(GetCVar(TILT_SPEED_CVAR))))
+	end
+	local axis = ns.pitchAxis
+	axis.positive, axis.moving, axis.speed, axis.lastStart = positive, true, 1, now
+	CallCameraFunction(positive and axis.positiveStart or axis.negativeStart, 1)
+	tilt.sent, tilt.sentAt = speed, now
+end
+
+-- The sway's tilt stops (unless the death camera's tilt has the pitch: see
+-- UpdateDeathTilt). The sway tilts with MoveAxis; driving it through the tilt
+-- speed setting, like the death tilt, made the swaying cameras snap.
+function StopOrbitTilt()
+	if not ns.orbit.tilting then
+		StopAxis(ns.pitchAxis)
+	end
+end
+
+local DEATH_ZOOM_GIVE_UP = 2 -- extra seconds before a zoom that can't get there stops
+local deathTilt = { amount = 0, from = 0, target = 0, t = 0, T = 0, on = false }
+-- You moved the camera yourself (while dead, or as it goes back after): the
+-- death camera hands it over where it is, and makes no more moves (none back
+-- either) until your next death.
+function ns.AbandonDeathCamera()
+	local tilt = deathTilt
+	if tilt.abandoned then
+		return
+	end
+	tilt.abandoned = true
+	if ns.orbit.tilting then
+		StopDeathTilt()
+	end
+	tilt.amount, tilt.from, tilt.target = 0, 0, 0 -- nothing to put back
+	tilt.zoomTo, tilt.zoomSaved = nil, nil
+	ns.DeathTestLog("you moved the camera: it's yours now")
+end
+
+-- Still doing something with the camera: dead, or on the way back after.
+function ns.DeathCameraBusy()
+	local tilt = deathTilt
+	return not tilt.abandoned and (tilt.on or tilt.amount ~= tilt.target or tilt.zoomTo ~= nil)
+end
+
+function ns.UpdateDeathTilt(on, elapsed)
+	local tilt = deathTilt
+	if tilt.abandoned then
+		ns.orbit.deathRisen = false
+		if not on then
+			tilt.abandoned, tilt.on = false, false -- released or back: ready for next time
+		end
+		return
+	end
+	ns.orbit.deathRisen = on and tilt.on and tilt.amount == tilt.target
+	if on ~= tilt.on then
+		tilt.on, tilt.t = on, 0
+		tilt.from, tilt.target = tilt.amount, on and ns.db.deathLevel or 0
+		local share = math.abs(tilt.target - tilt.amount) / math.max(1, ns.db.deathLevel, tilt.amount)
+		tilt.T = DEATH_TILT_TIME * math.max(0.3, share)
+		tilt.sent = nil
+		if tilt.target ~= tilt.amount then
+			StartDeathTilt(tilt.target - tilt.amount, tilt.T)
+		elseif ns.orbit.tilting then
+			StopDeathTilt()
+		end
+		local zoom = GetCameraZoom and GetCameraZoom()
+		if on and zoom and ns.db.deathZoom > 0 then
+			tilt.zoomSaved = tilt.zoomSaved or zoom -- (still on its way back: keep the first)
+			tilt.zoomFrom, tilt.zoomTo = zoom, tilt.zoomSaved + ns.db.deathZoom
+		elseif not on and zoom and tilt.zoomSaved then
+			tilt.zoomFrom, tilt.zoomTo = zoom, tilt.zoomSaved
+		end
+	end
+	if tilt.on or tilt.amount ~= tilt.target or tilt.zoomTo then
+		tilt.t = tilt.t + elapsed
+	end
+	if tilt.zoomTo then
+		local desired = tilt.zoomFrom + (tilt.zoomTo - tilt.zoomFrom) * EaseProgress(tilt.t, tilt.T, 0.5)
+		local err = CorrectZoomToward(desired)
+		if tilt.t >= tilt.T and (math.abs(err) < ZOOM_RESTORE_DONE or tilt.t >= tilt.T + DEATH_ZOOM_GIVE_UP) then
+			tilt.zoomTo = nil
+			if not tilt.on then
+				tilt.zoomSaved = nil
+			end
+		end
+	end
+	if tilt.amount == tilt.target then
+		return
+	end
+	local delta = tilt.target - tilt.from
+	if math.abs(tilt.amount - tilt.from) >= math.abs(delta) or tilt.t >= tilt.T + 1 then
+		tilt.amount = tilt.target
+		StopDeathTilt()
+		-- Stopping the tilt can stop the turn with it, and the orbit won't
+		-- re-send a turn whose speed hasn't changed: make it send it again.
+		if ns.yawAxis.moving then
+			ns.yawAxis.speed = 0
+		end
+		return
+	end
+	-- Eased: cruise = distance / (T * (1 - ease)), shaped by the ease curve.
+	local cruise = math.abs(delta) / (tilt.T * (1 - TILT_EASE))
+	SendTiltSpeed(tilt, math.max(TILT_MIN_SPEED, cruise * EaseShape(tilt.t, tilt.T, TILT_EASE)), delta > 0, true)
+	-- How far it's come, at the speed actually sent (for the stop, and any move back).
+	tilt.amount = tilt.amount + (delta > 0 and tilt.sent or -tilt.sent) * elapsed
+end
+
+-- Dead (not yet released, or /cine deathtest) with the death camera on.
+function ns.IsDead()
+	return (ns.Flag(UnitIsDead("player")) and not ns.Flag(UnitIsGhost("player")))
+		or GetTime() < (ns.deathTestUntil or 0)
+end
+
+-- Dead with the death camera to watch: cinematic mode stays on (popups like
+-- the release button aren't faded, so it's still there).
+function ns.IsDeathCinematic()
+	return ns.db.deathOrbit and ns.IsDead()
+		and not (ns.IsDeathCameraBlocked and ns.IsDeathCameraBlocked())
+end
+
+-- Your own zooming: you've picked a distance, so the death camera leaves it.
+function ns.CancelDeathZoom()
+	deathTilt.zoomTo, deathTilt.zoomSaved = nil, nil
+end
+
 local function FinishRestore()
 	idleZoom.restoring = false
 	idleZoom.saved = nil
-	ns.ApplyCVarSet(ZOOM_MAX_CVARS, false) -- the camera's back inside the old limit
+	-- The camera's back inside the old limit. Putting the limit back can still
+	-- jolt the camera (a hair outside it gets pulled in at once), so on a
+	-- flight it waits until you land, where the dismount moves the camera
+	-- anyway (see UpdateTaxi).
+	if not UnitOnTaxi("player") then
+		ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
+	end
 end
 
 local function StartIdleZoom()
@@ -987,8 +1645,12 @@ local function StepIdleZoom(elapsed)
 		if idleZoom.t >= T then
 			idleZoom.phase, idleZoom.t = ZoomSetting("Random") and "pause" or "hold", 0
 			idleZoom.from, idleZoom.delta, idleZoom.duration = desired, 0, 1
+			RollZoomPause()
 		end
-	elseif idleZoom.phase == "pause" and idleZoom.t >= ZoomSetting("Pause") then
+	elseif idleZoom.phase == "pause" and idleZoom.t >= ZoomPause() and not ns.FlyByTurning() then
+		-- (No new zoom move while a fly-by is turning the camera: a move already
+		-- under way finishes on its own curve, but freezing it mid-move, or
+		-- starting one mid-turn, showed as snaps.)
 		PlanRandomZoom()
 	end
 end
@@ -1035,6 +1697,18 @@ function CancelIdleZoom()
 		FinishRestore() -- the player took over mid-restore
 	end
 end
+-- The quest cam takes the zoom over: the slow zoom lets go where it is, but
+-- a raised max distance stays until ns.RestoreZoomLimit. (Put back while the
+-- camera's still past it, the game quietly moves its own zoom target in to the
+-- limit, so a zoom counted from where the camera is goes too far.)
+function ns.TakeOverZoom()
+	idleZoom.active, idleZoom.restoring, idleZoom.saved = false, false, nil
+end
+function ns.RestoreZoomLimit()
+	if not idleZoom.active and not idleZoom.restoring then
+		ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
+	end
+end
 
 -- Logout: no time to glide, so jump straight back and put everything back.
 function ns.StopIdleZoomNow()
@@ -1058,9 +1732,21 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 	local context = onTaxi and "taxi" or travel or "idle"
 	local allowed
 	if onTaxi then
-		allowed = ns.db.taxiZoom and not ns.orbit.settling
+		allowed = ns.db.taxiZoom and ns.FlightCameraOn() and not ns.orbit.settling and not ns.orbit.zoomSettled
+		if ns.FlightTakenOver() then
+			-- You've moved the camera: the slow zoom lets go where it is (no
+			-- glide back) and stays off for the rest of the flight.
+			allowed = false
+			if idleZoom.active and idleZoom.context == "taxi" then
+				CancelIdleZoom()
+			end
+		end
 	elseif travel == "cozy" then
 		allowed = ns.db.cozyZoom -- (cozy already means still, or walking weapon-drawn)
+	elseif travel == "vista" then
+		allowed = ns.db.vistaZoom -- (vista already means still)
+	elseif travel == "fish" then
+		allowed = ns.db.fishZoom
 	elseif travel then
 		allowed = ns.db[TRAVEL[travel].zoom]
 		-- Zoomed yourself mid-walk: carry on from your new distance shortly after.
@@ -1070,7 +1756,7 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 	else
 		allowed = ns.db.idleZoom and still and not ns.IsZoomBlocked()
 	end
-	local want = cinematic and allowed and not InCombatLockdown()
+	local want = cinematic and allowed and not InCombatLockdown() and ns.CombatWaitOver(context, now)
 	-- Walked indoors with the camera pulled back: glide in to the indoor limit.
 	local indoors = Indoors()
 	if indoors and not zoomWasIndoors and idleZoom.active and idleZoom.saved then
@@ -1093,9 +1779,14 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 			if context == "cozy" then
 				-- Into the cozy camera: zoom in to its close-up as it swings round.
 				PlanPath(ZoomBase(), COZY_ZOOM_START, COZY_ZOOM_EASE, "move")
+			elseif context == "vista" or context == "fish" then
+				-- Into the vista camera (say, /stare after /sit): ease back out from
+				-- wherever it was (a cozy close-up) to the vista's pull-back.
+				PlanZoom(idleZoom.saved + ZoomSetting("Distance"))
 			end
 			if idleZoom.phase == "hold" and ZoomSetting("Random") then
 				idleZoom.phase, idleZoom.t = "pause", 0
+				RollZoomPause()
 			elseif idleZoom.phase == "pause" and not ZoomSetting("Random") then
 				idleZoom.phase = "hold"
 			end
@@ -1265,6 +1956,22 @@ local function UpdateTurnFollow(now, elapsed, travel, T, cinematic, turning, tur
 	end
 end
 
+-- The "Print the camera mode to chat" option: one line each time the mode
+-- changes (nil: none of them).
+local reportedMode = false -- (false: nothing printed yet)
+function ns.ReportCameraMode(mode)
+	if mode == reportedMode then
+		return
+	end
+	reportedMode = mode
+	ns.Print("camera mode: " .. (mode and (mode .. " camera") or "none"))
+end
+
+-- Turning the option on prints the current mode straight away.
+function ns.ResetCameraModeReport()
+	reportedMode = false
+end
+
 function ns.UpdateOrbit(cinematic, elapsed)
 	local onTaxi = UnitOnTaxi("player")
 	local active = IsPlayerActive()
@@ -1276,11 +1983,14 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- An NPC window open (auction house, vendor, quest giver...): you're busy,
 	-- not idling, so the standing-still timer waits too.
 	local atNPC = ns.db.cameraPauseAtNPCs and ns.NPCWindowOpen and ns.NPCWindowOpen()
+	-- Same for a menu or game window (options, spellbook...).
+	local inMenu = ns.db.cameraPauseInMenus and ns.MenuWindowOpen and ns.MenuWindowOpen()
 	-- Casting (crafting, say) is busy too. (The cozy camera keeps going: cooking
 	-- at a campfire is still cozy.)
 	local casting = ns.db.cameraPauseCasting
 		and (ns.Flag(UnitCastingInfo("player")) or ns.Flag(UnitChannelInfo("player")))
-	if onTaxi or active or atNPC or (casting and not ns.IsCozy()) then
+		and not ns.IsFishingEvent()
+	if onTaxi or active or atNPC or inMenu or (casting and not ns.IsCozy()) then
 		ns.stillSince = nil
 	elseif not ns.stillSince then
 		-- Stopping from the RP walk camera goes straight into the standing-still
@@ -1291,18 +2001,41 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	end
 	-- Moving ends an emote.
 	if ns.playerMoving or onTaxi then
-		cozyEmote = nil
+		emoteEvent = nil
+		ns.manualCam = nil -- (and a camera started from a key binding)
 	end
-	-- Cozy (campfire, emotes): no waiting; the standing-still timer counts as
-	-- run, for the tint, tooltips and music too.
+	-- An event (Events page) for the cozy, vista or AFK camera: no waiting; the
+	-- AFK camera's timer counts as run, for the tint, tooltips and music too.
+	local vista = ns.IsVista()
+	local fish = ns.IsFish()
 	local cozy = ns.IsCozy()
 	if not cozy then
 		cozySessionStarted = false -- the next cozy spell swings round afresh
 	end
-	if ns.stillSince and cozy and now - ns.stillSince < ns.db.idleOrbitDelay then
+	local afk = ns.IsEventAFK()
+	if ns.stillSince and (cozy or vista or fish or afk) and now - ns.stillSince < ns.db.idleOrbitDelay then
 		ns.stillSince = now - ns.db.idleOrbitDelay
 	end
 	local idle = ns.db.idleOrbit and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
+	-- Death camera: dead (not yet released), the camera turns slowly round your
+	-- body. Cinematic mode is off while you're dead (the UI comes back for the
+	-- release button), so this runs without it, and in combat too.
+	local dead = ns.IsDead()
+	ns.orbit.deadSince = dead and (ns.orbit.deadSince or now) or nil
+	local deathCam = dead and ns.db.enabled and now - ns.orbit.deadSince >= ns.db.deathOrbitDelay
+		and ns.IsDeathCinematic()
+	-- The game's camera follow is off meanwhile, so it can't pull the view back.
+	-- It goes off as you die, not as the tilt starts: switched off then, while
+	-- it was still easing the view after your fall, it jolted the tilt's start.
+	local followOff = (dead and ns.db.enabled and ns.IsDeathCinematic()) or false
+	if followOff ~= (ns.DEATH_CVARS.active or false) then
+		ns.DeathTestLog(followOff and "camera follow off" or "camera follow back on")
+		-- The death song starts as you die too (starting music can hitch a frame:
+		-- better then than as the tilt starts).
+		if ns.SetDeathSong then ns.SetDeathSong(followOff) end
+	end
+	ns.ApplyCVarSet(ns.DEATH_CVARS, followOff)
+	ns.UpdateDeathTilt(deathCam, elapsed)
 	-- RP walk camera: only while actually moving in walk mode. Stop and stand,
 	-- and it's the standing-still camera again (after its usual delay).
 	-- Auto-running (not walking) gets the auto-run camera, set up the same way.
@@ -1313,12 +2046,19 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		travel = nil -- weapon drawn while walking: the cozy camera in front instead
 	end
 	local T = travel and TRAVEL[travel]
+	if ns.db.debugCameraMode then
+		ns.ReportCameraMode((deathCam and "death") or (cinematic and ((onTaxi and ns.FlightCameraOn() and "flight")
+			or (travel == "walk" and "RP walk") or (travel == "run" and "auto-run")
+			or (vista and "vista") or (fish and "fish") or (cozy and "cozy")
+			or (ns.stillSince and now - ns.stillSince >= ns.db.idleOrbitDelay and "AFK"))) or nil)
+	end
 	if travel and cinematic then
 		walkHandoff = true
 	elseif onTaxi or (active and not travel and ns.playerMoving) then
 		walkHandoff = false -- running or flying: the next stop starts the timer afresh
 	end
-	UpdateIdleZoom(cinematic, onTaxi, travel or (cozy and "cozy") or nil, now, elapsed)
+	-- (Dead: the death camera has the zoom.)
+	UpdateIdleZoom(cinematic and not dead, onTaxi, travel or (vista and "vista") or (fish and "fish") or (cozy and "cozy") or nil, now, elapsed)
 
 	local turning, turned = IsTurning(elapsed) -- every frame, to keep the last facing current
 	if turning then
@@ -1341,31 +2081,61 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	end
 	steerLowered = steeringNow
 
-	-- The player moving the camera pauses the orbit until cameraInputPause
-	-- seconds after their last camera input, in flight and on foot.
-	local adjusting = IsAdjustingCamera(now, (T and ns.db[T.pause]) or (cozy and ns.db.cozyInputPause) or nil)
+	-- The player moving the camera pauses the orbit until that camera's input
+	-- pause has passed since their last camera input, in flight and on foot.
+	local adjusting = IsAdjustingCamera(now, (T and ns.db[T.pause]) or (onTaxi and ns.db.taxiInputPause)
+		or (vista and ns.db.vistaInputPause) or (fish and ns.db.fishInputPause) or (cozy and ns.db.cozyInputPause) or nil)
+	-- The death camera doesn't pause: camera input since you died (or while it
+	-- goes back after) hands the camera to you for good (AbandonDeathCamera).
+	if dead then
+		ns.orbit.deathWatchFrom = ns.orbit.deathWatchFrom or now
+	elseif not ns.DeathCameraBusy() then
+		ns.orbit.deathWatchFrom = nil
+	end
+	if ns.orbit.deathWatchFrom and ns.GetLastCameraInput() > ns.orbit.deathWatchFrom then
+		ns.AbandonDeathCamera()
+	end
 	if adjusting then
 		ns.orbit.newReference = true
+	end
+	-- A fly-by (/cine flyby, its key, or a random one on a flight) has the
+	-- camera to itself while it lasts.
+	ns.UpdateAutoFlyBy(now, onTaxi, cinematic, adjusting)
+	if ns.UpdateFlyBy(now, elapsed) then
+		return
 	end
 
 	-- A travel camera (auto-run, RP walk) doesn't start mid-turn: its line-up
 	-- would swing the camera round with you. It waits until you've stopped
 	-- turning for a moment. (Once running, turns are held and glided instead.)
 	local turnBlocksStart = travel and ns.orbit.level == 0 and now - lastAnyTurnAt < TRAVEL_START_AFTER_TURN
-	local want = cinematic and not adjusting and not InCombatLockdown() and not turnBlocksStart
-		and ((onTaxi and ns.db.taxiOrbit and not ns.orbit.settling) or (travel and ns.db[T.orbit])
+	local want = (deathCam and ns.orbit.deathRisen and not adjusting)
+		or (cinematic and not adjusting and not InCombatLockdown() and not turnBlocksStart
+		and ((onTaxi and ns.db.taxiOrbit and ns.FlightCameraOn() and not ns.orbit.settling) or (travel and ns.db[T.orbit])
+			or (vista and ns.db.vistaOrbit and not ns.IsRotationBlocked())
+			or (fish and ns.db.fishOrbit and not ns.IsRotationBlocked())
 			or (cozy and ns.db.cozyOrbit and not ns.IsRotationBlocked())
-			or (idle and not ns.IsRotationBlocked() and not (ns.db.indoorNoSweep and Indoors())))
-	local prefix = onTaxi and "taxiOrbit" or ((travel and ns.db[T.orbit]) and T.orbit)
+			or (idle and not ns.IsRotationBlocked() and not (ns.db.indoorNoSweep and Indoors()))))
+	local prefix = deathCam and "deathOrbit" or onTaxi and "taxiOrbit" or ((travel and ns.db[T.orbit]) and T.orbit)
+		or ((vista and ns.db.vistaOrbit) and "vistaOrbit")
+		or ((fish and ns.db.fishOrbit) and "fishOrbit")
 		or ((cozy and ns.db.cozyOrbit) and "cozyOrbit") or "idleOrbit"
+	-- Fresh out of a fight: this mode may wait a while before starting.
+	want = want and ns.CombatWaitOver(prefix, now)
 	local footHandoff = ns.orbit.level > 0 and orbitPrefix ~= prefix
 		and FOOT_ORBIT[orbitPrefix] and FOOT_ORBIT[prefix]
+	-- Into the vista camera with another one still moving (the standing-still
+	-- sweep, cozy): ease that out first rather than stopping it dead.
+	local easeOutFirst = want and (prefix == "vistaOrbit" or prefix == "fishOrbit") and ns.orbit.level > 0 and orbitPrefix ~= prefix
 	if want and footHandoff then
 		-- Standing still <-> RP walk: no stop and restart. The current move or
 		-- pause plays out, and the next move follows on from where the camera
 		-- is (for walking, that eases it back behind you).
 		orbitPrefix = prefix
 		ns.orbit.level = 1
+		if prefix == "idleOrbit" then
+			ns.orbit.randomRight = math.random() < 0.5 -- a fresh direction each time
+		end
 		if prefix == "cozyOrbit" then
 			cozySessionStarted = true -- its next move swings round to face you
 		end
@@ -1384,24 +2154,44 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		else
 			ns.orbit.shortPauseNext = false -- walking again before that move finished
 		end
-	elseif want then
+	elseif want and not easeOutFirst then
 		if ns.orbit.level == 0 or orbitPrefix ~= prefix then
 			-- Starting, or switching between flight and standing-still settings
 			-- (taking off mid-rotation): begin afresh with the right profile.
 			StopOrbitMove()
 			orbitPrefix = prefix
-			if ns.OnRotationStart then ns.OnRotationStart(prefix) end
+			if prefix == "idleOrbit" then
+				ns.orbit.randomRight = math.random() < 0.5 -- a fresh direction each time
+			end
+			if prefix == "deathOrbit" then
+				ns.orbit.randomRight = math.random() < 0.5 -- (used with deathOrbitRandomDir)
+				ns.orbit.continuous = false -- its own slow turn, eased in from a standstill
+				ns.DeathTestLog("turn started")
+			elseif ns.OnRotationStart then
+				ns.OnRotationStart(prefix)
+			end
 			-- Start moving straight away, except while the takeoff swing is
 			-- still bringing the camera round behind the character.
 			local wait = onTaxi and math.max(0, (ns.orbit.centerUntil or 0) - now) or 0
+			if onTaxi and ns.orbit.newReference then
+				-- Picking up mid-flight after you moved the camera: swing back
+				-- behind you first, and sway from there.
+				wait = math.max(wait, ns.RecenterFlight())
+			end
 			if LINEUP_ORBIT[prefix] then
-				-- RP walk / auto-run starting (or picking up after you moved the
-				-- camera): glide round behind you first, then sway from there.
+				-- RP walk / auto-run / vista starting (or picking up after you moved
+				-- the camera): glide round behind you first, then sway from there.
 				-- Auto-running well clear of any fight: a quicker line-up, so the
 				-- travel camera gets going sooner.
 				if prefix == "runOrbit" and now - lastCombatAt > CALM_AFTER_COMBAT then
 					CenterCamera(CALM_CENTER_TIME, CALM_CENTER_YAW, CALM_CENTER_PITCH, CALM_CENTER_RAMP)
 					wait = CALM_CENTER_TIME
+				elseif prefix == "vistaOrbit" or prefix == "fishOrbit" then
+					-- Vista: an unhurried glide (8 sec at up to 30 deg/sec yaw and 20
+					-- tilt, building up over 3 sec), long enough to come round from in
+					-- front without being cut off mid-swing.
+					CenterCamera(8, 30, 20, 3)
+					wait = 8
 				else
 					CenterCamera(TRAVEL_CENTER_TIME, TRAVEL_CENTER_YAW, TRAVEL_CENTER_PITCH, TRAVEL_CENTER_RAMP)
 					wait = TRAVEL_CENTER_TIME
@@ -1444,15 +2234,16 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		-- standing-still timer then counts from touchdown, so nothing restarts
 		-- until it runs out).
 		local landed = orbitPrefix == "taxiOrbit" and (not onTaxi or ns.orbit.settling)
-		local stopTime = (adjusting or landed or (active and not onTaxi))
+		-- (Released or brought back: the death camera stops promptly too.)
+		local stopTime = (adjusting or landed or (active and not onTaxi) or orbitPrefix == "deathOrbit")
 			and ORBIT_QUICK_STOP_TIME or ORBIT_STOP_TIME
 		ns.orbit.level = ns.Approach(ns.orbit.level, 0, elapsed, stopTime)
 	end
 	if ns.orbit.level <= 0 then
 		if yawExtra ~= 0 then
 			-- No sway, but a turn to hold or glide: drive the yaw for that alone.
-			StopAxis(ns.pitchAxis)
-			ns.orbit.level, ns.orbit.continuous, ns.orbit.driftVel = 0, false, 0
+			StopOrbitTilt()
+			ns.orbit.level, ns.orbit.continuous, ns.orbit.driftVel, ns.orbit.driftSmooth = 0, false, 0, 0
 			DriveYaw(0)
 		else
 			ns.StopOrbitNow()
@@ -1487,7 +2278,8 @@ function ns.UpdateOrbit(cinematic, elapsed)
 			ns.orbit.continuous, ns.orbit.contT, ns.orbit.contFade = true, 0, nil
 		end
 		ns.orbit.contT = ns.orbit.contT + elapsed
-		local ramp = math.min(1, ns.orbit.contT / CONTINUOUS_RAMP)
+		-- (The death camera gets going almost at once, after its rise.)
+		local ramp = math.min(1, ns.orbit.contT / (orbitPrefix == "deathOrbit" and 0.5 or CONTINUOUS_RAMP))
 		ramp = ramp * ramp * (3 - 2 * ramp)
 		local positive = not OrbitSetting("Right")
 		ns.orbit.contSpeed, ns.orbit.contPositive = ramp * OrbitSetting("Speed"), positive
@@ -1511,6 +2303,17 @@ function ns.UpdateOrbit(cinematic, elapsed)
 			positive = ns.orbit.driftPositive
 		end
 		driftTarget = OrbitSetting("DriftSpeed") * (positive and 1 or -1)
+		if OrbitSetting("Mode") == "back" then
+			-- Ease off over the last stretch before the edge of the swing (and
+			-- stay put past it), so the drift never runs into the limit and turns.
+			-- The easing is an S-curve, so the braking starts gently too.
+			local arc = OrbitSetting("BackArc")
+			local relative = WrapAngle(ns.orbit.angle - ArcCenter(orbitPrefix))
+			local room = arc - (positive and relative or -relative)
+			local zone = math.max(1, math.min(10, arc * 0.4)) -- degrees of easing
+			local f = math.max(0, math.min(1, room / zone))
+			driftTarget = driftTarget * f * f * (3 - 2 * f)
+		end
 	end
 	local driftStep = elapsed * math.max(1, OrbitSetting("DriftSpeed")) / DRIFT_RAMP
 	local driftVel = ns.orbit.driftVel or 0
@@ -1520,12 +2323,17 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		driftVel = math.max(driftTarget, driftVel - driftStep)
 	end
 	ns.orbit.driftVel = driftVel
+	-- Smoothed, so the drift's speed changes (turning round as a move sets off
+	-- the other way, braking at the edge) ease in rather than start at once.
+	local driftSmooth = ns.orbit.driftSmooth or driftVel
+	driftSmooth = driftSmooth + (driftVel - driftSmooth) * math.min(1, elapsed / DRIFT_SMOOTH)
+	ns.orbit.driftSmooth = driftSmooth
 
-	local yawVel = driftVel -- signed degrees per second, before the level
+	local yawVel = driftSmooth -- signed degrees per second, before the level
 	if ns.orbit.phase == "move" then
 		local T = ns.orbit.sweepTime
 		if ns.orbit.t >= T then
-			StopAxis(ns.pitchAxis) -- the yaw carries on drifting
+			StopOrbitTilt() -- the yaw carries on drifting
 			-- Behind only always drifts a little after a move, drift setting or not.
 			local startT = 0
 			if ns.orbit.shortPauseNext then
@@ -1551,12 +2359,411 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	ns.orbit.angle = WrapAngle(ns.orbit.angle + yawSpeed * elapsed)
 end
 
+-- Fly-by: line the camera up behind you, turn it flyByAngle degrees round to
+-- look back past you, hold, then turn it back behind you. Each step is one
+-- move that starts and ends at rest, eased in and out (EaseShape), and sent
+-- the way the flight camera sends its sways. Turning only: tilting as well
+-- kept snapping the turn. Started with /cine flyby or its key, or at random
+-- in the middle of flights (taxiFlyBy). Settings: flyByAngle (degrees),
+-- flyByTurnTime, flyByHold, flyByBackTime (seconds).
+--
+-- flyby.view tracks the camera the way the flight camera does (degrees left
+-- of straight behind you), and is handed back to it at the end.
+local FLYBY = {
+	LINE_UP_SPEED = 30, -- degrees per second, about: how long lining up behind you takes...
+	LINE_UP_MIN = 1.5,  -- ...but at least this many seconds
+	SETTLE_TURN = 6,    -- seconds, at most, to line up behind you before landing (see UpdateTaxi)
+	SETTLE_ZOOM = 3,    -- seconds the zoom glides back first, just before that
+	MIN_SPEED = 0.3,    -- degrees per second: slower than this is sent as still
+	SEND_EVERY = 0.1,   -- seconds between speed changes, at most (each send restarts the turn)
+	FIRST = { 30, 60 }, -- seconds after takeoff for a random one on a route not timed yet
+	CVARS = { values = { cameraSmoothStyle = "0" } }, -- camera follow off (already off on flights)
+}
+local flyby = { active = false }
+
+-- A fly-by message in chat: always for ones you start, and for the random
+-- ones while /cine debug flybys is on. debugOnly: only with that on.
+local function FlyBySay(text, debugOnly)
+	if ns.db.debugFlyBy or not (debugOnly or flyby.quiet) then
+		ns.Print("fly-by" .. (flyby.quiet and " (random)" or "") .. ": " .. text)
+	end
+end
+
+-- /look as the fly-by starts (flyByLook): your character looks around, as if
+-- they'd spotted something. Untargeted ("none"), so it doesn't come out as
+-- looking at whatever you have targeted.
+local function FlyByLook()
+	if not ns.db.flyByLook then
+		return
+	end
+	local ok
+	if DoEmote then
+		ok = pcall(DoEmote, "LOOK", "none")
+	elseif C_ChatInfo and C_ChatInfo.PerformEmote then
+		ok = pcall(C_ChatInfo.PerformEmote, "LOOK", "none")
+	end
+	FlyBySay(ok and "/look" or "/look failed", true)
+end
+
+-- How fast an axis is turning now (degrees per second, positive its
+-- positive way).
+local function AxisRate(axis)
+	if not axis.moving then
+		return 0
+	end
+	local rate = axis.speed * (tonumber(GetCVar(axis.speedCVar)) or axis.defaultSpeed)
+	return axis.positive and rate or -rate
+end
+
+-- Sends the turn at this speed (degrees per second, left positive; 0 stops
+-- it), as a share of your turn speed setting. Each send restarts the turn.
+-- (On the yaw axis, positive turns the view right: the speed maps on negated.)
+local function SendTurn(degrees, now)
+	local axis = ns.yawAxis
+	local positive = degrees < 0
+	degrees = math.abs(degrees)
+	if degrees <= 0 then
+		StopAxis(axis)
+		return
+	end
+	if axis.moving and axis.positive ~= positive then
+		StopAxis(axis)
+	end
+	local speed = degrees / (tonumber(GetCVar(axis.speedCVar)) or axis.defaultSpeed)
+	axis.positive, axis.moving, axis.speed, axis.lastStart = positive, true, speed, now
+	CallCameraFunction(positive and axis.positiveStart or axis.negativeStart, speed)
+end
+
+-- The next step: turn by turn degrees over T seconds (0: hold still).
+local function BeginStep(phase, turn, T)
+	flyby.phase, flyby.turn, flyby.t, flyby.T = phase, turn, 0, math.max(0.1, T)
+end
+
+-- Lines up behind you, from wherever the camera is: quicker the nearer it is.
+local function LineUpTime(maxTime)
+	return math.min(maxTime or math.huge, math.max(FLYBY.LINE_UP_MIN, math.abs(flyby.view) / FLYBY.LINE_UP_SPEED))
+end
+
+-- why: printed when it ends early (nil when it's run its course or was stopped).
+local function EndFlyBy(why)
+	flyby.active = false
+	if why then
+		FlyBySay("stopped: " .. why)
+	end
+	StopAxis(ns.yawAxis)
+	ns.ApplyCVarSet(FLYBY.CVARS, false)
+	-- Hand the camera back to the flight camera (its angle is positive turned
+	-- right): a full pause holding still before its next sway.
+	ns.orbit.angle = WrapAngle(-flyby.view)
+	if ns.orbit.settling then
+		ns.StopOrbitNow() -- (locked behind you for landing: it stays off)
+	elseif ns.orbit.level > 0 then
+		ns.orbit.continuous, ns.orbit.contFade = false, nil
+		ns.orbit.driftVel, ns.orbit.driftSmooth = 0, 0
+		BeginPause(0, true)
+	end
+	-- Nor does the slow zoom start a move straight away (it was held back
+	-- meanwhile, so it was due): a full pause first.
+	if idleZoom.active and idleZoom.phase == "pause" then
+		idleZoom.t = 0
+	end
+end
+
+-- Takes the camera over from the flight camera, stopping its sway and tilt:
+-- where it's pointing is the flight camera's tracking on flights (or with a
+-- camera running), straight behind you otherwise.
+local function TakeOver()
+	local tracked = ns.orbit.level > 0 or UnitOnTaxi("player")
+	flyby.view = tracked and -ns.orbit.angle or 0
+	StopAxis(ns.yawAxis)
+	StopOrbitTilt()
+	flyby.active, flyby.started, flyby.sentAt = true, GetTime(), nil
+	flyby.onTaxi = UnitOnTaxi("player")
+end
+
+-- Starts a fly-by, or stops the one running. Returns false and why if it
+-- can't. quiet: a random one (no messages unless /cine debug flybys is on).
+function ns.ToggleFlyBy(quiet)
+	if flyby.active then
+		EndFlyBy()
+		return true, "stopped"
+	end
+	if not ns.db.enabled then
+		return false, "Cinematic is off (/cine turns it on)"
+	end
+	if InCombatLockdown() then
+		return false, "not in combat"
+	end
+	-- Steering with the mouse turns your character to face the camera, so the
+	-- camera can't turn away from your facing meanwhile.
+	if IsMouseOnCamera() then
+		return false, "let go of the mouse first"
+	end
+	TakeOver()
+	flyby.quiet = quiet or false
+	-- Which way round: the side the camera's on, if it's off to one side
+	-- (it lines up behind you first either way); either, from behind you.
+	flyby.side = flyby.view > 5 and 1 or flyby.view < -5 and -1 or (math.random() < 0.5 and 1 or -1)
+	BeginStep("lineup", -flyby.view, LineUpTime())
+	if ns.db.debugFlyBy then
+		ns.db.flyByLog = {}
+		flyby.log = ns.db.flyByLog
+	end
+	-- A swing back behind you still going (the takeoff swing, say) would fight
+	-- it: end it now. On flights, follow then goes back off with the flight's
+	-- own setting; elsewhere the fly-by turns it off itself.
+	recenterUntil = 0
+	ns.ApplyCVarSet(ns.RECENTER_CVARS, false)
+	if flyby.onTaxi then
+		ns.ApplyCVarSet(ns.FLIGHT_CVARS, true)
+	else
+		ns.ApplyCVarSet(FLYBY.CVARS, GetCVar("cameraSmoothStyle") ~= "0")
+	end
+	FlyBySay(("turning round to look back (%s)"):format(flyby.side > 0 and "left" or "right"))
+	FlyByLook()
+	return true
+end
+
+-- One fly-by frame: returns true while it's turning the camera.
+local function StepFlyBy(now, elapsed)
+	if not flyby.active then
+		return false
+	end
+	-- Only camera input since it started counts: the flight camera's pause
+	-- after input reaches back several seconds.
+	-- (Turning the addon off, with its key or /cine, stops it where it is.)
+	local why = (not ns.db.enabled and "turned off")
+		or (lastCameraInput > flyby.started and "you moved the camera")
+		or (InCombatLockdown() and "combat") or (flyby.onTaxi and not UnitOnTaxi("player") and "landed")
+	if why then
+		EndFlyBy(why)
+		return false
+	end
+	if ns.orbit.settling and flyby.phase ~= "back" and flyby.phase ~= "settle" then
+		-- About to land: straight back behind you, in time for landing. (A
+		-- step under way is cut short: rare, as random ones end before this.)
+		BeginStep("back", -flyby.view, LineUpTime(FLYBY.SETTLE_TURN))
+	end
+	-- This step's speed now: one smooth swell from rest to rest.
+	flyby.t = flyby.t + elapsed
+	local turn = 0
+	if flyby.phase ~= "hold" and flyby.t < flyby.T then
+		turn = flyby.turn * EaseShape(flyby.t, flyby.T, 0.5) / (flyby.T * 0.5)
+		if math.abs(turn) < FLYBY.MIN_SPEED then
+			turn = 0
+		end
+	end
+	-- Where the camera actually went this frame: at the speed it was turning.
+	local turning = -AxisRate(ns.yawAxis)
+	flyby.view = WrapAngle(flyby.view + turning * elapsed)
+	-- At most every SEND_EVERY seconds (every send restarts the camera's
+	-- turn); starting and stopping go out at once.
+	local starts = (turn == 0) ~= (turning == 0) or turn * turning < 0
+	local drifted = math.abs(turn - turning) > math.max(0.2, math.abs(turning) * 0.03)
+	if starts or (drifted and now - (flyby.sentAt or 0) >= FLYBY.SEND_EVERY) then
+		SendTurn(turn, now)
+		flyby.sentAt = now
+	end
+	if flyby.t >= flyby.T then
+		if flyby.phase == "lineup" then
+			BeginStep("out", flyby.side * ns.db.flyByAngle - flyby.view, ns.db.flyByTurnTime)
+		elseif flyby.phase == "out" then
+			BeginStep("hold", 0, ns.db.flyByHold)
+		elseif flyby.phase == "hold" then
+			BeginStep("back", -flyby.view, ns.db.flyByBackTime)
+			FlyBySay("turning back behind you", true)
+		else
+			EndFlyBy() -- (handing over where it actually got to)
+			FlyBySay("done", true)
+		end
+	end
+	return true
+end
+
+-- Before landing (taxiSettle): line up behind you and stay there; the flight
+-- camera stops meanwhile (ns.orbit.settling), so the camera stays locked
+-- behind you until you land. (A fly-by under way turns back on its own: see
+-- StepFlyBy.)
+function ns.SettleBehind()
+	if flyby.active then
+		return
+	end
+	TakeOver()
+	flyby.quiet = true
+	BeginStep("settle", -flyby.view, LineUpTime(FLYBY.SETTLE_TURN))
+	if ns.db.debugFlyBy then
+		ns.db.flyBySettleLog = {} -- (its own, so the last fly-by's stays)
+		flyby.log = ns.db.flyBySettleLog
+	end
+	FlyBySay("settling behind you for landing", true)
+end
+
+ns.SETTLE_TURN, ns.SETTLE_ZOOM = FLYBY.SETTLE_TURN, FLYBY.SETTLE_ZOOM
+
+-- Random fly-bys on flight paths (taxiFlyBy): spread over the middle of the
+-- flight, taxiFlyByFrom to taxiFlyByTo % of its known time, one per
+-- taxiFlyByEvery seconds of that stretch, each at a random moment in its own
+-- share (leaving room for it to play out). A route flown for the first time
+-- has no known time yet: one fly-by, FLYBY.FIRST seconds after takeoff.
+-- Flights picked up after a /reload or login get none. A fly-by that can't
+-- start on time (you're moving the camera, say) waits, until its share is over.
+local autoFlyBys = { times = {} }
+
+local function PlanAutoFlyBys()
+	local plan = { times = {}, key = flightSince }
+	if flightSince == -math.huge then
+		return plan -- (resumed mid-flight: they're only planned as you take off)
+	end
+	local start = ns.flight.start or flightSince
+	local duration = ns.flight.start and KnownFlightTime(ns.flight.route, ns.flight.base)
+	local length = ns.db.flyByTurnTime + ns.db.flyByHold + ns.db.flyByBackTime + 3 -- (+ lining up)
+	if duration then
+		local a = math.min(ns.db.taxiFlyByFrom, ns.db.taxiFlyByTo) / 100
+		local b = math.max(ns.db.taxiFlyByFrom, ns.db.taxiFlyByTo) / 100
+		local from, to = start + duration * a, start + duration * b
+		-- Each must be over before the arrival (the zoom back, the turn behind
+		-- you and the lock before landing) begins: one still turning when the
+		-- landing zoom started showed as snaps.
+		local arrival = start + duration
+		if ns.db.taxiSettle then
+			arrival = arrival - (ns.db.taxiSettleLead + ns.SETTLE_TURN + ns.SETTLE_ZOOM) - 2
+		end
+		local count = math.max(1, math.floor((to - from) / ns.db.taxiFlyByEvery))
+		local share = (to - from) / count
+		for i = 1, count do
+			local shareStart = from + (i - 1) * share
+			-- The latest it may start: by the end of its share, and in time to
+			-- finish before the arrival. (No room: skipped.)
+			local latest = math.min(shareStart + share, arrival - length)
+			if latest >= shareStart then
+				plan.times[#plan.times + 1] = {
+					at = shareStart + math.random() * math.max(0, math.min(share - length, latest - shareStart)),
+					latest = latest }
+			end
+		end
+	elseif start then
+		local first = FLYBY.FIRST
+		local at = start + first[1] + math.random() * (first[2] - first[1])
+		plan.times[1] = { at = at, latest = at + ns.db.taxiFlyByEvery }
+	end
+	return plan
+end
+
+-- Called from UpdateOrbit each frame, before UpdateFlyBy.
+function ns.UpdateAutoFlyBy(now, onTaxi, cinematic, adjusting)
+	if not onTaxi then
+		autoFlyBys = { times = {} }
+		return
+	end
+	if not (ns.db.taxiFlyBy and cinematic and ns.FlightCameraOn()) or ns.FlightTakenOver() then
+		return
+	end
+	if autoFlyBys.key ~= flightSince then
+		autoFlyBys = PlanAutoFlyBys() -- (a new flight)
+		if ns.db.debugFlyBy then
+			local times = {}
+			for _, slot in ipairs(autoFlyBys.times) do
+				times[#times + 1] = ("in %d sec"):format(math.max(0, slot.at - now))
+			end
+			local duration = KnownFlightTime(ns.flight.route, ns.flight.base)
+			ns.Print(("fly-by: random ones planned for this flight (%s): %s"):format(
+				flightSince == -math.huge and "resumed after a reload, so none"
+					or duration and ("%d sec long"):format(duration) or "route not timed yet",
+				#times > 0 and table.concat(times, ", ") or "none"))
+		end
+	end
+	local nextOne = autoFlyBys.times[1]
+	if not nextOne or now < nextOne.at then
+		return
+	end
+	if now > nextOne.latest then
+		table.remove(autoFlyBys.times, 1) -- its share is over: skip it
+		if ns.db.debugFlyBy then
+			ns.Print("fly-by (random): skipped, the camera wasn't free in time")
+		end
+		return
+	end
+	-- Wait for the flight camera to be running on its own: not mid fly-by,
+	-- not after camera input, not swinging round behind you or settling.
+	if flyby.active or adjusting or IsMouseOnCamera() or InCombatLockdown() or ns.orbit.settling
+		or ns.orbit.level <= 0 or now < (ns.orbit.centerUntil or 0)
+		or ns.orbit.phase ~= "pause" or math.abs(AxisRate(ns.yawAxis)) > (ns.db.taxiOrbitDriftSpeed or 3) + 1 then
+		-- (Nor mid sway: only between sways, when the camera is still or just
+		-- drifting, so it starts gently and carries on the way the drift goes.
+		-- Its share of the flight leaves time.)
+		return
+	end
+	table.remove(autoFlyBys.times, 1)
+	ns.ToggleFlyBy(true)
+end
+
+-- With /cine debug flybys on, every frame of each fly-by (and the 3 seconds
+-- after it, as the flight camera takes over) is recorded in the saved
+-- settings (flyByLog, the latest one only, and flyBySettleLog for the settle
+-- before landing; written out on /reload or logout).
+-- One line per frame: time, frame time, phase ("after" once it's over), the
+-- turn and tilt actually sent (degrees per second; turn left positive, tilt
+-- up positive), whether each was restarted (1/0), the tracked view and
+-- tilt, the zoom distance, the slow zoom's phase, the flight camera's level
+-- and phase, and your facing (degrees; -1 if hidden), to spot the flight
+-- path itself jerking the camera round (it turns with you).
+local LOG_MAX, LOG_AFTER = 6000, 3
+local logLast = { yaw = 0, pitch = 0 }
+
+local function LogFlyBy(now, elapsed)
+	local log = flyby.log
+	if type(log) ~= "table" or #log >= LOG_MAX then
+		return
+	end
+	local yaw, pitch = ns.yawAxis, ns.pitchAxis
+	local yawRestart = yaw.lastStart ~= logLast.yaw and 1 or 0
+	local pitchRestart = pitch.lastStart ~= logLast.pitch and 1 or 0
+	logLast.yaw, logLast.pitch = yaw.lastStart, pitch.lastStart
+	local okFacing, facing = pcall(GetPlayerFacing)
+	facing = okFacing and type(facing) == "number" and not (issecretvalue and issecretvalue(facing))
+		and math.deg(facing) or -1
+	log[#log + 1] = ("%.3f %.4f %s %.2f %.2f %d %d %.2f %.2f %.2f %s %.2f %s %.2f"):format(now, elapsed,
+		flyby.active and flyby.phase or "after", -AxisRate(yaw), AxisRate(pitch), yawRestart, pitchRestart,
+		flyby.view or 0, flyby.pitch or 0, GetCameraZoom and GetCameraZoom() or 0,
+		idleZoom.active and tostring(idleZoom.phase) or (idleZoom.restoring and "restoring" or "off"),
+		ns.orbit.level or 0, tostring(ns.orbit.phase), facing)
+end
+
+-- Called from UpdateOrbit each frame: returns true while the fly-by is
+-- turning the camera (the flight camera waits meanwhile).
+function ns.UpdateFlyBy(now, elapsed)
+	local driving = StepFlyBy(now, elapsed)
+	if ns.db.debugFlyBy then
+		if driving then
+			flyby.logUntil = now + LOG_AFTER
+		end
+		if now < (flyby.logUntil or 0) then
+			LogFlyBy(now, elapsed)
+		end
+	end
+	return driving
+end
+
+-- Whether a fly-by (or the settle) is turning the camera right now.
+function ns.FlyByTurning()
+	return flyby.active
+end
+
+-- For /cine debug flyby.
+function ns.GetFlyByDebug()
+	return {
+		active = flyby.active, phase = flyby.phase, t = flyby.t, T = flyby.T,
+		view = flyby.view, planned = autoFlyBys.times,
+	}
+end
+
 -- Swing the camera back behind the character (flight start, and the
 -- standing-still orbit in behind-only mode). There's no API to set the camera
 -- angle, and SetView's blend is too quick and abrupt, so this borrows camera
 -- following instead: for RECENTER_TIME seconds, follow is set to "Always" with
 -- slowed swing speeds, so the camera eases round behind the character on its
 -- own, then the player's follow settings are put back. Zoom is untouched.
+ns.DEATH_CVARS = { values = { cameraSmoothStyle = "0" } }
 ns.RECENTER_CVARS = {
 	values = { cameraSmoothStyle = "2", cameraYawSmoothSpeed = "45", cameraPitchSmoothSpeed = "30" },
 }
@@ -1608,34 +2815,101 @@ ns.FLIGHT_CVARS = { values = { cameraSmoothStyle = "0" } }
 -- (start > destination, read from the flight map when TakeTaxiNode is called)
 -- is timed from takeoff to landing and saved. Later flights on the same route
 -- know when they'll land, so the camera can settle behind the character first.
+-- Routes not timed yet fall back on the base times in FlightTimes.lua, looked
+-- up when the destination is picked; a timed flight then replaces them.
 local TAXI_PICK_WINDOW = 30 -- seconds between picking a destination and takeoff
-local pendingRoute, pendingRouteAt
-ns.flight = {}           -- route, start for the flight in progress
+local NODE_SLACK = 0.002    -- how far off the flight map a base time's flight point can be
+local pendingRoute, pendingRouteAt, pendingBase
+ns.flight = {}           -- route, start, base (time) for the flight in progress
+
+-- The base data keys flight points by floor(x * 100000000) on the flight map:
+-- the nearest key to x, if any is within NODE_SLACK.
+local function NearestNode(set, x)
+	local best, bestOff
+	for key in pairs(set) do
+		local off = math.abs(key / 100000000 - x)
+		if off <= (bestOff or NODE_SLACK) then
+			best, bestOff = key, off
+		end
+	end
+	return best
+end
+
+local function BaseFlightTime(fromIndex, toIndex)
+	local times = ns.FLIGHT_TIMES and ns.FLIGHT_TIMES[UnitFactionGroup("player") or ""]
+	if not (times and TaxiNodePosition) then
+		return nil
+	end
+	local fromX, toX = TaxiNodePosition(fromIndex), TaxiNodePosition(toIndex)
+	local from = fromX and NearestNode(times, fromX)
+	local to = from and toX and NearestNode(times[from], toX)
+	return to and times[from][to]
+end
 
 function ns.HookTaxiRoutes()
 	if not TakeTaxiNode then
 		return
 	end
 	hooksecurefunc("TakeTaxiNode", function(index)
-		local from
+		local from, fromIndex
 		for i = 1, (NumTaxiNodes and NumTaxiNodes() or 0) do
 			if TaxiNodeGetType(i) == "CURRENT" then
-				from = TaxiNodeName(i)
+				from, fromIndex = TaxiNodeName(i), i
 			end
 		end
 		local to = TaxiNodeName(index)
 		if from and to then
 			pendingRoute, pendingRouteAt = from .. " > " .. to, GetTime()
+			pendingBase = BaseFlightTime(fromIndex, index)
 		end
 	end)
 end
 
 local function FlightTimeLeft()
-	local duration = ns.flight.route and ns.db.flightTimes[ns.flight.route]
+	local duration = KnownFlightTime(ns.flight.route, ns.flight.base)
 	if not duration then
 		return nil
 	end
 	return duration - (GetTime() - ns.flight.start)
+end
+
+-- For /cine debug flight: the route noted at the flight master (if still
+-- waiting for takeoff), the flight in progress, its known time and time left.
+function ns.GetFlightDebug()
+	local now = GetTime()
+	return {
+		onTaxi = UnitOnTaxi("player"),
+		pending = pendingRoute, pendingAge = pendingRoute and now - pendingRouteAt,
+		route = ns.flight.route, elapsed = ns.flight.start and ns.flight.route and now - ns.flight.start,
+		known = KnownFlightTime(ns.flight.route, ns.flight.base),
+		knownIsBase = ns.flight.route and not ns.db.flightTimes[ns.flight.route] and ns.flight.base ~= nil,
+		pendingBase = pendingRoute and pendingBase,
+		left = FlightTimeLeft(), settling = ns.orbit.settling,
+		hooked = TakeTaxiNode ~= nil,
+	}
+end
+
+-- Mid-flight, once the pause after you moved the camera is up: swing back
+-- behind you, like the takeoff swing. Camera follow is off during flights, so
+-- put it back first (as for the settle) or the swing's settings would be undone.
+-- Returns how long the swing takes (0 when it's off).
+-- You've moved the camera yourself on this flight (dragged it, zoomed, a
+-- camera key, a click in the world): for the rest of the flight only the
+-- basic sway runs. Random fly-bys, the swing back behind you, the slow zoom,
+-- the settle before landing and the zoom back at landing all stand down,
+-- leaving the camera how you set it. (/cine flyby still works when you ask.)
+function ns.FlightTakenOver()
+	return flightSince ~= nil and lastCameraInput > flightSince
+end
+
+function ns.RecenterFlight()
+	if not (ns.db.enabled and ns.db.taxiCenter) or ns.FlightTakenOver() then
+		return 0
+	end
+	ns.ApplyCVarSet(ns.FLIGHT_CVARS, false)
+	CenterCamera(nil, nil, 0, 1.5) -- (turn only: the height you left it at stays; easing in)
+	ns.orbit.centerUntil = GetTime() + RECENTER_TIME
+	return RECENTER_TIME
 end
 
 function ns.UpdateTaxi()
@@ -1643,35 +2917,90 @@ function ns.UpdateTaxi()
 	local now = GetTime()
 	if onTaxi and not ns.wasOnTaxi then
 		ns.orbit.angle, ns.orbit.pitch = 0, 0 -- assume the camera starts behind the character
-		ns.orbit.settling = false
+		ns.orbit.settling, ns.orbit.zoomSettled = false, false
 		if pendingRoute and now - pendingRouteAt < TAXI_PICK_WINDOW then
-			ns.flight.route, ns.flight.start = pendingRoute, now
+			ns.flight.route, ns.flight.start, ns.flight.base = pendingRoute, now, pendingBase
 		end
-		pendingRoute = nil
-		-- Only the behind modes need the camera to start behind the character.
-		if ns.db.enabled and ns.db.taxiCenter then
-			CenterCamera()
-			ns.orbit.centerUntil = now + RECENTER_TIME
-		end
+		pendingRoute, pendingBase = nil, nil
+		ns.db.currentFlight = ns.flight.route
+			and { route = ns.flight.route, start = ns.flight.start, base = ns.flight.base } or nil
+		-- (Saved, so a /reload on the way still knows it.)
+		ns.db.takeoffZoom = ns.PlayerZoom()
+		flightSince, flightCamStarted = ns.flight.start or now, false
 	elseif ns.wasOnTaxi and not onTaxi then
 		if ns.flight.route then
 			ns.db.flightTimes[ns.flight.route] = now - ns.flight.start
 		end
-		ns.flight.route = nil
-		ns.orbit.settling = false
+		ns.flight.route, ns.flight.base = nil, nil
+		ns.db.currentFlight = nil
+		ns.orbit.settling, ns.orbit.zoomSettled = false, false
+		local takenOver = ns.FlightTakenOver() -- (before the flight's forgotten)
+		flightSince = nil
 		if ns.OnLandedForBuffs then ns.OnLandedForBuffs() end
+		if ns.db.enabled and ns.db.taxiLandZoom and ns.db.takeoffZoom and not takenOver then
+			ns.ZoomBackTo(ns.db.takeoffZoom)
+		end
+		ns.db.takeoffZoom = nil
+		if not idleZoom.active and not idleZoom.restoring then
+			ns.ApplyCVarSet(ZOOM_MAX_CVARS, false) -- (held back on the flight: see FinishRestore)
+		end
 	end
 	ns.wasOnTaxi = onTaxi
+	if onTaxi and not flightSince then
+		-- Already in the air after a /reload: the camera carries on, no takeoff swing.
+		-- (Login sets wasOnTaxi, so the takeoff branch above doesn't run.)
+		flightSince, flightCamStarted = -math.huge, true
+		-- Carry on with the saved flight so it still knows when it'll land.
+		-- (GetTime carries on across reloads, so its start still lines up.)
+		local saved = ns.db.currentFlight
+		if not ns.flight.route and saved and saved.route and saved.start and now >= saved.start
+			and now - saved.start < (KnownFlightTime(saved.route, saved.base) or 600) + 60 then
+			ns.flight.route, ns.flight.start, ns.flight.base = saved.route, saved.start, saved.base
+		else
+			ns.db.currentFlight = nil
+		end
+	end
+	-- The flight camera starting (at takeoff, or once the flight event's delay
+	-- has passed): swing round behind the character. Only the behind modes need
+	-- the camera to start behind the character.
+	if onTaxi and not flightCamStarted and ns.FlightCameraOn() then
+		flightCamStarted = true
+		ns.orbit.angle, ns.orbit.pitch = 0, 0
+		if ns.db.enabled and ns.db.taxiCenter then
+			-- Round behind you, turning only: the height stays as you had it at
+			-- takeoff, which the flight camera then tracks from (so the settle
+			-- before landing puts it back there). Camera follow would otherwise
+			-- shift the height too, out of sight of that tracking.
+			CenterCamera(nil, nil, 0, 1.5) -- (easing in over 1.5 sec rather than starting at full speed)
+			ns.orbit.centerUntil = now + RECENTER_TIME
+		end
+	end
 
-	-- Settle: shortly before a known landing, stop the rotation and swing the
-	-- camera round behind the character. Camera follow is off during flights,
-	-- so put it back first or the swing's settings would be undone.
-	if onTaxi and not ns.orbit.settling and ns.db.enabled and ns.db.taxiSettle then
+	-- Settle: before a known landing, turn the camera back behind you so it's
+	-- there taxiSettleLead seconds before touchdown, and lock it there (the
+	-- rotation stops). Steered back directly, like a fly-by's turn back: the
+	-- swing borrowed from camera follow couldn't bring it round from far off.
+	-- The zoom goes first: the flight's slow zoom stops and glides back to
+	-- your distance just before the turn, so only one thing moves at a time.
+	if onTaxi and flightCamStarted and not ns.orbit.settling and ns.db.enabled and ns.db.taxiSettle
+		and not ns.FlightTakenOver() then
 		local left = FlightTimeLeft()
-		if left and left <= ns.db.taxiSettleLead then
+		-- (Not while a fly-by's turning: a zoom moving under the turn snaps it.
+		-- If none ends in time, the zoom goes back at touchdown instead.)
+		if left and not ns.orbit.zoomSettled and left <= ns.db.taxiSettleLead + ns.SETTLE_TURN + ns.SETTLE_ZOOM
+			and not ns.FlyByTurning() then
+			ns.orbit.zoomSettled = true
+			-- Your takeoff distance (unless you zoomed yourself on the way), or
+			-- else back from the slow zoom to where it started.
+			local distance = (ns.db.taxiLandZoom and ns.db.takeoffZoom)
+				or (idleZoom.active and idleZoom.saved)
+			if distance then
+				ns.ZoomBackTo(distance, ns.SETTLE_ZOOM)
+			end
+		end
+		if left and left <= ns.db.taxiSettleLead + ns.SETTLE_TURN then -- (the turn's time)
 			ns.orbit.settling = true
-			ns.ApplyCVarSet(ns.FLIGHT_CVARS, false)
-			CenterCamera()
+			ns.SettleBehind()
 		end
 	end
 
@@ -1680,12 +3009,19 @@ function ns.UpdateTaxi()
 	-- you steer with the mouse or the travel mode ends.
 	local traveling = (ns.IsRPWalking and ns.IsRPWalking()) or (ns.IsAutoRunning and ns.IsAutoRunning())
 		or (ns.IsCozy and ns.IsCozy()) -- (the cozy camera lines up the same way)
+		or (ns.IsVista and ns.IsVista()) -- (and so does the vista camera)
+		or (ns.IsFish and ns.IsFish()) -- (and the fish camera)
 	if travelRecenter then
 		if not traveling or IsMouseOnCamera() then
 			recenterUntil = 0
 		end
 	elseif not onTaxi and IsPlayerActive() then
 		recenterUntil = 0
+	end
+	-- The arrival swing holds until touchdown: camera follow stays on behind
+	-- you rather than going off again once the swing's time is up.
+	if onTaxi and ns.orbit.settling and ns.RECENTER_CVARS.active then
+		recenterUntil = math.max(recenterUntil, now + 1)
 	end
 	local recentering = GetTime() < recenterUntil
 	if not recentering then
@@ -1704,5 +3040,6 @@ function ns.UpdateTaxi()
 			SetCVar("cameraPitchSmoothSpeed", pitch)
 		end
 	end
-	ns.ApplyCVarSet(ns.FLIGHT_CVARS, (onTaxi and ns.db.enabled and ns.db.taxiOrbit and not recentering) or false)
+	ns.ApplyCVarSet(ns.FLIGHT_CVARS, (onTaxi and ns.db.enabled and ns.db.taxiOrbit and ns.FlightCameraOn()
+		and not recentering) or false)
 end

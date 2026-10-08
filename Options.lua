@@ -33,6 +33,48 @@ local function Header(parent, text, anchor, yOffset)
 	return fs
 end
 
+-- Lays out a column of controls, each below the last, the same way on every
+-- page: headers and notes at the column edge, checkboxes 2 left of it (so the
+-- box lines up), sliders 2 right and edit boxes 6 right (their borders).
+local STACK_X = { header = 0, label = 0, dropdown = 0, check = -2, slider = 2, box = 6 }
+local STACK_GAP = { -- [kind being added][kind above it]
+	header = { header = 6, label = 18, dropdown = 18, check = 18, slider = 24, box = 18 },
+	label = { header = 6, label = 6, dropdown = 6, check = 8, slider = 14, box = 4 },
+	dropdown = { header = 8, label = 6, dropdown = 8, check = 6, slider = 14, box = 8 },
+	check = { header = 6, label = 8, dropdown = 8, check = 2, slider = 14, box = 8 },
+	slider = { header = 26, label = 26, dropdown = 30, check = 26, slider = 34, box = 30 },
+	box = { header = 6, label = 4, dropdown = 8, check = 4, slider = 14, box = 8 },
+}
+
+local function Stack(anchor, kind)
+	local stack = { last = anchor, kind = kind or "header", indent = 0 }
+	-- Puts control below the last one. indent: how far right of the usual
+	-- place it sits (children of a checkbox); the next control is placed from it.
+	function stack:Add(control, controlKind, indent)
+		indent = indent or 0
+		control:SetPoint("TOPLEFT", self.last, "BOTTOMLEFT",
+			STACK_X[controlKind] + indent - STACK_X[self.kind] - self.indent,
+			-STACK_GAP[controlKind][self.kind])
+		self.last, self.kind, self.indent = control, controlKind, indent
+		return control
+	end
+	function stack:Header(parent, text)
+		return self:Add(Label(parent, "GameFontNormal", text), "header")
+	end
+	-- A note in small text, wrapped to width.
+	function stack:Note(parent, text, width)
+		local note = Label(parent, "GameFontHighlightSmall", text)
+		note:SetWidth(width or 270)
+		note:SetJustifyV("TOP")
+		return self:Add(note, "label")
+	end
+	-- Carries on from a control placed some other way.
+	function stack:Continue(control, controlKind)
+		self.last, self.kind, self.indent = control, controlKind, 0
+	end
+	return stack
+end
+
 local function Check(parent, key, label, tip, onChange)
 	local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
 	cb:SetSize(26, 26)
@@ -87,8 +129,10 @@ local function Slider(parent, key, label, minV, maxV, step, fmt, scale, onChange
 	title:SetPoint("BOTTOMLEFT", slider, "TOPLEFT", 0, 4)
 
 	local function UpdateTitle(value)
-		title:SetText(label .. ": |cffffd100" .. fmt:format(value) .. "|r")
+		local shown = "|cffffd100" .. (type(fmt) == "function" and fmt(value) or fmt:format(value)) .. "|r"
+		title:SetText(label == "" and shown or label .. ": " .. shown)
 	end
+	slider.title = title
 
 	slider:SetScript("OnValueChanged", function(self, value)
 		value = math.floor(value / step + 0.5) * step
@@ -300,50 +344,25 @@ local function CreatePanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(panel, "GameFontHighlightSmall",
-		"Fades the UI and adds letterbox bars between fights. Combat, targeting an enemy, casting " ..
+		"Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
-		"pages under this one cover what shows when, the camera modes, sound, chat and the look.")
+		"pages under this one cover what shows when (Showing the UI, Frames, Combat, Nameplates, " ..
+		"Chat), the look and sound, the camera modes (a page each) and keybinds.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	-- Left column: general, fading
+	-- Left column: general
 	local general = Header(panel, "General", subtitle, -20)
 
 	local enabled = Check(panel, "enabled", "Enable cinematic mode",
 		"Also toggled with /cine or the keybind under Key Bindings > AddOns.", ns.SetEnabled)
 	enabled:SetPoint("TOPLEFT", general, "BOTTOMLEFT", -2, -6)
 
-	local startCinematic = Check(panel, "startCinematic", "Start in cinematic mode on login",
-		"When you log in, the UI starts hidden and the letterbox slides in, instead of " ..
-		"waiting for the fade delay. Doesn't apply to /reload (see below).")
+	local startCinematic = Check(panel, "startCinematic", "Start in cinematic mode",
+		"When you log in, /reload or turn cinematic mode on, the UI hides straight away and the " ..
+		"letterbox slides in, instead of waiting for the fade delay.")
 	startCinematic:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -2)
-
-	local startOnReload = Check(panel, "startCinematicOnReload", "Start in cinematic mode after /reload",
-		"After a /reload, the UI starts hidden and the letterbox slides in, instead of " ..
-		"waiting for the fade delay.")
-	startOnReload:SetPoint("TOPLEFT", startCinematic, "BOTTOMLEFT", 0, -2)
-
-	local timeMessage = Check(panel, "timeOfDayMessage", "Show the time of day on login and /reload",
-		"Under the zone name that appears when you log in or reload: Dawn, Morning, Midday, " ..
-		"Afternoon, Evening, Dusk or Night. Uses the same clock as the time-of-day tint (set " ..
-		"on the Look page).")
-	timeMessage:SetPoint("TOPLEFT", startOnReload, "BOTTOMLEFT", 0, -2)
-	timeMessage:HookScript("OnClick", Refresh) -- grey out / enable the option below
-
-	local timeChange = Check(panel, "timeOfDayChange", "...and when it changes",
-		"When the time of day moves on during play (Evening to Dusk, say), its name fades in " ..
-		"where the zone title appears, then fades away. Not during combat.")
-	timeChange:SetPoint("TOPLEFT", timeMessage, "BOTTOMLEFT", 16, -2)
-	GreyUnless(timeChange, function(db) return db.timeOfDayMessage end)
-	timeChange:HookScript("OnClick", Refresh) -- grey out / enable the sound option
-
-	local timeSound = Check(panel, "timeOfDaySound", "...with a sound",
-		"A fitting sound plays with it: a rooster at dawn, a horse in the morning, " ..
-		"your faction's bell at midday, a gentle afternoon sound, frogs in the evening, an owl at dusk and a " ..
-		"wolf at night. Uses your sound effects volume.")
-	timeSound:SetPoint("TOPLEFT", timeChange, "BOTTOMLEFT", 16, -2)
-	GreyUnless(timeSound, function(db) return db.timeOfDayMessage and db.timeOfDayChange end)
 
 	local minimapButton = Check(panel, "minimapButton", "Show minimap button",
 		"Left-click it for quick options (turn off for a while, combat, tint), right-click for " ..
@@ -351,28 +370,34 @@ local function CreatePanel()
 			ns.GetDB().minimapButton = value
 			if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
 		end)
-	minimapButton:SetPoint("TOPLEFT", timeSound, "BOTTOMLEFT", -32, -2)
-
-	local fadingHeader = Header(panel, "Fading", minimapButton, -18)
-	fadingHeader:SetPoint("TOPLEFT", minimapButton, "BOTTOMLEFT", 2, -18)
-
-	local delay = Slider(panel, "delay", "Fade delay", 0, 30, 0.5, "%.1f sec")
-	delay:SetPoint("TOPLEFT", fadingHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(delay, "How long things must stay calm before the UI fades out.")
-
-	local fadeOut = Slider(panel, "fadeOutTime", "Fade out time", 0.1, 5, 0.1, "%.1f sec")
-	fadeOut:SetPoint("TOPLEFT", delay, "BOTTOMLEFT", 0, -34)
-
-	local fadeIn = Slider(panel, "fadeInTime", "Fade in time", 0, 10, 0.05, "%.2f sec")
-	fadeIn:SetPoint("TOPLEFT", fadeOut, "BOTTOMLEFT", 0, -34)
+	minimapButton:SetPoint("TOPLEFT", startCinematic, "BOTTOMLEFT", 0, -2)
 
 	-- Right column: places
 	local placesHeader = Label(panel, "GameFontNormal", "Turn off in")
 	placesHeader:SetPoint("TOPLEFT", general, "TOPLEFT", 320, 0)
 
+	-- Stored the other way round (stayInCombat), as the Combat page's lists apply while staying.
+	local combat = Check(panel, "stayInCombat", "Combat",
+		"Being in combat brings the UI back. Targeting an enemy only shows the frames chosen " ..
+		"for it on the Combat page. Untick to stay cinematic in combat too.", function(value)
+			ns.GetDB().stayInCombat = not value
+			Refresh()
+		end)
+	combat.Refresh = function(self) self:SetChecked(not ns.GetDB().stayInCombat) end
+	combat:SetPoint("TOPLEFT", placesHeader, "BOTTOMLEFT", -2, -6)
+
+	-- Places in the same order as every other place list (PlaceList).
+	local cities = Check(panel, "offInCities", "Cities",
+		"Capital cities, including Dalaran. Flights leaving a city still go cinematic.")
+	cities:SetPoint("TOPLEFT", combat, "BOTTOMLEFT", 0, -2)
+
+	local inns = Check(panel, "offInInns", "Inns",
+		"Resting anywhere outside a capital city, such as a town inn.")
+	inns:SetPoint("TOPLEFT", cities, "BOTTOMLEFT", 0, -2)
+
 	local dungeons = Check(panel, "offInDungeons", "Dungeons",
 		"Keep the normal UI in dungeons and scenarios.")
-	dungeons:SetPoint("TOPLEFT", placesHeader, "BOTTOMLEFT", -2, -6)
+	dungeons:SetPoint("TOPLEFT", inns, "BOTTOMLEFT", 0, -2)
 
 	local raids = Check(panel, "offInRaids", "Raids")
 	raids:SetPoint("TOPLEFT", dungeons, "BOTTOMLEFT", 0, -2)
@@ -380,13 +405,13 @@ local function CreatePanel()
 	local pvp = Check(panel, "offInPvP", "Battlegrounds and arenas")
 	pvp:SetPoint("TOPLEFT", raids, "BOTTOMLEFT", 0, -2)
 
-	local cities = Check(panel, "offInCities", "Cities",
-		"Capital cities, including Dalaran. Flights leaving a city still go cinematic.")
-	cities:SetPoint("TOPLEFT", pvp, "BOTTOMLEFT", 0, -2)
+	local party = Check(panel, "offInParty", "A party",
+		"Keep the normal UI while you're in a party (but not a raid group).")
+	party:SetPoint("TOPLEFT", pvp, "BOTTOMLEFT", 0, -2)
 
-	local inns = Check(panel, "offInInns", "Inns",
-		"Resting anywhere outside a capital city, such as a town inn.")
-	inns:SetPoint("TOPLEFT", cities, "BOTTOMLEFT", 0, -2)
+	local raidGroup = Check(panel, "offInRaidGroup", "A raid group",
+		"Keep the normal UI while you're in a raid group, wherever you are.")
+	raidGroup:SetPoint("TOPLEFT", party, "BOTTOMLEFT", 0, -2)
 
 	local defaults = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	defaults:SetSize(140, 22)
@@ -428,31 +453,83 @@ local function CreateRevealPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"What brings the UI, or parts of it, back while cinematic mode is on. Fights and " ..
-		"targeting are on the Combat page, chat on the Chat page.")
+		"How fast the UI fades, what brings it (or parts of it) back while cinematic mode " ..
+		"is on, and combat text and tooltips in the world. Fights and targeting are on the Combat " ..
+		"page, names and nameplates on the Nameplates page, chat on the Chat page.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	-- Left column: mouseover, what brings the UI back, portrait and buffs
-	local mouseHeader = Header(content, "Mouseover", subtitle, -20)
+	local OVERRIDE_COLUMN, OVERRIDE_ROW = 300, 28
+
+	-- Fading (full width): how fast the UI goes and comes back
+	local fadingHeader = Header(content, "Fading", subtitle, -20)
+
+	local delay = Slider(content, "delay", "Fade delay", 0, 30, 0.5, "%.1f sec")
+	delay:SetPoint("TOPLEFT", fadingHeader, "BOTTOMLEFT", 2, -26)
+	Tooltip(delay, "How long things must stay calm before the UI fades out.")
+
+	local fadeOut = Slider(content, "fadeOutTime", "Fade out time", 0.1, 5, 0.1, "%.1f sec")
+	fadeOut:SetPoint("LEFT", delay, "LEFT", OVERRIDE_COLUMN, 0)
+	Tooltip(fadeOut, "How long the UI takes to fade out. The mouseover times below include it: " ..
+		"a time shorter than the fade just fades straight away.")
+
+	local fadeIn = Slider(content, "fadeInTime", "Fade in time", 0, 10, 0.05, "%.2f sec")
+	fadeIn:SetPoint("TOPLEFT", delay, "BOTTOMLEFT", 0, -34)
+
+	-- Mouseover (full width): the shared hold time, and per-group overrides
+	local mouseHeader = Header(content, "Mouseover", fadeIn, -24)
+	mouseHeader:SetPoint("TOPLEFT", fadeIn, "BOTTOMLEFT", -2, -24)
 
 	local mouseover = Check(content, "mouseover", "Reveal on mouseover",
-		"Pointing at a faded element shows it (and the elements grouped with it).")
+		"Pointing at a faded element shows it (and the elements grouped with it).", function(value)
+			ns.GetDB().mouseover = value
+			Refresh() -- grey out / enable the hold times
+		end)
 	mouseover:SetPoint("TOPLEFT", mouseHeader, "BOTTOMLEFT", -2, -6)
+	local function IfMouseover(db) return db.mouseover end
 
-	local minimapHold = Slider(content, "minimapHoverHold", "Minimap stays after mouseover", 0, 30, 1, "%d sec")
-	minimapHold:SetPoint("TOPLEFT", mouseover, "BOTTOMLEFT", 4, -26)
-	Tooltip(minimapHold, "How long the minimap stays up after your mouse leaves it. In the camera " ..
-		"modes the short default is used.")
+	local hold = Slider(content, "mouseoverHold", "Stays after mouseover", 0, 30, 1, "%d sec")
+	hold:SetPoint("TOPLEFT", mouseover, "BOTTOMLEFT", 4, -26)
+	Tooltip(hold, "How long until a group is gone after your mouse leaves it, fade included, " ..
+		"unless it has its own time below. In the camera modes the shorter default is used.")
+	GreyUnless(hold, IfMouseover)
 
-	local questsHold = Slider(content, "questsHoverHold", "Quest tracker stays after mouseover", 0, 30, 1, "%d sec")
-	questsHold:SetPoint("TOPLEFT", minimapHold, "BOTTOMLEFT", 0, -34)
-	Tooltip(questsHold, "How long the quest tracker stays up after your mouse leaves it. In the " ..
-		"camera modes the short default is used.")
+	local overrideLabel = Label(content, "GameFontHighlightSmall",
+		"Tick a group to give it its own time instead:")
+	overrideLabel:SetPoint("TOPLEFT", hold, "BOTTOMLEFT", -2, -18)
 
-	local revealHeader = Header(content, "Bring the UI back", questsHold, -24)
-	revealHeader:SetPoint("TOPLEFT", questsHold, "BOTTOMLEFT", -2, -24)
+	local OVERRIDE_ROWS = math.ceil(#ns.HOVER_GROUPS / 2)
+	local lastOverride
+	for i, group in ipairs(ns.HOVER_GROUPS) do
+		local key, label = group[1], group[2]
+		local column, row = math.floor((i - 1) / OVERRIDE_ROWS), (i - 1) % OVERRIDE_ROWS
+		local override = Check(content, key .. "HoverOverride", label,
+			"Give this group its own time instead of \"Stays after mouseover\".",
+			function(value)
+				ns.GetDB()[key .. "HoverOverride"] = value
+				Refresh()
+			end)
+		override:SetPoint("TOPLEFT", overrideLabel, "BOTTOMLEFT",
+			column * OVERRIDE_COLUMN, -4 - row * OVERRIDE_ROW)
+		GreyUnless(override, IfMouseover)
+
+		local groupHold = Slider(content, key .. "HoverHold", "", 0, 30, 1, "%d sec")
+		groupHold:SetWidth(80)
+		groupHold:SetPoint("LEFT", override, "LEFT", 150, 0)
+		groupHold.title:ClearAllPoints()
+		groupHold.title:SetPoint("LEFT", groupHold, "RIGHT", 6, 0)
+		Tooltip(groupHold, "How long until this group is gone after your mouse leaves it, fade " ..
+			"included. In the camera modes the shorter default is used.")
+		GreyUnless(groupHold, function(db) return db.mouseover and db[key .. "HoverOverride"] end)
+		if row == OVERRIDE_ROWS - 1 and column == 0 then
+			lastOverride = override
+		end
+	end
+
+	-- Left column: what brings the UI back, portrait and buffs
+	local revealHeader = Header(content, "Bring the UI back", lastOverride, -18)
+	revealHeader:SetPoint("TOPLEFT", lastOverride, "BOTTOMLEFT", 2, -18)
 
 	local cast = Check(content, "revealOnCast", "While casting",
 		"Includes mounting and hearthstone casts.")
@@ -501,11 +578,24 @@ local function CreateRevealPanel()
 		"A new buff or debuff, or one being refreshed, briefly shows your buffs and " ..
 		"debuffs. Buffs falling off don't count, and neither do flights.")
 	buffPeek:SetPoint("TOPLEFT", combatWindow, "BOTTOMLEFT", -4 - PORTRAIT_INDENT, -18)
+	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
+
+	local function IfBuffPeek(db) return db.buffPeek end
+
+	local buffAfterCombat = Check(content, "buffPeekAfterCombat", "Only after combat",
+		"Only show your buffs if you've been in combat recently, so buffing up or " ..
+		"picking up a buff in town doesn't bring them up.")
+	buffAfterCombat:SetPoint("TOPLEFT", buffPeek, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
+	GreyUnless(buffAfterCombat, IfBuffPeek)
+
+	local buffCombatWindow = Slider(content, "buffPeekCombatWindow", "Within", 10, 300, 10, "%d sec of a fight")
+	buffCombatWindow:SetPoint("TOPLEFT", buffAfterCombat, "BOTTOMLEFT", 4, -26)
+	GreyUnless(buffCombatWindow, IfBuffPeek)
 
 	local buffPeekTime = Slider(content, "buffPeekTime", "Show buffs for", 0.5, 30, 0.5, "%.1f sec")
-	buffPeekTime:SetPoint("TOPLEFT", buffPeek, "BOTTOMLEFT", 4, -26)
+	buffPeekTime:SetPoint("TOPLEFT", buffCombatWindow, "BOTTOMLEFT", -PORTRAIT_INDENT, -26)
 
-	local ignoreLabel = Label(content, "GameFontHighlightSmall", "Except for these buffs (spell IDs or names):")
+	local ignoreLabel = Label(content, "GameFontHighlightSmall", "Except for these buffs and debuffs (spell IDs or names):")
 	ignoreLabel:SetPoint("TOPLEFT", buffPeekTime, "BOTTOMLEFT", -2, -22)
 	local ignoreBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
 	ignoreBox:SetSize(270, 20)
@@ -526,48 +616,64 @@ local function CreateRevealPanel()
 	controls[#controls + 1] = ignoreBox
 	Tooltip(ignoreBox, "Gaining or stacking these doesn't bring your buffs up. Separate with commas. " ..
 		"Names must match your game language; spell IDs work in any language (2479 is " ..
-		"Honorless Target).")
-	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the list
+		"Honorless Target, 8326 and 20584 are Ghost).")
 
-	-- Right column: minimap and tracking
-	local trackingHeader = Label(content, "GameFontNormal", "Minimap and tracking")
-	trackingHeader:SetPoint("TOPLEFT", mouseHeader, "TOPLEFT", 320, 0)
+	-- Right column: combat text and world tooltips. World tooltips hide
+	-- throughout cinematic mode or only in the camera modes ticked here, and can
+	-- come back after hovering.
+	local worldHeader = Label(content, "GameFontNormal", "In the world")
+	worldHeader:SetPoint("TOPLEFT", revealHeader, "TOPLEFT", 320, 0)
 
-	-- Master switch; the kinds of tracking below only apply while it's on.
-	local trackingMaster = Check(content, "minimapForTracking", "Keep minimap open while tracking",
-		"While you're tracking one of the kinds ticked below, the minimap stays up during " ..
-		"cinematic mode. Also on the minimap button's menu.", function(value)
-			ns.GetDB().minimapForTracking = value
-			Refresh()
-		end)
-	trackingMaster:SetPoint("TOPLEFT", trackingHeader, "BOTTOMLEFT", -2, -6)
+	local combatText = Check(content, "hideCombatText", "Hide combat text out of combat",
+		"No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
+		"mode while you're out of combat. They come back the moment a fight starts, and your " ..
+		"combat text settings are put back when the UI returns.")
+	combatText:SetPoint("TOPLEFT", worldHeader, "BOTTOMLEFT", -2, -6)
 
-	local TRACKING_INDENT = 16
-	local TRACKING_TIP = "While this tracking is active, the minimap stays up during cinematic " ..
-		"mode so you can spot nodes or creatures."
-	local previousTracking = trackingMaster
-	for i, kind in ipairs({
-		{ "minimapForHerbs", "Herbs (Find Herbs)" },
-		{ "minimapForMinerals", "Minerals (Find Minerals)" },
-		{ "minimapForTreasure", "Treasure (Find Treasure)" },
-		{ "minimapForFish", "Fish (Find Fish)" },
-		{ "minimapForCreatures", "Creatures (hunter, druid, warlock)" },
-		{ "trackingHideWhenIdle", "Except when standing still or flying",
-			"Tracking doesn't keep the minimap up on flight paths, or once you've stood " ..
-			"still for the standing-still delay. It comes back when you move." },
+	local tooltip = Check(content, "fadeTooltip", "Hide world tooltips",
+		"Hides the tooltip for players, NPCs and objects you mouse over in the world, throughout " ..
+		"cinematic mode. Tooltips for UI elements still show. To hide them only in some camera " ..
+		"modes, untick this and tick the modes below.")
+	tooltip:SetPoint("TOPLEFT", combatText, "BOTTOMLEFT", 0, -2)
+	tooltip:HookScript("OnClick", Refresh) -- grey out / enable the camera modes below
+
+	local tooltipLabel = Label(content, "GameFontHighlight", "Or only in these camera modes")
+	tooltipLabel:SetPoint("TOPLEFT", tooltip, "BOTTOMLEFT", 2, -8)
+	local tooltipModes = tooltipLabel
+	for i, mode in ipairs({
+		{ "tooltipOffFlight", "On flights" },
+		{ "tooltipOffIdle", "AFK camera (standing still or AFK)" },
+		{ "tooltipOffCozy", "Cozy (campfire, sitting, emotes)" },
+		{ "tooltipOffVista", "Vista (/stare)" },
+		{ "tooltipOffFish", "Fish (fishing)" },
+		{ "tooltipOffWalk", "RP walking" },
+		{ "tooltipOffRun", "Auto-running" },
 	}) do
-		local check = Check(content, kind[1], kind[2], kind[3] or TRACKING_TIP)
-		check:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", i == 1 and TRACKING_INDENT or 0, -2)
-		GreyUnless(check, function(db) return db.minimapForTracking end)
-		previousTracking = check
+		local check = Check(content, mode[1], mode[2],
+			"No tooltip for players, NPCs and objects you mouse over in the world while this camera " ..
+			"is running. Tooltips for UI elements still show. (Not needed while \"Hide world " ..
+			"tooltips\" above hides them throughout cinematic mode.)")
+		check:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -4 or -2)
+		GreyUnless(check, function(db) return not db.fadeTooltip end)
+		tooltipModes = check
 	end
 
-	local alwaysNote = Label(content, "GameFontHighlightSmall",
-		"To keep the whole minimap up all the time, see \"Always show the minimap\" on the " ..
-		"Frames page.")
-	alwaysNote:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", 4 - TRACKING_INDENT, -10)
-	alwaysNote:SetWidth(270)
-	alwaysNote:SetJustifyV("TOP")
+	local tooltipReveal = Check(content, "tooltipReveal", "Show world tooltips after hovering",
+		"A hidden world tooltip appears once you've kept the mouse on the same player, NPC or " ..
+		"object for the time below. Applies wherever world tooltips are hidden: throughout " ..
+		"cinematic mode, or in the camera modes ticked above.")
+	tooltipReveal:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", 0, -10)
+	tooltipReveal:HookScript("OnClick", Refresh) -- grey out / enable the sliders
+
+	local tooltipRevealDelay = Slider(content, "tooltipRevealDelay", "After hovering for", 0, 10, 0.5, "%.1f sec")
+	tooltipRevealDelay:SetPoint("TOPLEFT", tooltipReveal, "BOTTOMLEFT", 4, -26)
+	GreyUnless(tooltipRevealDelay, function(db) return db.tooltipReveal end)
+
+	local tooltipFade = Slider(content, "tooltipFadeTime", "Fade in and out over", 0, 2, 0.05, "%.2f sec")
+	tooltipFade:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", 0, -26)
+	GreyUnless(tooltipFade, function(db) return db.tooltipReveal end)
+	Tooltip(tooltipFade, "How long a tooltip takes to fade in once it's shown, and to fade out " ..
+		"when you move off. 0 shows and hides it at once.")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -605,10 +711,16 @@ local function BuildZoomControls(parent, prefix, anchor)
 	zoomPause:SetPoint("TOPLEFT", zoomEase, "BOTTOMLEFT", 0, -34)
 	Tooltip(zoomPause, "Random zoom only.")
 
+	local zoomPauseVary = Slider(parent, key("PauseVary"), "Pause varies by up to", 0, 30, 0.5, "%.1f sec")
+	zoomPauseVary:SetPoint("TOPLEFT", zoomPause, "BOTTOMLEFT", 0, -34)
+	Tooltip(zoomPauseVary, "Random zoom only. Each pause is picked at random this much shorter or " ..
+		"longer than the pause above: 3 sec with a 10 sec pause waits anywhere from 7 to 13 sec. " ..
+		"0 keeps every pause the same.")
+
 	local zoomPastMax = Check(parent, key("PastMax"), "Allow zooming past your maximum",
 		"Raises the game's max camera distance (to 2.6) while pulled back, so the zoom " ..
 		"isn't cut short. Your own maximum comes back once you've zoomed in again.")
-	zoomPastMax:SetPoint("TOPLEFT", zoomPause, "BOTTOMLEFT", -4, -14)
+	zoomPastMax:SetPoint("TOPLEFT", zoomPauseVary, "BOTTOMLEFT", -4, -14)
 	return zoomPastMax
 end
 
@@ -621,91 +733,48 @@ local function CreateCameraPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(cameraPanel, "GameFontHighlightSmall",
-		"While cinematic mode is on, the camera comes alive in five situations, each with its " ..
-		"own page: Flight camera (on flight paths), Standing still camera (once you've stood " ..
-		"still a while), Cozy camera (campfires and emotes), RP walk (moving in walk mode) and " ..
-		"Auto-run camera. Everything goes back " ..
-		"to normal when " ..
-		"the UI returns. The settings here apply to all of them.")
+		"While cinematic mode is on, the camera comes alive in seven situations, each with its " ..
+		"own page: Flight (on flight paths), AFK (once you've stood still a while, or go AFK), " ..
+		"Cozy (campfires and emotes), Vista (/stare), Fish (fishing), RP Walk (moving in walk " ..
+		"mode) and Auto-run. Death Cam turns round your body when you die, and Quest Cam swings " ..
+		"behind you at quest givers. The Events page picks which camera each emote or event " ..
+		"starts. Everything goes back to normal when the UI returns. The settings here apply to " ..
+		"all of them.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", cameraPanel, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	local sharedHeader = Header(cameraPanel, "All camera modes", subtitle, -20)
 
-	local inputPause = Slider(cameraPanel, "cameraInputPause", "Pause after you move the camera", 0, 60, 1, "%d sec")
-	inputPause:SetPoint("TOPLEFT", sharedHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(inputPause, "When you drag the camera or use camera keys, the rotation stops and waits " ..
-		"this long after your last adjustment before carrying on from your new view. (RP walk " ..
-		"has its own, shorter pause.)")
-
 	local npcPause = Check(cameraPanel, "cameraPauseAtNPCs", "Pause while talking to NPCs",
 		"While an auction house, vendor, bank, mailbox, trainer, quest giver or flight map window " ..
-		"is open, the standing-still and cozy cameras don't start (and stop if they're running). " ..
-		"The standing-still timer starts again once you close it.")
-	npcPause:SetPoint("TOPLEFT", inputPause, "BOTTOMLEFT", -4, -14)
+		"is open, the AFK and cozy cameras don't start (and stop if they're running). " ..
+		"The AFK camera timer starts again once you close it.")
+	npcPause:SetPoint("TOPLEFT", sharedHeader, "BOTTOMLEFT", -2, -6)
 
 	local castPause = Check(cameraPanel, "cameraPauseCasting", "Pause while casting",
-		"While you cast or channel (crafting, say), the standing-still camera doesn't start, or " ..
+		"While you cast or channel (crafting, say), the AFK camera doesn't start, or " ..
 		"stops if it's running. Its timer starts again once you finish. The cozy camera keeps " ..
 		"going, so cooking at a campfire still feels cozy.")
 	castPause:SetPoint("TOPLEFT", npcPause, "BOTTOMLEFT", 0, -2)
 
-	local TUCK_TIP = "Addons can't move the cursor, but they can switch on mouse-steering mode (like " ..
-		"holding the right button), which hides it. Once the cursor has been still for the time " ..
-		"below, with no window open, it's tucked away. Any click, turning with the mouse, typing, " ..
-		"a window, combat or the end of cinematic mode brings it back. Moving the mouse sideways " ..
-		"turns you a touch before it does; moving it up or down tilts the camera. While it's " ..
-		"tucked away, your right mouse button is held down for you (that's how the cursor hides)."
-	local tuckLabel = Label(cameraPanel, "GameFontHighlight", "Tuck the mouse cursor away (experimental)")
-	tuckLabel:SetPoint("TOPLEFT", castPause, "BOTTOMLEFT", 2, -12)
-	local tuck = tuckLabel
-	for i, mode in ipairs({
-		{ "cursorTuckFlight", "On flights" },
-		{ "cursorTuckIdle", "Standing still" },
-		{ "cursorTuckCozy", "Cozy (campfire, sitting, emotes)" },
-		{ "cursorTuckWalk", "RP walking" },
-		{ "cursorTuckRun", "Auto-running" },
-		{ "cursorTuckOther", "Other times in cinematic mode" },
-	}) do
-		local check = Check(cameraPanel, mode[1], mode[2], TUCK_TIP)
-		check:SetPoint("TOPLEFT", tuck, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -4 or -2)
-		tuck = check
-	end
-	local tuckNote = Label(cameraPanel, "GameFontHighlightSmall",
-		"|cffff9933Note:|r while the cursor is tucked away, your right mouse button is locked down " ..
-		"(mouse-steering mode), as if you were holding it. Click any mouse button to get the " ..
-		"cursor back.")
-	tuckNote:SetPoint("TOPLEFT", tuck, "BOTTOMLEFT", 4, -6)
-	tuckNote:SetWidth(500)
-	tuckNote:SetJustifyV("TOP")
-	local tuckDelay = Slider(cameraPanel, "cursorTuckDelay", "Tuck it away after", 1, 15, 1, "%d sec")
-	tuckDelay:SetPoint("TOPLEFT", tuckNote, "BOTTOMLEFT", 0, -26)
+	local menuPause = Check(cameraPanel, "cameraPauseInMenus", "Pause while menus are open",
+		"While the game menu, options, spellbook, talents, character sheet, map or another " ..
+		"game window is open, the AFK and cozy cameras don't start (and stop if they're " ..
+		"running). The AFK camera timer starts again once you close it.")
+	menuPause:SetPoint("TOPLEFT", castPause, "BOTTOMLEFT", 0, -2)
 
-	local tooltipLabel = Label(cameraPanel, "GameFontHighlight", "Hide world tooltips")
-	tooltipLabel:SetPoint("TOPLEFT", tuckDelay, "BOTTOMLEFT", -2, -22)
-	local tooltipModes = tooltipLabel
-	for i, mode in ipairs({
-		{ "tooltipOffFlight", "On flights" },
-		{ "tooltipOffIdle", "Standing still" },
-		{ "tooltipOffCozy", "Cozy (campfire, sitting, emotes)" },
-		{ "tooltipOffWalk", "RP walking" },
-		{ "tooltipOffRun", "Auto-running" },
-	}) do
-		local check = Check(cameraPanel, mode[1], mode[2],
-			"No tooltip for players, NPCs and objects you mouse over in the world while this camera " ..
-			"is running. Tooltips for UI elements still show. (\"Hide world tooltips\" on the Look " ..
-			"page hides them throughout cinematic mode.)")
-		check:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -4 or -2)
-		tooltipModes = check
-	end
+	local depthOfField = Check(cameraPanel, "depthOfField", "Depth of field",
+		"A soft haze around the edges of the screen, as if the camera had focused on you. " ..
+		"Each camera mode's page sets how strong it is there (0% leaves it off). Off here: " ..
+		"no haze in any of them. /cine doftest shows it on demand.")
+	depthOfField:SetPoint("TOPLEFT", menuPause, "BOTTOMLEFT", 0, -2)
 
 	local holdNote = Label(cameraPanel, "GameFontHighlightSmall",
 		"In the camera modes, the minimap and quest tracker hover holds and the buff and chat " ..
-		"peeks use their short default times, so they clear the view quickly.\n\n" ..
-		"To fade the music out when you move on from a camera mode, see \"Pause music when you " ..
-		"move on\" on the Audio page.")
-	holdNote:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", 4, -10)
+		"peeks use their short default times, so they clear the view quickly. Each mode's page " ..
+		"sets its own pause after you move the camera.")
+	holdNote:SetPoint("TOPLEFT", depthOfField, "BOTTOMLEFT", 4, -10)
 	holdNote:SetWidth(520)
 	holdNote:SetJustifyV("TOP")
 
@@ -719,21 +788,21 @@ local function CreateCameraPanel()
 	indoorLimits:HookScript("OnClick", Refresh) -- grey out / enable the options below
 	local function IfIndoorLimits(db) return db.indoorLimits end
 
-	local indoorZoom = Slider(cameraPanel, "indoorZoomOut", "Zoom out indoors, at most", 0, 10, 0.5, "%.1f yards")
+	local indoorZoom = Slider(cameraPanel, "indoorZoomOut", "Zoom out indoors up to", 0, 10, 0.5, "%.1f yards")
 	indoorZoom:SetPoint("TOPLEFT", indoorLimits, "BOTTOMLEFT", 4, -26)
 	Tooltip(indoorZoom, "How far past your own distance the slow zoom may pull back indoors. It " ..
 		"also never raises the max zoom distance indoors. Walking in pulled back, the camera " ..
 		"glides in to this.")
 	GreyUnless(indoorZoom, IfIndoorLimits)
 
-	local indoorSwing = Slider(cameraPanel, "indoorSwing", "Swing indoors, at most", 0, 90, 5, "%d°")
+	local indoorSwing = Slider(cameraPanel, "indoorSwing", "Swing indoors up to", 0, 90, 5, "%d°")
 	indoorSwing:SetPoint("TOPLEFT", indoorZoom, "BOTTOMLEFT", 0, -34)
 	Tooltip(indoorSwing, "How far either side of behind the flight, RP walk and auto-run cameras " ..
 		"may swing indoors.")
 	GreyUnless(indoorSwing, IfIndoorLimits)
 
-	local indoorSweep = Check(cameraPanel, "indoorNoSweep", "Pause the standing-still rotation indoors",
-		"The standing-still camera sweeps right round your character, which can bump into walls " ..
+	local indoorSweep = Check(cameraPanel, "indoorNoSweep", "No AFK camera sweep indoors",
+		"The AFK camera sweeps right round your character, which can bump into walls " ..
 		"in tight rooms. Its zoom still runs (within the limit above).")
 	indoorSweep:SetPoint("TOPLEFT", indoorSwing, "BOTTOMLEFT", -4, -14)
 	GreyUnless(indoorSweep, IfIndoorLimits)
@@ -760,18 +829,31 @@ end
 -- Camera rotation settings, built once per profile (taxiOrbit* for flights,
 -- idleOrbit* for standing still), each on its own sub-page.
 -- Rotation controls for a camera's fixed style: "sweep" (steady sweeps: the
--- standing-still camera) or "back" (swings behind you: flights, RP walk).
+-- AFK camera) or "back" (swings behind you: flights, RP walk).
 local function BuildRotationControls(container, prefix, style)
 	local function key(name) return prefix .. name end
 
 	local last
 	if style == "sweep" then
-		local orbitRight = Check(container, key("Right"), "Rotate clockwise",
+		local orbitRight = Check(container, key("Right"), "Turn clockwise",
 			"Sweeps turn the other way round.")
 		orbitRight:SetPoint("TOPLEFT", container, "TOPLEFT", -2, 0)
+		local lastCheck = orbitRight
+
+		if prefix == "idleOrbit" then
+			local randomDir = Check(container, key("RandomDir"), "Random direction",
+				"Each time the camera starts, it picks clockwise or anticlockwise at random " ..
+				"(and keeps to it until it stops).", function(value)
+					ns.GetDB()[key("RandomDir")] = value
+					Refresh()
+				end)
+			randomDir:SetPoint("TOPLEFT", orbitRight, "BOTTOMLEFT", 0, 2)
+			GreyUnless(orbitRight, function(db) return not db[key("RandomDir")] end)
+			lastCheck = randomDir
+		end
 
 		local orbitStep = Slider(container, key("Step"), "Turn per sweep", 10, 90, 5, "%d°")
-		orbitStep:SetPoint("TOPLEFT", orbitRight, "BOTTOMLEFT", 4, -26)
+		orbitStep:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 4, -26)
 		Tooltip(orbitStep, "How far each sweep turns, always the same way, staying level.")
 
 		local orbitSpeed = Slider(container, key("Speed"), "Turn speed", 1, 45, 1, "%d°/sec")
@@ -792,17 +874,26 @@ local function BuildRotationControls(container, prefix, style)
 		Tooltip(backArc, "How far the camera may swing to either side of directly behind your " ..
 			"character. 90° reaches side-on; smaller keeps it closer behind.")
 
-		local pitchUp = Slider(container, key("PitchUp"), "Tilt up, max", 0, 45, 5, "%d°")
+		local pitchUp = Slider(container, key("PitchUp"), "Tilt up as far as", 0, 45, 5, "%d°")
 		pitchUp:SetPoint("TOPLEFT", backArc, "BOTTOMLEFT", 0, -34)
 		Tooltip(pitchUp, "Each move also tilts the camera to a random angle between the down " ..
 			"and up limits. 0 on both keeps it level.")
 
-		local pitchDown = Slider(container, key("PitchDown"), "Tilt down, max", 0, 45, 5, "%d°")
+		local pitchDown = Slider(container, key("PitchDown"), "Tilt down as far as", 0, 45, 5, "%d°")
 		pitchDown:SetPoint("TOPLEFT", pitchUp, "BOTTOMLEFT", 0, -34)
 		Tooltip(pitchDown, "How far below level a move may tilt.")
+		local lastPitch = pitchDown
 
-		local moveTime = Slider(container, key("MoveTime"), "Move time", 1, 20, 0.5, "%.1f sec")
-		moveTime:SetPoint("TOPLEFT", pitchDown, "BOTTOMLEFT", 0, -34)
+		if prefix == "runOrbit" then
+			local pitchFloor = Slider(container, key("PitchFloor"), "Lowest tilt", 0, 45, 1, "%d°")
+			pitchFloor:SetPoint("TOPLEFT", pitchDown, "BOTTOMLEFT", 0, -34)
+			Tooltip(pitchFloor, "The camera never tilts more than this far below where it was " ..
+				"when auto-run started, even when it lowers while you steer.")
+			lastPitch = pitchFloor
+		end
+
+		local moveTime = Slider(container, key("MoveTime"), "Each move takes", 1, 20, 0.5, "%.1f sec")
+		moveTime:SetPoint("TOPLEFT", lastPitch, "BOTTOMLEFT", 0, -34)
 		Tooltip(moveTime, "How long each move takes, however far it goes.")
 		last = moveTime
 	end
@@ -835,30 +926,67 @@ local function BuildRotationControls(container, prefix, style)
 end
 
 
--- A "Turn ... off in" list of place checkboxes (keys prefix .. "Cities" etc.).
-local function PlaceList(parent, anchor, title, prefix, tip)
-	local header = Label(parent, "GameFontNormal", title)
-	header:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 2, -18)
-	local previous, checks = header, {}
-	for i, place in ipairs({
-		{ "Cities", "Cities" }, { "Inns", "Inns" }, { "Dungeons", "Dungeons" },
-		{ "Raids", "Raids" }, { "PvP", "Battlegrounds and arenas" },
-	}) do
-		local check = Check(parent, prefix .. place[1], place[2], tip)
-		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
-		checks[#checks + 1] = check
-		previous = check
+-- The places a "Turn ... off in" list covers, in the same order everywhere.
+local PLACES = {
+	{ "Cities", "Cities" }, { "Inns", "Inns" }, { "Dungeons", "Dungeons" },
+	{ "Raids", "Raids" }, { "PvP", "Battlegrounds and arenas" },
+}
+
+-- A "Turn ... off in" list of place checkboxes (keys prefix .. "Cities" etc.),
+-- added to a Stack. Returns the checkboxes.
+local function PlaceList(parent, stack, title, prefix, tip)
+	stack:Header(parent, title)
+	local checks = {}
+	for _, place in ipairs(PLACES) do
+		checks[#checks + 1] = stack:Add(Check(parent, prefix .. place[1], place[2], tip), "check")
 	end
-	return previous, checks
+	return checks
 end
 
--- A camera mode's page, laid out the same for every mode: Starting (full
--- width), then Rotation (left) beside Zoom, the mode's extras and Music
--- (right). opts.start(content, header) and opts.extras(content, anchor, dx)
--- build their controls and return the last one plus the x offset from it back
--- to the column edge (2 below a checkbox, -2 below a slider).
+-- Each camera's "play a fresh song" switch: its key, its page's name and when
+-- the song starts. Shown on the camera's own page and the Audio page.
+local MUSIC_CAMS = {
+	{ "musicCamFlight", "Flight Cam", "as the camera starts rotating on a flight (at takeoff if " ..
+		"flight rotation is off). Once per flight. Not while music is muted on flights." },
+	{ "musicCamIdle", "AFK Cam", "as the AFK camera starts rotating. Once each time you stand " ..
+		"still (not again after you move the camera)." },
+	{ "musicCamCozy", "Cozy Cam", "as the cozy camera starts (campfire, sitting, dancing...). " ..
+		"Getting up for less than 20 seconds and settling back down counts as the same spell." },
+	{ "musicCamVista", "Vista Cam", "as the vista camera starts (/stare). Moving off for less " ..
+		"than 20 seconds and starting again counts as the same spell." },
+	{ "musicCamFish", "Fish Cam", "as the fish camera starts (casting Fishing). Moving off for " ..
+		"less than 20 seconds and casting again counts as the same spell." },
+	{ "musicCamWalk", "RP Walk Cam", "as you set off walking (walk/run key). Pausing for less " ..
+		"than 20 seconds and walking on counts as the same walk." },
+	{ "musicCamRun", "Auto-run Cam", "as you start auto-running. Stopping for less than 20 " ..
+		"seconds and running on counts as the same run." },
+}
+
+local function MusicCamTip(key)
+	for _, item in ipairs(MUSIC_CAMS) do
+		if item[1] == key then
+			return "A fresh song starts " .. item[3] .. " It plays even if music played recently " ..
+				"(see Fatigue on the Audio page). Not when you switch straight over from another " ..
+				"camera mode: the song playing carries on. Off: this camera leaves the music as it " ..
+				"is. Needs \"Play music in cinematic mode\" on the Audio page."
+		end
+	end
+end
+
+-- Every camera mode's page is laid out the same way:
+--   Starting (full width): opts.top's own section first if any (the fish
+--     camera's casting), then starting cinematic mode straight away, the
+--     mode's own starting options (opts.start), the wait after combat and the
+--     pause after you move the camera.
+--   Left column: Rotation (and opts.rotationExtras), then the mode's own
+--     sections (opts.extras: Height, Turning, Fly-bys, Landing).
+--   Right column: Zoom (and opts.zoomExtras), Depth of field, Music.
+-- The opts functions take (content, stack) and add their controls to it.
+-- The Death Cam and Quest Cam pages follow the same layout by hand.
 local ZOOM_TIP = "The camera slowly pulls back, then (with random zoom) drifts in and out. Moving " ..
 	"glides it back to your distance; zooming yourself keeps your new distance."
+local INPUT_PAUSE_TIP = "After you drag the camera, use camera keys or zoom, this camera waits " ..
+	"this long, then carries on from your new view."
 
 local function CreateCameraModePanel(opts)
 	local canvas, content = CreateScrollPage()
@@ -871,354 +999,750 @@ local function CreateCameraModePanel(opts)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	local startHeader = Header(content, "Starting", subtitle, -20)
-	local lastStart, startDx = opts.start(content, startHeader)
+	local stack = Stack(subtitle, "label")
+	if opts.top then
+		opts.top(content, stack)
+	end
 
-	-- Left column: rotation
-	local rotationHeader = Label(content, "GameFontNormal", "Rotation")
-	rotationHeader:SetPoint("TOPLEFT", lastStart, "BOTTOMLEFT", startDx, -24)
-	local rotate = Check(content, opts.orbitPrefix, opts.rotateLabel, opts.rotateTip)
-	rotate:SetPoint("TOPLEFT", rotationHeader, "BOTTOMLEFT", -2, -6)
+	stack:Header(content, "Starting")
+	if opts.instantKey then
+		stack:Add(Check(content, opts.instantKey, "Start cinematic mode as soon as you " .. opts.instantWhen,
+			"Skips the fade delay, so the UI fades and the camera starts moving straight away."), "check")
+	end
+	if opts.start then
+		opts.start(content, stack)
+	end
+	local combatWait = stack:Add(Slider(content, opts.combatWaitKey, "Wait after combat", 0, 120, 5,
+		function(value) return value == 0 and "Off" or ("%d sec"):format(value) end), "slider")
+	Tooltip(combatWait, "After a fight, this camera holds off this long before starting (its " ..
+		"rotation and zoom both). Off starts it as soon as the fight is over.")
+	local inputPause = stack:Add(Slider(content, opts.inputPauseKey, "Pause after you move the camera",
+		0, 60, 0.5, "%.1f sec"), "slider")
+	Tooltip(inputPause, INPUT_PAUSE_TIP .. (opts.inputPauseTip and (" " .. opts.inputPauseTip) or ""))
+
+	-- Left column: rotation, then the mode's own sections
+	local rotationHeader = stack:Header(content, "Rotation")
+	local rotate = stack:Add(Check(content, opts.orbitPrefix, opts.rotateLabel, opts.rotateTip), "check")
 	local container = CreateFrame("Frame", nil, content)
 	container:SetPoint("TOPLEFT", rotate, "BOTTOMLEFT", 2, -14)
 	container:SetSize(300, 1)
-	BuildRotationControls(container, opts.orbitPrefix, opts.style)
+	stack:Continue(BuildRotationControls(container, opts.orbitPrefix, opts.style), "slider")
+	if opts.rotationExtras then
+		opts.rotationExtras(content, stack)
+	end
+	if opts.extras then
+		opts.extras(content, stack)
+	end
 
-	-- Right column: zoom, the mode's extras, music
+	-- Right column: zoom, depth of field, music
 	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
 	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
-	local zoom = Check(content, opts.zoomPrefix, opts.zoomLabel, opts.zoomTip or ZOOM_TIP)
-	zoom:SetPoint("TOPLEFT", zoomHeader, "BOTTOMLEFT", -2, -6)
-	local last, dx = BuildZoomControls(content, opts.zoomPrefix, zoom), 2
-	if opts.extras then
-		last, dx = opts.extras(content, last, dx)
+	local right = Stack(zoomHeader)
+	local zoom = right:Add(Check(content, opts.zoomPrefix, "Slowly zoom", opts.zoomTip or ZOOM_TIP), "check")
+	right:Continue(BuildZoomControls(content, opts.zoomPrefix, zoom), "check")
+	if opts.zoomExtras then
+		opts.zoomExtras(content, right)
 	end
 
-	if opts.music then
-		local musicHeader = Label(content, "GameFontNormal", "Music")
-		musicHeader:SetPoint("TOPLEFT", last, "BOTTOMLEFT", dx, -18)
-		local previous = musicHeader
-		for i, item in ipairs(opts.music) do
-			local check = Check(content, item[1], item[2], item[3])
-			check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
-			DependsOnMusic(check)
-			previous = check
-		end
-		local musicNote = Label(content, "GameFontHighlightSmall",
-			"The same settings as on the Audio page. They need \"Play music in cinematic mode\" there.")
-		musicNote:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 4, -4)
-		musicNote:SetWidth(270)
-		musicNote:SetJustifyV("TOP")
-	end
+	right:Header(content, "Depth of field")
+	local dof = right:Add(Slider(content, opts.dofKey, "Edge haze", 0, 100, 2.5, "%.1f%%", 100, function(value)
+		if ns.FocusPreview then ns.FocusPreview(value / 100) end
+	end), "slider")
+	Tooltip(dof, "A soft haze around the edges of the screen in this camera mode, as if the " ..
+		"camera had focused on you. 0% leaves it off. Moving the slider shows it for a moment. " ..
+		"Needs \"Depth of field\" on the Camera modes page.")
+	GreyUnless(dof, function(db) return db.depthOfField end)
+
+	right:Header(content, "Music")
+	local music = right:Add(Check(content, opts.musicKey, "Play a fresh song as it starts",
+		MusicCamTip(opts.musicKey)), "check")
+	DependsOnMusic(music)
+	right:Note(content, "Fatigue, muting and ambience are on the Audio page.")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, opts.name)
 end
 
+-- The "Height" section of a camera mode's page: how far it lowers the camera.
+local function HeightExtras(key, minV, maxV, tip)
+	return function(content, stack)
+		stack:Header(content, "Height")
+		local level = stack:Add(Slider(content, key, "Lower the camera", minV, maxV, 5, "%d°"), "slider")
+		Tooltip(level, tip)
+	end
+end
+
 -- The "Turning" section of a travel mode's page (RP walk, auto-run).
 local function TurningExtras(swingKey, delayKey)
-	return function(content, anchor, dx)
-		local header = Label(content, "GameFontNormal", "Turning")
-		header:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", dx, -18)
-		local swing = Check(content, swingKey, "Glide round gently when you turn",
+	return function(content, stack)
+		stack:Header(content, "Turning")
+		local swing = stack:Add(Check(content, swingKey, "Glide round gently when you turn",
 			"When you turn left or right, the camera doesn't snap round with you: it carries on " ..
 			"as it was (sway and all) until you stop turning, then glides gently round to your " ..
 			"new facing, easing in and out. Steering with the mouse hands the camera straight " ..
-			"back to you.")
-		swing:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -2, -6)
+			"back to you."), "check")
 		swing:HookScript("OnClick", Refresh) -- grey out / enable the wait below
-		local glideDelay = Slider(content, delayKey, "Wait before gliding", 0, 5, 0.5, "%.1f sec")
-		glideDelay:SetPoint("TOPLEFT", swing, "BOTTOMLEFT", 4, -26)
+		local glideDelay = stack:Add(Slider(content, delayKey, "Wait before gliding", 0, 5, 0.5, "%.1f sec"),
+			"slider")
 		Tooltip(glideDelay, "After you stop turning, the view holds this long before gliding round " ..
 			"to your new facing, in case you turn again. Turning again starts the wait over.")
 		GreyUnless(glideDelay, function(db) return db[swingKey] end)
-		return glideDelay, -2
 	end
+end
+
+-- A comma-separated list setting in an edit box (saved as you leave it).
+local function ListBox(parent, key, width, tip, onSave)
+	local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+	box:SetSize(width, 20)
+	box:SetAutoFocus(false)
+	local function Save(self)
+		ns.GetDB()[key] = self:GetText()
+		if onSave then onSave() end
+	end
+	box:SetScript("OnEnterPressed", function(self) Save(self) self:ClearFocus() end)
+	box:SetScript("OnEditFocusLost", Save)
+	box:SetScript("OnEscapePressed", function(self)
+		self:SetText(ns.GetDB()[key] or "")
+		self:ClearFocus()
+	end)
+	box.Refresh = function(self)
+		if not self:HasFocus() then self:SetText(ns.GetDB()[key] or "") end
+	end
+	controls[#controls + 1] = box
+	Tooltip(box, tip)
+	return box
+end
+
+-- A number of seconds in a small edit box (saved as you leave it). Empty or 0
+-- saves nil.
+local function SecondsBox(parent, key, tip)
+	local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+	box:SetSize(40, 20)
+	box:SetAutoFocus(false)
+	box:SetNumeric(true)
+	box:SetMaxLetters(3)
+	-- Empty saves 0 rather than nil, so a delay with a default can still be cleared.
+	local function Shown()
+		local value = tonumber(ns.GetDB()[key])
+		return (value and value > 0) and value or ""
+	end
+	local function Save(self)
+		local value = tonumber(self:GetText())
+		ns.GetDB()[key] = (value and value > 0) and value or 0
+		self:SetText(Shown())
+	end
+	box:SetScript("OnEnterPressed", function(self) Save(self) self:ClearFocus() end)
+	box:SetScript("OnEditFocusLost", Save)
+	box:SetScript("OnEscapePressed", function(self)
+		self:SetText(Shown())
+		self:ClearFocus()
+	end)
+	box.Refresh = function(self)
+		if not self:HasFocus() then self:SetText(Shown()) end
+	end
+	controls[#controls + 1] = box
+	Tooltip(box, tip)
+	return box
+end
+
+-- Sub-page: events (emotes, a campfire, going AFK...) and the camera each starts.
+local EVENT_CAMERAS = {
+	{ value = "cozy", text = "Cozy camera" },
+	{ value = "vista", text = "Vista camera" },
+	{ value = "fish", text = "Fish camera" },
+	{ value = "afk", text = "AFK camera" },
+	{ value = "none", text = "No camera" },
+}
+local FLIGHT_CAMERAS = {
+	{ value = "flight", text = "Flight camera" },
+	{ value = "none", text = "No camera" },
+}
+local QUEST_CAMERAS = {
+	{ value = "quest", text = "Quest camera" },
+	{ value = "none", text = "No camera" },
+}
+local EVENT_TIPS = {
+	Campfire = "Standing or sitting still with any of the buffs listed below (like Welcoming Campfire).",
+	Sit = "Doing the emote (or pressing the sit key). Moving, jumping or another emote ends it.",
+	Sleep = "Doing the emote. Moving, jumping or another emote ends it.",
+	Dance = "Doing the emote. Moving, jumping or another emote ends it.",
+	Kneel = "Doing the emote. Moving, jumping or another emote ends it.",
+	Chair = "Right-clicking a seat to sit on it; standing up ends it. Seats are recognised by name, " ..
+		"using the words below.",
+	Weapon = "Unsheathing your weapon out of combat, for a \"hero shot\". Putting it away, running or " ..
+		"combat ends it. With the cozy camera it carries on while you RP walk (the camera swings " ..
+		"round in front as you walk, even with Stop on move).",
+	Stare = "Doing the emote while standing still. Moving, jumping or another emote ends it.",
+	Fishing = "Casting Fishing. It carries on after the cast ends (looting, casting again) until " ..
+		"you move or jump. The cast doesn't bring the UI back or pause the camera.",
+	AFK = "Being flagged AFK (/afk, or away long enough). With \"No camera\", the AFK camera still " ..
+		"starts once you've stood still for its delay.",
+	Flight = "Taking off on a flight path. The flight camera is set on the Flight Cam page. With a " ..
+		"delay, the camera and the UI fade wait that long into the flight. With \"No camera\", the " ..
+		"camera is left to you for the whole flight.",
+	Quest = "Talking to a quest giver (a quest to pick up or hand in). The quest camera is set on " ..
+		"the Quest Cam page. With a delay, it waits that long into the conversation. Works whether " ..
+		"or not cinematic mode is on.",
+}
+local function CreateEventsPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Events")
+	title:SetPoint("TOPLEFT", 16, -16)
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; the latest " ..
+		"emote wins, then a drawn weapon, a campfire and going AFK. Taking a flight has the flight " ..
+		"camera, and talking to a quest giver the quest camera. How each camera moves is set on its " ..
+		"own page. RP walk, auto-run and death start by themselves.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local CAMERA_X, DELAY_X, STOP_X = 250, 415, 500
+	local header = Header(content, "Event", subtitle, -20)
+	local cameraHeader = Label(content, "GameFontNormal", "Camera")
+	cameraHeader:SetPoint("LEFT", header, "LEFT", CAMERA_X, 0)
+	local delayHeader = Label(content, "GameFontNormal", "Wait (sec)")
+	delayHeader:SetPoint("LEFT", header, "LEFT", DELAY_X, 0)
+	local delayTip = "How long the event has to last before its camera starts and the UI fades. " ..
+		"Leave it empty to start right away. Moving, jumping or another emote starts the wait over."
+	local stopHeader = Label(content, "GameFontNormal", "Stop on move")
+	stopHeader:SetPoint("LEFT", header, "LEFT", STOP_X, 0)
+	local stopTip = "Moving or jumping ends the camera until the event starts afresh (the weapon " ..
+		"drawn again, the buff gained again, AFK again). Off: the camera waits while you move and " ..
+		"carries on once you stand still. Emotes and seats always end when you move or jump."
+
+	local previous, dx = header, 0
+	for _, event in ipairs(ns.EVENTS) do
+		local key = "event" .. event.key
+		local label = Label(content, "GameFontHighlight", event.label)
+		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -20)
+		label:SetWidth(CAMERA_X - 10)
+		label:SetWordWrap(false)
+		local hover = CreateFrame("Frame", nil, content)
+		hover:SetAllPoints(label)
+		hover:EnableMouse(true)
+		Tooltip(hover, EVENT_TIPS[event.key])
+
+		local choices = (event.key == "Flight" and FLIGHT_CAMERAS) or (event.key == "Quest" and QUEST_CAMERAS)
+			or EVENT_CAMERAS
+		local camera = Dropdown(content, key .. "Camera", choices, 150)
+		if not camera then
+			-- No modern dropdown on this client: a button that steps through them.
+			camera = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+			camera:SetSize(150, 22)
+			camera:SetScript("OnClick", function(self)
+				local db = ns.GetDB()
+				for i, choice in ipairs(choices) do
+					if db[key .. "Camera"] == choice.value then
+						db[key .. "Camera"] = choices[i % #choices + 1].value
+						break
+					end
+				end
+				Refresh()
+			end)
+			camera.Refresh = function(self)
+				for _, choice in ipairs(choices) do
+					if ns.GetDB()[key .. "Camera"] == choice.value then self:SetText(choice.text) end
+				end
+			end
+			controls[#controls + 1] = camera
+		end
+		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
+
+		local delay = SecondsBox(content, key .. "Delay", delayTip)
+		delay:SetPoint("LEFT", label, "LEFT", DELAY_X + 12, 0)
+		GreyUnless(delay, function(db) return db[key .. "Camera"] ~= "none" end)
+		if event.stopsOnMove then
+			local stop = Check(content, key .. "StopOnMove", "", stopTip)
+			stop:SetPoint("LEFT", label, "LEFT", STOP_X + 26, 0)
+			GreyUnless(stop, function(db) return db[key .. "Camera"] ~= "none" end)
+		end
+		previous, dx = label, 0
+
+		if event.key == "Campfire" then
+			local buffBox = ListBox(content, "cozyBuffs", 420, "Buff names or spell IDs, separated " ..
+				"by commas. Names must match your game language; spell IDs work in any language.",
+				function() if ns.CheckIdleBuffs then ns.CheckIdleBuffs() end end)
+			buffBox:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 26, -8)
+			local note = Label(content, "GameFontHighlightSmall", "Buffs, separated by commas.")
+			note:SetPoint("TOPLEFT", buffBox, "BOTTOMLEFT", -4, -4)
+			previous, dx = note, -22
+		elseif event.key == "Chair" then
+			local seatBox = ListBox(content, "cozyChairWords", 420, "Words that mark a seat when " ..
+				"they're in an object's name (\"Wooden Chair\"), separated by commas. Use words in " ..
+				"your game language.")
+			seatBox:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 26, -8)
+			local note = Label(content, "GameFontHighlightSmall", "Seat words, separated by commas.")
+			note:SetPoint("TOPLEFT", seatBox, "BOTTOMLEFT", -4, -4)
+			previous, dx = note, -22
+		end
+	end
+
+	local note = Label(content, "GameFontHighlightSmall",
+		"An event set to the AFK camera starts it without waiting out the AFK camera's own delay. " ..
+		"A camera whose rotation and zoom are both off on its own page shows nothing.")
+	note:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -28)
+	note:SetWidth(520)
+	note:SetJustifyV("TOP")
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Events")
 end
 
 local function CreateFlightPanel()
 	CreateCameraModePanel({
-		name = "Flight camera",
+		name = "Flight Cam",
 		description = "On flight paths. The camera swings round behind you as you take off, sways " ..
 			"behind you on the way and settles behind you before landing.",
-		start = function(content, header)
-			local instant = Check(content, "taxiInstant", "Start cinematic mode right away on flights",
-				"Skips the fade delay when you take off on a flight path.")
-			instant:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -2, -6)
-			local dropTarget = Check(content, "dropTargetOnFlights", "Drop your target when a flight starts",
+		instantKey = "taxiInstant", instantWhen = "take off",
+		start = function(content, stack)
+			stack:Add(Check(content, "dropTargetOnFlights", "Drop your target at takeoff",
 				"Your target's frames fade as if nothing were targeted, until you pick a new target " ..
-				"or land. (Addons can't clear the target itself; the game doesn't allow it.)")
-			dropTarget:SetPoint("TOPLEFT", instant, "BOTTOMLEFT", 0, -2)
-			local center = Check(content, "taxiCenter", "Center camera when a flight starts",
+				"or land. (Addons can't clear the target itself; the game doesn't allow it.)"), "check")
+			stack:Add(Check(content, "taxiCenter", "Swing round behind you at takeoff",
 				"Slowly swings the camera round behind your character as you take off, ready for " ..
-				"the swings behind you.")
-			center:SetPoint("TOPLEFT", dropTarget, "BOTTOMLEFT", 0, -2)
-			return center, 2
+				"the sway behind you. Also once the pause after you move the camera mid-flight is up."),
+				"check")
 		end,
+		combatWaitKey = "taxiCombatWait", inputPauseKey = "taxiInputPause",
 		orbitPrefix = "taxiOrbit", style = "back",
-		rotateLabel = "Sway the camera behind you",
+		rotateLabel = "Sway behind you",
 		rotateTip = "The camera swings from side to side behind your character, pausing between " ..
 			"moves. Dragging the camera pauses it.",
-		zoomPrefix = "taxiZoom", zoomLabel = "Slowly zoom",
-		extras = function(content, anchor, dx)
-			local header = Label(content, "GameFontNormal", "Landing")
-			header:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", dx, -18)
-			local settle = Check(content, "taxiSettle", "Settle camera behind you before landing",
-				"Shortly before you land, the rotation stops and the camera swings round behind " ..
-				"you. Needs one flight on a route to learn how long it takes.")
-			settle:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -2, -6)
-			local settleLead = Slider(content, "taxiSettleLead", "Start settling before landing", 5, 20, 1, "%d sec")
-			settleLead:SetPoint("TOPLEFT", settle, "BOTTOMLEFT", 4, -26)
-			Tooltip(settleLead, "The swing takes about 5 seconds, so leave a little extra.")
-			return settleLead, -2
+		extras = function(content, stack)
+			stack:Header(content, "Fly-bys")
+			stack:Add(Check(content, "taxiFlyBy", "Random fly-bys",
+				"Now and then in the middle of a flight, the camera slowly turns round to look back " ..
+				"past you, holds there, then turns back behind you. On a route's first flight (its " ..
+				"length not known yet), just one, early on. Dragging the camera stops it. /cine flyby " ..
+				"or its key starts one whenever you like. Once you move the camera yourself on a flight, " ..
+				"there are no more for that flight."), "check")
+			stack:Add(Check(content, "flyByLook", "Do /look as a fly-by starts",
+				"Your character looks around as the camera starts turning, as if they'd spotted " ..
+				"something. Players nearby see the emote in chat. Fly-bys you start count too."), "check")
+			local every = stack:Add(Slider(content, "taxiFlyByEvery", "About one every", 30, 300, 10, "%d sec"), "slider")
+			Tooltip(every, "Random fly-bys are spread over the part of the flight below: one per this " ..
+				"many seconds of it (at least one), each at a random moment in its share.")
+			local from = stack:Add(Slider(content, "taxiFlyByFrom", "Not before", 0, 100, 5, "%d%% of the way"), "slider")
+			Tooltip(from, "Keeps random fly-bys away from takeoff.")
+			local to = stack:Add(Slider(content, "taxiFlyByTo", "Not after", 0, 100, 5, "%d%% of the way"), "slider")
+			Tooltip(to, "Keeps random fly-bys away from landing (and the settle before it).")
+			local angle = stack:Add(Slider(content, "flyByAngle", "Turn round to", 90, 180, 5, "%d° from behind you"), "slider")
+			Tooltip(angle, "The camera lines up behind you, then turns this far round: 180 looks " ..
+				"straight back at you.")
+			local turnTime = stack:Add(Slider(content, "flyByTurnTime", "Turn round takes", 3, 20, 1, "%d sec"), "slider")
+			Tooltip(turnTime, "How long the turn round takes, easing in and out.")
+			stack:Add(Slider(content, "flyByHold", "Look back for", 0, 20, 1, "%d sec"), "slider")
+			stack:Add(Slider(content, "flyByBackTime", "Turn back takes", 3, 20, 1, "%d sec"), "slider")
+
+			stack:Header(content, "Landing")
+			stack:Add(Check(content, "taxiSettle", "Lock the camera behind you before landing",
+				"Shortly before you land, the rotation stops and the camera turns back behind you " ..
+				"and stays there until you touch down. Needs one flight on a " ..
+				"route to learn how long it takes. Skipped if you've moved the camera yourself on that " ..
+				"flight: it stays how you set it."), "check")
+			stack:Add(Check(content, "taxiLandZoom", "Put the zoom back when you land",
+				"As you land, the camera glides back to the zoom distance you had when you took " ..
+				"off. If you zoomed yourself on the way, it stays where you put it."), "check")
+			local settleLead = stack:Add(Slider(content, "taxiSettleLead", "Behind you by", 2, 20, 1,
+				"%d sec before landing"), "slider")
+			Tooltip(settleLead, "The camera turns back over the 6 seconds before this, so it's settled " ..
+				"behind you this long before you land.")
 		end,
-		music = {
-			{ "musicNewSongOnFlights", "Fresh song when the rotation starts",
-				"Music is switched off and straight back on as the camera starts rotating on a flight " ..
-				"(at takeoff if the rotation is off), so the game starts a fresh track. Once per flight." },
-			{ "musicOffOnFlights", "Mute music on flights",
-				"Music fades out and switches off when you take off, and a fresh track fades in " ..
-				"when you land." },
-			{ "fatigueIgnoreOnFlights", "Start music even if it played recently",
-				"Music fatigue doesn't hold music back when you take off." },
-		},
+		zoomPrefix = "taxiZoom", dofKey = "dofFlight", musicKey = "musicCamFlight",
 	})
 end
 
 local function CreateStandingPanel()
 	CreateCameraModePanel({
-		name = "Standing still camera",
-		description = "Once you've stood still for a while with the UI faded, the camera slowly " ..
-			"sweeps around your character. Moving stops it.",
-		start = function(content, header)
-			local idleDelay = Slider(content, "idleOrbitDelay", "Start after standing still for", 5, 120, 5, "%d sec")
-			idleDelay:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 2, -26)
-			Tooltip(idleDelay, "How long you stand still before the rotation and zoom begin. Also " ..
+		name = "AFK Cam",
+		description = "Once you've stood still for a while with the UI faded, or as soon as you " ..
+			"go AFK, the camera slowly sweeps around your character. Moving stops it.",
+		start = function(content, stack)
+			local idleDelay = stack:Add(Slider(content, "idleOrbitDelay", "Start after standing still for",
+				5, 120, 5, "%d sec"), "slider")
+			Tooltip(idleDelay, "How long you stand still before the rotation and zoom begin (an event " ..
+				"set to the AFK camera on the Events page, like going AFK, skips the wait). Also " ..
 				"used by the other options that mention standing still (tint, tracking, music, " ..
 				"tooltips).")
-			return idleDelay, -2
 		end,
+		combatWaitKey = "idleCombatWait", inputPauseKey = "idleInputPause",
 		orbitPrefix = "idleOrbit", style = "sweep",
-		rotateLabel = "Rotate camera",
+		rotateLabel = "Sweep round you",
 		rotateTip = "The camera sweeps around your character, pausing between sweeps. Moving or " ..
 			"dragging the camera stops it.",
-		zoomPrefix = "idleZoom", zoomLabel = "Slowly zoom",
-		extras = function(content, anchor)
-			local lastRot = PlaceList(content, anchor, "Turn rotation off in", "rotOffIn",
-				"No standing-still rotation here.")
-			local lastZoom = PlaceList(content, lastRot, "Turn zoom off in", "zoomOffIn",
-				"No standing-still zoom here.")
-			return lastZoom, 2
+		rotationExtras = function(content, stack)
+			PlaceList(content, stack, "Turn rotation off in", "rotOffIn", "No AFK camera rotation here.")
 		end,
-		music = {
-			{ "musicNewSongWhenIdle", "Fresh song when the camera starts",
-				"Music is switched off and straight back on as the rotation begins, so the game " ..
-				"starts a fresh track. Once each time you stand still (not again after you move " ..
-				"the camera)." },
-			{ "fatigueIgnoreWhenIdle", "Start music even if it played recently",
-				"Music fatigue doesn't hold music back once you've stood still for the delay." },
-		},
+		zoomPrefix = "idleZoom",
+		zoomExtras = function(content, stack)
+			PlaceList(content, stack, "Turn zoom off in", "zoomOffIn", "No AFK camera zoom here.")
+		end,
+		dofKey = "dofIdle", musicKey = "musicCamIdle",
 	})
 end
 
 local function CreateAutoRunPanel()
 	CreateCameraModePanel({
-		name = "Auto-run camera",
+		name = "Auto-run Cam",
 		description = "While you're auto-running (the auto-run key). Pressing forward or back, or " ..
-			"stopping, ends it; stop and stand, and the standing-still camera takes over. Auto-" ..
+			"stopping, ends it; stop and stand, and the AFK camera takes over. Auto-" ..
 			"walking counts as RP walk instead.",
-		start = function(content, header)
-			local instant = Check(content, "runInstant", "Start cinematic mode as soon as you auto-run",
-				"Auto-running skips the fade delay, so the UI fades and the camera starts moving " ..
-				"straight away.")
-			instant:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -2, -6)
-			local inputPause = Slider(content, "runInputPause", "Pause after you move the camera", 0, 15, 0.5, "%.1f sec")
-			inputPause:SetPoint("TOPLEFT", instant, "BOTTOMLEFT", 4, -26)
-			Tooltip(inputPause, "After you drag the camera, use camera keys or zoom, the rotation " ..
-				"waits this long and then carries on from your new view.")
-			return inputPause, -2
-		end,
+		instantKey = "runInstant", instantWhen = "auto-run",
+		combatWaitKey = "runCombatWait", inputPauseKey = "runInputPause",
 		orbitPrefix = "runOrbit", style = "back",
-		rotateLabel = "Sway the camera behind you",
+		rotateLabel = "Sway behind you",
 		rotateTip = "The camera swings gently from side to side behind your character, pausing " ..
 			"between moves.",
-		zoomPrefix = "runZoom", zoomLabel = "Gently zoom in and out",
+		extras = TurningExtras("runSwingBehind", "runGlideDelay"),
+		zoomPrefix = "runZoom",
 		zoomTip = "The camera eases out a little, then drifts in and out around your own distance. " ..
 			"When you stop it glides back.",
-		extras = TurningExtras("runSwingBehind", "runGlideDelay"),
-		music = {
-			{ "musicNewSongWhenAutoRun", "Fresh song when you start auto-running",
-				"Music is switched off and straight back on as you start auto-running, so the game " ..
-				"starts a fresh track. Stopping for less than 20 seconds and running on doesn't " ..
-				"count as a new run." },
-			{ "fatigueIgnoreWhenAutoRun", "Start music even if it played recently",
-				"Music fatigue doesn't hold music back while you auto-run." },
-		},
+		dofKey = "dofRun", musicKey = "musicCamRun",
 	})
 end
 
 local function CreateCozyPanel()
 	CreateCameraModePanel({
-		name = "Cozy camera",
-		description = "Resting at a campfire, sitting, sleeping, dancing and the like: the camera " ..
-			"swings slowly round to face you straight away, then sways gently from side to side " ..
-			"in front of you, and eases in close. Moving (or standing up) ends it.",
-		start = function(content, header)
-			local instant = Check(content, "cozyInstant", "Start cinematic mode straight away",
-				"A trigger below skips the fade delay, so the UI fades and the camera starts at once.")
-			instant:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -2, -6)
-
-			local cozyPause = Slider(content, "cozyInputPause", "Pause after you move the camera", 0, 15, 0.5, "%.1f sec")
-			cozyPause:SetPoint("TOPLEFT", instant, "BOTTOMLEFT", 4, -26)
-			Tooltip(cozyPause, "After you drag the camera, use camera keys or zoom, the cozy camera " ..
-				"waits this long and then carries on.")
-
-			local buffs = Check(content, "cozyBuffsOn", "With these buffs, while you're still",
-				"With any of the buffs listed below (like Welcoming Campfire), standing or sitting " ..
-				"still starts the cozy camera.")
-			buffs:SetPoint("TOPLEFT", cozyPause, "BOTTOMLEFT", -4, -14)
-			buffs:HookScript("OnClick", Refresh) -- grey out / enable the list below
-
-			local buffBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
-			buffBox:SetSize(420, 20)
-			buffBox:SetAutoFocus(false)
-			buffBox:SetPoint("TOPLEFT", buffs, "BOTTOMLEFT", 30, -4)
-			local function Save(self)
-				ns.GetDB().cozyBuffs = self:GetText()
-				if ns.CheckIdleBuffs then ns.CheckIdleBuffs() end
-			end
-			buffBox:SetScript("OnEnterPressed", function(self) Save(self) self:ClearFocus() end)
-			buffBox:SetScript("OnEditFocusLost", Save)
-			buffBox:SetScript("OnEscapePressed", function(self)
-				self:SetText(ns.GetDB().cozyBuffs or "")
-				self:ClearFocus()
-			end)
-			buffBox.Refresh = function(self)
-				local db = ns.GetDB()
-				if not self:HasFocus() then self:SetText(db.cozyBuffs or "") end
-				self:SetEnabled(db.cozyBuffsOn)
-			end
-			controls[#controls + 1] = buffBox
-			Tooltip(buffBox, "Buff names or spell IDs, separated by commas. Names must match your " ..
-				"game language; spell IDs work in any language.")
-
-			local emoteLabel = Label(content, "GameFontHighlight", "When you")
-			emoteLabel:SetPoint("TOPLEFT", buffBox, "BOTTOMLEFT", -28, -12)
-			local previous = emoteLabel
-			for i, emote in ipairs({
-				{ "cozySit", "/sit (or press the sit key)" },
-				{ "cozySleep", "/sleep or /lie down" },
-				{ "cozyDance", "/dance" },
-				{ "cozyKneel", "/kneel" },
-				{ "cozyWeapon", "Standing with your weapon drawn",
-					"Drawing your weapon (Z) out of combat starts the cozy camera for a \"hero shot\": " ..
-					"standing still, or while RP walking (the camera swings round in front as you " ..
-					"walk). Putting it away, running or combat ends it." },
-				{ "cozyChair", "Sitting in a chair or on a bench",
-					"Right-clicking a seat to sit on it starts the cozy camera; standing up ends it. " ..
-					"Seats are recognised by name, using the words below." },
-			}) do
-				local check = Check(content, emote[1], emote[2], emote[3] or
-					"Doing this emote starts the cozy camera; moving, jumping or another emote ends it.")
-				check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -4 or -2)
-				previous = check
-			end
-			previous:HookScript("OnClick", Refresh) -- grey out / enable the seat words
-
-			local seatBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
-			seatBox:SetSize(420, 20)
-			seatBox:SetAutoFocus(false)
-			seatBox:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 30, -4)
-			local function SaveSeats(self) ns.GetDB().cozyChairWords = self:GetText() end
-			seatBox:SetScript("OnEnterPressed", function(self) SaveSeats(self) self:ClearFocus() end)
-			seatBox:SetScript("OnEditFocusLost", SaveSeats)
-			seatBox:SetScript("OnEscapePressed", function(self)
-				self:SetText(ns.GetDB().cozyChairWords or "")
-				self:ClearFocus()
-			end)
-			seatBox.Refresh = function(self)
-				local db = ns.GetDB()
-				if not self:HasFocus() then self:SetText(db.cozyChairWords or "") end
-				self:SetEnabled(db.cozyChair)
-			end
-			controls[#controls + 1] = seatBox
-			Tooltip(seatBox, "Words that mark a seat when they're in an object's name (\"Wooden " ..
-				"Chair\"), separated by commas. Use words in your game language.")
-			local seatNote = Label(content, "GameFontHighlightSmall", "Seat words, separated by commas.")
-			seatNote:SetPoint("TOPLEFT", seatBox, "BOTTOMLEFT", -4, -4)
-			return seatNote, -24 -- back out to the column edge
-		end,
+		name = "Cozy Cam",
+		description = "Resting at a campfire, sitting, sleeping, dancing and the like (whichever " ..
+			"events pick it on the Events page): the camera swings slowly round to face you, then " ..
+			"sways gently from side to side in front of you, and eases in close. Moving (or standing " ..
+			"up) ends it.",
+		combatWaitKey = "cozyCombatWait", inputPauseKey = "cozyInputPause",
 		orbitPrefix = "cozyOrbit", style = "back",
 		rotateLabel = "Sway in front of you",
 		rotateTip = "Once it has swung round to face you, the camera sways gently from side to side " ..
 			"in front of your character, pausing between moves.",
-		music = {
-			{ "musicNewSongWhenCozy", "Fresh song when it starts",
-				"Music is switched off and straight back on as the cozy camera starts, so the game " ..
-				"starts a fresh track. Getting up for less than 20 seconds and settling back down " ..
-				"doesn't count as a new spell." },
-			{ "fatigueIgnoreWhenCozy", "Start music even if it played recently",
-				"Music fatigue doesn't hold music back while you're cozy." },
-		},
-		zoomPrefix = "cozyZoom", zoomLabel = "Gently zoom in and out",
+		extras = HeightExtras("cozyLevel", -30, 80, "As it swings round, the camera also comes down " ..
+			"this much toward the ground, so it feels low and close rather than looking down from " ..
+			"above. It stops at the ground, so a big number just means \"as low as it goes\". 0 " ..
+			"keeps your angle."),
+		zoomPrefix = "cozyZoom",
 		zoomTip = "A close, gentle zoom: it starts by easing in to the close-up distance below, then " ..
 			"drifts a little in and out around it.",
-		extras = function(content, anchor, dx)
-			local header = Label(content, "GameFontNormal", "Close-up")
-			header:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", dx, -18)
-			local close = Slider(content, "cozyZoomClose", "Zoom in to about", 2, 20, 0.5, "%.1f yards")
-			close:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 2, -26)
-			Tooltip(close, "The distance the cozy camera zooms in to, if you're further out. The " ..
-				"zoom settings above then work around it. Your own distance comes back afterwards.")
-			local level = Slider(content, "cozyLevel", "Bring the camera down", -30, 80, 5, "%d°")
-			level:SetPoint("TOPLEFT", close, "BOTTOMLEFT", 0, -34)
-			Tooltip(level, "As it swings round, the camera also comes down this much toward the " ..
-				"ground, so it feels low and close rather than looking down from above. It stops at " ..
-				"the ground, so a big number just means \"as low as it goes\". 0 keeps your angle.")
-			local crackle = Check(content, "cozyCrackle", "Campfire crackle",
-				"While the cozy camera runs at a campfire (one of the buffs listed on the left), a " ..
-				"crackling fire plays on your sound effects volume. It fades out when the cozy " ..
-				"camera ends or you leave the fire.")
-			crackle:SetPoint("TOPLEFT", level, "BOTTOMLEFT", -4, -14)
-			return crackle, 2
+		zoomExtras = function(content, stack)
+			local close = stack:Add(Slider(content, "cozyZoomClose", "Zoom in to about", 2, 20, 0.5,
+				"%.1f yards"), "slider")
+			Tooltip(close, "The close-up distance the cozy camera zooms in to, if you're further out. " ..
+				"The zoom settings above then work around it. Your own distance comes back afterwards.")
 		end,
+		dofKey = "dofCozy", musicKey = "musicCamCozy",
+	})
+end
+
+local function CreateVistaPanel()
+	CreateCameraModePanel({
+		name = "Vista Cam",
+		description = "Stop and /stare out at the view (or any event set to it on the Events page): " ..
+			"the camera glides round behind you and sways very gently there, looking out the way " ..
+			"you're facing. Like the RP walk camera, only slower and softer. Moving, jumping or " ..
+			"another emote ends it.",
+		combatWaitKey = "vistaCombatWait", inputPauseKey = "vistaInputPause",
+		inputPauseTip = "It glides back behind you first.",
+		orbitPrefix = "vistaOrbit", style = "back",
+		rotateLabel = "Sway behind you",
+		rotateTip = "The camera swings very gently from side to side behind your character, " ..
+			"pausing between moves.",
+		extras = HeightExtras("vistaLevel", -30, 45, "The camera sways this much lower than where " ..
+			"it lines up behind you, so it looks out across the view rather than down at it. 0 " ..
+			"keeps your angle."),
+		zoomPrefix = "vistaZoom",
+		zoomTip = "The camera eases out a little, then drifts slowly in and out around your own " ..
+			"distance. Your own distance comes back afterwards.",
+		dofKey = "dofVista", musicKey = "musicCamVista",
+	})
+end
+
+local function CreateFishPanel()
+	CreateCameraModePanel({
+		name = "Fish Cam",
+		description = "Cast Fishing (or any event set to it on the Events page): the vista camera, " ..
+			"made for fishing. The camera glides round behind you and sways only a little either " ..
+			"side, so your bobber stays in view. It carries on after the cast until you move or jump.",
+		top = function(content, stack)
+			stack:Header(content, "Casting")
+			stack:Add(Check(content, "hideFishingCastBar", "Hide the Fishing cast bar",
+				"Your cast bar stays hidden while it shows Fishing. Every other spell shows it as usual."),
+				"check")
+			local recast = stack:Add(Check(content, "fishRightClickCast", "Right-click to cast again",
+				"While the fish camera is on and no bobber is out, right-clicking in the world casts " ..
+				"Fishing again. Each cast still comes from your own click. While the bobber is out, " ..
+				"right-click clicks it as usual; in combat, with the loot window open or with your " ..
+				"mouse on a player or NPC, right-click is left alone. (Meanwhile right-drag doesn't " ..
+				"turn the camera: left-drag still does.)"), "check")
+			recast:HookScript("OnClick", Refresh) -- grey out / enable the options below
+			local function IfRecast(db) return db.fishRightClickCast end
+			local pole = stack:Add(Check(content, "fishPoleRightClickCast", "Also the first cast, with a pole equipped",
+				"With a fishing pole in your main hand, standing still, right-clicking in the world " ..
+				"casts Fishing, so you don't have to start the first cast yourself. Not while your " ..
+				"mouse is on a player, NPC or object (mailbox, corpse...): right-click works on them " ..
+				"as usual. Swap the pole out to have right-click back everywhere."), "check", 24)
+			GreyUnless(pole, IfRecast)
+			local delay = stack:Add(Slider(content, "fishRecastDelay", "Wait after a cast ends", 0, 3, 0.1,
+				"%.1f sec"), "slider")
+			Tooltip(delay, "How long after a cast ends (a catch looted, or the bobber gone) before " ..
+				"right-click casts again, so the click that loots the fish doesn't cast straight away.")
+			GreyUnless(delay, IfRecast)
+			local missPause = stack:Add(Slider(content, "fishMissPause", "Pause after a missed cast", 0, 30, 1,
+				function(value) return value == 0 and "Off" or ("%d sec"):format(value) end), "slider")
+			Tooltip(missPause, "When a cast doesn't land in fishable water (say, a pole left equipped " ..
+				"away from water), right-click goes back to normal for this long before it casts again. " ..
+				"Moving and then standing still for 1 sec ends it early: you're likely at a new spot to fish from. " ..
+				"Off doesn't pause. (\"Skill not high enough\" always pauses it for 30 sec, moving or not.)")
+			GreyUnless(missPause, IfRecast)
+		end,
+		combatWaitKey = "fishCombatWait", inputPauseKey = "fishInputPause",
+		inputPauseTip = "It glides back behind you first.",
+		orbitPrefix = "fishOrbit", style = "back",
+		rotateLabel = "Sway behind you",
+		rotateTip = "The camera swings a little from side to side behind your character, " ..
+			"pausing between moves. Narrower than the vista camera's sway.",
+		extras = HeightExtras("fishLevel", -30, 45, "The camera sways this much lower than where " ..
+			"it lines up behind you, so it looks out across the water rather than down at it. 0 " ..
+			"keeps your angle."),
+		zoomPrefix = "fishZoom",
+		zoomTip = "The camera eases out a little, then drifts slowly in and out around your own " ..
+			"distance. Your own distance comes back afterwards.",
+		dofKey = "dofFish", musicKey = "musicCamFish",
 	})
 end
 
 local function CreateWalkPanel()
 	CreateCameraModePanel({
-		name = "RP walk",
+		name = "RP Walk Cam",
 		description = "While you're moving in walk mode (walk/run key). Stop and stand, and the " ..
-			"standing-still camera takes over after its delay. Walking is recognised from your " ..
+			"AFK camera takes over after its delay. Walking is recognised from your " ..
 			"speed; /cine walk shows what the addon thinks.",
-		start = function(content, header)
-			local instant = Check(content, "walkInstant", "Start cinematic mode as soon as you walk",
-				"Walking skips the fade delay, so the UI fades and the camera starts moving straight away.")
-			instant:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -2, -6)
-			local inputPause = Slider(content, "walkInputPause", "Pause after you move the camera", 0, 15, 0.5, "%.1f sec")
-			inputPause:SetPoint("TOPLEFT", instant, "BOTTOMLEFT", 4, -26)
-			Tooltip(inputPause, "After you drag the camera, use camera keys or zoom, the " ..
-				"rotation waits this long and then carries on from your new view. Short, " ..
-				"so it's back in time if you need to steer.")
-			return inputPause, -2
-		end,
+		instantKey = "walkInstant", instantWhen = "walk",
+		combatWaitKey = "walkCombatWait", inputPauseKey = "walkInputPause",
+		inputPauseTip = "Keep it short, so it's back in time if you need to steer.",
 		orbitPrefix = "walkOrbit", style = "back",
-		rotateLabel = "Sway the camera behind you",
+		rotateLabel = "Sway behind you",
 		rotateTip = "The camera swings gently from side to side behind your character, pausing " ..
 			"between moves.",
-		zoomPrefix = "walkZoom", zoomLabel = "Gently zoom in and out",
+		extras = TurningExtras("walkSwingBehind", "walkGlideDelay"),
+		zoomPrefix = "walkZoom",
 		zoomTip = "The camera eases out a little, then drifts in and out around your own distance. " ..
 			"When you stop walking it glides back.",
-		extras = TurningExtras("walkSwingBehind", "walkGlideDelay"),
-		music = {
-			{ "musicNewSongWhenWalking", "Fresh song when you start walking",
-				"Music is switched off and straight back on as you set off, so the game starts a fresh " ..
-				"track. Pausing for less than 20 seconds and walking on doesn't count as a new walk." },
-			{ "fatigueIgnoreWhenWalking", "Start music even if it played recently",
-				"Music fatigue doesn't hold music back while you walk." },
-		},
+		dofKey = "dofWalk", musicKey = "musicCamWalk",
 	})
+end
+
+-- Not a CreateCameraModePanel page (no sway, zoom profile or music switch of
+-- its own), but laid out the same way.
+local function CreateDeathPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Death Cam")
+	title:SetPoint("TOPLEFT", 16, -16)
+	local subtitle = Label(content, "GameFontHighlightSmall", "When you die, the camera turns " ..
+		"slowly round your body until you release or are resurrected. Cinematic mode stays on " ..
+		"(straight away), with the release button (and any soulstone or Reincarnation " ..
+		"button) still showing.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+	local function IfOn(db) return db.deathOrbit end
+
+	local stack = Stack(subtitle, "label")
+	stack:Header(content, "Starting")
+	local on = stack:Add(Check(content, "deathOrbit", "Use the death camera",
+		"The camera turns steadily round your character while you're dead. Moving the camera " ..
+		"yourself (dragging, camera keys, zooming) hands it back to you: it stops where it is " ..
+		"and doesn't move again until your next death."), "check")
+	on:HookScript("OnClick", Refresh) -- grey out / enable everything below
+	local delay = stack:Add(Slider(content, "deathOrbitDelay", "Start after", 0, 10, 0.5, "%.1f sec"), "slider")
+	Tooltip(delay, "How long after you die before the camera starts turning.")
+	GreyUnless(delay, IfOn)
+	for _, check in ipairs(PlaceList(content, stack, "Turn off in", "deathOffIn",
+		"No death camera here: dying brings the UI back as usual.")) do
+		GreyUnless(check, IfOn)
+	end
+
+	-- Left column: rotation, height
+	local rotationHeader = stack:Header(content, "Rotation")
+	local right = stack:Add(Check(content, "deathOrbitRight", "Turn clockwise"), "check")
+	GreyUnless(right, function(db) return IfOn(db) and not db.deathOrbitRandomDir end)
+	local randomDir = stack:Add(Check(content, "deathOrbitRandomDir", "Random direction",
+		"Each death, the camera picks clockwise or anticlockwise at random."), "check")
+	randomDir:HookScript("OnClick", Refresh)
+	GreyUnless(randomDir, IfOn)
+	local speed = stack:Add(Slider(content, "deathOrbitSpeed", "Turn speed", 1, 20, 1, "%d°/sec"), "slider")
+	GreyUnless(speed, IfOn)
+	stack:Header(content, "Height")
+	local level = stack:Add(Slider(content, "deathLevel", "Raise the camera", 0, 90, 5, "%d°"), "slider")
+	Tooltip(level, "As it starts, the camera rises this much to look down on your body; it comes " ..
+		"back down afterwards. The game stops it just short of straight down, so a big number " ..
+		"means \"as high as it goes\". 0 keeps your angle.")
+	GreyUnless(level, IfOn)
+
+	-- Right column: zoom, screen, music
+	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
+	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
+	local rightStack = Stack(zoomHeader)
+	local zoom = rightStack:Add(Slider(content, "deathZoom", "Zoom out by", 0, 15, 0.5, "%.1f yards"), "slider")
+	Tooltip(zoom, "Meanwhile the camera pulls back this far, and returns to your own distance " ..
+		"afterwards. Zooming yourself leaves it where you put it.")
+	GreyUnless(zoom, IfOn)
+
+	rightStack:Header(content, "Screen")
+	local screen = rightStack:Add(Check(content, "deathScreen", "Darken the screen",
+		"The world dims and goes cold and grey-blue, with a heavy vignette closing in from the " ..
+		"edges. It clears when you release or come back."), "check")
+	screen:HookScript("OnClick", Refresh) -- grey out / enable the strength below
+	GreyUnless(screen, IfOn)
+	local screenStrength = rightStack:Add(Slider(content, "deathScreenStrength", "Strength", 10, 100, 5,
+		"%d%%", 100), "slider")
+	GreyUnless(screenStrength, function(db) return IfOn(db) and db.deathScreen end)
+
+	rightStack:Header(content, "Music")
+	local song = rightStack:Add(Check(content, "deathSong", "Play a death song",
+		"While the death camera runs, a song picked at random from the list below plays in place " ..
+		"of the zone music. Needs game music on. It stops when you release or come back."), "check")
+	song:HookScript("OnClick", Refresh) -- grey out / enable the file box below
+	GreyUnless(song, IfOn)
+	local songBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+	songBox:SetSize(260, 20)
+	songBox:SetAutoFocus(false)
+	rightStack:Add(songBox, "box")
+	local function SaveSong(self) ns.GetDB().deathSongFiles = self:GetText() end
+	songBox:SetScript("OnEnterPressed", function(self) SaveSong(self) self:ClearFocus() end)
+	songBox:SetScript("OnEditFocusLost", SaveSong)
+	songBox:SetScript("OnEscapePressed", function(self)
+		self:SetText(ns.GetDB().deathSongFiles or "")
+		self:ClearFocus()
+	end)
+	songBox.Refresh = function(self)
+		local db = ns.GetDB()
+		if not self:HasFocus() then self:SetText(db.deathSongFiles or "") end
+		self:SetEnabled(db.deathOrbit and db.deathSong)
+	end
+	controls[#controls + 1] = songBox
+	Tooltip(songBox, "Music file IDs, separated by commas; one is picked at random each time " ..
+		"you die (Wowhead lists the IDs on each sound's page). Try one with /cine songtest <ID>.")
+	rightStack:Note(content, "Music file IDs, separated by commas. One is picked at random.")
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Death Cam")
+end
+
+-- Not a CreateCameraModePanel page either (QuestCam.lua, started by the quest
+-- giver event), but laid out the same way.
+local QUEST_SIDES = {
+	{ value = "random", text = "Either side, at random" },
+	{ value = "right", text = "Your right" },
+	{ value = "left", text = "Your left" },
+}
+local function CreateQuestPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Quest Cam")
+	title:SetPoint("TOPLEFT", 16, -16)
+	local subtitle = Label(content, "GameFontHighlightSmall", "Talking to a quest giver, the " ..
+		"camera zooms in and swings round behind you, looking past you at them. It goes back " ..
+		"once you close the window or move off (your zoom stays if you zoomed yourself meanwhile). Works " ..
+		"whether or not cinematic mode is on. The \"Talk to a quest giver\" event on the Events " ..
+		"page can also turn it off or make it wait a moment.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+	local function IfOn(db) return db.eventQuestCamera ~= "none" end
+
+	local stack = Stack(subtitle, "label")
+	stack:Header(content, "Starting")
+	local on = stack:Add(Check(content, "eventQuestCamera", "Use the quest camera",
+		"Same as setting the \"Talk to a quest giver\" event to the quest camera (on) or no " ..
+		"camera (off) on the Events page.",
+		function(value)
+			ns.GetDB().eventQuestCamera = value and "quest" or "none"
+			Refresh()
+		end), "check")
+	on.Refresh = function(self) self:SetChecked(ns.GetDB().eventQuestCamera ~= "none") end
+	local gossip = stack:Add(Check(content, "questCamAllGossip", "Every NPC you talk to",
+		"Also for NPCs with nothing to say about quests (innkeepers, guards...). Off: only when " ..
+		"they have a quest to offer or take in."), "check")
+	GreyUnless(gossip, IfOn)
+
+	-- Left column: rotation, height, over the shoulder
+	local rotationHeader = stack:Header(content, "Rotation")
+	local duration = stack:Add(Slider(content, "questCamTime", "Swing behind you takes", 1, 6, 0.25, "%.2f sec"), "slider")
+	Tooltip(duration, "The turn to the side starts once the swing is done.")
+	GreyUnless(duration, IfOn)
+	local angle = stack:Add(Slider(content, "questCamAngle", "Come round to the side", 0, 90, 5, "%d°"), "slider")
+	Tooltip(angle, "After swinging behind you, the camera comes round this far to one side, so " ..
+		"you see the quest giver past you at an angle rather than straight over your head. " ..
+		"0 stays straight behind you. It turns back behind you as the window closes.")
+	GreyUnless(angle, IfOn)
+	local turnTime = stack:Add(Slider(content, "questCamTurnTime", "Turn to the side takes", 1, 8, 0.5, "%.1f sec"), "slider")
+	Tooltip(turnTime, "It starts once the swing behind you is done, while the zoom carries on. " ..
+		"The tilt down follows.")
+	GreyUnless(turnTime, IfOn)
+	local SIDE_TIP = "Which side the camera comes round to. On your right, the quest giver is on " ..
+		"the right of the screen. (The game doesn't tell addons where the quest giver stands, or " ..
+		"what's around you, so it can't pick the open side.)"
+	stack:Add(Label(content, "GameFontHighlight", "Side"), "label")
+	local side = Dropdown(content, "questCamSide", QUEST_SIDES, 200)
+	if side then
+		stack:Add(side, "dropdown")
+		Tooltip(side, SIDE_TIP)
+		GreyUnless(side, IfOn)
+	else
+		for _, choice in ipairs(QUEST_SIDES) do
+			local check = stack:Add(Choice(content, "questCamSide", choice.value, choice.text, SIDE_TIP), "check")
+			GreyUnless(check, IfOn)
+		end
+	end
+	stack:Header(content, "Height")
+	local lower = stack:Add(Slider(content, "questCamLower", "Lower the camera", 0, 45, 5, "%d°"), "slider")
+	Tooltip(lower, "How far the camera comes down toward eye level, from wherever you had it. " ..
+		"Much more and, close up, it can meet the ground or scenery behind you (a small jump). " ..
+		"It goes back up as the window closes (unless you moved the camera yourself meanwhile). " ..
+		"0 keeps your angle.")
+	GreyUnless(lower, IfOn)
+
+	stack:Header(content, "Over the shoulder (experimental)")
+	local overShoulder = stack:Add(Check(content, "questCamOverShoulder", "Move over your shoulder",
+		"The camera also moves to your right, putting you on the left of the screen and the " ..
+		"quest giver on the right. This uses one of Blizzard's experimental camera settings: the " ..
+		"game shows its experimental camera warning when it's used (Accept keeps it working). " ..
+		"Your own setting comes back as the window closes."), "check")
+	overShoulder:HookScript("OnClick", Refresh)
+	GreyUnless(overShoulder, IfOn)
+	local function IfShoulder(db) return IfOn(db) and db.questCamOverShoulder end
+	local shoulder = stack:Add(Slider(content, "questCamShoulder", "Shoulder offset", 0.25, 2, 0.25, "%.2f yards"), "slider")
+	Tooltip(shoulder, "How far the camera moves to your right. The game ignores this while " ..
+		"its Keep Character Centered option (Accessibility) is on: see below.")
+	GreyUnless(shoulder, IfShoulder)
+	local uncenter = stack:Add(Check(content, "questCamUncenter", "Turn off Keep Character Centered meanwhile",
+		"The game's Keep Character Centered option (Accessibility, on by default) stops the " ..
+		"camera moving over your shoulder. On: it's turned off while you talk to a quest giver, " ..
+		"and your setting comes back as the window closes. Off: with that option on, the " ..
+		"camera stays straight behind you."), "check")
+	GreyUnless(uncenter, IfShoulder)
+
+	-- Right column: zoom
+	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
+	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
+	local right = Stack(zoomHeader)
+	local distance = right:Add(Slider(content, "questCamDistance", "Zoom in to about", 1.5, 10, 0.5, "%.1f yards"), "slider")
+	Tooltip(distance, "If you're further out than this. Closer already, it stays where it is.")
+	GreyUnless(distance, IfOn)
+	local zoomTime = right:Add(Slider(content, "questCamZoomTime", "Zoom in takes", 1, 10, 0.5, "%.1f sec"), "slider")
+	Tooltip(zoomTime, "The turn to the side happens along the way, then the tilt down.")
+	GreyUnless(zoomTime, IfOn)
+	local zoomOutTime = right:Add(Slider(content, "questCamZoomOutTime", "Zoom back out takes", 1.5, 6, 0.5, "%.1f sec"), "slider")
+	Tooltip(zoomOutTime, "Leaving the quest giver, the camera zooms back out to your own distance " ..
+		"this quickly (turning back behind you and tilting back up as it goes).")
+	GreyUnless(zoomOutTime, IfOn)
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Quest Cam")
 end
 
 -- Blizzard's colour picker; the setup API changed in newer clients.
@@ -1254,8 +1778,9 @@ local function CreateTintPanel()
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		"How the game world looks while cinematic mode is active: letterbox bars, colour " ..
-		"grading, vignette, and names and tooltips in the world. The UI isn't tinted. While " ..
-		"this page is open the tint is previewed behind the options window.")
+		"grading, vignette, inn glow and weather. The UI isn't tinted. While this page is open " ..
+		"the tint is previewed behind the options window. Names and nameplates are on the " ..
+		"Nameplates page, world tooltips on the Showing the UI page.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -1303,8 +1828,9 @@ local function CreateTintPanel()
 			local refreshMenu = previewTime.Refresh
 			previewTime.Refresh = function(self)
 				refreshMenu(self)
-				local preset = ns.GetDB().tintPreset
+				local preset, here = ns.GetDB().tintPreset, ns.GetTintPresetHere()
 				local shown = preset == "timeofday" or preset == "zonetime"
+					or here == "timeofday" or here == "zonetime"
 				self:SetShown(shown)
 				previewLabel:SetShown(shown)
 			end
@@ -1328,15 +1854,22 @@ local function CreateTintPanel()
 	presetText:SetJustifyV("TOP")
 	presetText.Refresh = function(self)
 		local db = ns.GetDB()
+		local here, from = ns.GetTintPresetHere()
 		for _, choice in ipairs(choices) do
 			if choice.value == db.tintPreset then
 				local text = choice.tip
-				if choice.value == "zone" or choice.value == "zonetime" then
+				-- A zone or area with its own preset: say so, and describe that one.
+				if from then
+					text = text .. ("\n|cffffd100Here: %s (%s's own preset)|r"):format(
+						ns.GetTintPresetLabel(here),
+						from == "area" and ns.GetAreaTintInfo() or GetRealZoneText() or "?")
+				end
+				if here == "zone" or here == "zonetime" then
 					local zone, label, isOverride = ns.GetZoneTintInfo()
 					text = text .. ("\n|cffffd100Here: %s (%s%s)|r"):format(
 						label, zone, isOverride and ", your choice" or "")
 				end
-				if choice.value == "timeofday" or choice.value == "zonetime" then
+				if here == "timeofday" or here == "zonetime" then
 					local phase, hour, minute = ns.GetTimeOfDayInfo()
 					if (db.tintPreviewHour or -1) >= 0 then
 						text = text .. ("\n|cffffd100Previewing: %s (%02d:00)|r"):format(phase, hour)
@@ -1381,9 +1914,25 @@ local function CreateTintPanel()
 		end)
 	end)
 
+	-- Strength drift
+	local drift = Check(content, "tintDrift", "Subtle drift",
+		"The tint's strength slowly wanders up and down over a few minutes, so a still scene " ..
+		"feels a little more alive. Paused while this page is open.")
+	drift:SetPoint("TOPLEFT", swatch, "BOTTOMLEFT", -2, -12)
+	drift:HookScript("OnClick", function()
+		Refresh() -- grey out / enable the amount slider
+		ns.RefreshTint()
+	end)
+
+	local driftAmount = Slider(content, "tintDriftAmount", "Drift amount", 2, 15, 1, "+/-%d%%", 100,
+		ns.RefreshTint)
+	driftAmount:SetPoint("TOPLEFT", drift, "BOTTOMLEFT", 4, -26)
+	Tooltip(driftAmount, "How far the strength wanders either way, as a share of the strength.")
+	GreyUnless(driftAmount, function(db) return db.tintDrift end)
+
 	-- When the tint shows
 	local whenLabel = Label(content, "GameFontHighlight", "Show the tint")
-	whenLabel:SetPoint("TOPLEFT", swatch, "BOTTOMLEFT", 0, -18)
+	whenLabel:SetPoint("TOPLEFT", driftAmount, "BOTTOMLEFT", -4, -24)
 	local WHEN = {
 		{ value = "always", text = "Whenever cinematic mode is on" },
 		{ value = "flight", text = "Only on flights" },
@@ -1402,7 +1951,7 @@ local function CreateTintPanel()
 		whenControl = previous
 	end
 	local whenNote = Label(content, "GameFontHighlightSmall",
-		"\"Only when standing still\" starts after the delay on the Standing still camera page.")
+		"\"Only when standing still\" starts after the delay on the AFK camera page.")
 	whenNote:SetPoint("TOPLEFT", whenControl, "BOTTOMLEFT", 2, -8)
 	whenNote:SetWidth(320)
 	whenNote:SetJustifyV("TOP")
@@ -1411,11 +1960,19 @@ local function CreateTintPanel()
 	local timeHeader = Header(content, "Time of day", whenNote, -24)
 	timeHeader:SetPoint("TOPLEFT", whenNote, "BOTTOMLEFT", -2, -24)
 	local timeHelp = Label(content, "GameFontHighlightSmall",
-		"For the Time of day and Zone + time of day presets.")
+		"For the Time of day and Zone + time of day presets, and the time of day message.")
 	timeHelp:SetPoint("TOPLEFT", timeHeader, "BOTTOMLEFT", 0, -6)
 
+	local timeMessage = Check(content, "timeOfDayMessage", "Show the time of day",
+		"Dawn, Morning, Midday, Afternoon, Evening, Dusk or Night, under the zone name when " ..
+		"you log in or reload, and on its own when it changes during play (not in combat), " ..
+		"with a fitting sound: a rooster at dawn, a horse in the morning, your faction's bell " ..
+		"at midday, frogs in the evening, an owl at dusk and a wolf at night. Follows the clock " ..
+		"below.")
+	timeMessage:SetPoint("TOPLEFT", timeHelp, "BOTTOMLEFT", -2, -8)
+
 	local clockLabel = Label(content, "GameFontHighlight", "Follows")
-	clockLabel:SetPoint("TOPLEFT", timeHelp, "BOTTOMLEFT", 0, -12)
+	clockLabel:SetPoint("TOPLEFT", timeMessage, "BOTTOMLEFT", 2, -10)
 	local CLOCKS = {
 		{ value = "game", text = "Game time (matches the game's day and night)" },
 		{ value = "local", text = "Your computer's clock" },
@@ -1510,12 +2067,12 @@ local function CreateTintPanel()
 		previousPhase = row
 	end
 
-	-- Per-zone overrides for the Zone presets
+	-- Per-zone overrides: a preset of its own, and colours for the Zone presets
 	local zoneHeader = Header(content, "Zone tints", previousPhase, -24)
 	local zoneHelp = Label(content, "GameFontHighlightSmall",
-		"Used by the Zone and Zone + time of day presets. Choose a tint for the zone you're " ..
-		"standing in, or just the area within it (a town, a port); it replaces the built-in " ..
-		"mood there. An area's choice wins over its zone's.")
+		"Give the zone you're standing in, or just the area within it (a town, a port), a " ..
+		"preset of its own: it replaces your main preset there. With a Zone preset you can also " ..
+		"choose its colour, which replaces the built-in mood. An area's choices win over its zone's.")
 	zoneHelp:SetPoint("TOPLEFT", zoneHeader, "BOTTOMLEFT", 0, -6)
 	zoneHelp:SetWidth(420)
 	zoneHelp:SetJustifyV("TOP")
@@ -1527,14 +2084,18 @@ local function CreateTintPanel()
 	zoneText.Refresh = function(self)
 		local zone, label, isOverride = ns.GetZoneTintInfo()
 		local strength, ownStrength = ns.GetZoneTintStrength(zone)
-		local text = ("This zone: |cffffd100%s|r - %s%s, %d%% strength%s"):format(
+		local function PresetNote(name)
+			local preset = ns.GetZonePreset(name)
+			return preset and (", |cffffd100%s|r preset"):format(ns.GetTintPresetLabel(preset)) or ""
+		end
+		local text = ("This zone: |cffffd100%s|r - %s%s, %d%% strength%s%s"):format(
 			zone ~= "" and zone or "?", label, isOverride and " (your choice)" or " (built in)",
-			strength * 100 + 0.5, ownStrength and " (its own)" or "")
+			strength * 100 + 0.5, ownStrength and " (its own)" or "", PresetNote(zone))
 		local area, areaLabel, areaOwn, _, areaStrength, _, areaOwnStrength = ns.GetAreaTintInfo()
 		if area then
-			text = text .. ("\nThis area: |cffffd100%s|r - %s%s, %d%% strength%s"):format(
+			text = text .. ("\nThis area: |cffffd100%s|r - %s%s, %d%% strength%s%s"):format(
 				area, areaLabel, areaOwn and " (your choice)" or "", areaStrength * 100 + 0.5,
-				areaOwnStrength and " (its own)" or "")
+				areaOwnStrength and " (its own)" or "", PresetNote(area))
 		end
 		self:SetText(text)
 	end
@@ -1599,9 +2160,42 @@ local function CreateTintPanel()
 		end
 	end
 
+	-- Menu of presets for this zone or area (left out on clients without the dropdown).
+	local presetMenu
+	local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+	if ok and dropdown and dropdown.SetupMenu then
+		presetMenu = dropdown
+		presetMenu:SetWidth(200)
+		presetMenu:SetupMenu(function(_, root)
+			local function current() return ns.GetZonePreset(TargetName()) end
+			local function set(value)
+				local name = TargetName()
+				if name ~= "" then
+					ns.SetZonePreset(name, value)
+					Refresh()
+					FitContentHeight(content)
+				end
+			end
+			local isArea = tintTarget == "area" and ns.GetAreaTintInfo()
+			root:CreateRadio(isArea and "Same as the zone" or "Main preset",
+				function() return current() == nil end, function() set(nil) end)
+			for _, preset in ipairs(ns.TINT_PRESETS) do
+				root:CreateRadio(preset.label, function() return current() == preset.key end,
+					function() set(preset.key) end)
+			end
+		end)
+		presetMenu.Refresh = function(self) self:GenerateMenu() end
+		controls[#controls + 1] = presetMenu
+		presetMenu:SetPoint("TOPLEFT", targetLabel, "BOTTOMLEFT", 0, -10)
+		local presetMenuLabel = Label(content, "GameFontHighlight", "Preset here")
+		presetMenuLabel:SetPoint("LEFT", presetMenu, "RIGHT", 12, 0)
+		Tooltip(presetMenu, "A preset for the zone or area chosen above, used there instead of your " ..
+			"main preset.")
+	end
+
 	-- Menu of tints for this zone (left out on clients without the dropdown).
 	local zoneMenu
-	local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+	ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
 	if ok and dropdown and dropdown.SetupMenu then
 		zoneMenu = dropdown
 		zoneMenu:SetWidth(200)
@@ -1627,7 +2221,7 @@ local function CreateTintPanel()
 		end)
 		zoneMenu.Refresh = function(self) self:GenerateMenu() end
 		controls[#controls + 1] = zoneMenu
-		zoneMenu:SetPoint("TOPLEFT", targetLabel, "BOTTOMLEFT", 0, -10)
+		zoneMenu:SetPoint("TOPLEFT", presetMenu or targetLabel, "BOTTOMLEFT", 0, -10)
 	end
 
 	local pickColor = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
@@ -1638,7 +2232,7 @@ local function CreateTintPanel()
 	else
 		pickColor:SetPoint("TOPLEFT", targetLabel, "BOTTOMLEFT", 0, -10)
 	end
-	Tooltip(pickColor, "Choose your own colour for the zone or area chosen above.")
+	Tooltip(pickColor, "Choose your own colour for the zone or area chosen above (for the Zone presets).")
 	pickColor:SetScript("OnClick", function()
 		local name = TargetName()
 		if name == "" then
@@ -1669,6 +2263,7 @@ local function CreateTintPanel()
 			if row.zone then
 				ns.SetZoneTint(row.zone, nil)
 				ns.SetZoneTintStrength(row.zone, nil)
+				ns.SetZonePreset(row.zone, nil)
 				Refresh()
 				FitContentHeight(content)
 			end
@@ -1688,7 +2283,7 @@ local function CreateTintPanel()
 	zoneMore.Refresh = function(self)
 		local zones = {}
 		local db, listed = ns.GetDB(), {}
-		for _, source in ipairs({ db.zoneTints or {}, db.zoneTintStrength or {} }) do
+		for _, source in ipairs({ db.zoneTints or {}, db.zoneTintStrength or {}, db.zonePresets or {} }) do
 			for zone in pairs(source) do
 				if not listed[zone] then
 					listed[zone] = true
@@ -1704,7 +2299,9 @@ local function CreateTintPanel()
 				local _, label, _, color = ns.GetZoneTintInfo(zone)
 				row.swatch:SetColorTexture(color[1], color[2], color[3], 1)
 				local strength, ownStrength = ns.GetZoneTintStrength(zone)
-				row.text:SetText(("%s: %s%s"):format(zone, label,
+				local preset = ns.GetZonePreset(zone)
+				row.text:SetText(("%s: %s%s%s"):format(zone,
+					preset and (ns.GetTintPresetLabel(preset) .. " preset, ") or "", label,
 					ownStrength and (", %d%% strength"):format(strength * 100 + 0.5) or ""))
 			end
 			row:SetShown(zone ~= nil)
@@ -1732,8 +2329,25 @@ local function CreateTintPanel()
 		end
 	end)
 
+	-- Crossing a zone border: how the old zone's tint gives way to the new one.
+	local borderLabel = Label(content, "GameFontHighlight", "At zone borders")
+	borderLabel:SetPoint("TOPLEFT", zoneMore, "BOTTOMLEFT", 0, -18)
+	local zoneFade = Slider(content, "zoneFadeTime", "Fade time", 0.5, 10, 0.5, "%.1f sec")
+	zoneFade:SetPoint("TOPLEFT", borderLabel, "BOTTOMLEFT", 2, -26)
+	Tooltip(zoneFade, "With a Zone tint preset, crossing into a zone with a different mood " ..
+		"fades the old mood out over this long, pauses, then fades the new one in over " ..
+		"this long.")
+	local gapFlying = Slider(content, "zoneGapFlying", "Pause between tints when flying", 0, 20, 1, "%d sec")
+	gapFlying:SetPoint("TOPLEFT", zoneFade, "BOTTOMLEFT", 0, -34)
+	Tooltip(gapFlying, "Untinted time between the two zones' moods while you're in the air, " ..
+		"where you see the old zone's ground for longer (snow under an ember tint looks red).")
+	local gapGround = Slider(content, "zoneGapTime", "Pause between tints on the ground", 0, 10, 0.5, "%.1f sec")
+	gapGround:SetPoint("TOPLEFT", gapFlying, "BOTTOMLEFT", 0, -34)
+	Tooltip(gapGround, "The same pause when you cross a border on foot or riding.")
+
 	-- Vignette
-	local vignetteHeader = Header(content, "Vignette", zoneMore, -24)
+	local vignetteHeader = Header(content, "Vignette", gapGround, -24)
+	vignetteHeader:SetPoint("TOPLEFT", gapGround, "BOTTOMLEFT", -2, -24)
 
 	local vignette = Check(content, "vignette", "Darken the screen edges",
 		"Soft dark edges that draw the eye to the middle. Works with any tint.", function(value)
@@ -1746,31 +2360,47 @@ local function CreateTintPanel()
 		ns.RefreshTint)
 	vignetteStrength:SetPoint("TOPLEFT", vignette, "BOTTOMLEFT", 4, -26)
 
-	-- World: names, nameplates, tooltips
-	local worldHeader = Header(content, "World", vignetteStrength, -24)
-	worldHeader:SetPoint("TOPLEFT", vignetteStrength, "BOTTOMLEFT", -2, -24)
+	-- Inns
+	local innHeader = Header(content, "Inns", vignetteStrength, -24)
+	innHeader:SetPoint("TOPLEFT", vignetteStrength, "BOTTOMLEFT", -2, -24)
 
-	local names = Check(content, "hideNames", "Hide names in cinematic mode",
-		"Hides player, NPC, pet and your own names while the UI is faded. " ..
-		"Your name settings are restored when the UI comes back.")
-	names:SetPoint("TOPLEFT", worldHeader, "BOTTOMLEFT", -2, -6)
+	local innGlow = Check(content, "innGlow", "Light up inns",
+		"Indoors in an inn, the outdoor tint (a gloomy marsh, a moonlit night) partly lifts and a " ..
+		"soft firelit glow fades in, coloured by the zone: cooler in the snow, greener in a swamp. " ..
+		"Blends over a few seconds as you go through the door.",
+		function(value)
+			ns.GetDB().innGlow = value
+			Refresh() -- grey out / enable the strength slider
+			ns.RefreshTint()
+		end)
+	innGlow:SetPoint("TOPLEFT", innHeader, "BOTTOMLEFT", -2, -6)
 
-	local plates = Check(content, "hidePlates", "Hide nameplates in cinematic mode",
-		"Fades out enemy and friendly nameplates along with the UI. " ..
-		"They fade back in the moment combat starts.")
-	plates:SetPoint("TOPLEFT", names, "BOTTOMLEFT", 0, -2)
+	local innGlowStrength = Slider(content, "innGlowAmount", "Glow amount", 0, 25, 1, "%d%%", 100,
+		ns.RefreshTint)
+	Tooltip(innGlowStrength, "How much light the glow adds at its brightest, low on the screen.")
+	innGlowStrength:SetPoint("TOPLEFT", innGlow, "BOTTOMLEFT", 4, -26)
+	GreyUnless(innGlowStrength, function(db) return db.innGlow end)
 
-	local tooltip = Check(content, "fadeTooltip", "Hide world tooltips",
-		"Hides the tooltip for players, NPCs and objects you mouse over in the world, throughout " ..
-		"cinematic mode. Tooltips for UI elements still show. (To hide them only in the camera " ..
-		"modes, see the Camera modes page.)")
-	tooltip:SetPoint("TOPLEFT", plates, "BOTTOMLEFT", 0, -2)
+	-- Weather
+	local weatherHeader = Header(content, "Weather", innGlowStrength, -24)
+	weatherHeader:SetPoint("TOPLEFT", innGlowStrength, "BOTTOMLEFT", -2, -24)
 
-	local combatText = Check(content, "hideCombatText", "Hide combat text out of combat",
-		"No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
-		"mode while you're out of combat. They come back the moment a fight starts, and your " ..
-		"combat text settings are put back when the UI returns.")
-	combatText:SetPoint("TOPLEFT", tooltip, "BOTTOMLEFT", 0, -2)
+	local weatherTint = Check(content, "weatherTint", "Tint for the weather",
+		"Rain greys and cools the scene, snow turns it pale blue and a sandstorm gives it a dusty " ..
+		"orange haze, more strongly the heavier the weather. Works with any tint (None included), " ..
+		"lifts under a roof and blends in as a storm builds. Needs a game version that reports " ..
+		"the weather.",
+		function(value)
+			ns.GetDB().weatherTint = value
+			Refresh() -- grey out / enable the strength slider
+			ns.RefreshTint()
+		end)
+	weatherTint:SetPoint("TOPLEFT", weatherHeader, "BOTTOMLEFT", -2, -6)
+
+	local weatherTintStrength = Slider(content, "weatherTintStrength", "Weather strength", 10, 100, 5, "%d%%", 100,
+		ns.RefreshTint)
+	weatherTintStrength:SetPoint("TOPLEFT", weatherTint, "BOTTOMLEFT", 4, -26)
+	GreyUnless(weatherTintStrength, function(db) return db.weatherTint end)
 
 	canvas:SetScript("OnShow", PageShown(function()
 		Refresh()
@@ -1790,8 +2420,7 @@ local function CreateAudioPanel()
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		"Sound during cinematic mode. Your own sound settings are saved first and put " ..
-		"back afterwards, even after a crash. The camera mode pages show their own music " ..
-		"options too; they're the same settings.")
+		"back afterwards, even after a crash. Pick which cameras play music as they start.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -1813,32 +2442,12 @@ local function CreateAudioPanel()
 	musicFade:SetPoint("TOPLEFT", logoutMusic, "BOTTOMLEFT", 4, -26)
 	Tooltip(musicFade, "How long music (and ambience) takes to fade in or out with cinematic mode.")
 
-	local freshHeader = Header(content, "Start a fresh song when", musicFade, -24)
-	freshHeader:SetPoint("TOPLEFT", musicFade, "BOTTOMLEFT", -2, -24)
-	local previous = freshHeader
-	for i, item in ipairs({
-		{ "musicNewSongOnFlights", "The flight rotation starts",
-			"Music is switched off and straight back on as the camera starts rotating on a flight " ..
-			"(at takeoff if flight rotation is off), so the game starts a fresh track. Once per " ..
-			"flight. Not used while music is muted on flights." },
-		{ "musicNewSongWhenIdle", "The standing-still camera starts",
-			"Music is switched off and straight back on as the standing-still rotation begins, so " ..
-			"the game starts a fresh track. Once each time you stand still (not again after you " ..
-			"move the camera)." },
-		{ "musicNewSongWhenWalking", "You start RP walking",
-			"Music is switched off and straight back on as you set off walking (walk/run key), so " ..
-			"the game starts a fresh track. Pausing for less than 20 seconds and walking on " ..
-			"doesn't count as a new walk." },
-		{ "musicNewSongWhenCozy", "The cozy camera starts",
-			"Music is switched off and straight back on as the cozy camera starts (campfire, " ..
-			"sitting, dancing...), so the game starts a fresh track. Getting up for less than 20 " ..
-			"seconds and settling back down doesn't count as a new spell." },
-		{ "musicNewSongWhenAutoRun", "You start auto-running",
-			"Music is switched off and straight back on as you start auto-running, so the game " ..
-			"starts a fresh track. Stopping for less than 20 seconds and running on doesn't count " ..
-			"as a new run." },
-	}) do
-		local check = Check(content, item[1], item[2], item[3])
+	local playHeader = Header(content, "Play music", musicFade, -24)
+	playHeader:SetPoint("TOPLEFT", musicFade, "BOTTOMLEFT", -2, -24)
+	local previous = playHeader
+	for i, item in ipairs(MUSIC_CAMS) do
+		local check = Check(content, item[1], item[2], MusicCamTip(item[1]) ..
+			" Also on the camera's own page.")
 		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
 		DependsOnMusic(check)
 		previous = check
@@ -1850,31 +2459,14 @@ local function CreateAudioPanel()
 	local fatigue = Slider(content, "musicFatigue", "Music fatigue", 0, 30, 1, "%d min")
 	fatigue:SetPoint("TOPLEFT", fatigueHeader, "BOTTOMLEFT", 2, -26)
 	Tooltip(fatigue, "Once the addon has started music, it won't start it again for this " ..
-		"long, so short spells of cinematic mode don't keep restarting it. Music coming " ..
-		"back after a mute doesn't count. 0 turns this off.")
+		"long, so short spells of cinematic mode don't keep restarting it. The cameras ticked " ..
+		"under Play music start it anyway. Music coming back after a mute doesn't count. 0 turns this off.")
 	DependsOnMusic(fatigue)
 
-	local fatigueLabel = Label(content, "GameFontHighlight", "Start music anyway")
-	fatigueLabel:SetPoint("TOPLEFT", fatigue, "BOTTOMLEFT", -2, -22)
-	previous = fatigueLabel
-	for i, override in ipairs({
-		{ "fatigueIgnoreOnFlights", "On flights", "Music starts when you take off, even if it played recently." },
-		{ "fatigueIgnoreWhenIdle", "When standing still",
-			"Music starts once you've stood still for the standing-still delay, even if it played recently." },
-		{ "fatigueIgnoreWhenWalking", "When RP walking",
-			"Music starts as you walk (walk/run key), even if it played recently." },
-		{ "fatigueIgnoreWhenAutoRun", "When auto-running",
-			"Music starts as you auto-run, even if it played recently." },
-		{ "fatigueIgnoreWhenCozy", "When cozy",
-			"Music starts with the cozy camera (campfire, emotes), even if it played recently." },
-		{ "fatigueIgnoreNewZone", "When entering a new zone",
-			"Music starts in a zone other than the one it last played in, even if it played recently." },
-	}) do
-		local check = Check(content, override[1], override[2], override[3])
-		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -4 or -2)
-		DependsOnMusic(check)
-		previous = check
-	end
+	local newZone = Check(content, "fatigueIgnoreNewZone", "Start music anyway in a new zone",
+		"Music starts in a zone other than the one it last played in, even if it played recently.")
+	newZone:SetPoint("TOPLEFT", fatigue, "BOTTOMLEFT", -4, -18)
+	DependsOnMusic(newZone)
 
 	-- Right column: muting, ambience
 	local muteHeader = Label(content, "GameFontNormal", "Muting")
@@ -1902,24 +2494,34 @@ local function CreateAudioPanel()
 	local movingMusic = Check(content, "musicPauseWhenMoving", "Pause music when you move on",
 		"Music fades out once you start moving after a flight, RP walking or standing still " ..
 		"(running, riding). A fresh track fades in when you next fly, walk, or stand still for " ..
-		"the standing-still delay.")
+		"the AFK camera delay.")
 	movingMusic:SetPoint("TOPLEFT", flightMusic, "BOTTOMLEFT", 0, -2)
 	DependsOnMusic(movingMusic)
 	movingMusic:HookScript("OnClick", Refresh) -- grey out / enable the fade below
 
+	local landingMusic = Check(content, "musicPauseOnLanding", "Pause music when a flight lands",
+		"Music fades out as soon as you touch down, without waiting for you to move. A fresh " ..
+		"track fades in when you next fly, walk, or stand still for the AFK camera delay.")
+	landingMusic:SetPoint("TOPLEFT", movingMusic, "BOTTOMLEFT", 0, -2)
+	DependsOnMusic(landingMusic)
+	landingMusic:HookScript("OnClick", Refresh)
+
 	local pauseFade = Slider(content, "musicPauseFadeTime", "Pause fade time", 0.5, 10, 0.5, "%.1f sec")
-	pauseFade:SetPoint("TOPLEFT", movingMusic, "BOTTOMLEFT", 24, -26)
-	Tooltip(pauseFade, "How long the music takes to fade out when you move on, and to fade " ..
-		"back in when the next flight, walk or standing-still spell starts.")
-	GreyUnless(pauseFade, function(db) return db.musicInCinematic and db.musicPauseWhenMoving end)
+	pauseFade:SetPoint("TOPLEFT", landingMusic, "BOTTOMLEFT", 24, -26)
+	Tooltip(pauseFade, "How long the music takes to fade out when you move on or land, and to " ..
+		"fade back in when the next flight, walk or AFK camera starts.")
+	GreyUnless(pauseFade, function(db)
+		return db.musicInCinematic and (db.musicPauseWhenMoving or db.musicPauseOnLanding)
+	end)
 
 	-- Back out to the checkboxes' edge for the next heading.
 	local pauseFadeEdge = CreateFrame("Frame", nil, content)
 	pauseFadeEdge:SetSize(1, 1)
 	pauseFadeEdge:SetPoint("TOPLEFT", pauseFade, "BOTTOMLEFT", -24, -4)
 
-	local lastPlace, placeChecks = PlaceList(content, pauseFadeEdge, "Mute music in", "musicOffIn",
+	local placeChecks = PlaceList(content, Stack(pauseFadeEdge, "check"), "Mute music in", "musicOffIn",
 		"Music fades out here (your own game music too) and back in when you leave.")
+	local lastPlace = placeChecks[#placeChecks]
 	for _, check in ipairs(placeChecks) do
 		DependsOnMusic(check)
 	end
@@ -1953,99 +2555,290 @@ local function CreateCombatPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"What happens to cinematic mode when a fight starts. By default the UI comes " ..
-		"straight back; you can stay cinematic instead and show just what you need.")
+		"Which frames show when you fight or target something while cinematic mode is on, " ..
+		"and how fast they fade in and out.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	-- Left column
-	local fightHeader = Header(content, "During fights", subtitle, -20)
+	-- The same setting as "Turn off in: Combat" on the main page, the right way round.
+	local stayHeader = Header(content, "Fights", subtitle, -20)
+	local stay = Check(content, "stayInCombat", "Stay in cinematic mode in combat",
+		"Fights don't bring the whole UI back: only the frames ticked under In combat below " ..
+		"show. Off: being in combat brings the UI back. Same as unticking \"Turn off in: " ..
+		"Combat\" on the main page.", function(value)
+			ns.GetDB().stayInCombat = value
+			Refresh() -- grey out / enable the In combat column
+		end)
+	stay:SetPoint("TOPLEFT", stayHeader, "BOTTOMLEFT", -2, -6)
 
-	local stayInCombat = Check(content, "stayInCombat", "Stay in cinematic mode in combat",
-		"Combat and targeting an enemy no longer bring the UI back. Mouseover still " ..
-		"reveals things. Nameplates show during fights, and camera rotation pauses.")
-	stayInCombat:SetPoint("TOPLEFT", fightHeader, "BOTTOMLEFT", -2, -6)
-	stayInCombat:HookScript("OnClick", Refresh) -- grey out / enable the frames list
+	-- One table: a row per frame, a column per situation.
+	local showHeader = Header(content, "What to show", stay, -18)
+	showHeader:SetPoint("TOPLEFT", stay, "BOTTOMLEFT", 2, -18)
 
-	local target = Check(content, "revealOnTarget", "Reveal when targeting an enemy",
-		"Bring the UI back when you target something you can attack. Ignored while " ..
-		"\"Stay in cinematic mode in combat\" is on.")
-	target:SetPoint("TOPLEFT", stayInCombat, "BOTTOMLEFT", 0, -2)
+	local showHelp = Label(content, "GameFontHighlightSmall",
+		"In combat: only while you stay in cinematic mode in fights (above). Enemy: an alive enemy you can attack, before a fight " ..
+		"starts. Anything else: friends, NPCs, other players and dead enemies. Targeting never " ..
+		"brings the whole UI back, only what's ticked here.")
+	showHelp:SetPoint("TOPLEFT", showHeader, "BOTTOMLEFT", 0, -6)
+	showHelp:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	showHelp:SetJustifyV("TOP")
 
-	local ignoreDead = Check(content, "ignoreDeadTarget", "Ignore dead targets",
-		"Targeting a dead enemy (say, to loot it) doesn't bring the UI back with " ..
-		"\"Reveal when targeting an enemy\". (For the frame lists below, dead enemies " ..
-		"count as \"anything else\".)")
-	ignoreDead:SetPoint("TOPLEFT", target, "BOTTOMLEFT", 0, -2)
+	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 100, 24
+	local COLUMNS = {
+		{ "In combat", ns.IsCombatShowOn, "combatShow", true },
+		{ "Enemy", ns.IsEnemyShowOn, "enemyShow", false },
+		{ "Anything else", ns.IsFriendlyShowOn, "friendlyShow", false },
+	}
+	local columnTop = CreateFrame("Frame", nil, content)
+	columnTop:SetSize(1, 1)
+	columnTop:SetPoint("TOPLEFT", showHelp, "BOTTOMLEFT", 0, -14)
+	for c, column in ipairs(COLUMNS) do
+		local heading = Label(content, "GameFontNormalSmall", column[1])
+		heading:SetWidth(COLUMN_WIDTH)
+		heading:SetJustifyH("CENTER")
+		heading:SetPoint("TOPLEFT", columnTop, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+	end
 
-	-- A greyed-out-unless-staying list of frame checkboxes for one situation.
-	local function FrameList(header, isOn, tableKey, needsStay)
-		local previous = header
-		for i, item in ipairs(ns.COMBAT_SHOW) do
-			local check = Check(content, tableKey, item.label, nil, function(value)
+	local lastLabel
+	for r, item in ipairs(ns.COMBAT_SHOW) do
+		local y = -16 - (r - 1) * ROW_HEIGHT
+		local rowLabel = Label(content, "GameFontHighlight", item.label)
+		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
+		lastLabel = rowLabel
+		for c, column in ipairs(COLUMNS) do
+			local isOn, tableKey, needsStay = column[2], column[3], column[4]
+			local check = Check(content, tableKey, "", nil, function(value)
 				ns.GetDB()[tableKey][item.key] = value
 			end)
-			check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
+			check:SetPoint("TOPLEFT", columnTop, "TOPLEFT",
+				LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
 			check.Refresh = function(self)
-				local db = ns.GetDB()
 				self:SetChecked(isOn(item.key))
-				local enabled = not needsStay or db.stayInCombat
-				self:SetEnabled(enabled)
-				local label = self.Text or self.text
-				if label then
-					label:SetFontObject(enabled and "GameFontHighlight" or "GameFontDisable")
-				end
+				self:SetEnabled(not needsStay or ns.GetDB().stayInCombat)
 			end
-			previous = check
 		end
-		return previous
 	end
 
-	-- A frame list with a header, help text and its own fade sliders.
-	local function Section(anchor, x, y, title, help, isOn, tableKey, needsStay, fadeInKey, fadeOutKey, fadeInMax, fadeInLabel, fadeOutLabel)
-		local header = Label(content, "GameFontNormal", title)
-		header:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x, y)
-		local helpText = Label(content, "GameFontHighlightSmall", help)
-		helpText:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
-		helpText:SetWidth(270)
-		helpText:SetJustifyV("TOP")
-		local last = FrameList(helpText, isOn, tableKey, needsStay)
-		local fadeIn = Slider(content, fadeInKey, fadeInLabel, 0, fadeInMax, 0.05, "%.2f sec")
-		fadeIn:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 4, -30)
-		local fadeOut = Slider(content, fadeOutKey, fadeOutLabel, 0, 30, 0.5, "%.1f sec")
-		fadeOut:SetPoint("TOPLEFT", fadeIn, "BOTTOMLEFT", 0, -34)
-		return header, fadeIn, fadeOut
+	-- All the fade times together: a row per situation, fade in and fade out.
+	local fadeHeader = Header(content, "Fade times", lastLabel, -24)
+
+	local FADES = {
+		{ "In combat", "combatFadeInTime", "combatFadeOutTime", 3,
+			"How fast the frames appear when you enter combat. 0 is instant.",
+			"How fast they fade away again once the fight is over." },
+		{ "Enemy", "enemyFadeInTime", "enemyFadeOutTime", 5,
+			"How fast the frames appear when you target an alive enemy.",
+			"How fast they fade away again once the enemy is no longer targeted." },
+		{ "Anything else", "friendlyFadeInTime", "friendlyFadeOutTime", 5,
+			"How fast the frames appear when you target anything else.",
+			"How fast they fade away again once it's no longer targeted." },
+	}
+	local previous = fadeHeader
+	for i, fade in ipairs(FADES) do
+		local fadeIn = Slider(content, fade[2], fade[1] .. ": fade in", 0, fade[4], 0.05, "%.2f sec")
+		fadeIn:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and 2 or 0, i == 1 and -26 or -34)
+		Tooltip(fadeIn, fade[5])
+		local fadeOut = Slider(content, fade[3], fade[1] .. ": fade out", 0, 30, 0.5, "%.1f sec")
+		fadeOut:SetPoint("LEFT", fadeIn, "LEFT", 300, 0)
+		Tooltip(fadeOut, fade[6])
+		previous = fadeIn
 	end
-
-	-- Left column, below the fight settings: an enemy targeted, out of combat
-	local _, enemyIn = Section(ignoreDead, 2, -18, "When you target an enemy, show",
-		"A living enemy you can attack, while you're not in combat yet. Once a fight " ..
-		"starts, the in-combat list applies.",
-		ns.IsEnemyShowOn, "enemyShow", false, "enemyFadeInTime", "enemyFadeOutTime", 5,
-		"Fade in", "Fade out")
-	Tooltip(enemyIn, "How fast the frames ticked above appear when you target an enemy.")
-
-	-- Right column: in combat, then a friend targeted
-	local combatHeader, fadeIn, fadeOut = Section(fightHeader, 0, 0, "In combat, show",
-		"While you're in combat and staying cinematic.",
-		ns.IsCombatShowOn, "combatShow", true, "combatFadeInTime", "combatFadeOutTime", 3,
-		"Fade in when a fight starts", "Fade out after a fight")
-	combatHeader:ClearAllPoints()
-	combatHeader:SetPoint("TOPLEFT", fightHeader, "TOPLEFT", 320, 0)
-	Tooltip(fadeIn, "How fast the frames ticked above appear when you enter combat. 0 is instant.")
-	Tooltip(fadeOut, "How fast those frames fade away again once the fight is over.")
-
-	local _, friendIn = Section(fadeOut, -6, -24, "When you target anything else, show",
-		"Friends, NPCs, other players and dead enemies (say, a corpse you're looting), " ..
-		"while you're not in combat.",
-		ns.IsFriendlyShowOn, "friendlyShow", false, "friendlyFadeInTime", "friendlyFadeOutTime", 5,
-		"Fade in", "Fade out")
-	Tooltip(friendIn, "How fast the frames ticked above appear when you target anything else.")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Combat")
+end
+
+-- Sub-page: which nameplates show (mobs, your faction, the other faction),
+-- which stay up in cinematic mode, and how far away they show.
+local function CreatePlatesPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Nameplates")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"Which nameplates show, which stay up while cinematic mode hides the rest, and how far " ..
+		"away they appear. Your faction and the other faction work out from the character " ..
+		"you're playing, so the same settings suit Horde and Alliance characters.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local hide = Check(content, "hidePlates", "Hide nameplates in cinematic mode",
+		"Fades out nameplates along with the UI. They fade back in the moment combat starts. " ..
+		"Kinds ticked under \"In cinematic mode\" below stay up.")
+	hide:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+	hide:HookScript("OnClick", Refresh)
+
+	-- Nameplates and names each get a table: a row per kind of unit, a column
+	-- per situation.
+	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 120, 24
+	local function TableTop(anchor, headings)
+		local top = CreateFrame("Frame", nil, content)
+		top:SetSize(1, 1)
+		top:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
+		for c, heading in ipairs(headings) do
+			local text = Label(content, "GameFontNormalSmall", heading)
+			text:SetWidth(COLUMN_WIDTH)
+			text:SetJustifyH("CENTER")
+			text:SetPoint("TOPLEFT", top, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+		end
+		return top
+	end
+	local function PlaceRow(top, r, label, ...)
+		local y = -16 - (r - 1) * ROW_HEIGHT
+		local rowLabel = Label(content, "GameFontHighlight", label)
+		rowLabel:SetPoint("TOPLEFT", top, "TOPLEFT", 0, y - 5)
+		for c, check in ipairs({ ... }) do
+			check:SetPoint("TOPLEFT", top, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
+		end
+		return rowLabel
+	end
+
+	local showHeader = Header(content, "Show nameplates for", hide, -18)
+	showHeader:SetPoint("TOPLEFT", hide, "BOTTOMLEFT", 2, -18)
+	local columnTop = TableTop(showHeader, { "Show", "In cinematic mode", "In combat" })
+
+	local KINDS = {
+		{ "Mobs", "Hostile and neutral mobs" },
+		{ "NPCs", "Friendly NPCs" },
+		{ "Own", "Players of your faction" },
+		{ "Other", "Players of the other faction" },
+		{ "Pets", "Pets, minions and guardians" },
+		{ "Totems", "Totems" },
+	}
+	local lastLabel
+	for r, kind in ipairs(KINDS) do
+		local showKey, cinematicKey = "plateShow" .. kind[1], "plateCinematic" .. kind[1]
+		local show = Check(content, showKey, "",
+			"Show these nameplates. Unticked, they stay hidden everywhere, in fights too. " ..
+			"The game's own nameplate options (enemy nameplates, friendly NPC nameplates...) " ..
+			"are set to match these ticks at login and whenever you change them here, so " ..
+			"changes made with the V keys or the game's options last until you log in again.",
+			function(value)
+				ns.GetDB()[showKey] = value
+				ns.SyncPlateCVars()
+				Refresh()
+			end)
+		local cinematic = Check(content, cinematicKey, "",
+			"Keep these nameplates up in cinematic mode while the others fade out.")
+		GreyUnless(cinematic, function(db) return db.hidePlates and db[showKey] end)
+		local combat = Check(content, "plateCombat" .. kind[1], "",
+			"Show these nameplates during fights. Unticked, they're hidden while you're in " ..
+			"combat, in or out of cinematic mode. The game won't let nameplates be switched " ..
+			"off mid-fight, so hidden ones can still be clicked.")
+		GreyUnless(combat, function(db) return db[showKey] end)
+		lastLabel = PlaceRow(columnTop, r, kind[2], show, cinematic, combat)
+	end
+
+	local alwaysTarget = Check(content, "plateAlwaysTarget", "Always show your target's nameplate",
+		"Your target's nameplate shows whatever the rows above say, in cinematic mode too. " ..
+		"The game still needs its nameplates for that kind of unit switched on, so a row " ..
+		"whose game option is off (for example Friendly NPCs unticked) has no plate to show.")
+	alwaysTarget:SetPoint("TOPLEFT", lastLabel, "BOTTOMLEFT", -2, -12)
+	lastLabel = alwaysTarget
+
+	-- Names, laid out the same way. "Show" is the game's own name setting
+	-- (what you see outside cinematic mode).
+	local namesHeader = Header(content, "Names", lastLabel, -24)
+	local hideNames = Check(content, "hideNames", "Hide names in cinematic mode",
+		"Hides unit names while the UI is faded. Your name settings are restored when the UI " ..
+		"comes back. Kinds ticked under \"In cinematic mode\" below keep their names.")
+	hideNames:SetPoint("TOPLEFT", namesHeader, "BOTTOMLEFT", -2, -6)
+	hideNames:HookScript("OnClick", Refresh)
+
+	local namesShowHeader = Header(content, "Show names for", hideNames, -18)
+	namesShowHeader:SetPoint("TOPLEFT", hideNames, "BOTTOMLEFT", 2, -18)
+	local namesTop = TableTop(namesShowHeader, { "Show", "In cinematic mode" })
+	local previousName
+	for r, group in ipairs(ns.NAME_GROUPS) do
+		local iconKey = ns.NAME_ICON_KINDS[group.key] and ("nameIcon" .. group.key)
+		local showKey = "nameShow" .. group.key
+		local show = Check(content, showKey, "",
+			"Show these names. The game's own name options are set to match these ticks at " ..
+			"login and whenever you change them here, so changes made in the game's options " ..
+			"last until you log in again.", function(value)
+				ns.GetDB()[showKey] = value
+				ns.SetNamesShown(group, value)
+				Refresh()
+			end)
+		show.Refresh = function(self)
+			self:SetChecked(ns.GetDB()[showKey] == true)
+			self:SetEnabled(ns.GetNamesShown(group) ~= nil) -- greyed out where this client has no such setting
+		end
+		local keepKey = "nameKeep" .. group.key
+		-- Keeping the name and using an icon in its place are one or the other.
+		local cinematic = Check(content, keepKey, "",
+			"Keep these names up in cinematic mode while the others are hidden.", function(value)
+				local db = ns.GetDB()
+				db[keepKey] = value
+				if value and iconKey then
+					db[iconKey] = false
+				end
+				ns.UpdateCVars(ns.lastCinematic)
+				Refresh()
+			end)
+		GreyUnless(cinematic, function(db) return db.hideNames and db[showKey] == true end)
+		previousName = PlaceRow(namesTop, r, group.label, show, cinematic)
+	end
+
+	-- Custom icons: in cinematic mode, an icon in place of a kind's name, on
+	-- every unit of that kind or only on those flagged for PvP.
+	local iconsHeader = Header(content, "Custom icons", previousName, -18)
+	iconsHeader:SetPoint("TOPLEFT", previousName, "BOTTOMLEFT", 2, -18)
+	local iconsHelp = Label(content, "GameFontHighlightSmall",
+		"In cinematic mode, a small icon where these units' nameplates would be, in place of " ..
+		"their names (a faction icon for players). Needs \"Hide names in cinematic mode\" and " ..
+		"their nameplates ticked under \"Show nameplates for\"; their faded plates stay switched " ..
+		"on (and clickable) for it.")
+	iconsHelp:SetPoint("TOPLEFT", iconsHeader, "BOTTOMLEFT", 0, -6)
+	iconsHelp:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	iconsHelp:SetJustifyH("LEFT")
+	local iconsTop = TableTop(iconsHelp, { "Use custom icon", "Only if PvP flagged" })
+	for r, kind in ipairs(KINDS) do
+		local iconKey, keepKey = "nameIcon" .. kind[1], "nameKeep" .. kind[1]
+		local icon = Check(content, iconKey, "",
+			"Show an icon in place of these names in cinematic mode. Keeping their names (under " ..
+			"\"Show names for\") is turned off: it's one or the other.",
+			function(value)
+				local db = ns.GetDB()
+				db[iconKey] = value
+				if value then
+					db[keepKey] = false -- the icon replaces the name
+					ns.UpdateCVars(ns.lastCinematic)
+				end
+				Refresh()
+			end)
+		GreyUnless(icon, function(db) return db.hideNames and db["plateShow" .. kind[1]] end)
+		local pvp = Check(content, "nameIconPvP" .. kind[1], "",
+			"Only units flagged for PvP get the icon; the rest show nothing.")
+		GreyUnless(pvp, function(db) return db.hideNames and db["plateShow" .. kind[1]] and db[iconKey] end)
+		previousName = PlaceRow(iconsTop, r, kind[2], icon, pvp)
+	end
+
+	-- The game's own setting, not a saved one: shown as it is now.
+	local distanceHeader = Header(content, "Distance", previousName, -18)
+	distanceHeader:SetPoint("TOPLEFT", previousName, "BOTTOMLEFT", 2, -18)
+	local distance = Slider(content, {
+		get = function() return tonumber(GetCVar("nameplateMaxDistance")) or 20 end,
+		set = function(value)
+			if not InCombatLockdown() then SetCVar("nameplateMaxDistance", value) end
+		end,
+	}, "Show nameplates up to", 10, 100, 1, "%d yards")
+	distance:SetPoint("TOPLEFT", distanceHeader, "BOTTOMLEFT", 2, -26)
+	Tooltip(distance, "The game's own nameplate distance, for every kind of nameplate. " ..
+		"Can't change during a fight. Far plates also need the unit to be loaded: the server " ..
+		"only sends units within about 100 yards, often less.")
+	if GetCVar("nameplateMaxDistance") == nil then
+		distance:Hide()
+		distanceHeader:Hide()
+	end
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Nameplates")
 end
 
 -- Sub-page for everything chat: fading, new-message peeks (by message type and
@@ -2199,7 +2992,7 @@ end
 
 local function RefreshKeep()
 	local rowIndex, headerIndex = 0, 0
-	local previous, lastGroup, previousIsHeader = keepPanel.alwaysMinimap, nil, false
+	local previous, lastGroup, previousIsHeader = keepPanel.keepTop, nil, false
 	for _, item in ipairs(ns.GetBuiltInFrames()) do
 		if item.groupLabel ~= lastGroup then
 			lastGroup = item.groupLabel
@@ -2259,6 +3052,37 @@ local function CreateFramesPanel()
 		"and the Cinematic button.")
 	content.alwaysMinimap:SetPoint("TOPLEFT", keepHelp, "BOTTOMLEFT", -2, -10)
 
+	-- Or only while tracking; the kinds of tracking below only apply while it's on.
+	local trackingMaster = Check(content, "minimapForTracking", "Keep minimap open while tracking",
+		"While you're tracking one of the kinds ticked below, the minimap stays up during " ..
+		"cinematic mode. Also on the minimap button's menu.", function(value)
+			ns.GetDB().minimapForTracking = value
+			Refresh()
+		end)
+	trackingMaster:SetPoint("TOPLEFT", content.alwaysMinimap, "BOTTOMLEFT", 0, -2)
+	local TRACKING_TIP = "While this tracking is active, the minimap stays up during cinematic " ..
+		"mode so you can spot nodes or creatures."
+	local previousTracking = trackingMaster
+	for i, kind in ipairs({
+		{ "minimapForHerbs", "Herbs (Find Herbs)" },
+		{ "minimapForMinerals", "Minerals (Find Minerals)" },
+		{ "minimapForTreasure", "Treasure (Find Treasure)" },
+		{ "minimapForFish", "Fish (Find Fish)" },
+		{ "minimapForCreatures", "Creatures (hunter, druid, warlock)" },
+		{ "trackingHideWhenIdle", "Except when standing still or flying",
+			"Tracking doesn't keep the minimap up on flight paths, or once you've stood " ..
+			"still for the AFK camera delay. It comes back when you move." },
+	}) do
+		local check = Check(content, kind[1], kind[2], kind[3] or TRACKING_TIP)
+		check:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", i == 1 and 16 or 0, -2)
+		GreyUnless(check, function(db) return db.minimapForTracking end)
+		previousTracking = check
+	end
+	-- The list of frames starts below the tracking (back out to the column edge).
+	content.keepTop = CreateFrame("Frame", nil, content)
+	content.keepTop:SetSize(1, 1)
+	content.keepTop:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", -16, 0)
+
 	-- Right column: extra frames
 	local extrasHeader = Label(content, "GameFontNormal", "Extra frames")
 	extrasHeader:SetPoint("TOPLEFT", keepHeader, "TOPLEFT", 320, 0)
@@ -2277,13 +3101,172 @@ local function CreateFramesPanel()
 
 	canvas:SetScript("OnShow", PageShown(function()
 		if ns.GetDB() then
-			content.alwaysMinimap:Refresh()
+			Refresh()
 			RefreshKeep()
 			RefreshExtras()
 		end
 	end, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Frames")
+end
+
+-- Sub-page: keybinds. The same bindings as Key Bindings > AddOns, with two
+-- key slots each like Blizzard's page.
+local KEYBINDS = {
+	{ action = "CINEMATIC_HIDEUI", label = "Hide the UI",
+		tip = "Like Blizzard's Alt+Z: hides the whole UI, but keeps the tint, letterbox " ..
+			"and time-of-day title. Press again (or Blizzard's key) to bring it back." },
+	{ action = "CINEMATIC_TOGGLE", label = "Toggle cinematic mode",
+		tip = "Turns cinematic mode on or off, like /cine." },
+	{ action = "CINEMATIC_PEEK", label = "Peek at the UI (hold)",
+		tip = "Brings the UI back while held, and fades it again when let go." },
+	{ action = "CINEMATIC_FLYBY", label = "Fly-by",
+		tip = "The camera slowly turns round to look back past you, holds there, then turns " ..
+			"back behind you. Press again to stop; moving the camera stops it too. Like /cine flyby." },
+	{ action = "CINEMATIC_CAM_IDLE", label = "AFK camera",
+		tip = "Starts the AFK camera now, without waiting out its delay. " ..
+			"Press again, move or jump to stop it." },
+	{ action = "CINEMATIC_CAM_COZY", label = "Cozy camera",
+		tip = "Starts the cozy camera now, as if you'd sat down. Press again, move or jump to stop it." },
+	{ action = "CINEMATIC_CAM_VISTA", label = "Vista camera",
+		tip = "Starts the vista camera now, as if you'd done a /stare. Press again, move or jump to stop it." },
+	{ action = "CINEMATIC_CAM_FISH", label = "Fish camera",
+		tip = "Starts the fish camera now, without casting. Press again, move or jump to stop it." },
+	{ action = "CINEMATIC_CAM_DEATH", label = "Death camera test",
+		tip = "Pretends you're dead for 30 seconds so the death camera runs. Press again to stop. " ..
+			"Like /cine deathtest." },
+}
+
+local IGNORED_KEYS = {
+	LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true,
+	LALT = true, RALT = true, LMETA = true, RMETA = true, UNKNOWN = true,
+}
+local MOUSE_KEYS = { MiddleButton = "BUTTON3", Button4 = "BUTTON4", Button5 = "BUTTON5" }
+local keybindButtons = {}
+local listening -- the slot button waiting for a key, if any
+
+local function KeyText(key)
+	return GetBindingText and GetBindingText(key) or key
+end
+
+local function RefreshKeybinds()
+	for _, button in ipairs(keybindButtons) do
+		local key = select(button.slot, GetBindingKey(button.action))
+		if button == listening then
+			button:SetText("Press a key")
+		else
+			button:SetText(key and KeyText(key) or "|cff808080Not bound|r")
+		end
+	end
+end
+
+local function StopListening()
+	if listening then
+		listening:EnableKeyboard(false)
+		listening:UnlockHighlight()
+		listening = nil
+	end
+	RefreshKeybinds()
+end
+
+-- Puts key (or nothing) in the button's slot, replacing what was there.
+local function Bind(button, key)
+	StopListening()
+	if InCombatLockdown() then
+		ns.Print("keybinds can't be changed in combat")
+		return
+	end
+	local current = select(button.slot, GetBindingKey(button.action))
+	if current then
+		SetBinding(current)
+	end
+	if key then
+		local previous = GetBindingAction(key)
+		if previous and previous ~= "" and previous ~= button.action then
+			ns.Print(KeyText(key) .. " was bound to " .. (_G["BINDING_NAME_" .. previous] or previous) ..
+				" and now isn't")
+		end
+		SetBinding(key, button.action)
+	end
+	SaveBindings(GetCurrentBindingSet())
+	RefreshKeybinds()
+end
+
+local function WithModifiers(key)
+	if IsShiftKeyDown() then key = "SHIFT-" .. key end
+	if IsControlKeyDown() then key = "CTRL-" .. key end
+	if IsAltKeyDown() then key = "ALT-" .. key end
+	return key
+end
+
+local function CreateKeybindButton(parent, action, slot)
+	local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	button:SetSize(140, 22)
+	button.action, button.slot = action, slot
+	button:RegisterForClicks("AnyUp")
+	button:SetScript("OnClick", function(self, mouseButton)
+		if self == listening and MOUSE_KEYS[mouseButton] then
+			Bind(self, WithModifiers(MOUSE_KEYS[mouseButton]))
+		elseif mouseButton == "RightButton" then
+			Bind(self, nil)
+		elseif self == listening then
+			StopListening()
+		else
+			StopListening()
+			listening = self
+			self:EnableKeyboard(true)
+			self:LockHighlight()
+			RefreshKeybinds()
+		end
+	end)
+	button:SetScript("OnKeyDown", function(self, key)
+		if key == "ESCAPE" then
+			StopListening()
+		elseif not IGNORED_KEYS[key] then
+			Bind(self, WithModifiers(key))
+		end
+	end)
+	Tooltip(button, "Click, then press a key (with Shift, Ctrl or Alt if you like). " ..
+		"Right-click to clear. Escape cancels.")
+	keybindButtons[#keybindButtons + 1] = button
+	return button
+end
+
+local function CreateKeybindsPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Keybinds")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"Keys for Cinematic. These are the same bindings as under Key Bindings > AddOns, " ..
+		"so setting them in either place works.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local previous = Header(content, "Keys", subtitle, -20)
+	for i, bind in ipairs(KEYBINDS) do
+		local label = Label(content, "GameFontHighlight", bind.label)
+		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, i == 1 and -14 or -18)
+		label:SetWidth(200)
+		local first = CreateKeybindButton(content, bind.action, 1)
+		first:SetPoint("LEFT", label, "RIGHT", 10, 0)
+		local second = CreateKeybindButton(content, bind.action, 2)
+		second:SetPoint("LEFT", first, "RIGHT", 8, 0)
+		local note = Label(content, "GameFontDisableSmall", bind.tip)
+		note:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -8)
+		note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+		note:SetJustifyV("TOP")
+		previous = note
+	end
+
+	canvas:RegisterEvent("UPDATE_BINDINGS")
+	canvas:SetScript("OnEvent", RefreshKeybinds)
+	canvas:SetScript("OnShow", PageShown(RefreshKeybinds, content))
+	canvas:SetScript("OnHide", StopListening)
+	canvas:Hide()
+	RegisterSubpage(canvas, "Keybinds")
 end
 
 function ns.OpenOptions()
@@ -2297,15 +3280,24 @@ function ns.OpenOptions()
 end
 
 CreatePanel()
+-- Sub-pages in the order they're listed: what fades and shows, then the look
+-- and sound, then the camera modes (their shared page and events first).
 CreateRevealPanel()
+CreateFramesPanel()
+CreateCombatPanel()
+CreatePlatesPanel()
+CreateChatPanel()
+CreateTintPanel()
+CreateAudioPanel()
 CreateCameraPanel()
+CreateEventsPanel()
 CreateFlightPanel()
 CreateStandingPanel()
 CreateCozyPanel()
+CreateVistaPanel()
+CreateFishPanel()
 CreateWalkPanel()
 CreateAutoRunPanel()
-CreateCombatPanel()
-CreateAudioPanel()
-CreateChatPanel()
-CreateTintPanel()
-CreateFramesPanel()
+CreateDeathPanel()
+CreateQuestPanel()
+CreateKeybindsPanel()

@@ -14,7 +14,7 @@ end
 -- missing = db.chatPeekChannels). "game" types are game events rather than
 -- conversation; the noisy ones default off.
 ns.CHAT_PEEK_TYPES = {
-	{ key = "say", label = "Say", events = { "CHAT_MSG_SAY" } },
+	{ key = "say", label = "Say", default = false, events = { "CHAT_MSG_SAY" } },
 	{ key = "yell", label = "Yell", events = { "CHAT_MSG_YELL" } },
 	{ key = "emote", label = "Emotes", events = { "CHAT_MSG_EMOTE", "CHAT_MSG_TEXT_EMOTE" } },
 	{ key = "whisper", label = "Whispers", events = { "CHAT_MSG_WHISPER", "CHAT_MSG_BN_WHISPER" } },
@@ -103,13 +103,13 @@ function ns.GetJoinedChannels()
 	return list
 end
 
--- "1. General - Elwynn Forest" -> "General", for clients that don't pass the
--- channel's base name with the message.
+-- "1. General - Elwynn Forest" -> "General", to match GetChannelList's names.
+-- Some clients don't pass the channel's base name with the message, and some
+-- (Classic) pass it with the zone still attached, so trim either.
 local function ChannelBaseName(baseName, channelString)
-	if baseName and baseName ~= "" then
-		return baseName
-	end
-	return (channelString or ""):gsub("^%d+%.%s*", ""):gsub("%s+%-%s+.*$", "")
+	local name = (baseName and baseName ~= "") and baseName or channelString or ""
+	name = name:gsub("^%d+%.%s*", ""):gsub("%s+%-%s+.*$", "")
+	return name
 end
 ns.chatPeekUntil = {} -- [chat frame] = GetTime() when it may fade again
 ns.chatTypingUntil = 0 -- typing shows the whole chat group without leaving cinematic

@@ -8,16 +8,17 @@ end
 local TOGGLES = {
 	letterbox = { key = "letterbox", label = "Letterbox bars" },
 	chat = { key = "fadeChat", label = "Fade chat" },
-	target = { key = "revealOnTarget", label = "Reveal on attackable target" },
 	cast = { key = "revealOnCast", label = "Reveal while casting" },
 	music = { key = "musicInCinematic", label = "Play music in cinematic mode" },
 	logoutmusic = { key = "musicOffOnLogout", label = "Turn music off on logout" },
 	names = { key = "hideNames", label = "Hide names in cinematic mode" },
 	plates = { key = "hidePlates", label = "Hide nameplates in cinematic mode" },
 	tooltip = { key = "fadeTooltip", label = "Hide world tooltips" },
-	orbit = { key = "taxiOrbit", label = "Rotate camera on flight paths" },
-	idle = { key = "idleOrbit", label = "Rotate camera when standing still" },
-	start = { key = "startCinematic", label = "Start in cinematic mode on login (not /reload)" },
+	orbit = { key = "taxiOrbit", label = "Flight camera sway" },
+	flybys = { key = "taxiFlyBy", label = "Random fly-bys on flight paths" },
+	flybylook = { key = "flyByLook", label = "/look as a fly-by starts" },
+	idle = { key = "idleOrbit", label = "AFK camera sweep" },
+	start = { key = "startCinematic", label = "Start in cinematic mode on login, /reload and turning it on" },
 	combat = { key = "stayInCombat", label = "Stay in cinematic mode in combat" },
 	npcs = { key = "revealAtNPCs", label = "Reveal at vendors, banks, mail and trainers" },
 	minimap = { key = "alwaysShowMinimap", label = "Always show the minimap" },
@@ -27,9 +28,11 @@ local TOGGLES = {
 	pvp = { key = "offInPvP", label = "Turn off in battlegrounds and arenas" },
 	cities = { key = "offInCities", label = "Turn off in cities" },
 	inns = { key = "offInInns", label = "Turn off in inns" },
-	center = { key = "taxiCenter", label = "Center camera when a flight starts" },
-	settle = { key = "taxiSettle", label = "Settle camera behind you before landing" },
-	flight = { key = "taxiInstant", label = "Start cinematic mode right away on flights" },
+	party = { key = "offInParty", label = "Turn off in a party" },
+	raidgroup = { key = "offInRaidGroup", label = "Turn off in a raid group" },
+	center = { key = "taxiCenter", label = "Swing round behind you at takeoff" },
+	settle = { key = "taxiSettle", label = "Lock the camera behind you before landing" },
+	flight = { key = "taxiInstant", label = "Start cinematic mode as soon as you take off" },
 	chatpeek = { key = "chatPeek", label = "Show chat when a message arrives" },
 	citychat = { key = "chatInCities", label = "Keep chat visible in cities" },
 	innchat = { key = "chatInInns", label = "Keep chat visible in inns" },
@@ -37,16 +40,17 @@ local TOGGLES = {
 	raidchat = { key = "chatInRaids", label = "Keep chat visible in raids" },
 	pvpchat = { key = "chatInPvP", label = "Keep chat visible in battlegrounds and arenas" },
 	mouseover = { key = "mouseover", label = "Mouseover reveal" },
-	reload = { key = "startCinematicOnReload", label = "Start in cinematic mode after /reload" },
-	timetitle = { key = "timeOfDayMessage", label = "Time of day under the zone name on login" },
+	timetitle = { key = "timeOfDayMessage", label = "Show the time of day" },
 	windows = { key = "stayWithWindows", label = "Stay in cinematic mode when opening windows" },
 	walkcam = { key = "walkOrbit", label = "RP walk camera" },
 	autoruncam = { key = "runOrbit", label = "Auto-run camera" },
-	campfire = { key = "cozyBuffsOn", label = "Cozy camera with listed buffs (campfire)" },
 	cozy = { key = "cozyOrbit", label = "Cozy camera" },
-	chair = { key = "cozyChair", label = "Cozy camera when sitting in a chair" },
-	weapon = { key = "cozyWeapon", label = "Cozy camera with your weapon drawn" },
+	vista = { key = "vistaOrbit", label = "Vista camera" },
+	fish = { key = "fishOrbit", label = "Fish camera" },
+	death = { key = "deathOrbit", label = "Death camera" },
+	deathsong = { key = "deathSong", label = "Death song" },
 	musicpause = { key = "musicPauseWhenMoving", label = "Pause music when you move on" },
+	landingpause = { key = "musicPauseOnLanding", label = "Pause music when a flight lands" },
 	indoor = { key = "indoorLimits", label = "Limit the camera indoors" },
 	combattext = { key = "hideCombatText", label = "Hide combat text out of combat" },
 	drag = { key = "revealOnDrag", label = "Bring the UI back while dragging something" },
@@ -71,6 +75,7 @@ local function PrintHelp()
 	print("  /cine list - show the extra faded frames")
 	Heading("Camera")
 	print("  /cine behind - swing the camera back behind your character")
+	print("  /cine flyby - turn the camera slowly round to look back, then back behind you (again to stop)")
 	print("  /cine walk - does the addon think you're walking or auto-running?")
 	print("  /cine walk flip - fix it if it has walk and run backwards")
 	Heading("Switches: /cine <name> turns one on or off")
@@ -83,29 +88,45 @@ local function PrintHelp()
 	end
 	Heading("More")
 	print("  /cine debug help - troubleshooting commands")
-	print("  Keybinds for toggle and hold-to-peek are under Key Bindings > AddOns.")
+	print("  Keybinds (toggle, hold-to-peek, hide the UI, fly-by) are on the Keybinds settings page.")
 end
 
 local function PrintDebugHelp()
 	ns.Print("troubleshooting commands")
 	print("  /cine debug mode - which camera mode it thinks you're in")
-	print("  /cine debug emote - the last emote the game passed, and whether cozy took it")
+	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
+	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
+	print("  /cine debug fishing - the last red error message, and whether it paused right-click casting")
 	print("  /cine debug weapon - what the game says about your weapon, and the cozy weapon trigger")
+	print("  /cine debug quest - the quest cam: on or off, its zoom and the over-the-shoulder offset")
+	print("  /cine debug questlog - save every frame of the next quest cams (for tracking down snaps)")
 	print("  /cine debug zoom - the slow zoom's state")
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
 	print("  /cine debug ambience - ambience volume and what it follows")
+	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
+	print("  /cine debug weather - the weather the game reports and the weather tint")
+	print("  /cine debug flight - the flight route, its known time and when the camera settles")
 	print("  /cine debug orbit - the camera rotation's state")
+	print("  /cine debug flyby - the fly-by's state and the random ones planned")
+	print("  /cine debug flybys - print each fly-by's start and end, random ones too (again to stop)")
+	print("  /cine debug death - print what the death camera does on real deaths (again to stop)")
 	print("  /cine debug place - city, inn, dungeon detection")
 	print("  /cine debug portrait - the portrait-until-full rule")
 	print("  /cine debug tracking - which tracking is active")
+	print("  /cine debug tooltip - trace the world tooltip hold-back (10 seconds)")
 	print("  /cine debug <group> - faded frames in a group (hover first; default minimap)")
 	print("  /cine speed - your speed, two ways")
 	print("  /cine facing - whether turning can be detected (10 seconds)")
 	print("  /cine turntest <degrees> <speed> - turn the camera a set amount")
+	print("  /cine starttest gentle|tilt|setting|share|steady|nomove - one slow move, to find what snaps as it starts")
+	print("  /cine restarttest [speed] - turn for 4 seconds, re-sending the turn every 0.1 sec")
 	print("  /cine turnhold - hold the view while you turn on the spot (10 seconds)")
+	print("  /cine deathtest [seconds] - act as if you'd died, for the death camera (30; again to stop)")
 	print("  /cine zoomtest, drifttest, pitchtest - camera movement tests")
+	print("  /cine doftest [seconds|strength <0-100>] - show the depth-of-field edge haze (30; again to stop)")
 	print("  /cine timetest [name] - show the time-of-day change title now (all: each in turn)")
 	print("  /cine soundtest <id> - play a game sound by its ID (stops after 10 seconds)")
+	print("  /cine songtest [file ID] - play a random death song, or any music file (again to stop)")
 end
 
 function ns.HandleSlash(msg)
@@ -152,6 +173,13 @@ function ns.HandleSlash(msg)
 				end
 			end)
 		end
+	elseif cmd == "starttest" then
+		local ok, why = ns.QuestCamStartTest(arg)
+		if ok then
+			ns.Print(("start test (%s): stand still and watch the camera; it starts moving in a second"):format(arg))
+		else
+			ns.Print("start test: " .. why)
+		end
 	elseif cmd == "turntest" then
 		-- Turns the camera a set number of degrees at a steady speed (default 30
 		-- deg/sec) using the same speed conversion as the orbit, to check that it's
@@ -163,21 +191,110 @@ function ns.HandleSlash(msg)
 			speed, tostring(GetCVar("cameraYawMoveSpeed"))))
 		MoveViewLeftStart(speed / yawSpeed)
 		C_Timer.After(degrees / speed, function() MoveViewLeftStop() end)
+	elseif cmd == "flyby" then
+		Cinematic_FlyBy()
+	elseif cmd == "debug" and arg == "flybys" then
+		ns.db.debugFlyBy = not ns.db.debugFlyBy
+		ns.Print("fly-by messages " .. (ns.db.debugFlyBy and
+			"on: each fly-by's plan, start and end, random ones too (again to stop)" or "off"))
+	elseif cmd == "debug" and arg == "flyby" then
+		local d = ns.GetFlyByDebug()
+		if d.active then
+			ns.Print(("fly-by on: %s, %.1f of %.1f sec, view %.0f° from behind you"):format(
+				d.phase, d.t, d.T, d.view))
+		else
+			ns.Print("fly-by off")
+		end
+		local planned = {}
+		for _, slot in ipairs(d.planned) do
+			planned[#planned + 1] = ("in %d sec"):format(math.max(0, slot.at - GetTime()))
+		end
+		ns.Print("random fly-bys (" .. (ns.db.taxiFlyBy and "on" or "off") .. "): " ..
+			(#planned > 0 and table.concat(planned, ", ") or "none planned"))
+	elseif cmd == "restarttest" then
+		-- Like turntest, but the turn is re-sent at the same speed every 0.1 sec
+		-- (as a fly-by does to change speed), to see whether restarting the
+		-- camera's turn shows as a jump. /cine restarttest [degrees/sec], 4 sec.
+		local speed = num or 40
+		local yawSpeed = tonumber(GetCVar("cameraYawMoveSpeed")) or 180
+		ns.Print(("turning left at %d°/sec for 4 sec, restarting the turn every 0.1 sec"):format(speed))
+		local sends = 0
+		local function Send()
+			sends = sends + 1
+			if sends > 40 then
+				MoveViewLeftStop()
+				ns.Print("restart test over")
+				return
+			end
+			MoveViewLeftStart(speed / yawSpeed)
+			C_Timer.After(0.1, Send)
+		end
+		Send()
 	elseif cmd == "turnhold" then
 		-- For 10 seconds, the turn follow runs even standing still: hold a turn key
 		-- and the camera should stay pointing the same way while you spin.
 		ns.turnTestUntil = GetTime() + 10
 		ns.Print("turn hold test for 10 seconds: stand still and hold a turn key. The camera " ..
 			"should keep looking the same way while your character turns.")
+	elseif cmd == "debug" and arg == "modes" then
+		ns.db.debugCameraMode = not ns.db.debugCameraMode
+		ns.ResetCameraModeReport() -- print the current mode straight away
+		ns.Print("print camera mode changes to chat: " .. OnOff(ns.db.debugCameraMode))
+	elseif cmd == "debug" and arg == "death" then
+		ns.deathDebug = not ns.deathDebug
+		ns.Print("death camera log on real deaths: " .. OnOff(ns.deathDebug) .. " (until you /reload)")
+	elseif cmd == "debug" and arg == "music" then
+		ns.musicDebug = not ns.musicDebug
+		ns.Print("music log: " .. OnOff(ns.musicDebug) .. " (until you /reload)")
+	elseif cmd == "songtest" then
+		-- Plays a music file in place of the zone music: the death song, or any
+		-- music file ID. Run it again (with no ID) to stop.
+		if ns.songTestPlaying and not num then
+			StopMusic()
+			ns.songTestPlaying = false
+			ns.Print("song stopped")
+		else
+			local file = num or ns.PickDeathSong()
+			ns.songTestPlaying = pcall(PlayMusic, file)
+			ns.Print(("playing music file %s%s. /cine songtest again stops it."):format(tostring(file),
+				GetCVar("Sound_EnableMusic") == "1" and "" or " (game music is off, so you won't hear it)"))
+		end
+	elseif cmd == "deathtest" then
+		-- Pretends you're dead (default 30 seconds) so the death camera runs, delay
+		-- and all. Running it again while it's going stops it.
+		if GetTime() < (ns.deathTestUntil or 0) then
+			ns.deathTestUntil = 0
+			ns.Print("death camera test stopped")
+		elseif not ns.db.deathOrbit then
+			ns.Print("the death camera is off: turn it on with /cine death first")
+		else
+			local seconds = num or 30
+			ns.deathTestUntil = GetTime() + seconds
+			ns.Print(("death camera test for %d seconds: stand still and it starts after %.1f sec. " ..
+				"/cine deathtest again stops it."):format(seconds, ns.db.deathOrbitDelay))
+		end
+	elseif cmd == "debug" and arg == "fishing" then
+		local e = ns.fishErrorDebug
+		if not e or not e.message then
+			ns.Print("No error message seen since loading in.")
+		else
+			ns.Print(("Last error (%d sec ago, from the %s): \"%s\" - %s"):format(GetTime() - e.at, e.via,
+				e.message, e.taken == "miss" and "missed the water: right-click casting paused"
+				or e.taken == "skill" and "skill too low: right-click casting off for 30 sec"
+				or "not a fishing error"))
+		end
 	elseif cmd == "debug" and arg == "emote" then
 		-- What the last emote passed to the game, and whether the cozy camera took it.
 		local e = ns.lastEmote
 		if not e then
 			ns.Print("no emote seen since login (the emote hook may not be firing)")
 		else
-			ns.Print(("last emote: %s (caught by %s), %.0f sec ago; cozy now: %s"):format(
-				e.token, e.via, GetTime() - e.at, tostring(ns.IsCozy and ns.IsCozy())))
+			ns.Print(("last emote: %s (caught by %s), %.0f sec ago"):format(e.token, e.via, GetTime() - e.at))
 		end
+		local event, camera, wait = ns.GetEventDebug()
+		ns.Print(event and ("event now: %s -> %s camera%s"):format(event, camera,
+			wait > 0 and (", starts in %d sec"):format(math.ceil(wait)) or "")
+			or "event now: none (or set to no camera)")
 		local d = ns.seatDebug
 		if d then
 			ns.Print(("last right-click %.0f sec ago: world tooltip was \"%s\" (%.1f sec before), seat word match: %s"):format(
@@ -292,6 +409,23 @@ function ns.HandleSlash(msg)
 				ns.Print("sound " .. num .. " didn't play (not a sound ID on this client?)")
 			end
 		end
+	elseif cmd == "doftest" then
+		-- Faked depth of field: /cine doftest shows it now (a number sets how
+		-- long; again stops it). /cine doftest strength 20 shows it at 20%, to
+		-- compare values (the camera pages set the real ones).
+		local strength = arg:match("^strength%s+(%d+)$")
+		if strength then
+			ns.FocusDemo(nil, tonumber(strength) / 100)
+			ns.Print(("showing depth of field at %d%% for 30 seconds"):format(
+				math.floor(ns.FocusDemoStrength() * 100 + 0.5)))
+		elseif arg ~= "" and not num then
+			ns.Print("/cine doftest [seconds|strength <0-100>]")
+		elseif ns.FocusDemo(num) then
+			ns.Print(("showing depth of field at %d%% for %d seconds. /cine doftest again stops it."):format(
+				math.floor(ns.FocusDemoStrength() * 100 + 0.5), num or 30))
+		else
+			ns.Print("depth of field demo stopped")
+		end
 	elseif cmd == "timetest" then
 		-- Shows the time-of-day change title now; /cine timetest dusk shows "Dusk".
 		if arg == "all" then
@@ -305,11 +439,34 @@ function ns.HandleSlash(msg)
 		end
 		local text = arg ~= "" and (arg:gsub("^%l", string.upper)) or nil
 		ns.TestTimeChangeTitle(text)
+	elseif cmd == "debug" and arg == "tooltip" then
+		-- Traces the world tooltip hold-back for 10 seconds (hover a herb meanwhile).
+		ns.tooltipTrace = { started = GetTime() }
+		ns.Print(("tooltip trace for 10 seconds: hover the thing now (reveal %s, after %.1f sec)."):format(
+			OnOff(ns.db.tooltipReveal), ns.db.tooltipRevealDelay or 0))
+		C_Timer.After(10, function()
+			local log = ns.tooltipTrace
+			ns.tooltipTrace = nil
+			ns.Print(("tooltip trace done: %d entries"):format(#log))
+			for _, line in ipairs(log) do
+				print("  " .. line)
+			end
+		end)
 	elseif cmd == "debug" and arg == "weapon" then
 		local w = ns.GetWeaponDebug()
-		ns.Print(("weapon: GetSheathState %s, returned %s (1 sheathed, 2 melee, 3 ranged); drawn %s, drawn calmly %s; cozy now %s, weapon trigger %s"):format(
+		ns.Print(("weapon: GetSheathState %s, returned %s (1 sheathed, 2 melee, 3 ranged); drawn %s, drawn calmly %s; cozy now %s, weapon event camera %s"):format(
 			w.exists and "exists" or "MISSING", w.state, tostring(w.drawn), tostring(w.calm),
-			tostring(w.cozy), ns.db.cozyWeapon and "on" or "off"))
+			tostring(w.cozy), tostring(ns.db.eventWeaponCamera)))
+	elseif cmd == "debug" and arg == "questlog" then
+		ns.db.debugQuestCam = not ns.db.debugQuestCam
+		ns.Print("quest cam log " .. (ns.db.debugQuestCam and
+			"on: each quest cam's frames are saved; /reload after one so they can be read (again to stop)"
+			or "off"))
+	elseif cmd == "debug" and arg == "quest" then
+		local q = ns.GetQuestCamDebug()
+		ns.Print(("quest cam: %s, event camera %s; turned %.1f°, lowered %.1f°%s; your distance %s, zoomed to %s; shoulder %s (ours %s), Keep Character Centered %s"):format(
+			q.active and "on" or (q.talking and "waiting") or "off", tostring(ns.db.eventQuestCamera), q.turned, q.lowered, q.handedOver and " (handed over to you)" or "", tostring(q.zoom), tostring(q.zoomedTo),
+			tostring(q.shoulder), tostring(q.shoulderOn), tostring(q.centered)))
 	elseif cmd == "debug" and arg == "help" then
 		PrintDebugHelp()
 	elseif cmd == "debug" and arg == "zoom" then
@@ -345,6 +502,45 @@ function ns.HandleSlash(msg)
 				ns.Print("turn debug done.")
 			end
 		end)
+	elseif cmd == "debug" and arg == "flight" then
+		local f = ns.GetFlightDebug()
+		local function s(v) return v and ("%.0fs"):format(v) or "-" end
+		if not f.hooked then
+			ns.Print("flight: this client has no TakeTaxiNode, so routes can't be noted")
+		end
+		if f.pending then
+			ns.Print(("flight: noted %s %s ago, waiting for takeoff (base time %s)"):format(
+				f.pending, s(f.pendingAge), f.pendingBase and s(f.pendingBase) or "none found"))
+		end
+		if f.onTaxi then
+			ns.Print(("flight: route %s, %s in, known time %s, left %s, settle at %s left (%s)"):format(
+				f.route or "unknown (not noted at the flight master)", s(f.elapsed),
+				s(f.known) .. (f.knownIsBase and " (base)" or ""), s(f.left),
+				s(ns.db.taxiSettleLead), f.settling and "settling now"
+					or not ns.db.taxiSettle and "settle is off"
+					or not f.route and "can't settle: no route"
+					or not f.known and "can't settle: first time on this route, timing it"
+					or "waiting"))
+		elseif not f.pending then
+			ns.Print("flight: not flying. Talk to a flight master and pick a destination, then try again.")
+		end
+	elseif cmd == "debug" and arg == "weather" then
+		local w = ns.GetWeatherDebug()
+		local function rgb(c) return ("%.2f %.2f %.2f"):format(c[1], c[2], c[3]) end
+		if not w.api then
+			ns.Print("weather: this client has no C_Weather")
+		elseif w.error then
+			ns.Print("weather: C_Weather.GetCurrentWeather gave an error")
+		elseif w.secret then
+			ns.Print("weather: the values are secret here")
+		else
+			ns.Print(("weather: type %s (%s), intensity %s, indoors %s"):format(tostring(w.kind),
+				w.kindName or "unknown", tostring(w.intensity), tostring(w.indoors)))
+		end
+		ns.Print(("weather tint: %s, aiming for %s, showing %s"):format(
+			ns.GetDB().weatherTint and "on" or "off", rgb(w.target), rgb(w.shown)))
+	elseif cmd == "debug" and arg == "plates" then
+		ns.PrintPlatesDebug()
 	elseif cmd == "debug" and arg == "ambience" then
 		local a = ns.GetAmbienceDebug()
 		local function n(v) return v and ("%.2f"):format(tonumber(v) or 0) or "-" end
@@ -456,14 +652,18 @@ function ns.HandleSlash(msg)
 			mode = "walking (RP walk camera)"
 		elseif ns.IsAutoRunning and ns.IsAutoRunning() then
 			mode = "auto-running (auto-run camera)"
+		elseif ns.IsVista and ns.IsVista() then
+			mode = "vista (/stare)"
+		elseif ns.IsFish and ns.IsFish() then
+			mode = "fish (fishing)"
 		elseif ns.IsCozy and ns.IsCozy() then
 			mode = "cozy (campfire or emote)"
 		elseif ns.playerMoving then
 			mode = "running"
 		elseif still then
 			local left = ns.db.idleOrbitDelay - (GetTime() - still)
-			mode = left > 0 and ("standing still, standing-still camera in %d sec"):format(math.ceil(left))
-				or "standing still (standing-still camera)"
+			mode = left > 0 and ("standing still, AFK camera in %d sec"):format(math.ceil(left))
+				or "standing still (AFK camera)"
 		else
 			mode = "moving the camera"
 		end

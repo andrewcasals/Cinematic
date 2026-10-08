@@ -47,11 +47,11 @@ local function FormatTime(seconds)
 	return ("%d:%02d left"):format(math.floor(seconds / 60), math.floor(seconds % 60))
 end
 
-local STRENGTHS = { 0.25, 0.5, 0.75, 1 }
-local VIGNETTE_STRENGTHS = { 0.1, 0.15, 0.25, 0.5, 0.75, 1 }
+local STRENGTHS = { 0, 0.25, 0.5, 0.75, 1 }
+local VIGNETTE_STRENGTHS = { 0, 0.1, 0.15, 0.25, 0.5, 0.75, 1 }
 
--- Strength choices: the usual steps plus the current value if it's between
--- them. Compared as whole percents (slider values aren't exact).
+-- Strength choices: the same fixed steps everywhere (finer values are set with
+-- the sliders in settings). Compared as whole percents (slider values aren't exact).
 local function Percent(value)
 	return value and math.floor(value * 100 + 0.5)
 end
@@ -60,167 +60,35 @@ local function AddStrengthChoices(menu, get, set, defaultLabel, choices)
 	if defaultLabel then
 		menu:CreateRadio(defaultLabel, function() return get() == nil end, function() set(nil) end)
 	end
-	local current, steps, seen = Percent(get()), {}, {}
 	for _, value in ipairs(choices or STRENGTHS) do
-		steps[#steps + 1] = value
-		seen[Percent(value)] = true
-	end
-	if current and not seen[current] then
-		steps[#steps + 1] = current / 100
-		table.sort(steps)
-	end
-	for _, value in ipairs(steps) do
 		menu:CreateRadio(("%d%%"):format(Percent(value)),
 			function() return Percent(get()) == Percent(value) end, function() set(value) end)
 	end
 end
 
--- Screen tint section, right in the main menu so nothing nests more than one
--- level deep (deeper menus flip sides near the screen edge and overlap).
--- With a Zone preset on, the colour and strength choices change only the
--- zone you're standing in.
+-- Screen tint section: tint and vignette on/off and their strengths. Presets,
+-- colours and the rest are in settings. Switching the tint off sets the main
+-- preset to None and remembers the old one for switching it back on.
 local function AddTintMenu(root, db)
 	local tint = root
 	tint:CreateDivider()
 	tint:CreateTitle("Screen tint")
 
-	local presetMenu = tint:CreateButton("Preset")
-	for _, preset in ipairs(ns.TINT_PRESETS) do
-		presetMenu:CreateRadio(preset.label, function() return db.tintPreset == preset.key end,
-			function()
-				db.tintPreset = preset.key
-				ns.RefreshTint()
-			end)
-	end
-
-	local zone = GetRealZoneText() or ""
-	if (db.tintPreset == "zone" or db.tintPreset == "zonetime") and zone ~= "" then
-		local current = function() return db.zoneTints[zone] end
-		local mood = tint:CreateButton(zone .. " colour")
-		mood:CreateRadio("Built-in mood", function() return current() == nil end,
-			function() ns.SetZoneTint(zone, nil) end)
-		mood:CreateRadio("No tint", function() return current() == "none" end,
-			function() ns.SetZoneTint(zone, "none") end)
-		for _, entry in ipairs(ns.GetZoneMoods()) do
-			local hex = ("|cff%02x%02x%02x"):format(entry.color[1] * 255, entry.color[2] * 255, entry.color[3] * 255)
-			mood:CreateRadio(hex .. entry.label .. "|r", function() return current() == entry.key end,
-				function() ns.SetZoneTint(zone, entry.key) end)
+	tint:CreateCheckbox("Tint", function() return db.tintPreset ~= "none" end, function()
+		if db.tintPreset == "none" then
+			db.tintPreset = db.tintPresetBeforeOff or ns.DEFAULTS.tintPreset
+			db.tintPresetBeforeOff = nil
+		else
+			db.tintPresetBeforeOff = db.tintPreset
+			db.tintPreset = "none"
 		end
-		if ns.OpenColorPicker then
-			mood:CreateButton("Pick a colour...", function()
-				local _, _, _, color = ns.GetZoneTintInfo(zone)
-				ns.OpenColorPicker(color[1], color[2], color[3], function(r, g, b)
-					ns.SetZoneTint(zone, { r, g, b })
-				end)
-			end)
-		end
-		local strength = tint:CreateButton(zone .. " strength")
-		AddStrengthChoices(strength,
-			function() return db.zoneTintStrength[zone] end,
-			function(value) ns.SetZoneTintStrength(zone, value) end,
-			("Main strength (%d%%)"):format(db.tintStrength * 100 + 0.5))
-
-		-- The area you're in (a town, a port): its own colour and strength.
-		local area, _, _, _, _, areaDefault = ns.GetAreaTintInfo()
-		if area then
-			local areaCurrent = function() return db.zoneTints[area] end
-			local areaMood = tint:CreateButton(area .. " colour")
-			areaMood:CreateRadio("Same as the zone", function() return areaCurrent() == nil end,
-				function() ns.SetZoneTint(area, nil) end)
-			areaMood:CreateRadio("No tint", function() return areaCurrent() == "none" end,
-				function() ns.SetZoneTint(area, "none") end)
-			for _, entry in ipairs(ns.GetZoneMoods()) do
-				local hex = ("|cff%02x%02x%02x"):format(entry.color[1] * 255, entry.color[2] * 255, entry.color[3] * 255)
-				areaMood:CreateRadio(hex .. entry.label .. "|r", function() return areaCurrent() == entry.key end,
-					function() ns.SetZoneTint(area, entry.key) end)
-			end
-			if ns.OpenColorPicker then
-				areaMood:CreateButton("Pick a colour...", function()
-					local _, _, _, color = ns.GetAreaTintInfo()
-					ns.OpenColorPicker(color[1], color[2], color[3], function(r, g, b)
-						ns.SetZoneTint(area, { r, g, b })
-					end)
-				end)
-			end
-			local areaStrength = tint:CreateButton(area .. " strength")
-			AddStrengthChoices(areaStrength,
-				function() return db.zoneTintStrength[area] end,
-				function(value) ns.SetZoneTintStrength(area, value) end,
-				("Area default (%d%%)"):format(areaDefault * 100 + 0.5))
-		end
-	elseif db.tintPreset ~= "none" then
-		local strength = tint:CreateButton("Strength")
-		AddStrengthChoices(strength, function() return db.tintStrength end, function(value)
-			db.tintStrength = value
-			ns.RefreshTint()
-		end)
-		if db.tintPreset == "custom" and ns.OpenColorPicker then
-			tint:CreateButton("Pick custom colour...", function()
-				ns.OpenColorPicker(db.tintCustomR, db.tintCustomG, db.tintCustomB, function(r, g, b)
-					db.tintCustomR, db.tintCustomG, db.tintCustomB = r, g, b
-					ns.RefreshTint()
-				end)
-			end)
-		end
-	end
-
-	if db.tintPreset == "timeofday" or db.tintPreset == "zonetime" then
-		local timeStrength = tint:CreateButton("Time of day strength")
-		AddStrengthChoices(timeStrength, function() return db.timeTintStrength end, function(value)
-			db.timeTintStrength = value
-			ns.RefreshTint()
-		end)
-		-- Clicking a phase previews it and opens the colour picker.
-		local colours = tint:CreateButton("Phase colours")
-		local anyOwn = false
-		for _, phase in ipairs(ns.GetTimePhases()) do
-			anyOwn = anyOwn or phase.own
-			local hex = ("|cff%02x%02x%02x"):format(phase.color[1] * 255, phase.color[2] * 255, phase.color[3] * 255)
-			colours:CreateButton(hex .. phase.name .. "|r" .. (phase.own and " (yours)" or ""), function()
-				ns.PreviewTintHour(phase.hour)
-				if ns.OpenColorPicker then
-					ns.OpenColorPicker(phase.color[1], phase.color[2], phase.color[3], function(r, g, b)
-						ns.SetTimePhaseColor(phase.name, { r, g, b })
-						ns.PreviewTintHour(phase.hour) -- keep showing it while you pick
-					end)
-				end
-			end)
-		end
-		if anyOwn then
-			colours:CreateDivider()
-			colours:CreateButton("Reset all to built-in", function()
-				for _, phase in ipairs(ns.GetTimePhases()) do ns.SetTimePhaseColor(phase.name, nil) end
-			end)
-		end
-		-- One level only: each phase's choices under its own heading.
-		local phaseStrength = tint:CreateButton("Phase strength")
-		for i, phase in ipairs(ns.GetTimePhases()) do
-			if i > 1 then phaseStrength:CreateDivider() end
-			phaseStrength:CreateTitle(phase.name)
-			AddStrengthChoices(phaseStrength,
-				function()
-					return phase.strength
-				end,
-				function(value)
-					ns.SetTimePhaseStrength(phase.name, value)
-					ns.PreviewTintHour(phase.hour)
-				end)
-		end
-		local preview = tint:CreateButton("Preview time of day")
-		for _, phase in ipairs(ns.GetTimePhases()) do
-			preview:CreateButton(("%s (%02d:00)"):format(phase.name, phase.hour),
-				function() ns.PreviewTintHour(phase.hour) end)
-		end
-		local clock = tint:CreateButton("Time of day clock")
-		clock:CreateRadio("Game time", function() return db.tintClock ~= "local" end, function()
-			db.tintClock = "game"
-			ns.RefreshTint()
-		end)
-		clock:CreateRadio("Your computer's clock", function() return db.tintClock == "local" end, function()
-			db.tintClock = "local"
-			ns.RefreshTint()
-		end)
-	end
+		ns.RefreshTint()
+	end)
+	local strength = tint:CreateButton("Tint strength")
+	AddStrengthChoices(strength, function() return db.tintStrength end, function(value)
+		db.tintStrength = value
+		ns.RefreshTint()
+	end)
 
 	tint:CreateCheckbox("Vignette", function() return db.vignette end, function()
 		db.vignette = not db.vignette
@@ -234,29 +102,29 @@ local function AddTintMenu(root, db)
 	end, nil, VIGNETTE_STRENGTHS)
 end
 
--- Camera section: quick on/off for each camera mode (one level deep).
-local CAMERA_MODES = {
-	{ "Flight camera", "taxiOrbit", "taxiZoom" },
-	{ "Standing still camera", "idleOrbit", "idleZoom" },
-	{ "Cozy camera", "cozyOrbit", "cozyZoom" },
-	{ "RP walk camera", "walkOrbit", "walkZoom" },
-	{ "Auto-run camera", "runOrbit", "runZoom" },
+-- Camera section: a submenu to switch each camera mode's zoom on or off.
+local CAMERA_ZOOMS = {
+	{ "Flight camera", "taxiZoom" },
+	{ "AFK camera", "idleZoom" },
+	{ "Cozy camera", "cozyZoom" },
+	{ "Vista camera", "vistaZoom" },
+	{ "Fish camera", "fishZoom" },
+	{ "RP walk camera", "walkZoom" },
+	{ "Auto-run camera", "runZoom" },
 }
 
 local function AddCameraMenu(root, db)
 	root:CreateDivider()
 	root:CreateTitle("Camera")
-	for _, mode in ipairs(CAMERA_MODES) do
-		root:CreateCheckbox(mode[1], function() return db[mode[2]] end,
-			function() db[mode[2]] = not db[mode[2]] end)
-	end
 	local zoom = root:CreateButton("Zoom")
-	for _, mode in ipairs(CAMERA_MODES) do
-		zoom:CreateCheckbox(mode[1], function() return db[mode[3]] end,
-			function() db[mode[3]] = not db[mode[3]] end)
+	for _, mode in ipairs(CAMERA_ZOOMS) do
+		zoom:CreateCheckbox(mode[1], function() return db[mode[2]] end,
+			function() db[mode[2]] = not db[mode[2]] end)
 	end
 	root:CreateCheckbox("Pause music when you move on", function() return db.musicPauseWhenMoving end,
 		function() db.musicPauseWhenMoving = not db.musicPauseWhenMoving end)
+	root:CreateCheckbox("Pause music when a flight lands", function() return db.musicPauseOnLanding end,
+		function() db.musicPauseOnLanding = not db.musicPauseOnLanding end)
 end
 
 local MENU_MARGIN = 12 -- pixels between the menu and the screen edges

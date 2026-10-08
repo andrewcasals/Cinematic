@@ -325,11 +325,49 @@ local function IsCursorInSavedRect(entry)
 	return x >= left and x <= left + width and y >= bottom and y <= bottom + height
 end
 
+-- The UI element the mouse is actually over (nil over the 3D world).
+local function MouseFocus()
+	local focus
+	if GetMouseFoci then
+		focus = GetMouseFoci()[1]
+	elseif GetMouseFocus then
+		focus = GetMouseFocus()
+	end
+	if focus == WorldFrame then
+		return nil
+	end
+	return focus
+end
+
+local function IsInside(frame, ancestor)
+	while frame do
+		if frame == ancestor then
+			return true
+		end
+		if IsForbidden(frame) then
+			return false
+		end
+		frame = frame:GetParent()
+	end
+	return false
+end
+
 function ns.IsEntryHovered(entry)
 	if entry.shrunk then
 		return IsCursorInSavedRect(entry)
 	end
-	return entry.frame:IsVisible() and entry.frame:IsMouseOver()
+	if not (entry.frame:IsVisible() and entry.frame:IsMouseOver()) then
+		return false
+	end
+	-- Container frames (the action bar holders, status bar managers, the
+	-- quest tracker) can cover far more of the screen than their buttons, so
+	-- the mouse resting in an empty corner would reveal them. Only count it
+	-- when the mouse is on something that belongs to the frame. Chat windows
+	-- don't always take the mouse, so they keep the plain rect test.
+	if entry.group == "chat" then
+		return true
+	end
+	return IsInside(MouseFocus(), entry.frame)
 end
 
 -- Frames the player can choose to show while fighting when staying cinematic
@@ -369,7 +407,7 @@ ns.COMBAT_SHOW = {
 local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
-	target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
+	player = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true,
 }
 
@@ -404,8 +442,7 @@ local SITUATION_FADE = {
 -- Frame names to show right now: only while staying cinematic and fighting
 -- (in combat, or with an enemy targeted). Also returns whether the player is
 -- actually in combat, since the fast fade-in only applies then.
--- Anything targeted (friend or foe); a dead target doesn't count when
--- ignoreDeadTarget is on.
+-- Anything targeted (friend or foe).
 local function HasAnyTarget()
 	return ns.HasTarget()
 end
@@ -463,6 +500,9 @@ local lastVitalsChange = 0
 -- aura details, which may be secret. Removals and the full refresh at login or
 -- zoning don't count. Clients that don't say what changed count every change.
 local buffPeekUntil = 0
+
+-- When the player was last in combat (for "only after combat").
+local lastCombatAt = -math.huge
 
 -- In combat the update details are secret: lists can't be looked into and the
 -- flag can't be tested. A secret list is still present (so something was
@@ -569,6 +609,9 @@ auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
 	if not (ns.db and ns.db.buffPeek) then
 		return
 	end
+	if ns.db.buffPeekAfterCombat and GetTime() - lastCombatAt > ns.db.buffPeekCombatWindow then
+		return
+	end
 	-- (wasOnTaxi: landed this instant, before the flight code has noticed.)
 	if UnitOnTaxi("player") or ns.wasOnTaxi or GetTime() < landedQuietUntil then
 		return
@@ -594,9 +637,6 @@ vitalsWatcher:SetScript("OnEvent", function()
 	lastVitalsChange = GetTime()
 end)
 
--- When the player was last in combat (for "only after combat").
-local lastCombatAt = -math.huge
-
 local function IsPlayerRecovering()
 	local health, maxHealth = UnitHealth("player"), UnitHealthMax("player")
 	local _, powerToken = UnitPowerType("player")
@@ -617,9 +657,17 @@ end
 ns.IsPlayerRecovering = IsPlayerRecovering
 ns.GetSecondsSinceVitalsChange = function() return GetTime() - lastVitalsChange end
 
--- Groups that stay a while after the mouse leaves them, and their settings.
-local HOVER_HOLD = { minimap = "minimapHoverHold", quests = "questsHoverHold" }
+-- How long a group stays after the mouse leaves it: its own setting when it
+-- overrides the shared one, otherwise the shared "stays after mouseover".
+local function HoverHoldKey(group)
+	if ns.db[group .. "HoverOverride"] then
+		return group .. "HoverHold"
+	end
+	return "mouseoverHold"
+end
 local hoverHeldUntil = {}
+
+local DEATH_FADE_TIME = 0.5 -- seconds for the UI to go when you die (death camera)
 
 function ns.UpdateFrames(cinematic, elapsed)
 	local now = GetTime()
@@ -649,11 +697,15 @@ function ns.UpdateFrames(cinematic, elapsed)
 				hovered[entry.group] = true
 			end
 		end
-		-- Some groups linger after the mouse leaves.
-		for group, key in pairs(HOVER_HOLD) do
-			if hovered[group] then
-				hoverHeldUntil[group] = now + ns.HoldTime(key)
-			elseif (hoverHeldUntil[group] or 0) > now then
+		-- Groups linger after the mouse leaves. The hold time counts the fade
+		-- out, so a group is gone that long after the mouse leaves; a hold
+		-- shorter than the fade just starts the fade straight away.
+		for group in pairs(hovered) do
+			local hold = ns.HoldTime(HoverHoldKey(group)) - ns.db.fadeOutTime
+			hoverHeldUntil[group] = now + math.max(0, hold)
+		end
+		for group, untilTime in pairs(hoverHeldUntil) do
+			if untilTime > now then
 				hovered[group] = true
 			end
 		end
@@ -661,6 +713,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 
 	-- "Except when standing still or flying": tracking doesn't hold the minimap
 	-- open on flights or once you've stood still for the standing-still delay.
+	-- Dead, with the death camera watching: everything goes, quickly, whatever
+	-- would normally keep it up (the release button is a popup: it stays).
+	local deathFade = cinematic and ns.IsDeathCinematic and ns.IsDeathCinematic()
+
 	local trackingPaused = false
 	if ns.db.trackingHideWhenIdle then
 		local stillSince = ns.GetStillSince()
@@ -691,6 +747,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 			and not fightingShown and (fadeChat or entry.group ~= "chat") then
 			target = 0
 		end
+		if deathFade and not (typing and entry.group == "chat") then
+			target = 0
+		end
 		if typing and entry.group == "chat" and entry.alpha < 1 then
 			-- Pressing Enter shows the chat input (and its window) at once.
 			ns.SetEntryAlpha(entry, 1)
@@ -705,7 +764,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 				duration = fade and ns.db[fade[1]] or ns.db.fadeInTime
 			else
 				local fade = entry.shownBy and SITUATION_FADE[entry.shownBy]
-				duration = fade and ns.db[fade[2]] or ns.db.fadeOutTime
+				duration = deathFade and DEATH_FADE_TIME or fade and ns.db[fade[2]] or ns.db.fadeOutTime
 			end
 			ns.SetEntryAlpha(entry, ns.Approach(entry.alpha, target, elapsed, duration))
 			if entry.alpha <= 0 then
@@ -719,12 +778,8 @@ end
 -- Built-in frames (the default fade list) for the "Always shown" page, which
 -- lets any of them be kept visible. Chat windows are listed only if shown, so
 -- the ten mostly unused chat frame slots don't clutter the list.
-local GROUP_LABELS = {
-	bars = "Action bars", sidebars = "Side action bars", totems = "Totems",
-	player = "Player", target = "Target and focus", minimap = "Minimap",
-	buffs = "Buffs", quests = "Quest tracker", misc = "Other", swing = "Swing timer",
-	meters = "Damage meter", chat = "Chat",
-}
+local GROUP_LABELS = {}
+for _, group in ipairs(ns.HOVER_GROUPS) do GROUP_LABELS[group[1]] = group[2] end
 
 local function IsBuiltInName(name)
 	if name:find("^ChatFrame%d+$") or name:find("^ChatFrame%d+EditBox$") then
@@ -849,7 +904,7 @@ function ns.RemoveUnderMouse()
 		return
 	end
 	ns.StopFading(name)
-	ns.Print(name .. " will always be shown (undo on the Always shown or Extra frames page).")
+	ns.Print(name .. " will always be shown (undo on the Frames options page).")
 end
 
 function ns.ListExtras()

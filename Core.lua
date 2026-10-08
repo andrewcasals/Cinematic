@@ -6,32 +6,41 @@
 local ADDON_NAME, ns = ...
 
 BINDING_HEADER_CINEMATIC = "Cinematic"
-BINDING_NAME_CINEMATIC_TOGGLE = "Toggle cinematic mode"
-BINDING_NAME_CINEMATIC_PEEK = "Peek at UI (hold)"
+BINDING_NAME_CINEMATIC_TOGGLE = "Cinematic: Toggle cinematic mode"
+BINDING_NAME_CINEMATIC_PEEK = "Cinematic: Peek at UI (hold)"
+BINDING_NAME_CINEMATIC_HIDEUI = "Cinematic: Hide the UI (keep the look)"
+BINDING_NAME_CINEMATIC_FLYBY = "Cinematic: Fly-by (turn round to look back)"
+BINDING_NAME_CINEMATIC_CAM_IDLE = "Cinematic: Start the AFK camera"
+BINDING_NAME_CINEMATIC_CAM_COZY = "Cinematic: Start the cozy camera"
+BINDING_NAME_CINEMATIC_CAM_VISTA = "Cinematic: Start the vista camera"
+BINDING_NAME_CINEMATIC_CAM_FISH = "Cinematic: Start the fish camera"
+BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: Test the death camera"
 
 local DEFAULTS = {
 	enabled = true,
 	minimapButton = true,     -- show the minimap button
 	minimapAngle = 225,       -- its position around the minimap, in degrees
-	startCinematic = true,   -- be in cinematic mode straight away on login
-	startCinematicOnReload = true, -- ...and after a /reload
+	startCinematic = true,   -- be in cinematic mode straight away on login, /reload and turning it on
 	-- Hide world tooltips in each camera mode:
 	tooltipOffFlight = true,
 	tooltipOffIdle = true,    -- standing still
 	tooltipOffCozy = true,
+	tooltipOffVista = true,   -- /stare
+	tooltipOffFish = true,    -- fishing
 	tooltipOffWalk = true,    -- RP walking
-	tooltipOffRun = false,     -- auto-running
+	tooltipOffRun = true,      -- auto-running
 	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat
-	timeOfDayMessage = true,  -- "Dusk" under the zone name on login and /reload
-	timeOfDayChange = true,   -- ...and on its own when the time of day changes
-	timeOfDaySound = true,    -- ...with a fitting sound (rooster, bells, frogs, owl, wolf)
+	timeOfDayMessage = true,  -- "Dusk" under the zone name on login and /reload, and when it
+	                          -- changes, with a fitting sound (rooster, bells, frogs, owl, wolf)
 	offInDungeons = true,     -- no cinematic mode in dungeons (and scenarios)
 	offInRaids = true,
 	offInPvP = true,          -- battlegrounds and arenas
 	offInCities = false,      -- capital cities
 	offInInns = false,        -- inns (resting outside a capital)
+	offInParty = false,       -- while in a party (not a raid group)
+	offInRaidGroup = false,   -- while in a raid group
 	delay = 15,            -- seconds of calm before fading out
-	fadeOutTime = 2.5,
+	fadeOutTime = 1.5,
 	fadeInTime = 0.5,
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
@@ -39,11 +48,17 @@ local DEFAULTS = {
 	tintPreset = "zonetime",   -- screen tint over the game world (see TINT_PRESETS)
 	tintStrength = 1,
 	tintCustomR = 1, tintCustomG = 0.8, tintCustomB = 0.6,
+	tintDrift = true,      -- tint strength slowly wanders up and down over a few minutes
+	tintDriftAmount = 0.08, -- how far it wanders, as a fraction of the strength (0.08 = +/-8%)
 	vignette = true,      -- darkened screen edges
 	vignetteStrength = 0.1,
+	innGlow = true,        -- indoors in an inn: lift the outdoor tint and add a warm glow
+	innGlowAmount = 0.02,  -- light the inn glow adds at its brightest (0.1 = 10%)
+	weatherTint = true,    -- rain, snow and sandstorms grey or colour the scene (clients with C_Weather)
+	weatherTintStrength = 0.6,
 	tintWhen = "always",   -- "always", "flight" or "idle" (standing still past the standing-still delay)
 	tintClock = "game",    -- time-of-day tint follows "game" (realm) time or "local" (computer) time
-	timeTintStrength = 1,  -- how strongly the time-of-day colour applies (both time presets)
+	timeTintStrength = 0.5,-- how strongly the time-of-day colour applies (both time presets)
 	tintPreviewHour = -1,  -- options-page preview of the time-of-day tint at this hour (-1 = now)
 	fadeChat = true,
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
@@ -54,12 +69,10 @@ local DEFAULTS = {
 	minimapForFish = true,
 	minimapForCreatures = false,
 	trackingHideWhenIdle = true, -- ...except once the standing-still timer has run, or on flights
-	revealOnTarget = true, -- attackable target brings the UI back
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
-	combatFadeInTime = 0.2,  -- how fast the "while fighting, show" frames appear
-	ignoreDeadTarget = true, -- a dead enemy targeted doesn't count as fighting
+	combatFadeInTime = 1,    -- how fast the "while fighting, show" frames appear
 	combatFadeOutTime = 5, -- and how fast they go once the fight is over
-	enemyFadeInTime = 0.5,   -- targeting an enemy out of combat: fade times for its frame list
+	enemyFadeInTime = 1,     -- targeting an enemy out of combat: fade times for its frame list
 	enemyFadeOutTime = 1.5,
 	friendlyFadeInTime = 1,  -- targeting a friend (anything you can't attack)
 	friendlyFadeOutTime = 1.5,
@@ -71,31 +84,74 @@ local DEFAULTS = {
 	portraitAfterCombat = true,  -- ...but only within portraitCombatWindow seconds of combat
 	portraitCombatWindow = 60,
 	buffPeek = true,          -- briefly show buffs/debuffs when one is gained or refreshed
+	buffPeekAfterCombat = true,  -- ...but only within buffPeekCombatWindow seconds of combat
+	buffPeekCombatWindow = 60,
 	buffPeekTime = 2.5,         -- seconds they stay up
-	buffPeekIgnore = "2479, Plainsrunning", -- buffs that never bring them up (spell IDs or names)
+	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584", -- buffs or debuffs that never bring them up
+	                                                    -- (spell IDs or names; 8326/20584: Ghost)
 	mouseover = true,      -- hovering a faded element reveals it
-	minimapHoverHold = 8,  -- seconds the minimap stays after the mouse leaves it
-	questsHoverHold = 10,   -- seconds the quest tracker stays after the mouse leaves it
+	mouseoverHold = 3,     -- seconds a group stays after the mouse leaves it (per-group overrides below)
 	musicInCinematic = true,  -- turn game music on while cinematic, off after
 	musicOffOnLogout = true,  -- turn game music off when logging out
 	hideNames = true,         -- hide unit names while cinematic
 	hidePlates = true,        -- hide nameplates while cinematic
-	fadeTooltip = false,      -- hide tooltips for units/objects in the world
+	plateShowMobs = true,     -- nameplates for hostile and neutral mobs (off hides them everywhere)
+	plateShowNPCs = true,     -- ...for friendly NPCs (when the game's friendly NPC plates are on)
+	plateShowOwn = true,      -- ...for players of your own faction
+	plateShowOther = true,    -- ...for players of the other faction
+	plateShowPets = true,     -- ...for pets, minions and guardians
+	plateShowTotems = true,   -- ...for totems
+	plateAlwaysTarget = false, -- your target's nameplate always shows, whatever the rows below say
+	plateCombatMobs = false,  -- show these during fights (off: hidden while you're in combat)
+	plateCombatNPCs = false,
+	plateCombatOwn = false,
+	plateCombatOther = false,
+	plateCombatPets = false,
+	plateCombatTotems = false,
+	plateCinematicMobs = false, -- keep these showing in cinematic mode despite hidePlates
+	plateCinematicNPCs = false,
+	plateCinematicOwn = false,
+	plateCinematicOther = false,
+	plateCinematicPets = false,
+	plateCinematicTotems = false,
+	nameKeepMobs = false,     -- keep these names up in cinematic mode despite hideNames
+	nameKeepNPCs = false,
+	nameKeepOwn = false,
+	nameKeepOther = false,
+	nameKeepPets = false,
+	nameKeepMinions = false,  -- minions and guardians
+	nameKeepTotems = false,
+	nameKeepSelf = false,     -- your own name
+	nameIconMobs = false,     -- in cinematic mode, an icon in place of these names
+	nameIconNPCs = false,
+	nameIconOwn = false,
+	nameIconOther = true,
+	nameIconPets = true,      -- pets, minions and guardians (they share a nameplate kind)
+	nameIconTotems = false,
+	nameIconPvPMobs = false,  -- ...only on units flagged for PvP
+	nameIconPvPNPCs = false,
+	nameIconPvPOwn = true,
+	nameIconPvPOther = true,
+	nameIconPvPPets = false,
+	nameIconPvPTotems = false,
+	fadeTooltip = true,       -- hide tooltips for units/objects in the world
+	tooltipReveal = true,     -- a hidden world tooltip comes back after hovering the same thing...
+	tooltipRevealDelay = 1,   -- ...for this many seconds
+	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
 	musicFadeTime = 5,        -- seconds for music to fade in or out
 	musicFatigue = 5,         -- minutes: don't start music again within this long of the last start
-	musicNewSongOnFlights = true, -- switch music off and on as flight rotation starts so a new song starts
-	musicNewSongWhenIdle = true,  -- ...and as the standing-still camera starts
-	musicNewSongWhenWalking = true, -- ...and when you set off RP walking
-	musicNewSongWhenAutoRun = true, -- ...and when you start auto-running
-	musicNewSongWhenCozy = true,    -- ...and when the cozy camera starts
+	-- Play music with each camera: a fresh song as it starts, even within the fatigue time.
+	musicCamFlight = true,
+	musicCamIdle = true,      -- AFK camera
+	musicCamCozy = true,
+	musicCamVista = true,
+	musicCamFish = true,
+	musicCamWalk = true,      -- RP walk
+	musicCamRun = true,       -- auto-run
 	musicPauseWhenMoving = true,  -- music fades out once you move on from flying, RP walking or standing still
-	musicPauseFadeTime = 3,       -- seconds that pause takes to fade out (and the music to come back)
-	fatigueIgnoreOnFlights = true, -- ...but start it anyway on a flight,
-	fatigueIgnoreWhenIdle = true,  -- once the standing-still timer has run,
-	fatigueIgnoreWhenWalking = true, -- while RP walking,
-	fatigueIgnoreWhenAutoRun = true, -- while auto-running,
-	fatigueIgnoreWhenCozy = true,    -- while cozy (campfire, emotes),
-	fatigueIgnoreNewZone = true,   -- or in a different zone from the last music
+	musicPauseOnLanding = true,   -- ...and as soon as a flight lands, without waiting for you to move
+	musicPauseFadeTime = 3,      -- seconds that pause takes to fade out (and the music to come back)
+	fatigueIgnoreNewZone = true,   -- start music anyway in a different zone from the last music
 	ambienceFollowsMusic = false, -- set ambient sound to a share of the music volume while cinematic
 	musicOffInCombat = false, -- fade game music out while in combat
 	musicCombatResume = 30,   -- ...and keep it off until this many seconds after the fight
@@ -117,26 +173,30 @@ local DEFAULTS = {
 	dropTargetOnFlights = true, -- ignore your target from takeoff (its frames fade) until you pick another
 	taxiInstant = true,       -- go cinematic as soon as a flight starts (no fade delay)
 	taxiCenter = true,        -- swing the camera behind the character when a flight starts
+	taxiFlyBy = true,         -- random fly-bys in the middle of flights
+	taxiFlyByEvery = 60,      -- ...about one per this many seconds of...
+	taxiFlyByFrom = 25,       -- ...the stretch between these % of the way
+	taxiFlyByTo = 75,
+	taxiLandZoom = true,      -- put the zoom back to your takeoff distance on landing
+	flyByLook = false,        -- /look as each fly-by starts (off for now: under suspicion for a snap)
+	flyByAngle = 160,         -- fly-by: degrees round from behind you
+	flyByTurnTime = 8,        -- ...seconds to turn round
+	flyByHold = 5,            -- ...seconds looking back
+	flyByBackTime = 6,        -- ...seconds to turn back
 	taxiOrbit = true,         -- slowly rotate the camera while on a flight path
 	taxiSettle = true,        -- swing the camera behind the character before landing
-	taxiSettleLead = 8,       -- seconds before the expected landing to start settling
+	taxiSettleLead = 5,       -- seconds before the expected landing the camera is locked behind you
+	zoneFadeTime = 3,         -- seconds a zone tint fades out (and the next fades in) at a border
+	zoneGapTime = 1.5,        -- seconds untinted between zone tints on the ground
+	zoneGapFlying = 6,        -- ...and in the air
 	idleOrbit = true,         -- also rotate it after standing still for a while
 	idleOrbitDelay = 30,      -- seconds of standing still before it starts
-	-- Cozy camera: swings round to face you and sways in front, when resting
-	-- at a campfire (listed buffs) or doing one of these emotes.
+	-- Cozy camera: swings round to face you and sways in front, when an event
+	-- picks it (Events page: ns.EVENTS in Camera.lua has their defaults).
 	cozyOrbit = true,         -- sway in front of you
 	cozyZoom = true,          -- with a close, gentle zoom
-	cozyInstant = true,       -- go cinematic straight away
-	cozyBuffsOn = true,       -- with one of the buffs below, while still
-	cozyBuffs = "Welcoming Campfire", -- buff names or spell IDs, comma-separated
-	cozySit = true,           -- /sit (and the sit key)
-	cozySleep = true,         -- /sleep, /lie
-	cozyDance = true,         -- /dance
-	cozyKneel = true,         -- /kneel
-	cozyChair = true,         -- sitting on a chair, bench and so on
-	cozyWeapon = true,        -- standing with your weapon drawn (a "hero shot")
-	cozyCrackle = true,       -- a crackling fire sound while cozy at a campfire
-	cozyChairWords = "chair, bench, stool, seat, throne, pew", -- words in a seat's name
+	cozyBuffs = "Welcoming Campfire", -- the campfire event's buffs: names or spell IDs, comma-separated
+	cozyChairWords = "chair, bench, stool, seat, throne, pew", -- the chair event: words in a seat's name
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
 	cozyZoomClose = 10,       -- yards: the distance it zooms in to (if you're further out); far side of a fire
 	cozyLevel = 15,           -- degrees it brings the camera down toward the ground as it swings round
@@ -160,21 +220,27 @@ local DEFAULTS = {
 	zoomOffInDungeons = false,
 	zoomOffInRaids = false,
 	zoomOffInPvP = false,
-	cameraInputPause = 15,    -- seconds the rotation waits after the player moves the camera
+	taxiInputPause = 15,      -- seconds the flight camera waits after the player moves the camera
+	idleInputPause = 15,      -- ...and the AFK camera
 	cameraPauseAtNPCs = true, -- no standing-still camera while an NPC window (auction house...) is open
 	cameraPauseCasting = true, -- ...or while you're casting (crafting, say)
-	-- Tuck the mouse cursor away (mouse-steering mode) once it's still, in each
-	-- camera mode, and at other times in cinematic mode:
-	cursorTuckFlight = true,
-	cursorTuckIdle = false,
-	cursorTuckCozy = false,
-	cursorTuckWalk = false,
-	cursorTuckRun = false,
-	cursorTuckOther = false,
-	cursorTuckDelay = 3,      -- seconds of a still cursor first
+	cameraPauseInMenus = true, -- ...or while a menu or game window (spellbook, options...) is open
+	-- Quest cam (eventQuestCamera on the Events page): talking to a quest giver, zoom in and swing behind you
+	questCamDistance = 4,     -- ...yards it zooms in to (if you're further out)
+	questCamTime = 3,         -- ...seconds the swing behind you takes
+	questCamZoomTime = 7,     -- ...seconds the zoom in takes (the side turn and tilt finish with it)
+	questCamZoomOutTime = 1.5, -- ...seconds the zoom back out takes, leaving
+	questCamAngle = 30,       -- ...degrees the camera comes round to one side of behind you (0: straight behind)
+	questCamSide = "random",  -- ...to a side picked at random each time, or "left" or "right"
+	questCamTurnTime = 4,     -- ...seconds that turn takes (once the zoom's done)
+	questCamLower = 0,        -- ...degrees the camera comes down, toward eye level (0: keep your angle)
+	questCamOverShoulder = false, -- ...and move over your shoulder (a Blizzard experimental camera setting: off by default)
+	questCamShoulder = 1,     -- ...yards the camera moves right, over your shoulder
+	questCamUncenter = false, -- ...turn the game's Keep Character Centered off meanwhile (it blocks the shoulder)
+	questCamAllGossip = false, -- ...for every NPC you talk to, not just quest givers
 	indoorLimits = true,      -- indoors, keep the camera modes from pushing into walls:
 	indoorZoomOut = 1,        -- ...zoom out at most this many yards past your own distance
-	indoorSwing = 20,         -- ...swing at most this far either side of behind
+	indoorSwing = 10,         -- ...swing at most this far either side of behind
 	indoorNoSweep = false,    -- ...and optionally no standing-still rotation at all
 	taxiOrbitSpeed = 6,       -- peak degrees per second during a sweep
 	taxiOrbitMode = "back",  -- "sweep", "random" or "back" (random angles behind the character)
@@ -202,6 +268,22 @@ for _, key in ipairs(ORBIT_PROFILE_KEYS) do
 end
 -- The standing-still camera's own defaults where they differ from the flight ones.
 DEFAULTS.idleOrbitMode = "sweep"
+
+-- The groups of faded frames, in the order the options list them. Each can
+-- override the mouseover hold time: <group>HoverOverride and <group>HoverHold.
+ns.HOVER_GROUPS = {
+	{ "bars", "Action bars" }, { "sidebars", "Side action bars" }, { "player", "Player" },
+	{ "target", "Target and focus" }, { "buffs", "Buffs" }, { "minimap", "Minimap" },
+	{ "quests", "Quest tracker" }, { "chat", "Chat" }, { "totems", "Totems" },
+	{ "swing", "Swing timer" }, { "meters", "Damage meter" }, { "misc", "Other" },
+}
+-- The minimap and quest tracker linger by default; the rest follow mouseoverHold.
+local HOVER_HOLD_DEFAULTS = { minimap = 5, quests = 5 }
+for _, group in ipairs(ns.HOVER_GROUPS) do
+	local key = group[1]
+	DEFAULTS[key .. "HoverOverride"] = HOVER_HOLD_DEFAULTS[key] ~= nil
+	DEFAULTS[key .. "HoverHold"] = HOVER_HOLD_DEFAULTS[key] or 5
+end
 DEFAULTS.idleOrbitBackArc = 45
 DEFAULTS.idleOrbitDrift = true
 DEFAULTS.idleOrbitDriftSpeed = 1
@@ -210,6 +292,9 @@ DEFAULTS.idleOrbitPause = 20
 DEFAULTS.idleOrbitPitchDown = 10
 DEFAULTS.idleOrbitPitchUp = 10
 DEFAULTS.idleOrbitStep = 40
+DEFAULTS.idleOrbitRandomDir = true -- pick clockwise or not afresh each time it starts
+DEFAULTS.debugCameraMode = false   -- print each camera mode change to chat
+DEFAULTS.debugFlyBy = false        -- print each fly-by's plan, start and end (/cine debug flybys)
 -- RP walking (moving in walk mode): its own page. The rotation is always
 -- "behind only" (walkOrbit* minus the mode), plus its own gentle zoom.
 DEFAULTS.walkOrbit = true          -- sway the camera behind you while walking
@@ -232,6 +317,68 @@ for key, value in pairs({
 }) do
 	DEFAULTS["cozyZoom" .. key] = value
 end
+-- Vista camera (/stare, by default). Lines up behind you and sways there like
+-- the RP walk camera, only gentler: slower moves, longer pauses and a softer drift.
+DEFAULTS.vistaOrbit = true         -- sway the camera behind you
+DEFAULTS.vistaZoom = true          -- and drift the zoom gently in and out
+DEFAULTS.vistaInputPause = 2       -- seconds after you move the camera before it carries on
+DEFAULTS.vistaLevel = 5            -- degrees it brings the camera down toward the ground
+for key, value in pairs({
+	Mode = "back", Right = false, Step = 30, Speed = 4, MinChange = 10,
+	PitchUp = 5, PitchDown = 3, BackArc = 30, MoveTime = 14, Ease = 0.5,
+	Pause = 8, Drift = true, DriftSpeed = 0.5,
+}) do
+	DEFAULTS["vistaOrbit" .. key] = value
+end
+for key, value in pairs({
+	Distance = 4, In = 2, Time = 16, Pause = 8, Random = true, Ease = 0.5, PastMax = true,
+}) do
+	DEFAULTS["vistaZoom" .. key] = value
+end
+-- Fish camera (casting Fishing, by default): the vista camera's settings, with
+-- a narrower, calmer sway either side of behind you (so the bobber stays in view).
+DEFAULTS.fishOrbit = true
+DEFAULTS.fishZoom = true
+DEFAULTS.fishInputPause = DEFAULTS.vistaInputPause
+DEFAULTS.fishLevel = DEFAULTS.vistaLevel
+DEFAULTS.fishRightClickCast = true  -- right-click casts Fishing again while the fish camera is on
+DEFAULTS.fishRecastDelay = 0.3     --...seconds after a cast ends before it does
+DEFAULTS.fishPoleRightClickCast = true -- ...and for the first cast, with a fishing pole equipped
+DEFAULTS.fishMissPause = 30        -- ...seconds it stands aside after a cast misses the water
+DEFAULTS.hideFishingCastBar = true -- no cast bar while it shows Fishing (other spells still show it)
+for _, key in ipairs({ "Mode", "Right", "Step", "Speed", "MinChange", "PitchUp", "PitchDown", "BackArc",
+	"MoveTime", "Ease", "Pause", "Drift", "DriftSpeed" }) do
+	DEFAULTS["fishOrbit" .. key] = DEFAULTS["vistaOrbit" .. key]
+end
+DEFAULTS.fishOrbitBackArc = 12     -- (vista: 30)
+DEFAULTS.fishOrbitMinChange = 4    -- (vista: 10)
+DEFAULTS.fishOrbitDriftSpeed = 0.3 -- (vista: 0.5)
+for _, key in ipairs({ "Distance", "In", "Time", "Pause", "Random", "Ease", "PastMax" }) do
+	DEFAULTS["fishZoom" .. key] = DEFAULTS["vistaZoom" .. key]
+end
+-- Death camera: a slow, steady turn round your body while you're dead.
+DEFAULTS.deathOrbit = true         -- turn the camera slowly while dead (until you release)
+DEFAULTS.deathOrbitDelay = 0       -- seconds after dying before it starts (0: the rise
+                                   -- goes with your fall, which hides the snap the game
+                                   -- gives a tilt starting on a dead character)
+DEFAULTS.deathOrbitSpeed = 5       -- degrees per second
+DEFAULTS.deathOrbitRight = false   -- turn clockwise instead
+DEFAULTS.deathOrbitRandomDir = false -- pick clockwise or not afresh each death
+DEFAULTS.deathLevel = 30           -- degrees it raises the camera to look down on you
+DEFAULTS.deathSong = true          -- play a song of its own meanwhile
+-- Music file IDs, comma-separated; one is picked at random each death:
+-- GhostMusic03 (the ghost world's music), Gloomy02, Haunted02, Haunted01,
+-- Mystery01, Undercity01, KelThuzad1A.
+DEFAULTS.deathSongFiles = "53519, 53232, 53235, 53234, 53240, 53216, 53602"
+DEFAULTS.deathOffInCities = false  -- no death camera in these places
+DEFAULTS.deathOffInInns = false
+DEFAULTS.deathOffInDungeons = false
+DEFAULTS.deathOffInRaids = false
+DEFAULTS.deathOffInPvP = true
+DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
+DEFAULTS.deathScreenStrength = 1
+DEFAULTS.deathZoom = 4             -- yards it pulls back meanwhile
+DEFAULTS.deathOrbitPause = 0       -- (always one continuous turn)
 -- Auto-run camera: like RP walk, while auto-running (runOrbit*, runZoom*).
 DEFAULTS.runOrbit = true
 DEFAULTS.runZoom = true
@@ -241,7 +388,7 @@ DEFAULTS.runSwingBehind = true
 DEFAULTS.runGlideDelay = 0.5
 for key, value in pairs({
 	Mode = "back", Right = false, Step = 30, Speed = 4, MinChange = 6,
-	PitchUp = 3, PitchDown = 10, BackArc = 15, MoveTime = 6, Ease = 0.5,
+	PitchUp = 3, PitchDown = 10, PitchFloor = 10, BackArc = 15, MoveTime = 6, Ease = 0.5,
 	Pause = 2, Drift = true, DriftSpeed = 1,
 }) do
 	DEFAULTS["runOrbit" .. key] = value
@@ -253,6 +400,14 @@ for key, value in pairs({
 }) do
 	DEFAULTS["walkOrbit" .. key] = value
 end
+-- Seconds after a fight before each camera mode may start (0: no wait).
+DEFAULTS.taxiCombatWait = 0
+DEFAULTS.idleCombatWait = 0
+DEFAULTS.walkCombatWait = 15
+DEFAULTS.runCombatWait = 30
+DEFAULTS.cozyCombatWait = 30
+DEFAULTS.vistaCombatWait = 0
+DEFAULTS.fishCombatWait = 0
 -- Slow zoom settings likewise: idleZoom* for standing still, taxiZoom* for
 -- flights, with the flight defaults copying the standing-still ones.
 local ZOOM_PROFILE_KEYS = { "Distance", "In", "Time", "Pause", "Random", "Ease", "PastMax" }
@@ -270,6 +425,22 @@ DEFAULTS.runZoomIn = 4
 for _, key in ipairs(ZOOM_PROFILE_KEYS) do
 	DEFAULTS["taxiZoom" .. key] = DEFAULTS["idleZoom" .. key]
 end
+DEFAULTS.taxiZoomPause = 7
+-- Seconds the pause between random zooms may run over or under <prefix>Pause.
+for _, prefix in ipairs({ "idleZoom", "taxiZoom", "walkZoom", "runZoom", "cozyZoom", "vistaZoom", "fishZoom" }) do
+	DEFAULTS[prefix .. "PauseVary"] = 0
+end
+DEFAULTS.taxiZoomPauseVary = 3
+-- Depth of field (faked): a soft haze round the screen edges in the camera
+-- modes. One switch for all, then a strength per mode (0 is off there).
+DEFAULTS.depthOfField = true
+DEFAULTS.dofIdle = 0.025
+DEFAULTS.dofCozy = 0.025
+DEFAULTS.dofVista = 0.025
+DEFAULTS.dofFish = 0.025
+DEFAULTS.dofFlight = 0.025
+DEFAULTS.dofWalk = 0
+DEFAULTS.dofRun = 0
 
 -- While any of these windows is open, keep the UI visible.
 local REVEAL_WHILE_SHOWN = {
@@ -311,16 +482,17 @@ function ns.NPCWindowOpen()
 	return AnyShown(NPC_WINDOWS)
 end
 
--- Anything open that you'd want the mouse for: windows, the game menu, popups,
--- open dropdown menus.
-local MOUSE_WINDOWS = { "GameMenuFrame", "StaticPopup1", "StaticPopup2", "StaticPopup3", "LootFrame",
-	"ContainerFrame1", "ContainerFrameCombinedBags", "WorldMapFrame", "QuestLogFrame", "FriendsFrame" }
-function ns.MouseWindowOpen()
-	if AnyShown(REVEAL_WHILE_SHOWN) or AnyShown(NPC_WINDOWS) or AnyShown(MOUSE_WINDOWS) then
-		return true
-	end
-	local manager = Menu and Menu.GetManager and Menu.GetManager()
-	return manager and manager.GetOpenMenu and manager:GetOpenMenu() ~= nil or false
+-- Menus and game windows (the Escape menu, options, spellbook, character
+-- sheet, map...). The camera modes wait while one is open (cameraPauseInMenus).
+local MENU_WINDOWS = {
+	"GameMenuFrame", "WorldMapFrame", "QuestLogFrame", "FriendsFrame", "PVEFrame",
+	"CollectionsJournal", "EncounterJournal", "AchievementFrame", "CommunitiesFrame",
+	"ProfessionsFrame", "TradeSkillFrame", "CraftFrame", "AddonList", "ChatConfigFrame",
+	"VideoOptionsFrame",
+}
+for _, name in ipairs(REVEAL_WHILE_SHOWN) do MENU_WINDOWS[#MENU_WINDOWS + 1] = name end
+function ns.MenuWindowOpen()
+	return AnyShown(MENU_WINDOWS)
 end
 
 local function AnyRevealFrameShown()
@@ -358,15 +530,6 @@ function ns.HasTarget()
 	return not targetDropped and Flag(UnitExists("target"))
 end
 
--- An enemy you could fight is targeted (a dead one doesn't count when
--- ignoreDeadTarget is on, e.g. targeting a corpse to loot it).
-function ns.HasHostileTarget()
-	if not (ns.HasTarget() and Flag(UnitCanAttack("player", "target"))) then
-		return false
-	end
-	return not (ns.db.ignoreDeadTarget and Flag(UnitIsDeadOrGhost("target")))
-end
-
 -- Confirming that an item will bind (Bind on Equip and the like) holds the item
 -- on the cursor until you answer; that isn't dragging something about.
 local BIND_POPUPS = {
@@ -396,10 +559,15 @@ local function IsBusy()
 	if inCombat and not ns.db.stayInCombat then
 		return true
 	end
-	local revealOnTarget = ns.db.revealOnTarget and not ns.db.stayInCombat
-	return Flag(UnitIsDeadOrGhost("player"))
-		or (revealOnTarget and ns.HasHostileTarget())
-		or (ns.db.revealOnCast and (Flag(UnitCastingInfo("player")) or Flag(UnitChannelInfo("player"))))
+	-- Targeting never brings the whole UI back; it shows the Combat page's
+	-- target lists instead (see GetCombatShownFrames).
+	-- Dead: the UI comes back, unless the death camera is watching (then the
+	-- release button, a popup, shows anyway). A ghost keeps cinematic mode as
+	-- usual: the corpse run is just travel (Return to Graveyard isn't faded).
+	local corpse = Flag(UnitIsDead("player")) and not Flag(UnitIsGhost("player"))
+	return (corpse and not (ns.IsDeathCinematic and ns.IsDeathCinematic()))
+		or (ns.db.revealOnCast and (Flag(UnitCastingInfo("player")) or Flag(UnitChannelInfo("player")))
+			and not (ns.IsFishingEvent and ns.IsFishingEvent()))
 		or CursorBusy()
 		or AnyRevealFrameShown()
 end
@@ -475,6 +643,11 @@ function ns.IsRotationBlocked()
 	return place ~= nil and ns.db["rotOffIn" .. PLACE_SUFFIX[place]] or false
 end
 
+function ns.IsDeathCameraBlocked()
+	local place = ns.GetPlaceType()
+	return place ~= nil and ns.db["deathOffIn" .. PLACE_SUFFIX[place]] or false
+end
+
 function ns.IsMusicBlocked()
 	local place = ns.GetPlaceType()
 	return place ~= nil and ns.db["musicOffIn" .. PLACE_SUFFIX[place]] or false
@@ -490,12 +663,21 @@ local function IsInDisabledZone()
 	return place ~= nil and ns.db[OFF_IN[place]] or false
 end
 
+-- "Turn off in" a party or raid group: who you're with, not where you are.
+local function IsInDisabledGroup()
+	if IsInRaid() then
+		return ns.db.offInRaidGroup
+	end
+	return IsInGroup() and ns.db.offInParty
+end
+
 -- "Turn off for a while" from the minimap menu. Session only: a reload or
 -- logout clears it.
 local snoozeUntil = 0
 
 local function ShouldBeCinematic(now)
-	if not ns.db.enabled or peeking or GetTime() < snoozeUntil or IsInDisabledZone() then
+	if not ns.db.enabled or peeking or GetTime() < snoozeUntil or IsInDisabledZone()
+		or IsInDisabledGroup() then
 		lastBusy = now -- the full fade delay applies after leaving
 		return false
 	end
@@ -503,8 +685,12 @@ local function ShouldBeCinematic(now)
 		lastBusy = now
 		return false
 	end
-	local instant = (ns.db.taxiInstant and UnitOnTaxi("player")) or (ns.db.walkInstant and ns.IsRPWalking())
-		or (ns.db.runInstant and ns.IsAutoRunning()) or (ns.db.cozyInstant and ns.IsCozy and ns.IsCozy())
+	-- Flights: right away with the option on, or as the flight event's delay ends.
+	local instant = (ns.FlightStarted and ns.FlightStarted() and (ns.db.taxiInstant or ns.db.eventFlightDelay))
+		or (ns.db.walkInstant and ns.IsRPWalking())
+		or (ns.db.runInstant and ns.IsAutoRunning())
+		or (ns.ActiveEvent and ns.ActiveEvent())
+		or (ns.IsDeathCinematic and ns.IsDeathCinematic())
 	local delay = instant and 0 or ns.db.delay
 	return now - lastBusy >= delay
 end
@@ -538,7 +724,13 @@ end
 local function RestoreSavedCVars()
 	for cvar, value in pairs(ns.db.savedCVars) do
 		if cvar ~= "Sound_AmbienceVolume" and not (cvar:find("^nameplate") and InCombatLockdown()) then
-			SetCVar(cvar, value)
+			-- Skip values that are already right: writing a test_ CVar at all
+			-- brings up Blizzard's experimental-camera warning.
+			local now = GetCVar(cvar)
+			local same = now == value or (tonumber(now) ~= nil and tonumber(now) == tonumber(value))
+			if not same then
+				SetCVar(cvar, value)
+			end
 			ns.db.savedCVars[cvar] = nil
 		end
 	end
@@ -578,7 +770,7 @@ local function OnOrbitUpdate(_, elapsed)
 	ns.UpdateOrbit(ns.lastCinematic, elapsed)
 end
 
--- Set at login when "start in cinematic mode" is on: the first cinematic tick
+-- Set at login (and on turning it on) when "start in cinematic mode" is on: the first cinematic tick
 -- within this window snaps straight to cinematic. Expires so a busy login
 -- (say, an enemy targeted) falls back to the normal fade later.
 local START_SNAP_WINDOW = 5
@@ -617,8 +809,6 @@ local function OnUpdate(_, elapsed)
 	ns.UpdateAmbience(cinematic, elapsed)
 	ns.UpdatePlates(cinematic, elapsed)
 	ns.UpdateTooltip()
-	if ns.UpdateCrackle then ns.UpdateCrackle(cinematic) end
-	if ns.UpdateCursorTuck then ns.UpdateCursorTuck(cinematic) end
 	ns.UpdateTaxi()
 	ns.lastCinematic = cinematic
 end
@@ -627,11 +817,75 @@ end
 function ns.SetEnabled(enabled)
 	ns.db.enabled = enabled
 	lastBusy = GetTime()
+	if enabled and ns.db.startCinematic then
+		-- "Start in cinematic mode" covers turning it on too: straight in, as at login.
+		lastBusy = GetTime() - ns.db.delay
+		startSnapUntil = GetTime() + START_SNAP_WINDOW
+	end
 end
 
 function Cinematic_Toggle()
 	ns.SetEnabled(not ns.db.enabled)
 	ns.Print(ns.db.enabled and "enabled" or "disabled")
+end
+
+function Cinematic_FlyBy()
+	local _, message = ns.ToggleFlyBy()
+	if message then
+		ns.Print("fly-by: " .. message)
+	end
+end
+
+-- Key bindings for the standing-still cameras: each starts its camera now, as
+-- if its event had happened, and pressing it again stops it. Moving or jumping
+-- ends it, like an emote. "death" runs the death camera test (/cine deathtest).
+local CAM_NAMES = { idle = "AFK", cozy = "cozy", vista = "vista", fish = "fish" }
+function Cinematic_StartCam(camera)
+	if not ns.db then
+		return
+	end
+	local now = GetTime()
+	if camera == "death" then
+		if now < (ns.deathTestUntil or 0) then
+			ns.deathTestUntil = 0
+			ns.Print("death camera test stopped")
+		elseif not ns.db.deathOrbit then
+			ns.Print("the death camera is off: turn it on with /cine death first")
+		else
+			ns.deathTestUntil = now + 30
+			ns.Print(("death camera test for 30 seconds: stand still and it starts after %.1f sec. " ..
+				"Press the key again to stop it."):format(ns.db.deathOrbitDelay))
+		end
+		return
+	end
+	if not ns.db.enabled then
+		ns.Print("Cinematic is off: turn it on first")
+		return
+	end
+	if ns.playerMoving or UnitOnTaxi("player") then
+		ns.Print("stand still to start the " .. CAM_NAMES[camera] .. " camera")
+		return
+	end
+	local idleOn = camera == "idle" and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
+		and not ns.manualCam
+	if ns.manualCam == camera or idleOn then
+		ns.manualCam = nil
+		ns.stillSince = now -- the standing-still timer starts afresh
+		ns.Print(CAM_NAMES[camera] .. " camera stopped")
+		return
+	end
+	if camera == "idle" and not ns.db.idleOrbit then
+		ns.Print("the AFK camera's rotation is off on its options page")
+		return
+	end
+	ns.manualCam = camera ~= "idle" and camera or nil
+	ns.stillSince = now - ns.db.idleOrbitDelay -- counts as stood still long enough
+	lastBusy = 0 -- fade the UI now
+	ns.Print(CAM_NAMES[camera] .. " camera on: move, jump or press the key again to stop it")
+end
+
+function Cinematic_ToggleUI()
+	ns.ToggleUI()
 end
 
 function Cinematic_Peek(down)
@@ -646,10 +900,11 @@ local function EnsureTables()
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
 	ns.db.savedCVars = ns.db.savedCVars or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
-	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or {}
+	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = true, LocalDefense = true }
 	ns.db.flightTimes = ns.db.flightTimes or {}
 	ns.db.zoneTints = ns.db.zoneTints or {} -- zone name -> "none", a mood key or { r, g, b }
 	ns.db.zoneTintStrength = ns.db.zoneTintStrength or {} -- zone name -> strength (0-1) for the Zone presets
+	ns.db.zonePresets = ns.db.zonePresets or {} -- zone or area name -> tint preset key used there instead of tintPreset
 	ns.db.timePhaseColors = ns.db.timePhaseColors or {} -- "Night", "Dawn"... -> { r, g, b } of your own
 	ns.db.timePhaseStrength = ns.db.timePhaseStrength or {} -- "Night", "Dawn"... -> strength (0-1) of your own
 	ns.db.combatShow = ns.db.combatShow or {}
@@ -667,6 +922,7 @@ end
 -- Restores the tunable settings but keeps the player's added/ignored frames.
 function ns.ResetSettings()
 	for k, v in pairs(DEFAULTS) do ns.db[k] = v end
+	ns.SyncPlateCVars() -- the game's nameplate options follow the restored ticks
 	lastBusy = GetTime()
 	ns.letterboxDirty = true
 end
@@ -690,9 +946,10 @@ end
 -- (flying, RP walking, standing still past the standing-still delay) these use
 -- their default values instead of the player's, so a long hold set for normal
 -- play doesn't keep the quest tracker (or chat, or buffs) up over the view.
-local FLIGHT_USES_DEFAULT = {
-	minimapHoverHold = true, questsHoverHold = true, buffPeekTime = true, chatPeekTime = true,
-}
+local FLIGHT_USES_DEFAULT = { mouseoverHold = true, buffPeekTime = true, chatPeekTime = true }
+for _, group in ipairs(ns.HOVER_GROUPS) do FLIGHT_USES_DEFAULT[group[1] .. "HoverHold"] = true end
+-- ...except the general hold, which goes at once there (normal play holds it a while).
+local FLIGHT_HOLD = { mouseoverHold = 0 }
 
 -- Flying, RP walking, or standing still past the standing-still delay.
 local function InCameraMode()
@@ -708,7 +965,7 @@ end
 
 ns.InCameraMode = function() return InCameraMode() end
 
--- Which camera mode you're in: "flight", "walk", "run", "cozy", "idle", or nil.
+-- Which camera mode you're in: "flight", "walk", "run", "vista", "fish", "cozy", "idle", or nil.
 function ns.CameraMode()
 	if UnitOnTaxi("player") then
 		return "flight"
@@ -716,6 +973,10 @@ function ns.CameraMode()
 		return "walk"
 	elseif ns.IsAutoRunning and ns.IsAutoRunning() then
 		return "run"
+	elseif ns.IsVista and ns.IsVista() then
+		return "vista"
+	elseif ns.IsFish and ns.IsFish() then
+		return "fish"
 	elseif ns.IsCozy and ns.IsCozy() then
 		return "cozy"
 	end
@@ -728,7 +989,7 @@ end
 
 function ns.HoldTime(key)
 	if FLIGHT_USES_DEFAULT[key] and InCameraMode() then
-		return math.min(DEFAULTS[key], ns.db[key])
+		return math.min(FLIGHT_HOLD[key] or DEFAULTS[key], ns.db[key])
 	end
 	return ns.db[key]
 end
@@ -764,6 +1025,7 @@ ticker:RegisterEvent("PLAYER_LOGIN")
 ticker:RegisterEvent("PLAYER_REGEN_DISABLED")
 ticker:RegisterEvent("PLAYER_LOGOUT")
 ticker:RegisterEvent("PLAYER_ENTERING_WORLD")
+pcall(ticker.RegisterEvent, ticker, "LOADING_SCREEN_DISABLED") -- (not on every client)
 ticker:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 ticker:RegisterEvent("PLAYER_STARTED_MOVING")
 ticker:RegisterEvent("PLAYER_LEVEL_UP")
@@ -798,6 +1060,16 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 				ns.db["taxiZoom" .. key] = ns.db["idleZoom" .. key]
 			end
 		end
+		-- An early build had one "keep the other faction's names" option.
+		if ns.db.plateEnemyNamesCinematic then
+			ns.db.nameKeepOther = true
+		end
+		ns.db.plateEnemyNamesCinematic = nil
+		-- The other faction's icon used to be its own option (markOther).
+		if ns.db.markOther == false then
+			ns.db.nameIconOther = false
+		end
+		ns.db.markOther = nil
 		-- "Turn camera effects off in" used to cover rotation and zoom together.
 		for _, suffix in ipairs({ "Cities", "Inns", "Dungeons", "Raids", "PvP" }) do
 			local old = ns.db["camOffIn" .. suffix]
@@ -843,6 +1115,23 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.cozyLevel == 50 then ns.db.cozyLevel = nil end
 			ns.db.cozySettingsV4 = true
 		end
+		-- The settle used to start this long before landing (default 8); now
+		-- it's when the camera is locked behind you (default 5). Once, unless changed.
+		if not ns.db.taxiSettleV2 then
+			if ns.db.taxiSettleLead == 8 then ns.db.taxiSettleLead = nil end
+			ns.db.taxiSettleV2 = true
+		end
+		-- Fly-bys turned to 150 degrees at first, now 160. Once, unless changed.
+		if not ns.db.flyByAngleV2 then
+			if ns.db.flyByAngle == 150 then ns.db.flyByAngle = nil end
+			ns.db.flyByAngleV2 = true
+		end
+		-- The fly-by /look was on by default at first; now off by default (it may
+		-- be what snaps the camera as a fly-by starts). Saved "on" goes once.
+		if not ns.db.flyByLookOffV1 then
+			if ns.db.flyByLook == true then ns.db.flyByLook = nil end
+			ns.db.flyByLookOffV1 = true
+		end
 		-- Still too low (the ground pulled the camera in); once, unless changed.
 		if not ns.db.cozySettingsV5 then
 			if ns.db.cozyLevel == 40 then ns.db.cozyLevel = nil end
@@ -873,6 +1162,61 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.runGlideDelay == 1.5 then ns.db.runGlideDelay = nil end
 			ns.db.runSettingsV3 = true
 		end
+		if ns.db.deathSongFile then -- one song became a list to pick from
+			if ns.db.deathSongFile ~= 53519 then ns.db.deathSongFiles = tostring(ns.db.deathSongFile) end
+			ns.db.deathSongFile = nil
+		end
+		if not ns.db.buffPeekIgnoreV2 then -- Ghost joins the list, unless it was changed
+			if ns.db.buffPeekIgnore == "2479, Plainsrunning" then ns.db.buffPeekIgnore = nil end
+			ns.db.buffPeekIgnoreV2 = true
+		end
+		if not ns.db.deathSettingsV4 then -- starts as you fall
+			if ns.db.deathOrbitDelay == 2 then ns.db.deathOrbitDelay = nil end
+			ns.db.deathSettingsV4 = true
+		end
+		if not ns.db.deathSettingsV3 then -- a gentler rise
+			if ns.db.deathLevel == 70 or ns.db.deathLevel == 60 then ns.db.deathLevel = nil end
+			ns.db.deathSettingsV3 = true
+		end
+		if not ns.db.questCamSettingsV4 then -- comes down less (lower, it met the scenery)
+			if ns.db.questCamLower == 20 then ns.db.questCamLower = nil end
+			ns.db.questCamSettingsV4 = true
+		end
+		if not ns.db.questCamSettingsV3 then -- a gentler swing
+			if ns.db.questCamTime == 1.5 then ns.db.questCamTime = nil end
+			ns.db.questCamSettingsV3 = true
+		end
+		if not ns.db.questCamSettingsV2 then -- a slower zoom
+			if ns.db.questCamZoomTime == 4 then ns.db.questCamZoomTime = nil end
+			ns.db.questCamSettingsV2 = true
+		end
+		if not ns.db.vistaSettingsV2 then -- doesn't drop down as much
+			if ns.db.vistaLevel == 10 then ns.db.vistaLevel = nil end
+			if ns.db.vistaOrbitPitchDown == 5 then ns.db.vistaOrbitPitchDown = nil end
+			ns.db.vistaSettingsV2 = true
+		end
+		-- "Start a fresh song when" and "Start music anyway" became one "Play
+		-- music" choice per camera: one switched off in both stays off.
+		for new, old in pairs({ Flight = { "musicNewSongOnFlights", "fatigueIgnoreOnFlights" },
+			Idle = { "musicNewSongWhenIdle", "fatigueIgnoreWhenIdle" },
+			Cozy = { "musicNewSongWhenCozy", "fatigueIgnoreWhenCozy" },
+			Walk = { "musicNewSongWhenWalking", "fatigueIgnoreWhenWalking" },
+			Run = { "musicNewSongWhenAutoRun", "fatigueIgnoreWhenAutoRun" } }) do
+			if ns.db[old[1]] == false and ns.db[old[2]] == false and ns.db["musicCam" .. new] == nil then
+				ns.db["musicCam" .. new] = false
+			end
+			ns.db[old[1]], ns.db[old[2]] = nil, nil
+		end
+		if not ns.db.fishMissPauseV2 then -- 5 sec became 30 (moving to a new spot still ends it)
+			if ns.db.fishMissPause == 5 then ns.db.fishMissPause = nil end
+			ns.db.fishMissPauseV2 = true
+		end
+		-- The fishing event used the vista camera by default before the fish
+		-- camera existed: that saved default moves over to it.
+		if not ns.db.fishCamV1 then
+			if ns.db.eventFishingCamera == "vista" then ns.db.eventFishingCamera = nil end
+			ns.db.fishCamV1 = true
+		end
 		if not ns.db.cozySettingsV8 then -- a slower sway
 			if ns.db.cozyOrbitMoveTime == 12 then ns.db.cozyOrbitMoveTime = nil end
 			ns.db.cozySettingsV8 = true
@@ -896,13 +1240,6 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.idleAtCampfire ~= nil then ns.db.cozyBuffsOn = ns.db.idleAtCampfire end
 			ns.db.idleBuffs, ns.db.idleAtCampfire = nil, nil
 		end
-		-- The cursor tuck used to be one switch.
-		if ns.db.cursorTuck ~= nil then
-			for _, suffix in ipairs({ "Flight", "Idle", "Cozy", "Walk", "Run", "Other" }) do
-				ns.db["cursorTuck" .. suffix] = ns.db.cursorTuck
-			end
-			ns.db.cursorTuck = nil
-		end
 		-- World tooltips used to be one switch for every camera mode.
 		if ns.db.tooltipOffInCameraModes ~= nil then
 			for _, key in ipairs({ "tooltipOffFlight", "tooltipOffIdle", "tooltipOffCozy",
@@ -911,13 +1248,62 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			end
 			ns.db.tooltipOffInCameraModes = nil
 		end
+		-- The cozy and vista triggers used to be switches on those cameras' pages;
+		-- they're events now, each picking its camera. A switched-off trigger
+		-- becomes "no camera".
+		local oldTriggers = { Campfire = "cozyBuffsOn", Sit = "cozySit", Sleep = "cozySleep",
+			Dance = "cozyDance", Kneel = "cozyKneel", Chair = "cozyChair", Weapon = "cozyWeapon",
+			Stare = "vistaStare" }
+		for event, old in pairs(oldTriggers) do
+			if ns.db[old] == false and ns.db["event" .. event .. "Camera"] == nil then
+				ns.db["event" .. event .. "Camera"] = "none"
+			end
+		end
+		-- "Start right away" and the shared eventDelay became a delay per event
+		-- (empty: right away). Only a changed eventDelay carries over, to the
+		-- events that weren't set to start right away.
+		local oldDelay = ns.db.eventDelay
+		for _, event in ipairs(ns.EVENTS) do
+			local key = "event" .. event.key
+			if oldDelay and oldDelay ~= 10 and not ns.db[key .. "Instant"] and ns.db[key .. "Delay"] == nil
+				and event.key ~= "Flight" and event.key ~= "Quest" and event.key ~= "Fishing" then -- (added after; never had the shared delay)
+				ns.db[key .. "Delay"] = oldDelay
+			end
+			ns.db[key .. "Instant"] = nil
+		end
+		-- One camera input pause used to cover the flight and AFK cameras; each
+		-- has its own now. Only a changed one carries over.
+		if ns.db.cameraInputPause and ns.db.cameraInputPause ~= 15 then
+			ns.db.taxiInputPause = ns.db.taxiInputPause or ns.db.cameraInputPause
+			ns.db.idleInputPause = ns.db.idleInputPause or ns.db.cameraInputPause
+		end
+		-- The quest cam's side used to be two switches (random, else left).
+		if ns.db.questCamRandomSide == false and ns.db.questCamSide == nil then
+			ns.db.questCamSide = ns.db.questCamLeft and "left" or "right"
+		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
 		for _, key in ipairs({
+			"cozyInstant", "cozyBuffsOn", "cozySit", "cozySleep", "cozyDance", "cozyKneel", "cozyChair",
+			"cozyWeapon", "vistaInstant", "vistaStare", "eventsV2", "eventDelay",
+			"taxiShotHold", "taxiShotBlendTime",
+			"taxiShots", "taxiShotInterval", "taxiShotLength", "taxiShotBlend", "taxiShotCuts",
+			"questCam", -- (now the quest giver event's camera)
+			"thirdsFraming", "thirdsStrength", "thirdsInterval", "thirdsHold",
+			"taxiThirdsInterval", "taxiThirdsStrength", "taxiThirds", "walkThirds", "runThirds",
+			"idleThirds", "cozyThirds", "vistaThirds", "deathThirds",
+			"startCinematicOnReload", "timeOfDayChange", "timeOfDaySound",
+			"revealOnTarget", "ignoreDeadTarget",
+			"plateHurtMobs", "plateHurtNPCs", "plateHurtOwn", "plateHurtOther", "plateHurtPets",
+			"plateHurtTotems",
 			"camOffInCities", "camOffInInns", "camOffInDungeons", "camOffInRaids", "camOffInPvP",
 			"hideCursor", "hideCursorDelay", "innZoom", "innZoomDistance",
 			"viewShift", "viewShiftAmount", "viewShiftRight", "zoneTitle", "zoneTitleSubzones",
-			"taxiOrbitPitch", "idleOrbitPitch", "turnLog", "cozyPray", "cozyAngle",
+			"taxiOrbitPitch", "idleOrbitPitch", "turnLog", "cozyPray", "cozyAngle", "deathInputPause",
+			"cozyCrackle", "cursorTuck", "cursorTuckFlight", "cursorTuckIdle", "cursorTuckCozy",
+			"cursorTuckVista", "cursorTuckWalk", "cursorTuckRun", "cursorTuckOther", "cursorTuckDelay",
+			"flyByDistance", "flyByMinDistance", "flyByMaxDistance", "flyByTrace", "flyByLower",
+			"cameraInputPause", "questCamRandomSide", "questCamLeft",
 		}) do
 			ns.db[key] = nil
 		end
@@ -930,6 +1316,8 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		SlashCmdList.CINEMATIC = ns.HandleSlash
 	elseif event == "PLAYER_LOGIN" then
 		RestoreSavedCVars()
+		ns.SyncPlateCVars()
+		ns.SyncNameCVars()
 		ns.PruneBuiltInExtras()
 		ns.wasOnTaxi = UnitOnTaxi("player") -- don't re-center after a /reload mid-flight
 		ns.RegisterChatPeek()
@@ -996,6 +1384,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		Hook("MoveBackwardStart", function() ns.autoRunning = false end)
 		ns.HookTaxiRoutes()
 		GameTooltip:HookScript("OnShow", ns.OnTooltipShow)
+		GameTooltip:HookScript("OnHide", ns.OnTooltipHide)
 		-- The minimap button first, so the fade list picks it up straight away
 		-- (otherwise it stays visible until the next scan).
 		if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
@@ -1005,7 +1394,13 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		lastBusy = GetTime()
 		self:SetScript("OnUpdate", OnUpdate)
 		ns.orbitFrame:SetScript("OnUpdate", OnOrbitUpdate)
+	elseif event == "LOADING_SCREEN_DISABLED" then
+		ns.stillSince = nil -- the AFK timer starts once you can see the world
 	elseif event == "PLAYER_ENTERING_WORLD" then
+		-- After a login, /reload or any loading screen, the AFK timer starts
+		-- afresh (the orbit has been running since login, counting the loading
+		-- screen as standing still).
+		ns.stillSince = nil
 		-- Movement is only reported as it starts and stops, so after a login or
 		-- /reload already on the move, check your speed instead.
 		local function CheckMoving()
@@ -1022,7 +1417,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		if (arg1 or arg2) and ns.db.timeOfDayMessage then
 			ns.ShowTimeOfDayTitle()
 		end
-		if (arg1 and ns.db.startCinematic) or (arg2 and ns.db.startCinematicOnReload) then
+		if (arg1 or arg2) and ns.db.startCinematic then
 			lastBusy = GetTime() - ns.db.delay -- skip the fade delay
 			startSnapUntil = GetTime() + START_SNAP_WINDOW
 		end
@@ -1050,9 +1445,10 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		ns.playerMoving = false
 		ns.autoRunning = false -- auto-run ends when you stop
 	elseif event == "NAME_PLATE_UNIT_ADDED" then
-		-- New plates start fully visible; match them to the current fade.
-		if ns.plates.level < 1 and C_NamePlate then
-			ns.SetPlateAlpha(C_NamePlate.GetNamePlateForUnit(arg1), ns.plates.level)
+		-- New plates start fully visible; match them to the current fade and
+		-- the Nameplates page's choices.
+		if C_NamePlate then
+			ns.RefreshPlate(C_NamePlate.GetNamePlateForUnit(arg1), arg1)
 		end
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		-- Snap back instantly when a fight starts rather than waiting for a tick.

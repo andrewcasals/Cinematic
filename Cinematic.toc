@@ -7,11 +7,15 @@
 ## SavedVariables: CinematicDB
 
 Core.lua
+HideUI.lua
 Frames.lua
 Chat.lua
 Effects.lua
+FlightTimes.lua
 Camera.lua
+QuestCam.lua
 Tint.lua
+Focus.lua
 Tracking.lua
 Slash.lua
 Options.lua
