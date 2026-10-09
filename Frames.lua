@@ -704,9 +704,20 @@ end
 -- power as secret values (even out of combat), so otherwise fall back on the
 -- change events: they keep firing every couple of seconds while health or
 -- power regenerates (or rage drains) and stop once it's back at rest. The
--- window covers mana's 5-second pause in regeneration after a cast.
+-- window covers mana's 5-second pause in regeneration after a cast; with no
+-- cast that recent, ticks come every 2 seconds, so a shorter wait will do and
+-- the portrait starts fading soon after you're full.
 local RECOVERY_WINDOW = 6
+local TICK_WINDOW = 3
+local CAST_PAUSE = 5
 local lastVitalsChange = 0
+local lastCastAt = -math.huge
+
+-- Fall damage brings the portrait up like a fight does. Health changing while
+-- falling or just after landing (the damage arrives a moment later) counts.
+local FALL_LANDING_GRACE = 1
+local lastFallingAt = -math.huge
+local lastFallDamageAt = -math.huge
 
 -- Buff peek: a new or refreshed buff/debuff briefly shows the buffs group.
 -- UNIT_AURA says what changed (added, updated, removed) without needing the
@@ -846,11 +857,20 @@ end)
 local vitalsWatcher = CreateFrame("Frame")
 vitalsWatcher:RegisterUnitEvent("UNIT_HEALTH", "player")
 vitalsWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
+vitalsWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 vitalsWatcher:SetScript("OnEvent", function(_, event)
+	local now = GetTime()
+	if event == "UNIT_SPELLCAST_SUCCEEDED" then
+		lastCastAt = now
+		return
+	end
 	if event == "UNIT_POWER_UPDATE" and not PowerCounts() then
 		return
 	end
-	lastVitalsChange = GetTime()
+	if event == "UNIT_HEALTH" and (ns.Flag(IsFalling()) or now - lastFallingAt <= FALL_LANDING_GRACE) then
+		lastFallDamageAt = now
+	end
+	lastVitalsChange = now
 end)
 
 local function IsPlayerRecovering()
@@ -859,7 +879,9 @@ local function IsPlayerRecovering()
 	local power, maxPower = UnitPower("player"), UnitPowerMax("player")
 	if IsSecretValue(health) or IsSecretValue(maxHealth)
 		or (countPower and (IsSecretValue(power) or IsSecretValue(maxPower))) then
-		return GetTime() - lastVitalsChange < RECOVERY_WINDOW
+		local now = GetTime()
+		local window = now - lastCastAt < CAST_PAUSE + TICK_WINDOW and RECOVERY_WINDOW or TICK_WINDOW
+		return now - lastVitalsChange < window
 	end
 	if maxHealth > 0 and health < maxHealth then
 		return true
@@ -891,8 +913,11 @@ function ns.UpdateFrames(cinematic, elapsed)
 	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
 		lastCombatAt = now
 	end
+	if ns.Flag(IsFalling()) then
+		lastFallingAt = now
+	end
 	local portraitAllowed = ns.db.portraitWhenNotFull and (not ns.db.portraitAfterCombat
-		or now - lastCombatAt <= ns.db.portraitCombatWindow)
+		or now - math.max(lastCombatAt, lastFallDamageAt) <= ns.db.portraitCombatWindow)
 	if ns.IsChatActive() then
 		ns.chatTypingUntil = now + ns.HoldTime("chatPeekTime")
 	end
@@ -926,12 +951,13 @@ function ns.UpdateFrames(cinematic, elapsed)
 
 	-- "Except when standing still or flying": tracking doesn't hold the minimap
 	-- open on flights or once you've stood still for the standing-still delay.
+	-- Nor in the places ticked under "Except in" (cities and the like).
 	-- Dead, with the death camera watching: everything goes, quickly, whatever
 	-- would normally keep it up (the release button is a popup: it stays).
 	local deathFade = cinematic and ns.IsDeathCinematic and ns.IsDeathCinematic()
 
-	local trackingPaused = false
-	if ns.db.trackingHideWhenIdle then
+	local trackingPaused = ns.IsTrackingOffHere()
+	if not trackingPaused and ns.db.trackingHideWhenIdle then
 		local stillSince = ns.GetStillSince()
 		trackingPaused = UnitOnTaxi("player")
 			or (stillSince ~= nil and now - stillSince >= ns.db.idleOrbitDelay)

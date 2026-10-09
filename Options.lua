@@ -501,8 +501,8 @@ local function CreateRevealPanel()
 	local function IfPortrait(db) return db.portraitWhenNotFull end
 
 	local afterCombat = Check(content, "portraitAfterCombat", "Only after combat",
-		"Only keep the portrait up if you've been in combat recently, so things like " ..
-		"fall damage or casting a buff in town don't bring it up.")
+		"Only keep the portrait up if you've been in combat (or taken fall damage) " ..
+		"recently, so things like casting a buff in town don't bring it up.")
 	afterCombat:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(afterCombat, IfPortrait)
 
@@ -605,8 +605,14 @@ local function CreateRevealPanel()
 	tooltipRevealDelay:SetPoint("TOPLEFT", tooltipReveal, "BOTTOMLEFT", 4, -26)
 	GreyUnless(tooltipRevealDelay, function(db) return db.tooltipReveal end)
 
+	local tooltipWarm = Slider(content, "tooltipWarmTime", "Then show at once until none for", 0, 15, 0.5, "%.1f sec")
+	tooltipWarm:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", 0, -26)
+	GreyUnless(tooltipWarm, function(db) return db.tooltipReveal end)
+	Tooltip(tooltipWarm, "Once a tooltip has shown, the next things you hover show theirs straight " ..
+		"away, until no world tooltip has been up for this long. 0 makes every one wait.")
+
 	local tooltipFade = Slider(content, "tooltipFadeTime", "Fade in and out over", 0, 2, 0.05, "%.2f sec")
-	tooltipFade:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", 0, -26)
+	tooltipFade:SetPoint("TOPLEFT", tooltipWarm, "BOTTOMLEFT", 0, -26)
 	GreyUnless(tooltipFade, function(db) return db.tooltipReveal end)
 	Tooltip(tooltipFade, "How long a tooltip takes to fade in once it's shown, and to fade out " ..
 		"when you move off. 0 shows and hides it at once.")
@@ -1634,6 +1640,7 @@ end
 -- Not a CreateCameraModePanel page either (QuestCam.lua, started by the quest
 -- giver event), but laid out the same way.
 local QUEST_SIDES = {
+	{ value = "click", text = "Where you clicked them" },
 	{ value = "random", text = "Either side, at random" },
 	{ value = "right", text = "Your right" },
 	{ value = "left", text = "Your left" },
@@ -1684,7 +1691,9 @@ local function CreateQuestPanel()
 	GreyUnless(turnTime, IfOn)
 	local SIDE_TIP = "Which side the camera comes round to. On your right, the quest giver is on " ..
 		"the right of the screen. (The game doesn't tell addons where the quest giver stands, or " ..
-		"what's around you, so it can't pick the open side.)"
+		"what's around you, so it can't pick the open side.) \"Where you clicked them\": the side " ..
+		"of the screen you clicked the quest giver on, and the camera turns toward it; talking " ..
+		"to them with a key instead, the side is picked at random."
 	stack:Add(Label(content, "GameFontHighlight", "Side"), "label")
 	local side = Dropdown(content, "questCamSide", QUEST_SIDES, 200)
 	if side then
@@ -1866,6 +1875,43 @@ local function OpenColorPicker(r, g, b, onChange)
 end
 ns.OpenColorPicker = OpenColorPicker
 
+-- When the letterbox or tint shows: a checkbox per situation (db.<prefix>Moving,
+-- Still, Flight and InCombat), the first at x, y from anchor, then the wait
+-- after a fight. text: what's shown (it), and how it leaves (away) and comes
+-- back (back). enabled: false greys them all. Returns the slider at the end.
+local function SituationChecks(content, prefix, anchor, x, y, text, onChange, enabled)
+	enabled = enabled or function() return true end
+	local function Situation(key, label, tip)
+		local check = Check(content, prefix .. key, label, tip, function(value)
+			ns.GetDB()[prefix .. key] = value
+			onChange()
+			Refresh() -- grey out / enable the wait after combat
+		end)
+		check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x, y)
+		anchor, x, y = check, 0, -2
+		return check
+	end
+	local moving = Situation("Moving", "Moving around",
+		("Show %s while you're out and about, or stopped for less than the standing-still delay."):format(text.it))
+	local still = Situation("Still", "Standing still",
+		("Show %s once you've stood still for the delay on the AFK camera page."):format(text.it))
+	local flight = Situation("Flight", "On flights", ("Show %s on flight paths."):format(text.it))
+	local combat = Situation("InCombat", "In combat",
+		("Keep %s during fights. Untick to %s (and back after). Only while staying cinematic in " ..
+		"combat (Combat unticked under Turn off in, on the main page)."):format(text.it, text.away))
+	for _, check in ipairs({ moving, still, flight }) do
+		GreyUnless(check, enabled)
+	end
+	GreyUnless(combat, function(db) return enabled(db) and db.stayInCombat end)
+
+	local back = Slider(content, prefix .. "CombatWait", "Fade in after combat", 0, 30, 1, "%d sec")
+	back:SetPoint("TOPLEFT", combat, "BOTTOMLEFT", 24, -26)
+	Tooltip(back, ("How long %s stays away once a fight is over before %s. 0 brings it back right away.")
+		:format(text.it, text.back))
+	GreyUnless(back, function(db) return enabled(db) and db.stayInCombat and not db[prefix .. "InCombat"] end)
+	return back
+end
+
 -- Sub-page for the screen tint and vignette.
 local function CreateTintPanel()
 	local canvas, content = CreateScrollPage()
@@ -1889,24 +1935,16 @@ local function CreateTintPanel()
 		"Black bars slide in at the top and bottom of the screen.", function(value)
 			ns.GetDB().letterbox = value
 			ns.RefreshLetterbox()
+			Refresh() -- grey out / enable when they show
 		end)
 	letterbox:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", -2, -6)
 
-	local letterboxCombat = Check(content, "letterboxInCombat", "Keep in combat",
-		"Untick to slide the bars away during fights (and back after). Only while staying " ..
-		"cinematic in combat (Combat unticked under Turn off in, on the main page).")
-	letterboxCombat:SetPoint("TOPLEFT", letterbox, "BOTTOMLEFT", 16, -2)
-	GreyUnless(letterboxCombat, function(db) return db.stayInCombat end)
-	letterboxCombat:HookScript("OnClick", function() Refresh() end) -- grey out / enable the time
-
-	local letterboxBack = Slider(content, "letterboxCombatWait", "Fade in after combat", 0, 30, 1, "%d sec")
-	letterboxBack:SetPoint("TOPLEFT", letterboxCombat, "BOTTOMLEFT", 4, -26)
-	Tooltip(letterboxBack, "How long the bars stay away once a fight is over before sliding back in. " ..
-		"0 brings them back right away.")
-	GreyUnless(letterboxBack, function(db) return db.stayInCombat and not db.letterboxInCombat end)
+	local letterboxBack = SituationChecks(content, "letterbox", letterbox, 16, -2,
+		{ it = "the letterbox", away = "slide it away", back = "sliding back in" },
+		ns.RefreshLetterbox, function(db) return db.letterbox end)
 
 	local size = Slider(content, "letterboxSize", "Bar height", 0, 25, 1, "%d%%", 100, ns.RefreshLetterbox)
-	size:SetPoint("TOPLEFT", letterboxBack, "BOTTOMLEFT", -16, -34)
+	size:SetPoint("TOPLEFT", letterboxBack, "BOTTOMLEFT", -36, -34)
 
 	local opacity = Slider(content, "letterboxAlpha", "Bar opacity", 10, 100, 5, "%d%%", 100, ns.RefreshLetterbox)
 	opacity:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -34)
@@ -2043,45 +2081,12 @@ local function CreateTintPanel()
 	-- When the tint shows
 	local whenLabel = Label(content, "GameFontHighlight", "Show the tint")
 	whenLabel:SetPoint("TOPLEFT", driftAmount, "BOTTOMLEFT", -4, -24)
-	local WHEN = {
-		{ value = "always", text = "Whenever cinematic mode is on" },
-		{ value = "flight", text = "Only on flights" },
-		{ value = "idle", text = "Only when standing still" },
-	}
-	local whenControl = Dropdown(content, "tintWhen", WHEN, 260, ns.RefreshTint)
-	if whenControl then
-		whenControl:SetPoint("TOPLEFT", whenLabel, "BOTTOMLEFT", 0, -6)
-	else
-		local previous = whenLabel
-		for i, choice in ipairs(WHEN) do
-			local check = Choice(content, "tintWhen", choice.value, choice.text)
-			check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
-			previous = check
-		end
-		whenControl = previous
-	end
-	local whenNote = Label(content, "GameFontHighlightSmall",
-		"\"Only when standing still\" starts after the delay on the AFK camera page.")
-	whenNote:SetPoint("TOPLEFT", whenControl, "BOTTOMLEFT", 2, -8)
-	whenNote:SetWidth(320)
-	whenNote:SetJustifyV("TOP")
-
-	local tintCombat = Check(content, "tintInCombat", "Keep in combat",
-		"Untick to fade the tint away during fights (and back after). Only while staying " ..
-		"cinematic in combat (Combat unticked under Turn off in, on the main page).")
-	tintCombat:SetPoint("TOPLEFT", whenNote, "BOTTOMLEFT", -4, -8)
-	GreyUnless(tintCombat, function(db) return db.stayInCombat end)
-	tintCombat:HookScript("OnClick", function() Refresh() end) -- grey out / enable the time
-
-	local tintBack = Slider(content, "tintCombatWait", "Fade in after combat", 0, 30, 1, "%d sec")
-	tintBack:SetPoint("TOPLEFT", tintCombat, "BOTTOMLEFT", 4, -26)
-	Tooltip(tintBack, "How long the tint stays away once a fight is over before fading back in. " ..
-		"0 brings it back right away.")
-	GreyUnless(tintBack, function(db) return db.stayInCombat and not db.tintInCombat end)
+	local tintBack = SituationChecks(content, "tint", whenLabel, -2, -6,
+		{ it = "the tint", away = "fade it away", back = "fading back in" }, ns.RefreshTint)
 
 	-- Time of day: which clock, strength, your own phases
 	local timeHeader = Header(content, "Time of day", tintBack, -24)
-	timeHeader:SetPoint("TOPLEFT", tintBack, "BOTTOMLEFT", -2, -24)
+	timeHeader:SetPoint("TOPLEFT", tintBack, "BOTTOMLEFT", -22, -24)
 	local timeHelp = Label(content, "GameFontHighlightSmall",
 		"For the Time of day and Zone + time of day presets, and the time of day message.")
 	timeHelp:SetPoint("TOPLEFT", timeHeader, "BOTTOMLEFT", 0, -6)
@@ -3232,10 +3237,25 @@ local function CreateFramesPanel()
 		GreyUnless(check, function(db) return db.minimapForTracking end)
 		previousTracking = check
 	end
+	-- Places where tracking doesn't keep the minimap up, in the usual place order.
+	local exceptIn = Label(content, "GameFontHighlight", "Except in")
+	exceptIn:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", 4, -4)
+	local PLACE_TIPS = {
+		Cities = "Capital cities. ", Inns = "Resting anywhere outside a capital city. ",
+		PvP = "Alterac Valley's mines do have ore, so untick this if you mine there. ",
+	}
+	for i, place in ipairs(PLACES) do
+		local check = Check(content, "trackingOffIn" .. place[1], place[2], (PLACE_TIPS[place[1]] or "") ..
+			"Tracking doesn't keep the minimap up here. Hovering it still shows it.")
+		check:SetPoint("TOPLEFT", i == 1 and exceptIn or previousTracking, "BOTTOMLEFT",
+			i == 1 and 12 or 0, i == 1 and -4 or -2)
+		GreyUnless(check, function(db) return db.minimapForTracking end)
+		previousTracking = check
+	end
 	-- The list of frames starts below the tracking (back out to the column edge).
 	content.keepTop = CreateFrame("Frame", nil, content)
 	content.keepTop:SetSize(1, 1)
-	content.keepTop:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", -16, 0)
+	content.keepTop:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", -32, 0)
 
 	canvas:SetScript("OnShow", PageShown(function()
 		if ns.GetDB() then

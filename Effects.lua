@@ -1304,7 +1304,10 @@ end
 -- (walking, flying, turning, the camera orbiting); a unit once it's no longer
 -- the mouseover.
 -- A put-back tooltip is the add-on's own, so it's also taken down that way.
+-- Once one's been put back, tooltips are warm: the game's own show at once,
+-- left to it, until none has been up for tooltipWarmTime seconds.
 local held, shown, revealedName, revealing
+local warmUntil = 0
 local CURSOR_REACH = 32 -- UI pixels the cursor may wander over an object
 local CURSOR_REST = 3   -- UI pixels a tick that still count as resting
 local CURSOR_SETTLE = 0.5 -- seconds the cursor has to come to rest over an object
@@ -1318,6 +1321,26 @@ end
 local function SameName(a, b)
 	local ok, same = pcall(function() return a == b end)
 	return not ok or same
+end
+
+-- The game reuses a world tooltip for the next unit without showing it again
+-- (OnShow never fires), so a unit with a different name in a tooltip that's
+-- already up is a new one. Only a unit: an object's tooltip (a shop sign) is
+-- the add-on's own once put back, and the game can redo it in place.
+local function ReusedForUnit(name)
+	local ok, isUnit = pcall(function()
+		local _, unit = GameTooltip:GetUnit()
+		return unit ~= nil
+	end)
+	return ok and isUnit and not SameName(TooltipName(), name)
+end
+
+local function Warm()
+	return ns.db.tooltipReveal and GetTime() < warmUntil
+end
+
+local function KeepWarm()
+	warmUntil = GetTime() + (ns.db.tooltipWarmTime or 0)
 end
 
 -- Fades every frame (the tick is too coarse for a short fade). Fading out ends
@@ -1340,11 +1363,10 @@ local function StartFade(to)
 end
 
 fader:SetScript("OnUpdate", function(self)
-	-- The game reuses a tooltip that's still up (fading out) for the next unit
-	-- without showing it again, so OnShow never fires: finishing the fade would
-	-- hide the new one, and nothing would bring it back until the mouseover
-	-- changed. Treat it as newly shown instead.
-	if fadeTo == 0 and not SameName(TooltipName(), fadingName) then
+	-- Reused for the next unit while fading out: finishing the fade would hide
+	-- the new one, and nothing would bring it back until the mouseover changed.
+	-- Treat it as newly shown instead.
+	if fadeTo == 0 and ReusedForUnit(fadingName) then
 		ns.OnTooltipShow(GameTooltip)
 		return
 	end
@@ -1530,6 +1552,7 @@ local function Reveal()
 		tostring(ok), ok and "" or tostring(err))
 	revealing = false
 	revealedName, shown = TooltipName(), note
+	KeepWarm()
 	if tooltip:IsShown() then
 		tooltip:SetAlpha(0)
 		StartFade(1)
@@ -1556,6 +1579,12 @@ function ns.OnTooltipShow(self)
 	if revealedName and SameName(TooltipName(), revealedName) then
 		return -- the revealed one refreshing
 	end
+	if Warm() then
+		Trace("warm, showing %s", tostring(TooltipName()))
+		held, revealedName = nil, nil
+		KeepWarm()
+		return
+	end
 	HoldBack(self)
 end
 
@@ -1566,15 +1595,18 @@ end
 -- Runs on the tick: counts down a held tooltip, and covers a tooltip that was
 -- already up when cinematic mode started.
 function ns.UpdateTooltip()
+	-- Any world tooltip up keeps them warm.
+	if Warm() and GameTooltip:IsShown() and IsWorldTooltip() then
+		KeepWarm()
+	end
 	-- Gone, or taken over by a UI element's tooltip (left alone). (Not the
 	-- minimap exception: a put-back tooltip is the add-on's to take down, and
 	-- nothing else would if the cursor went over the minimap.)
 	if shown and not (GameTooltip:IsShown() and WorldOwned()) then
 		shown, revealedName = nil, nil
 	end
-	-- Straight from the revealed unit onto the next: the game reuses the
-	-- tooltip without showing it again, so it's caught here as new.
-	if shown and revealedName and not SameName(TooltipName(), revealedName) then
+	-- Straight from the revealed one onto the next unit: caught here as new.
+	if shown and revealedName and ReusedForUnit(revealedName) then
 		Trace("replaced %s", tostring(revealedName))
 		ns.OnTooltipShow(GameTooltip)
 		return
@@ -1602,7 +1634,7 @@ function ns.UpdateTooltip()
 			end
 		end
 	elseif not (fader:IsShown() and fadeTo == 0) -- let a fade-out finish
-		and ShouldHideTooltip() and not (revealedName and SameName(TooltipName(), revealedName)) then
+		and not Warm() and ShouldHideTooltip() and not (revealedName and SameName(TooltipName(), revealedName)) then
 		HoldBack(GameTooltip)
 	end
 end

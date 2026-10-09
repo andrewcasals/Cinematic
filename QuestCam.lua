@@ -72,6 +72,7 @@ local DRIFT_EASE = 0.3 -- ...ramps at either end (all easing, it crawled so long
                        -- side; much shorter, it turned round with a jump)
 local DRIFT_GAP = 0.35 -- ...seconds between legs (STEP_GAP's pause showed)
 local INPUT_GRACE = 1 -- seconds: camera input this soon is the click that opened the window
+local CLICK_WINDOW = 2 -- seconds: a click on the world this soon before the window opened is what opened it
 local LOG_MAX = 4000  -- frames kept by /cine debug questlog
 
 local SHOULDER_CVARS = { values = { test_cameraOverShoulder = "1" } }
@@ -548,15 +549,19 @@ local function Start()
 	-- (A move still undoing a past conversation's carries on from where it is.)
 	-- Which side: there's no knowing where the quest giver stands (only your
 	-- own and your group's positions are given), nor what's around you, so
-	-- with questCamSide "random" it's picked afresh each time.
+	-- with questCamSide "random" it's picked afresh each time. With "click",
+	-- it turns toward the side of the screen you clicked them on. (That's
+	-- yaw.left on a click on the right: the other way, it turned away.)
 	-- (Unless still turning back from the last one: it carries on that way.)
 	if movers.yaw.amount == 0 then
-		if db.questCamSide == "random" then
+		if db.questCamSide == "click" and cam.clickSide then
+			movers.yaw.left = cam.clickSide == "right"
+		elseif db.questCamSide == "random" or db.questCamSide == "click" then
 			movers.yaw.left = math.random() < 0.5
 		else
 			movers.yaw.left = db.questCamSide == "left"
 		end
-		Note("side " .. (movers.yaw.left and "left" or "right"))
+		Note("side " .. (movers.yaw.left and "left" or "right") .. (cam.clickSide and " (clicked)" or ""))
 	end
 	cam.steps, cam.stepsAt = {}, cam.startedAt + db.questCamTime + SWING_SETTLE
 	cam.driftOut, movers.yaw.lastGrowing = nil, nil
@@ -619,6 +624,26 @@ local function Wanted()
 		and not UnitOnTaxi("player") and not ns.IsCameraOffHere("quest")
 end
 
+-- The last click on the world (not on a window): when, and which half of the
+-- screen it was on.
+local lastClick = { at = -math.huge }
+local clickWatcher = CreateFrame("Frame")
+clickWatcher:RegisterEvent("GLOBAL_MOUSE_DOWN")
+clickWatcher:SetScript("OnEvent", function()
+	local focus
+	if GetMouseFoci then
+		focus = GetMouseFoci()[1]
+	elseif GetMouseFocus then
+		focus = GetMouseFocus()
+	end
+	if focus ~= nil and focus ~= WorldFrame then
+		return
+	end
+	local x = GetCursorPosition() / UIParent:GetEffectiveScale()
+	lastClick.at = GetTime()
+	lastClick.side = x > UIParent:GetWidth() / 2 and "right" or "left"
+end)
+
 local OPENS = {
 	QUEST_GREETING = true, QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true,
 	GOSSIP_SHOW = true,
@@ -635,6 +660,8 @@ local function OnEvent(_, event)
 		end
 		if not cam.since then
 			cam.since, cam.cancelled = GetTime(), nil -- a new conversation
+			-- Opened by clicking them (not an interact key): the side they were on.
+			cam.clickSide = cam.since - lastClick.at <= CLICK_WINDOW and lastClick.side or nil
 		end
 		cam.closingAt = nil
 	elseif event == "PLAYER_LOGOUT" then

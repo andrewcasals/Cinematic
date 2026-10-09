@@ -636,7 +636,7 @@ local function ApplyTint(level)
 
 	local vignetteAlpha = db.vignette and db.vignetteStrength * level or 0
 	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
-	for side, edge in pairs(vignetteEdges) do
+	for _, edge in pairs(vignetteEdges) do
 		edge:SetShown(vignetteAlpha > 0)
 	end
 	if vignetteAlpha > 0 then
@@ -654,21 +654,9 @@ local function ApplyTint(level)
 	tintFrame:SetShown(level > 0)
 end
 
+-- cinematic: already false outside the situations ticked for the tint (see Core).
 local function TintWanted(cinematic)
-	local stillSince = ns.GetStillSince()
-	if Previewing() then
-		return true
-	end
-	if not cinematic then
-		return false
-	end
-	if db.tintWhen == "flight" then
-		return UnitOnTaxi("player")
-	elseif db.tintWhen == "idle" then
-		return not UnitOnTaxi("player") and stillSince ~= nil
-			and GetTime() - stillSince >= db.idleOrbitDelay
-	end
-	return true
+	return cinematic or Previewing()
 end
 
 -- Death screen: while the death camera runs, the world goes dim and cold and a

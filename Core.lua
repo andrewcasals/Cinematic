@@ -50,8 +50,12 @@ local DEFAULTS = {
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
-	letterboxInCombat = false, -- keep the bars while staying cinematic in combat
-	tintInCombat = true,      -- keep the tint while staying cinematic in combat
+	-- When the letterbox and tint show: moving around, standing still (past the
+	-- standing-still delay), on flights, and in combat (while staying cinematic).
+	letterboxMoving = true, letterboxStill = true, letterboxFlight = true,
+	letterboxInCombat = false,
+	tintMoving = true, tintStill = true, tintFlight = true,
+	tintInCombat = true,
 	letterboxCombatWait = 30, -- if not: seconds after a fight before the bars fade back in
 	tintCombatWait = 8,       -- ...and the tint
 	tintPreset = "zonetime",   -- screen tint over the game world (see TINT_PRESETS)
@@ -65,7 +69,6 @@ local DEFAULTS = {
 	innGlowAmount = 0.02,  -- light the inn glow adds at its brightest (0.1 = 10%)
 	weatherTint = true,    -- rain, snow and sandstorms grey or colour the scene (clients with C_Weather)
 	weatherTintStrength = 0.6,
-	tintWhen = "always",   -- "always", "flight" or "idle" (standing still past the standing-still delay)
 	tintClock = "game",    -- time-of-day tint follows "game" (realm) time or "local" (computer) time
 	timeTintStrength = 0.5,-- how strongly the time-of-day colour applies (both time presets)
 	tintPreviewHour = -1,  -- options-page preview of the time-of-day tint at this hour (-1 = now)
@@ -79,6 +82,11 @@ local DEFAULTS = {
 	minimapForFish = true,
 	minimapForCreatures = false,
 	trackingHideWhenIdle = true, -- ...except once the standing-still timer has run, or on flights
+	trackingOffInCities = true,  -- ...and in these places (no nodes there; dungeons have some)
+	trackingOffInInns = true,
+	trackingOffInDungeons = false,
+	trackingOffInRaids = false,
+	trackingOffInPvP = true,
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
 	combatFadeInTime = 1,    -- how fast the "while fighting, show" frames appear
 	combatFadeOutTime = 6, -- and how fast they go once the fight is over
@@ -147,6 +155,7 @@ local DEFAULTS = {
 	fadeTooltip = true,       -- hide tooltips for units/objects in the world
 	tooltipReveal = true,     -- a hidden world tooltip comes back after hovering the same thing...
 	tooltipRevealDelay = 1,   -- ...for this many seconds
+	tooltipWarmTime = 5,      -- once one's shown, the rest show at once until none has been up this long (0: off)
 	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
 	musicFadeTime = 5,        -- seconds for music to fade in or out
 	musicFatigue = 5,         -- minutes: don't start music again within this long of the last start
@@ -231,7 +240,7 @@ local DEFAULTS = {
 	questCamZoomTime = 7,     -- ...seconds the zoom in takes (the side turn and tilt finish with it)
 	questCamZoomOutTime = 1.5, -- ...seconds the zoom back out takes, leaving
 	questCamAngle = 30,       -- ...degrees the camera comes round to one side of behind you (0: straight behind)
-	questCamSide = "random",  -- ...to a side picked at random each time, or "left" or "right"
+	questCamSide = "click",   -- ...the side of the screen you clicked them on (else at random), or "random", "left" or "right"
 	questCamTurnTime = 4,     -- ...seconds that turn takes (once the zoom's done)
 	questCamDrift = 4,        -- ...degrees it then drifts slowly to and fro, side to side (0: holds still)
 	questCamLower = 0,        -- ...degrees the camera comes down, toward eye level (0: keep your angle)
@@ -713,6 +722,12 @@ function ns.IsMusicBlocked()
 	return place ~= nil and ns.db["musicOffIn" .. PLACE_SUFFIX[place]] or false
 end
 
+-- Tracking doesn't keep the minimap up here (Frames page, "Except in").
+function ns.IsTrackingOffHere()
+	local place = ns.GetPlaceType()
+	return place ~= nil and ns.db["trackingOffIn" .. PLACE_SUFFIX[place]] or false
+end
+
 local function IsInDisabledZone()
 	local place = ns.GetPlaceType()
 	return place ~= nil and ns.db[OFF_IN[place]] or false
@@ -861,13 +876,23 @@ end
 local START_SNAP_WINDOW = 5
 local startSnapUntil = 0
 
--- Effects that can step aside in fights (db.<key>InCombat) and fade back in
--- a while after (db.<key>CombatWait seconds).
-local COMBAT_EFFECTS = {
+-- Effects shown only in some situations (db.<key>Moving, Still, Flight and
+-- InCombat), fading back in a while after a fight (db.<key>CombatWait seconds).
+local SITUATION_EFFECTS = {
 	{ key = "letterbox", update = "UpdateLetterbox" },
 	{ key = "tint", update = "UpdateTint" },
 }
 local lastFightAt = -math.huge
+
+-- Out of combat: on a flight, standing still past the standing-still delay, or moving around.
+local function Situation(now)
+	if UnitOnTaxi("player") then
+		return "Flight"
+	elseif ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay then
+		return "Still"
+	end
+	return "Moving"
+end
 
 local function OnUpdate(_, elapsed)
 	accumulated = accumulated + elapsed
@@ -908,17 +933,24 @@ local function OnUpdate(_, elapsed)
 		ns.Log("state", cinematic and "cinematic" or "normal UI")
 	end
 	Step(ns.UpdateFrames, cinematic, elapsed)
-	-- Staying cinematic in a fight: the letterbox and tint can each step aside,
-	-- and wait their own time after it before fading back in.
+	-- The letterbox and tint each show only in the situations ticked for them.
+	-- One kept out of fights waits its own time after one before fading back in.
 	local now = GetTime()
 	local inCombat = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
 	if inCombat then
 		lastFightAt = now
 	end
-	for _, effect in ipairs(COMBAT_EFFECTS) do
-		local back = ns.db[effect.key .. "InCombat"]
-			or (not inCombat and now - lastFightAt >= ns.db[effect.key .. "CombatWait"])
-		Step(ns[effect.update], cinematic and back, elapsed)
+	local situation = Situation(now)
+	for _, effect in ipairs(SITUATION_EFFECTS) do
+		local key = effect.key
+		local wanted
+		if inCombat then
+			wanted = ns.db[key .. "InCombat"]
+		else
+			wanted = ns.db[key .. situation]
+				and (ns.db[key .. "InCombat"] or now - lastFightAt >= ns.db[key .. "CombatWait"])
+		end
+		Step(ns[effect.update], cinematic and wanted and true or false, elapsed)
 	end
 	Step(ns.UpdateCVars, cinematic)
 	Step(ns.UpdateMusic, cinematic, elapsed)
@@ -1433,6 +1465,10 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.deathLevel == 70 or ns.db.deathLevel == 60 then ns.db.deathLevel = nil end
 			ns.db.deathSettingsV3 = true
 		end
+		if not ns.db.questCamSettingsV5 then -- the side you clicked them on
+			if ns.db.questCamSide == "random" then ns.db.questCamSide = nil end
+			ns.db.questCamSettingsV5 = true
+		end
 		if not ns.db.questCamSettingsV4 then -- comes down less (lower, it met the scenery)
 			if ns.db.questCamLower == 20 then ns.db.questCamLower = nil end
 			ns.db.questCamSettingsV4 = true
@@ -1544,6 +1580,13 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		if ns.db.questCamRandomSide == false and ns.db.questCamSide == nil then
 			ns.db.questCamSide = ns.db.questCamLeft and "left" or "right"
 		end
+		-- When the tint shows used to be one choice: always, only on flights or
+		-- only standing still (the last two never in combat).
+		if ns.db.tintWhen == "flight" or ns.db.tintWhen == "idle" then
+			ns.db.tintMoving, ns.db.tintInCombat = false, false
+			ns.db.tintFlight = ns.db.tintWhen == "flight"
+			ns.db.tintStill = ns.db.tintWhen == "idle"
+		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
 		for _, key in ipairs({
@@ -1570,6 +1613,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"flyByDistance", "flyByMinDistance", "flyByMaxDistance", "flyByTrace", "flyByLower",
 			"cameraInputPause", "questCamRandomSide", "questCamLeft", "lastMusicStartedAt",
 			"musicCamIdle", "musicWhenAFK", -- (now noMusicWhenAFK)
+			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
 		}) do
 			ns.db[key] = nil
 		end
