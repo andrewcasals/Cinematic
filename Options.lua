@@ -491,8 +491,8 @@ local function CreateRevealPanel()
 	yoursHeader:SetPoint("TOPLEFT", drag, "BOTTOMLEFT", 2, -18)
 
 	local portrait = Check(content, "portraitWhenNotFull", "Show your portrait until health and power are full",
-		"Keeps your player portrait up while you're recovering. Rage and runic power count " ..
-		"as full when empty, so a warrior's portrait hides once their rage has drained.")
+		"Keeps your player portrait up while you're recovering. Rage and runic power don't " ..
+		"count, so a warrior's portrait hides once their health is full.")
 	portrait:SetPoint("TOPLEFT", yoursHeader, "BOTTOMLEFT", -2, -6)
 	portrait:HookScript("OnClick", Refresh) -- grey out / enable the options below
 

@@ -685,11 +685,18 @@ local function GetCombatShownFrames()
 	return shown, situation
 end
 
--- Power types that sit empty at rest (rage, runic power): "full" means 0.
+-- Power types that sit empty at rest (rage, runic power) don't count: leftover
+-- rage draining after a fight isn't recovering, so only health matters.
 local EMPTY_AT_REST = { RAGE = true, RUNIC_POWER = true }
 
 local function IsSecretValue(value)
 	return issecretvalue and issecretvalue(value) or false
+end
+
+-- Does the player's power count toward recovery? (Yes when unsure.)
+local function PowerCounts()
+	local _, powerToken = UnitPowerType("player")
+	return IsSecretValue(powerToken) or not EMPTY_AT_REST[powerToken]
 end
 
 -- Is the player's health or power not at its resting level? Where the values
@@ -839,25 +846,25 @@ end)
 local vitalsWatcher = CreateFrame("Frame")
 vitalsWatcher:RegisterUnitEvent("UNIT_HEALTH", "player")
 vitalsWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
-vitalsWatcher:SetScript("OnEvent", function()
+vitalsWatcher:SetScript("OnEvent", function(_, event)
+	if event == "UNIT_POWER_UPDATE" and not PowerCounts() then
+		return
+	end
 	lastVitalsChange = GetTime()
 end)
 
 local function IsPlayerRecovering()
 	local health, maxHealth = UnitHealth("player"), UnitHealthMax("player")
-	local _, powerToken = UnitPowerType("player")
+	local countPower = PowerCounts()
 	local power, maxPower = UnitPower("player"), UnitPowerMax("player")
-	if IsSecretValue(health) or IsSecretValue(maxHealth) or IsSecretValue(power)
-		or IsSecretValue(maxPower) or IsSecretValue(powerToken) then
+	if IsSecretValue(health) or IsSecretValue(maxHealth)
+		or (countPower and (IsSecretValue(power) or IsSecretValue(maxPower))) then
 		return GetTime() - lastVitalsChange < RECOVERY_WINDOW
 	end
 	if maxHealth > 0 and health < maxHealth then
 		return true
 	end
-	if EMPTY_AT_REST[powerToken] then
-		return power > 0
-	end
-	return maxPower > 0 and power < maxPower
+	return countPower and maxPower > 0 and power < maxPower
 end
 
 ns.IsPlayerRecovering = IsPlayerRecovering
