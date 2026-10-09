@@ -50,6 +50,10 @@ local DEFAULTS = {
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
+	letterboxInCombat = false, -- keep the bars while staying cinematic in combat
+	tintInCombat = true,      -- keep the tint while staying cinematic in combat
+	letterboxCombatWait = 8,  -- if not: seconds after a fight before the bars fade back in
+	tintCombatWait = 8,       -- ...and the tint
 	tintPreset = "zonetime",   -- screen tint over the game world (see TINT_PRESETS)
 	tintStrength = 1,
 	tintCustomR = 1, tintCustomG = 0.8, tintCustomB = 0.6,
@@ -148,12 +152,12 @@ local DEFAULTS = {
 	musicFatigue = 5,         -- minutes: don't start music again within this long of the last start
 	-- Play music with each camera: a fresh song as it starts, even within the fatigue time.
 	musicCamFlight = true,
-	musicCamIdle = true,      -- AFK camera
 	musicCamCozy = true,
 	musicCamVista = true,
 	musicCamFish = true,
 	musicCamWalk = true,      -- RP walk
 	musicCamRun = true,       -- auto-run
+	noMusicWhenAFK = true,    -- standing still, the AFK camera and going AFK don't start music (off: a fresh song as the AFK camera starts)
 	musicPauseWhenMoving = true,  -- music fades out once you move on from flying, RP walking or standing still
 	musicPauseOnLanding = true,   -- ...and as soon as a flight lands, without waiting for you to move
 	musicPauseFadeTime = 3,      -- seconds that pause takes to fade out (and the music to come back)
@@ -216,16 +220,6 @@ local DEFAULTS = {
 	idleZoomEase = 0.5,       -- fraction of each zoom spent speeding up (and again slowing down)
 	idleZoomPastMax = true,   -- raise the max zoom distance (to 2.6) during the pull-back
 	idleOpeningDrift = 5,     -- random/behind modes: seconds of slow drift before the first move
-	rotOffInCities = false,   -- no standing-still rotation in these places
-	rotOffInInns = false,
-	rotOffInDungeons = false,
-	rotOffInRaids = false,
-	rotOffInPvP = false,
-	zoomOffInCities = false,  -- no standing-still zoom in these places
-	zoomOffInInns = false,
-	zoomOffInDungeons = false,
-	zoomOffInRaids = false,
-	zoomOffInPvP = false,
 	taxiInputPause = 15,      -- seconds the flight camera waits after the player moves the camera
 	idleInputPause = 15,      -- ...and the AFK camera
 	cameraPauseAtNPCs = true, -- no standing-still camera while an NPC window (auction house...) is open
@@ -281,7 +275,8 @@ ns.HOVER_GROUPS = {
 	{ "bars", "Action bars" }, { "sidebars", "Side action bars" }, { "player", "Player" },
 	{ "target", "Target and focus" }, { "buffs", "Buffs" }, { "minimap", "Minimap" },
 	{ "quests", "Quest tracker" }, { "chat", "Chat" }, { "totems", "Totems" },
-	{ "swing", "Swing timer" }, { "meters", "Damage meter" }, { "misc", "Other" },
+	{ "swing", "Swing timer" }, { "meters", "Damage meter" }, { "cooldowns", "Cooldown Manager" },
+	{ "misc", "Other" },
 }
 -- The minimap and quest tracker linger by default; the rest follow mouseoverHold.
 local HOVER_HOLD_DEFAULTS = { minimap = 5, quests = 5 }
@@ -395,10 +390,24 @@ DEFAULTS.deathSong = true          -- play a song of its own meanwhile
 -- GhostMusic03 (the ghost world's music), Gloomy02, Haunted02, Haunted01,
 -- Mystery01, Undercity01, KelThuzad1A.
 DEFAULTS.deathSongFiles = "53519, 53232, 53235, 53234, 53240, 53216, 53602"
-DEFAULTS.deathOffInCities = false  -- no death camera in these places
-DEFAULTS.deathOffInInns = false
-DEFAULTS.deathOffInDungeons = false
-DEFAULTS.deathOffInRaids = false
+-- Each camera mode's "Turn off in" grid (Camera modes page): <cam>OffIn<where>,
+-- for the cameras in ns.CAMERA_OFF_CAMS and the places and groups in
+-- ns.CAMERA_OFF_WHERE, but not those in ns.CAMERA_OFF_NEVER (no flight from
+-- there). All off, except no death camera in battlegrounds.
+ns.CAMERA_OFF_CAMS = {
+	{ "flight", "Flight" }, { "idle", "AFK" }, { "cozy", "Cozy" }, { "tele", "Tele" },
+	{ "vista", "Vista" }, { "fish", "Fish" }, { "walk", "RP Walk" }, { "run", "Auto-run" },
+	{ "death", "Death" }, { "quest", "Quest" },
+}
+ns.CAMERA_OFF_WHERE = { "Cities", "Inns", "Dungeons", "Raids", "PvP", "Party", "RaidGroup" }
+ns.CAMERA_OFF_NEVER = { flight = { Inns = true, Dungeons = true, Raids = true, PvP = true } }
+for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+	for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
+		if not (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
+			DEFAULTS[cam[1] .. "OffIn" .. where] = false
+		end
+	end
+end
 DEFAULTS.deathOffInPvP = true
 DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
 DEFAULTS.deathScreenStrength = 1
@@ -505,6 +514,11 @@ local NPC_WINDOWS = {
 	"GossipFrame", "QuestFrame", "TaxiFrame", "ItemTextFrame",
 }
 for _, name in ipairs(REVEAL_AT_NPCS) do NPC_WINDOWS[#NPC_WINDOWS + 1] = name end
+-- Windows /cine add must never fade (see Frames.lua).
+ns.WINDOWS = {}
+for _, list in ipairs({ REVEAL_WHILE_SHOWN, NPC_WINDOWS }) do
+	for _, name in ipairs(list) do ns.WINDOWS[name] = true end
+end
 function ns.NPCWindowOpen()
 	return AnyShown(NPC_WINDOWS)
 end
@@ -673,26 +687,29 @@ ns.CHAT_IN = {
 
 local PLACE_SUFFIX = { city = "Cities", inn = "Inns", dungeon = "Dungeons", raid = "Raids", pvp = "PvP" }
 
--- Places where the standing-still rotation (rotOffIn*) or zoom (zoomOffIn*)
--- stays off. Flights never count as being in a place, so they're unaffected.
-function ns.IsRotationBlocked()
+-- A camera mode ("flight", "idle", "cozy"... see ns.CAMERA_OFF_CAMS) turned
+-- off where you are, or for the group you're in. A flight doesn't count as
+-- being in a city (see ns.GetPlaceType): for the flight camera, Cities means
+-- taking off from one (db.takeoffInCity, noted at takeoff).
+function ns.IsCameraOffHere(cam)
+	local db = ns.db
+	if not db then return false end
+	if cam == "flight" and db.flightOffInCities and db.takeoffInCity and UnitOnTaxi("player") then
+		return true
+	end
 	local place = ns.GetPlaceType()
-	return place ~= nil and ns.db["rotOffIn" .. PLACE_SUFFIX[place]] or false
-end
-
-function ns.IsDeathCameraBlocked()
-	local place = ns.GetPlaceType()
-	return place ~= nil and ns.db["deathOffIn" .. PLACE_SUFFIX[place]] or false
+	if place ~= nil and db[cam .. "OffIn" .. PLACE_SUFFIX[place]] then
+		return true
+	end
+	if IsInRaid() then
+		return db[cam .. "OffInRaidGroup"] or false
+	end
+	return (IsInGroup() and db[cam .. "OffInParty"]) or false
 end
 
 function ns.IsMusicBlocked()
 	local place = ns.GetPlaceType()
 	return place ~= nil and ns.db["musicOffIn" .. PLACE_SUFFIX[place]] or false
-end
-
-function ns.IsZoomBlocked()
-	local place = ns.GetPlaceType()
-	return place ~= nil and ns.db["zoomOffIn" .. PLACE_SUFFIX[place]] or false
 end
 
 local function IsInDisabledZone()
@@ -843,6 +860,14 @@ end
 local START_SNAP_WINDOW = 5
 local startSnapUntil = 0
 
+-- Effects that can step aside in fights (db.<key>InCombat) and fade back in
+-- a while after (db.<key>CombatWait seconds).
+local COMBAT_EFFECTS = {
+	{ key = "letterbox", update = "UpdateLetterbox" },
+	{ key = "tint", update = "UpdateTint" },
+}
+local lastFightAt = -math.huge
+
 local function OnUpdate(_, elapsed)
 	accumulated = accumulated + elapsed
 	if accumulated < TICK then
@@ -882,8 +907,18 @@ local function OnUpdate(_, elapsed)
 		ns.Log("state", cinematic and "cinematic" or "normal UI")
 	end
 	Step(ns.UpdateFrames, cinematic, elapsed)
-	Step(ns.UpdateLetterbox, cinematic, elapsed)
-	Step(ns.UpdateTint, cinematic, elapsed)
+	-- Staying cinematic in a fight: the letterbox and tint can each step aside,
+	-- and wait their own time after it before fading back in.
+	local now = GetTime()
+	local inCombat = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
+	if inCombat then
+		lastFightAt = now
+	end
+	for _, effect in ipairs(COMBAT_EFFECTS) do
+		local back = ns.db[effect.key .. "InCombat"]
+			or (not inCombat and now - lastFightAt >= ns.db[effect.key .. "CombatWait"])
+		Step(ns[effect.update], cinematic and back, elapsed)
+	end
 	Step(ns.UpdateCVars, cinematic)
 	Step(ns.UpdateMusic, cinematic, elapsed)
 	Step(ns.UpdateAmbience, cinematic, elapsed)
@@ -1083,6 +1118,7 @@ end
 local function EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
+	ns.db.addonFrames = ns.db.addonFrames or {} -- Extra frames page: key -> false when switched off
 	ns.db.savedCVars = ns.db.savedCVars or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
 	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = true, LocalDefense = true }
@@ -1169,13 +1205,14 @@ end
 ns.InCameraMode = function() return InCameraMode() end
 
 -- Which camera mode you're in: "flight", "walk", "run", "vista", "fish", "cozy", "idle", or nil.
+-- (Not one turned off where you are; see ns.IsCameraOffHere.)
 function ns.CameraMode()
 	if UnitOnTaxi("player") then
 		return "flight"
 	elseif ns.IsRPWalking and ns.IsRPWalking() then
-		return "walk"
+		return not ns.IsCameraOffHere("walk") and "walk" or nil
 	elseif ns.IsAutoRunning and ns.IsAutoRunning() then
-		return "run"
+		return not ns.IsCameraOffHere("run") and "run" or nil
 	elseif ns.IsVista and ns.IsVista() then
 		return "vista"
 	elseif ns.IsFish and ns.IsFish() then
@@ -1184,7 +1221,7 @@ function ns.CameraMode()
 		return "cozy"
 	end
 	local still = ns.GetStillSince()
-	if still ~= nil and GetTime() - still >= ns.db.idleOrbitDelay then
+	if still ~= nil and GetTime() - still >= ns.db.idleOrbitDelay and not ns.IsCameraOffHere("idle") then
 		return "idle"
 	end
 	return nil
@@ -1273,12 +1310,14 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.nameIconOther = false
 		end
 		ns.db.markOther = nil
-		-- "Turn camera effects off in" used to cover rotation and zoom together.
+		-- The AFK camera's "Turn rotation off in" and "Turn zoom off in" (and
+		-- before them "Turn camera effects off in") are now its row of the
+		-- "Turn off in" grid: off there if either was.
 		for _, suffix in ipairs({ "Cities", "Inns", "Dungeons", "Raids", "PvP" }) do
-			local old = ns.db["camOffIn" .. suffix]
-			if old ~= nil then
-				if ns.db["rotOffIn" .. suffix] == nil then ns.db["rotOffIn" .. suffix] = old end
-				if ns.db["zoomOffIn" .. suffix] == nil then ns.db["zoomOffIn" .. suffix] = old end
+			if ns.db["idleOffIn" .. suffix] == nil then
+				local old = ns.db["camOffIn" .. suffix] or ns.db["rotOffIn" .. suffix]
+					or ns.db["zoomOffIn" .. suffix]
+				if old ~= nil then ns.db["idleOffIn" .. suffix] = old and true or false end
 			end
 		end
 		-- An early walk camera saved other values for these; start from the
@@ -1508,6 +1547,8 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"plateHurtMobs", "plateHurtNPCs", "plateHurtOwn", "plateHurtOther", "plateHurtPets",
 			"plateHurtTotems",
 			"camOffInCities", "camOffInInns", "camOffInDungeons", "camOffInRaids", "camOffInPvP",
+			"rotOffInCities", "rotOffInInns", "rotOffInDungeons", "rotOffInRaids", "rotOffInPvP",
+			"zoomOffInCities", "zoomOffInInns", "zoomOffInDungeons", "zoomOffInRaids", "zoomOffInPvP",
 			"hideCursor", "hideCursorDelay", "innZoom", "innZoomDistance",
 			"viewShift", "viewShiftAmount", "viewShiftRight", "zoneTitle", "zoneTitleSubzones",
 			"taxiOrbitPitch", "idleOrbitPitch", "turnLog", "cozyPray", "cozyAngle", "deathInputPause",
@@ -1515,6 +1556,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"cursorTuckVista", "cursorTuckWalk", "cursorTuckRun", "cursorTuckOther", "cursorTuckDelay",
 			"flyByDistance", "flyByMinDistance", "flyByMaxDistance", "flyByTrace", "flyByLower",
 			"cameraInputPause", "questCamRandomSide", "questCamLeft", "lastMusicStartedAt",
+			"musicCamIdle", "musicWhenAFK", -- (now noMusicWhenAFK)
 		}) do
 			ns.db[key] = nil
 		end

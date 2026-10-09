@@ -23,6 +23,7 @@ local TOGGLES = {
 	cast = { key = "revealOnCast", label = "Reveal while casting" },
 	music = { key = "musicInCinematic", label = "Play music in cinematic mode" },
 	logoutmusic = { key = "musicOffOnLogout", label = "Turn music off on logout" },
+	noafkmusic = { key = "noMusicWhenAFK", label = "No music while AFK" },
 	names = { key = "hideNames", label = "Hide names in cinematic mode" },
 	plates = { key = "hidePlates", label = "Hide nameplates in cinematic mode" },
 	tooltip = { key = "fadeTooltip", label = "Hide world tooltips" },
@@ -32,6 +33,8 @@ local TOGGLES = {
 	idle = { key = "idleOrbit", label = "AFK camera sweep" },
 	start = { key = "startCinematic", label = "Start in cinematic mode on login, /reload and turning it on" },
 	combat = { key = "stayInCombat", label = "Stay in cinematic mode in combat" },
+	combatbars = { key = "letterboxInCombat", label = "Keep the letterbox in combat" },
+	combattint = { key = "tintInCombat", label = "Keep the tint in combat" },
 	npcs = { key = "revealAtNPCs", label = "Reveal at vendors, banks, mail and trainers" },
 	minimap = { key = "alwaysShowMinimap", label = "Always show the minimap" },
 	tracking = { key = "minimapForTracking", label = "Keep minimap open while tracking" },
@@ -83,7 +86,7 @@ local function PrintHelp()
 	print("  /cine button - show or hide the minimap button")
 	print("  /cine reset - restore the default settings")
 	Heading("Frames (hover over one first)")
-	print("  /cine add - fade it too")
+	print("  /cine add - fade it too (or /cine add <FrameName>)")
 	print("  /cine keep - always show it")
 	print("  /cine list - show the extra faded frames")
 	Heading("Camera")
@@ -197,7 +200,8 @@ function ns.HandleSlash(msg)
 		ns.db[toggle.key] = not ns.db[toggle.key]
 		ns.Print(toggle.label .. ": " .. OnOff(ns.db[toggle.key]))
 	elseif cmd == "add" then
-		ns.AddUnderMouse()
+		-- Frame names are case-sensitive, so take the name before lowercasing.
+		ns.AddUnderMouse(msg:match("^%s*%S+%s+(%S+)"))
 	elseif cmd == "remove" or cmd == "keep" then
 		ns.RemoveUnderMouse()
 	elseif cmd == "button" then
@@ -822,12 +826,17 @@ function ns.HandleSlash(msg)
 			tostring(ns.orbitFrame:GetScript("OnUpdate") ~= nil), tostring(MoveViewUpStart ~= nil)))
 	elseif cmd == "debug" then
 		-- Hover over something and run this to see how the addon sees it.
+		local found = false
 		for _, entry in ipairs(ns.managed) do
 			if entry.group == arg or (arg == "" and entry.group == "minimap") then
+				found = true
 				ns.Print(("%s [%s] shown=%s alpha=%.2f hovered=%s"):format(
 					entry.name or entry.frame:GetDebugName(), entry.group,
 					tostring(entry.frame:IsShown()), entry.alpha, tostring(ns.IsEntryHovered(entry))))
 			end
+		end
+		if not found then
+			ns.Print("no faded frames in the group " .. (arg == "" and "minimap" or arg))
 		end
 	elseif cmd == "list" then
 		ns.ListExtras()

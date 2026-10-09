@@ -8,7 +8,6 @@ local panel, category, extrasPanel, cameraPanel, keepPanel, chatPanel
 local mainCanvas
 local controls = {}   -- widgets that mirror a db key, refreshed on show
 local extraRows = {}
-local MAX_EXTRA_ROWS = 18
 local sliderCount = 0
 
 local function Tooltip(widget, tip)
@@ -175,41 +174,6 @@ local function DependsOnMusic(control)
 	GreyUnless(control, function(db) return db.musicInCinematic end)
 end
 
-local function RefreshExtras()
-	local faded, ignored = ns.GetExtraFrames()
-	local items = {}
-	for _, name in ipairs(faded) do items[#items + 1] = { name = name, faded = true } end
-	for _, name in ipairs(ignored) do items[#items + 1] = { name = name, faded = false } end
-
-	for i, row in ipairs(extraRows) do
-		local item = items[i]
-		row:SetShown(item ~= nil)
-		if item then
-			row.item = item
-			row.text:SetText(item.faded and item.name or ("|cff808080" .. item.name .. "|r"))
-			row.button:SetText(item.faded and "Stop" or "Restore")
-		end
-	end
-
-	local empty = extrasPanel.empty
-	local shown = math.min(#items, MAX_EXTRA_ROWS)
-	empty:ClearAllPoints()
-	if shown == 0 then
-		empty:SetPoint("TOPLEFT", extrasPanel.help, "BOTTOMLEFT", 0, -12)
-	else
-		empty:SetPoint("TOPLEFT", extraRows[shown], "BOTTOMLEFT", 0, -6)
-	end
-
-	local hidden = #items - MAX_EXTRA_ROWS
-	if #items == 0 then
-		empty:SetText("None yet.")
-	elseif hidden > 0 then
-		empty:SetText(("...and %d more (see /cine list)"):format(hidden))
-	else
-		empty:SetText("")
-	end
-end
-
 local function Refresh()
 	if not ns.GetDB() then return end
 	for _, control in ipairs(controls) do
@@ -253,34 +217,6 @@ local function Dropdown(parent, key, choices, width, onChange)
 	dropdown.Refresh = function(self) self:GenerateMenu() end
 	controls[#controls + 1] = dropdown
 	return dropdown
-end
-
-local function CreateExtraRow(parent, anchor, index)
-	local row = CreateFrame("Frame", nil, parent)
-	row:SetSize(300, 22)
-	row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10 - (index - 1) * 24)
-
-	row.button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-	row.button:SetSize(70, 20)
-	row.button:SetPoint("LEFT")
-	row.button:SetScript("OnClick", function()
-		if not row.item then
-			return
-		end
-		if row.item.faded then
-			ns.StopFading(row.item.name)
-		else
-			ns.UnignoreFrame(row.item.name)
-		end
-		RefreshExtras()
-	end)
-
-	row.text = Label(row, "GameFontHighlightSmall")
-	row.text:SetPoint("LEFT", row.button, "RIGHT", 8, 0)
-	row.text:SetPoint("RIGHT")
-	row.text:SetWordWrap(false)
-	row:Hide()
-	return row
 end
 
 local SCROLLBAR_WIDTH = 26
@@ -346,7 +282,7 @@ local function CreatePanel()
 	local subtitle = Label(panel, "GameFontHighlightSmall",
 		"Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
-		"pages under this one cover what shows when (Showing the UI, Frames, Combat, Nameplates, " ..
+		"pages under this one cover what shows when (Showing the UI, Frames, Extra frames, Combat, Nameplates, " ..
 		"Chat), the look and sound, the camera modes (a page each) and keybinds.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
@@ -778,9 +714,67 @@ local function CreateCameraPanel()
 	holdNote:SetWidth(520)
 	holdNote:SetJustifyV("TOP")
 
+	-- Turn off in: a grid of each camera (rows) by place or group (columns).
+	local offHeader = Header(cameraPanel, "Turn off in", holdNote, -24)
+	offHeader:SetPoint("TOPLEFT", holdNote, "BOTTOMLEFT", -2, -24)
+	local offNote = Label(cameraPanel, "GameFontHighlightSmall",
+		"Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
+		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back " ..
+		"as usual. To keep the normal UI somewhere instead, use Turn off in on the main page. " ..
+		"For flights, Cities means taking off from one.")
+	offNote:SetPoint("TOPLEFT", offHeader, "BOTTOMLEFT", 0, -6)
+	offNote:SetWidth(520)
+	offNote:SetJustifyV("TOP")
+	local GRID_NAME_WIDTH, GRID_COLUMN = 90, 62
+	local WHERE = {
+		Cities = { "Cities", "in capital cities" }, Inns = { "Inns", "in inns" },
+		Dungeons = { "Dungeons", "in dungeons and scenarios" }, Raids = { "Raids", "in raids" },
+		PvP = { "BGs", "in battlegrounds and arenas" },
+		Party = { "Party", "while you're in a party (not a raid group)" },
+		RaidGroup = { "Raid group", "while you're in a raid group" },
+	}
+	local gridTop = CreateFrame("Frame", nil, cameraPanel)
+	gridTop:SetSize(GRID_NAME_WIDTH + GRID_COLUMN * #ns.CAMERA_OFF_WHERE, 16)
+	gridTop:SetPoint("TOPLEFT", offNote, "BOTTOMLEFT", 0, -10)
+	for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
+		local cell = CreateFrame("Frame", nil, gridTop)
+		cell:SetSize(GRID_COLUMN, 16)
+		cell:SetPoint("LEFT", gridTop, "LEFT", GRID_NAME_WIDTH + GRID_COLUMN * (i - 1), 0)
+		local text = Label(cell, "GameFontNormalSmall", WHERE[where][1])
+		text:SetPoint("CENTER")
+		text:SetJustifyH("CENTER")
+		Tooltip(cell, "Tick a camera here to turn it off " .. WHERE[where][2] .. ".")
+	end
+	local lastRow = gridTop
+	for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+		local row = CreateFrame("Frame", nil, cameraPanel)
+		row:SetSize(gridTop:GetWidth(), 24)
+		row:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -2)
+		local name = Label(row, "GameFontHighlight", cam[2])
+		name:SetPoint("LEFT", row, "LEFT", 0, 0)
+		for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
+			local x = GRID_NAME_WIDTH + GRID_COLUMN * (i - 0.5)
+			if (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
+				-- No flights from here: a greyed-out cross in place of the box.
+				local cell = CreateFrame("Frame", nil, row)
+				cell:SetSize(26, 26)
+				cell:SetPoint("CENTER", row, "LEFT", x, 0)
+				local cross = Label(cell, "GameFontDisable", "x")
+				cross:SetPoint("CENTER")
+				Tooltip(cell, "Flights don't start " .. WHERE[where][2] .. ".")
+			else
+				local tip = (cam[1] == "flight" and where == "Cities")
+					and "No Flight Cam on flights taking off from a capital city."
+					or ("No " .. cam[2] .. " Cam " .. WHERE[where][2] .. ".")
+				local cb = Check(row, cam[1] .. "OffIn" .. where, "", tip)
+				cb:SetPoint("CENTER", row, "LEFT", x, 0)
+			end
+		end
+		lastRow = row
+	end
+
 	-- Indoors
-	local indoorHeader = Header(cameraPanel, "Indoors", holdNote, -24)
-	indoorHeader:SetPoint("TOPLEFT", holdNote, "BOTTOMLEFT", -2, -24)
+	local indoorHeader = Header(cameraPanel, "Indoors", lastRow, -24)
 	local indoorLimits = Check(cameraPanel, "indoorLimits", "Limit the camera indoors",
 		"Inside buildings and caves, the camera modes zoom out less and swing less, so the " ..
 		"camera doesn't keep pushing into walls and ceilings. Uses the game's own indoor check.")
@@ -944,12 +938,11 @@ local function PlaceList(parent, stack, title, prefix, tip)
 end
 
 -- Each camera's "play a fresh song" switch: its key, its page's name and when
--- the song starts. Shown on the camera's own page and the Audio page.
+-- the song starts, for the Audio page. (The AFK camera has "No music while AFK"
+-- instead.)
 local MUSIC_CAMS = {
 	{ "musicCamFlight", "Flight Cam", "as the camera starts rotating on a flight (at takeoff if " ..
 		"flight rotation is off). Once per flight. Not while music is muted on flights." },
-	{ "musicCamIdle", "AFK Cam", "as the AFK camera starts rotating. Once each time you stand " ..
-		"still (not again after you move the camera)." },
 	{ "musicCamCozy", "Cozy Cam", "as the cozy camera starts (campfire, sitting, dancing...). " ..
 		"Getting up for less than 20 seconds and settling back down counts as the same spell." },
 	{ "musicCamVista", "Vista Cam", "as the vista camera starts (/stare). Moving off for less " ..
@@ -973,6 +966,13 @@ local function MusicCamTip(key)
 	end
 end
 
+-- "No music while AFK", on the Audio page.
+local AFK_MUSIC_TIP = "Standing still with the UI faded, the AFK camera and going AFK don't " ..
+	"start any music (nor bring it back after a pause), so it doesn't come on while you're " ..
+	"away. Music already playing carries on, and flights, walks, sitting down and the other " ..
+	"cameras start it as usual. Off: the AFK camera plays a fresh song as it starts, like the " ..
+	"other cameras. Needs \"Play music in cinematic mode\" on the Audio page."
+
 -- Every camera mode's page is laid out the same way:
 --   Starting (full width): opts.top's own section first if any (the fish
 --     camera's casting), then starting cinematic mode straight away, the
@@ -980,7 +980,7 @@ end
 --     pause after you move the camera.
 --   Left column: Rotation (and opts.rotationExtras), then the mode's own
 --     sections (opts.extras: Height, Turning, Fly-bys, Landing).
---   Right column: Zoom (and opts.zoomExtras), Depth of field, Music.
+--   Right column: Zoom (and opts.zoomExtras), Depth of field.
 -- The opts functions take (content, stack) and add their controls to it.
 -- The Death Cam and Quest Cam pages follow the same layout by hand.
 local ZOOM_TIP = "The camera slowly pulls back, then (with random zoom) drifts in and out. Moving " ..
@@ -1034,7 +1034,7 @@ local function CreateCameraModePanel(opts)
 		opts.extras(content, stack)
 	end
 
-	-- Right column: zoom, depth of field, music
+	-- Right column: zoom, depth of field
 	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
 	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
 	local right = Stack(zoomHeader)
@@ -1052,12 +1052,6 @@ local function CreateCameraModePanel(opts)
 		"camera had focused on you. 0% leaves it off. Moving the slider shows it for a moment. " ..
 		"Needs \"Depth of field\" on the Camera modes page.")
 	GreyUnless(dof, function(db) return db.depthOfField end)
-
-	right:Header(content, "Music")
-	local music = right:Add(Check(content, opts.musicKey, "Play a fresh song as it starts",
-		MusicCamTip(opts.musicKey)), "check")
-	DependsOnMusic(music)
-	right:Note(content, "Fatigue, muting and ambience are on the Audio page.")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -1368,7 +1362,7 @@ local function CreateFlightPanel()
 			Tooltip(settleLead, "The camera turns back over the 6 seconds before this, so it's settled " ..
 				"behind you this long before you land.")
 		end,
-		zoomPrefix = "taxiZoom", dofKey = "dofFlight", musicKey = "musicCamFlight",
+		zoomPrefix = "taxiZoom", dofKey = "dofFlight",
 	})
 end
 
@@ -1390,14 +1384,8 @@ local function CreateStandingPanel()
 		rotateLabel = "Sweep round you",
 		rotateTip = "The camera sweeps around your character, pausing between sweeps. Moving or " ..
 			"dragging the camera stops it.",
-		rotationExtras = function(content, stack)
-			PlaceList(content, stack, "Turn rotation off in", "rotOffIn", "No AFK camera rotation here.")
-		end,
 		zoomPrefix = "idleZoom",
-		zoomExtras = function(content, stack)
-			PlaceList(content, stack, "Turn zoom off in", "zoomOffIn", "No AFK camera zoom here.")
-		end,
-		dofKey = "dofIdle", musicKey = "musicCamIdle",
+		dofKey = "dofIdle",
 	})
 end
 
@@ -1417,7 +1405,7 @@ local function CreateAutoRunPanel()
 		zoomPrefix = "runZoom",
 		zoomTip = "The camera eases out a little, then drifts in and out around your own distance. " ..
 			"When you stop it glides back.",
-		dofKey = "dofRun", musicKey = "musicCamRun",
+		dofKey = "dofRun",
 	})
 end
 
@@ -1446,7 +1434,7 @@ local function CreateCozyPanel()
 			Tooltip(close, "The close-up distance the cozy camera zooms in to, if you're further out. " ..
 				"The zoom settings above then work around it. Your own distance comes back afterwards.")
 		end,
-		dofKey = "dofCozy", musicKey = "musicCamCozy",
+		dofKey = "dofCozy",
 	})
 end
 
@@ -1469,7 +1457,7 @@ local function CreateVistaPanel()
 		zoomPrefix = "vistaZoom",
 		zoomTip = "The camera eases out a little, then drifts slowly in and out around your own " ..
 			"distance. Your own distance comes back afterwards.",
-		dofKey = "dofVista", musicKey = "musicCamVista",
+		dofKey = "dofVista",
 	})
 end
 
@@ -1523,7 +1511,7 @@ local function CreateFishPanel()
 		zoomPrefix = "fishZoom",
 		zoomTip = "The camera eases out a little, then drifts slowly in and out around your own " ..
 			"distance. Your own distance comes back afterwards.",
-		dofKey = "dofFish", musicKey = "musicCamFish",
+		dofKey = "dofFish",
 	})
 end
 
@@ -1544,7 +1532,7 @@ local function CreateWalkPanel()
 		zoomPrefix = "walkZoom",
 		zoomTip = "The camera eases out a little, then drifts in and out around your own distance. " ..
 			"When you stop walking it glides back.",
-		dofKey = "dofWalk", musicKey = "musicCamWalk",
+		dofKey = "dofWalk",
 	})
 end
 
@@ -1574,10 +1562,6 @@ local function CreateDeathPanel()
 	local delay = stack:Add(Slider(content, "deathOrbitDelay", "Start after", 0, 10, 0.5, "%.1f sec"), "slider")
 	Tooltip(delay, "How long after you die before the camera starts turning.")
 	GreyUnless(delay, IfOn)
-	for _, check in ipairs(PlaceList(content, stack, "Turn off in", "deathOffIn",
-		"No death camera here: dying brings the UI back as usual.")) do
-		GreyUnless(check, IfOn)
-	end
 
 	-- Left column: rotation, height
 	local rotationHeader = stack:Header(content, "Rotation")
@@ -1904,8 +1888,21 @@ local function CreateTintPanel()
 		end)
 	letterbox:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", -2, -6)
 
+	local letterboxCombat = Check(content, "letterboxInCombat", "Keep in combat",
+		"Untick to slide the bars away during fights (and back after). Only while staying " ..
+		"cinematic in combat (Combat unticked under Turn off in, on the main page).")
+	letterboxCombat:SetPoint("TOPLEFT", letterbox, "BOTTOMLEFT", 16, -2)
+	GreyUnless(letterboxCombat, function(db) return db.stayInCombat end)
+	letterboxCombat:HookScript("OnClick", function() Refresh() end) -- grey out / enable the time
+
+	local letterboxBack = Slider(content, "letterboxCombatWait", "Fade in after combat", 0, 30, 1, "%d sec")
+	letterboxBack:SetPoint("TOPLEFT", letterboxCombat, "BOTTOMLEFT", 4, -26)
+	Tooltip(letterboxBack, "How long the bars stay away once a fight is over before sliding back in. " ..
+		"0 brings them back right away.")
+	GreyUnless(letterboxBack, function(db) return db.stayInCombat and not db.letterboxInCombat end)
+
 	local size = Slider(content, "letterboxSize", "Bar height", 0, 25, 1, "%d%%", 100, ns.RefreshLetterbox)
-	size:SetPoint("TOPLEFT", letterbox, "BOTTOMLEFT", 4, -26)
+	size:SetPoint("TOPLEFT", letterboxBack, "BOTTOMLEFT", -16, -34)
 
 	local opacity = Slider(content, "letterboxAlpha", "Bar opacity", 10, 100, 5, "%d%%", 100, ns.RefreshLetterbox)
 	opacity:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -34)
@@ -2065,9 +2062,22 @@ local function CreateTintPanel()
 	whenNote:SetWidth(320)
 	whenNote:SetJustifyV("TOP")
 
+	local tintCombat = Check(content, "tintInCombat", "Keep in combat",
+		"Untick to fade the tint away during fights (and back after). Only while staying " ..
+		"cinematic in combat (Combat unticked under Turn off in, on the main page).")
+	tintCombat:SetPoint("TOPLEFT", whenNote, "BOTTOMLEFT", -4, -8)
+	GreyUnless(tintCombat, function(db) return db.stayInCombat end)
+	tintCombat:HookScript("OnClick", function() Refresh() end) -- grey out / enable the time
+
+	local tintBack = Slider(content, "tintCombatWait", "Fade in after combat", 0, 30, 1, "%d sec")
+	tintBack:SetPoint("TOPLEFT", tintCombat, "BOTTOMLEFT", 4, -26)
+	Tooltip(tintBack, "How long the tint stays away once a fight is over before fading back in. " ..
+		"0 brings it back right away.")
+	GreyUnless(tintBack, function(db) return db.stayInCombat and not db.tintInCombat end)
+
 	-- Time of day: which clock, strength, your own phases
-	local timeHeader = Header(content, "Time of day", whenNote, -24)
-	timeHeader:SetPoint("TOPLEFT", whenNote, "BOTTOMLEFT", -2, -24)
+	local timeHeader = Header(content, "Time of day", tintBack, -24)
+	timeHeader:SetPoint("TOPLEFT", tintBack, "BOTTOMLEFT", -2, -24)
 	local timeHelp = Label(content, "GameFontHighlightSmall",
 		"For the Time of day and Zone + time of day presets, and the time of day message.")
 	timeHelp:SetPoint("TOPLEFT", timeHeader, "BOTTOMLEFT", 0, -6)
@@ -2543,9 +2553,13 @@ local function CreateAudioPanel()
 	music:SetPoint("TOPLEFT", musicHeader, "BOTTOMLEFT", -2, -6)
 	music:HookScript("OnClick", Refresh) -- grey out / enable the options that depend on it
 
+	local afkMusic = Check(content, "noMusicWhenAFK", "No music while AFK", AFK_MUSIC_TIP)
+	afkMusic:SetPoint("TOPLEFT", music, "BOTTOMLEFT", 0, -2)
+	DependsOnMusic(afkMusic)
+
 	local logoutMusic = Check(content, "musicOffOnLogout", "Turn music off on logout",
 		"Switches game music off when you log out or exit, so it starts off next time.")
-	logoutMusic:SetPoint("TOPLEFT", music, "BOTTOMLEFT", 0, -2)
+	logoutMusic:SetPoint("TOPLEFT", afkMusic, "BOTTOMLEFT", 0, -2)
 
 	local musicFade = Slider(content, "musicFadeTime", "Music fade time", 0.5, 10, 0.5, "%.1f sec")
 	musicFade:SetPoint("TOPLEFT", logoutMusic, "BOTTOMLEFT", 4, -26)
@@ -2555,8 +2569,7 @@ local function CreateAudioPanel()
 	playHeader:SetPoint("TOPLEFT", musicFade, "BOTTOMLEFT", -2, -24)
 	local previous = playHeader
 	for i, item in ipairs(MUSIC_CAMS) do
-		local check = Check(content, item[1], item[2], MusicCamTip(item[1]) ..
-			" Also on the camera's own page.")
+		local check = Check(content, item[1], item[2], MusicCamTip(item[1]))
 		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
 		DependsOnMusic(check)
 		previous = check
@@ -2602,15 +2615,16 @@ local function CreateAudioPanel()
 
 	local movingMusic = Check(content, "musicPauseWhenMoving", "Pause music when you move on",
 		"Music fades out once you start moving after a flight, RP walking or standing still " ..
-		"(running, riding). A fresh track fades in when you next fly, walk, or stand still for " ..
-		"the AFK camera delay.")
+		"(running, riding). A fresh track fades in when you next fly, walk, or sit down (or stand " ..
+		"still for the AFK camera delay, with \"No music while AFK\" off).")
 	movingMusic:SetPoint("TOPLEFT", flightMusic, "BOTTOMLEFT", 0, -2)
 	DependsOnMusic(movingMusic)
 	movingMusic:HookScript("OnClick", Refresh) -- grey out / enable the fade below
 
 	local landingMusic = Check(content, "musicPauseOnLanding", "Pause music when a flight lands",
 		"Music fades out as soon as you touch down, without waiting for you to move. A fresh " ..
-		"track fades in when you next fly, walk, or stand still for the AFK camera delay.")
+		"track fades in when you next fly, walk, or sit down (or stand still for the AFK camera " ..
+		"delay, with \"No music while AFK\" off).")
 	landingMusic:SetPoint("TOPLEFT", movingMusic, "BOTTOMLEFT", 0, -2)
 	DependsOnMusic(landingMusic)
 	landingMusic:HookScript("OnClick", Refresh)
@@ -2618,7 +2632,7 @@ local function CreateAudioPanel()
 	local pauseFade = Slider(content, "musicPauseFadeTime", "Pause fade time", 0.5, 10, 0.5, "%.1f sec")
 	pauseFade:SetPoint("TOPLEFT", landingMusic, "BOTTOMLEFT", 24, -26)
 	Tooltip(pauseFade, "How long the music takes to fade out when you move on or land, and to " ..
-		"fade back in when the next flight, walk or AFK camera starts.")
+		"fade back in when the next flight, walk or other camera starts.")
 	GreyUnless(pauseFade, function(db)
 		return db.musicInCinematic and (db.musicPauseWhenMoving or db.musicPauseOnLanding)
 	end)
@@ -2709,15 +2723,26 @@ local function CreateCombatPanel()
 		heading:SetPoint("TOPLEFT", columnTop, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
 	end
 
-	local rows = {} -- the frames this client has
+	-- The frames this client has, then the Other addons installed, under
+	-- their own heading at the bottom.
+	local rows, addonRows = {}, {}
 	for _, item in ipairs(ns.COMBAT_SHOW) do
 		if ns.OptionAvailable(item) then
-			rows[#rows + 1] = item
+			local list = item.key:find("^addon:") and addonRows or rows
+			list[#list + 1] = item
 		end
 	end
+	local ADDON_GAP = 30 -- room for the Other addons heading
+	local addonHeading
+	if #addonRows > 0 then
+		addonHeading = Label(content, "GameFontNormal", "Other addons")
+		addonHeading:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, -16 - #rows * ROW_HEIGHT - 10)
+		for _, item in ipairs(addonRows) do rows[#rows + 1] = item end
+	end
+	local firstAddonRow = #rows - #addonRows + 1
 	local lastLabel
 	for r, item in ipairs(rows) do
-		local y = -16 - (r - 1) * ROW_HEIGHT
+		local y = -16 - (r - 1) * ROW_HEIGHT - (r >= firstAddonRow and addonHeading and ADDON_GAP or 0)
 		local rowLabel = Label(content, "GameFontHighlight", item.label)
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
 		lastLabel = rowLabel
@@ -3134,18 +3159,18 @@ local function RefreshKeep()
 	for i = headerIndex + 1, #keepHeaders do keepHeaders[i]:Hide() end
 end
 
--- Sub-page: which frames fade. Built-in frames to keep shown (left), and
--- extra frames beyond the built-in list (right).
+-- Sub-page: which built-in frames stay shown. Frames beyond the built-in list
+-- have their own page (Extra frames).
 local function CreateFramesPanel()
 	local canvas, content = CreateScrollPage()
-	keepPanel, extrasPanel = content, content
+	keepPanel = content
 
 	local title = Label(content, "GameFontNormalLarge", "Frames")
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Which frames fade in cinematic mode: keep built-in ones visible (left), or fade extra " ..
-		"ones the addon doesn't know about (right).")
+		"Which built-in frames fade in cinematic mode. To fade frames the addon doesn't know " ..
+		"about, see the Extra frames page.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -3208,31 +3233,138 @@ local function CreateFramesPanel()
 	content.keepTop:SetSize(1, 1)
 	content.keepTop:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", -16, 0)
 
-	-- Right column: extra frames
-	local extrasHeader = Label(content, "GameFontNormal", "Extra frames")
-	extrasHeader:SetPoint("TOPLEFT", keepHeader, "TOPLEFT", 320, 0)
-	content.help = Label(content, "GameFontHighlightSmall",
-		"To fade something else, hover over it and type |cffffd100/cine add|r. " ..
-		"Stop fading one with |cffffd100Stop|r; greyed-out frames are ones you stopped, " ..
-		"which |cffffd100Restore|r undoes.")
-	content.help:SetPoint("TOPLEFT", extrasHeader, "BOTTOMLEFT", 0, -6)
-	content.help:SetWidth(290)
-	content.help:SetJustifyV("TOP")
-
-	for i = 1, MAX_EXTRA_ROWS do
-		extraRows[i] = CreateExtraRow(content, content.help, i)
-	end
-	content.empty = Label(content, "GameFontDisableSmall")
-
 	canvas:SetScript("OnShow", PageShown(function()
 		if ns.GetDB() then
 			Refresh()
 			RefreshKeep()
-			RefreshExtras()
 		end
 	end, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Frames")
+end
+
+local RefreshExtras
+
+-- One row of the extras list, made as needed: Stop/Restore, Delete, the name.
+local function GetExtraRow(index)
+	local row = extraRows[index]
+	if row then
+		return row
+	end
+	row = CreateFrame("Frame", nil, extrasPanel)
+	row:SetSize(560, 22)
+	row:SetPoint("TOPLEFT", extrasPanel.help, "BOTTOMLEFT", 0, -10 - (index - 1) * 24)
+
+	row.button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+	row.button:SetSize(70, 20)
+	row.button:SetPoint("LEFT")
+	row.button:SetScript("OnClick", function()
+		if row.item.faded then
+			ns.StopFading(row.item.name)
+		else
+			ns.UnignoreFrame(row.item.name)
+		end
+		RefreshExtras()
+	end)
+
+	row.delete = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+	row.delete:SetSize(70, 20)
+	row.delete:SetPoint("LEFT", row.button, "RIGHT", 4, 0)
+	row.delete:SetText("Delete")
+	Tooltip(row.delete, "Removes this frame from the list. A frame you added stops fading; " ..
+		"one you stopped fades again if it's one the addon fades by itself.")
+	row.delete:SetScript("OnClick", function()
+		ns.ForgetExtraFrame(row.item.name)
+		RefreshExtras()
+	end)
+
+	row.text = Label(row, "GameFontHighlightSmall")
+	row.text:SetPoint("LEFT", row.delete, "RIGHT", 8, 0)
+	row.text:SetPoint("RIGHT")
+	row.text:SetWordWrap(false)
+	extraRows[index] = row
+	return row
+end
+
+RefreshExtras = function()
+	local faded, ignored = ns.GetExtraFrames()
+	local items = {}
+	for _, name in ipairs(faded) do items[#items + 1] = { name = name, faded = true } end
+	for _, name in ipairs(ignored) do items[#items + 1] = { name = name, faded = false } end
+
+	for i, item in ipairs(items) do
+		local row = GetExtraRow(i)
+		row.item = item
+		row.text:SetText(item.faded and item.name or ("|cff808080" .. item.name .. "|r"))
+		row.button:SetText(item.faded and "Stop" or "Restore")
+		row:Show()
+	end
+	for i = #items + 1, #extraRows do extraRows[i]:Hide() end
+
+	extrasPanel.empty:SetShown(#items == 0)
+	FitContentHeight(extrasPanel)
+end
+
+-- Sub-page: other addons' frames. The addons faded out of the box (a switch
+-- for each one installed; the rest listed), then frames beyond the built-in
+-- list, faded with /cine add.
+local function CreateExtrasPanel()
+	local canvas, content = CreateScrollPage()
+	extrasPanel = content
+
+	local title = Label(content, "GameFontNormalLarge", "Extra frames")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	-- (As if the title were a note, so the first heading gets a full gap below it.)
+	local stack = Stack(title, "label")
+	stack:Header(content, "Supported addons")
+	stack:Note(content, "Frames from these addons fade with the rest of the UI. Untick one to leave its " ..
+		"frames alone. When they show in fights and when you target something is on the Combat page, " ..
+		"under Other addons.", 560)
+
+	local installed, missing = {}, {}
+	for _, known in ipairs(ns.ADDON_FRAMES) do
+		if ns.AddOnInstalled(known.addon) then
+			installed[#installed + 1] = known
+		else
+			missing[#missing + 1] = known.label
+		end
+	end
+	for _, known in ipairs(installed) do
+		local check = Check(content, nil, known.label, known.about, function(value)
+			ns.SetAddonFramesOn(known.key, value)
+		end)
+		-- (Checked as the page shows: it may load after this addon.)
+		local note = Label(content, "GameFontDisableSmall", "(installed, not loaded)")
+		note:SetPoint("LEFT", check.Text or check.text or check, "RIGHT", 6, 0)
+		check.Refresh = function(self)
+			self:SetChecked(ns.IsAddonFramesOn(known.key))
+			note:SetShown(not ns.AddOnLoaded(known.addon))
+		end
+		stack:Add(check, "check")
+	end
+	if #missing > 0 then
+		stack:Note(content, "|cff808080Also supported, when installed: " .. table.concat(missing, ", ") .. "|r", 560)
+	end
+
+	stack:Header(content, "Custom frames")
+	content.help = stack:Note(content,
+		"To fade something else, hover over it and type |cffffd100/cine add|r, " ..
+			"or type |cffffd100/cine add|r and its frame name. " ..
+		"Stop fading one with |cffffd100Stop|r; greyed-out frames are ones you stopped, " ..
+		"which |cffffd100Restore|r undoes. |cffffd100Delete|r takes a frame off the list.", 560)
+
+	content.empty = Label(content, "GameFontDisableSmall", "None yet.")
+	content.empty:SetPoint("TOPLEFT", content.help, "BOTTOMLEFT", 0, -12)
+
+	canvas:SetScript("OnShow", PageShown(function()
+		if ns.GetDB() then
+			Refresh()
+			RefreshExtras()
+		end
+	end, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Extra frames")
 end
 
 -- Sub-page: keybinds. The same bindings as Key Bindings > AddOns, with two
@@ -3409,6 +3541,7 @@ CreatePanel()
 -- and sound, then the camera modes (their shared page and events first).
 CreateRevealPanel()
 CreateFramesPanel()
+CreateExtrasPanel()
 CreateCombatPanel()
 CreatePlatesPanel()
 CreateChatPanel()

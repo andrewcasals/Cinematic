@@ -109,7 +109,7 @@ function ns.FlightStarted()
 		and GetTime() - flightSince >= EventDelay("Flight")
 end
 function ns.FlightCameraOn()
-	return ns.FlightStarted() and ns.db.eventFlightCamera ~= "none"
+	return ns.FlightStarted() and ns.db.eventFlightCamera ~= "none" and not ns.IsCameraOffHere("flight")
 end
 -- Emote token -> its event. Over once you move, jump or do another emote.
 local EMOTE_EVENTS = {
@@ -1108,7 +1108,9 @@ end
 -- "vista", "fish", "afk" or "tele"), or nil. A Hearthstone or teleport cast
 -- comes first, then logging out, going AFK, the latest emote (or seat), a
 -- drawn weapon and a campfire buff; one set to no camera is passed over.
--- An event with a delay counts only once it has lasted that many seconds.
+-- An event with a delay counts only once it has lasted that many seconds, and
+-- one whose camera is turned off here (Camera modes page) doesn't count.
+local EVENT_CAM = { cozy = "cozy", vista = "vista", fish = "fish", afk = "idle", tele = "tele" }
 local lastEvent, eventSince = nil, 0
 function ns.ActiveEvent()
 	local key, camera = CurrentEvent()
@@ -1117,6 +1119,9 @@ function ns.ActiveEvent()
 		lastEvent, eventSince = key, now
 	end
 	if key and now - eventSince < EventDelay(key) then
+		return nil
+	end
+	if camera and EVENT_CAM[camera] and ns.IsCameraOffHere(EVENT_CAM[camera]) then
 		return nil
 	end
 	return key, camera
@@ -1907,8 +1912,7 @@ end
 -- Dead with the death camera to watch: cinematic mode stays on (popups like
 -- the release button aren't faded, so it's still there).
 function ns.IsDeathCinematic()
-	return ns.db.deathOrbit and ns.IsDead()
-		and not (ns.IsDeathCameraBlocked and ns.IsDeathCameraBlocked())
+	return ns.db.deathOrbit and ns.IsDead() and not ns.IsCameraOffHere("death")
 end
 
 -- Your own zooming: you've picked a distance, so the death camera leaves it.
@@ -2111,7 +2115,7 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 			idleZoom.done = false
 		end
 	else
-		allowed = ns.db.idleZoom and still and not ns.IsZoomBlocked()
+		allowed = ns.db.idleZoom and still and not ns.IsCameraOffHere("idle")
 	end
 	local want = cinematic and allowed and not InCombatLockdown() and ns.CombatWaitOver(context, now)
 	-- Walked indoors with the camera pulled back: glide in to the indoor limit.
@@ -2391,6 +2395,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		ns.stillSince = now - ns.db.idleOrbitDelay
 	end
 	local idle = ns.db.idleOrbit and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
+		and not ns.IsCameraOffHere("idle")
 	-- Death camera: dead (not yet released), the camera turns slowly round your
 	-- body. Cinematic mode is off while you're dead (the UI comes back for the
 	-- release button), so this runs without it, and in combat too.
@@ -2416,7 +2421,8 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- Auto-running (not walking) gets the auto-run camera, set up the same way.
 	local walking = not onTaxi and ns.IsRPWalking and ns.IsRPWalking()
 	local autoRunning = not onTaxi and not walking and ns.IsAutoRunning and ns.IsAutoRunning()
-	local travel = (walking and "walk") or (autoRunning and "run") or nil
+	local travel = (walking and not ns.IsCameraOffHere("walk") and "walk")
+		or (autoRunning and not ns.IsCameraOffHere("run") and "run") or nil
 	if travel == "walk" and ns.IsCozy() then
 		travel = nil -- weapon drawn while walking: the cozy camera in front instead
 	end
@@ -2425,7 +2431,8 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		ns.ReportCameraMode((deathCam and "death") or (cinematic and ((onTaxi and ns.FlightCameraOn() and "flight")
 			or (travel == "walk" and "RP walk") or (travel == "run" and "auto-run")
 			or (vista and "vista") or (fish and "fish") or (tele and "tele") or (cozy and "cozy")
-			or (ns.stillSince and now - ns.stillSince >= ns.db.idleOrbitDelay and "AFK"))) or nil)
+			or (ns.stillSince and now - ns.stillSince >= ns.db.idleOrbitDelay
+				and not ns.IsCameraOffHere("idle") and "AFK"))) or nil)
 	end
 	if travel and cinematic then
 		walkHandoff = true
@@ -2487,10 +2494,10 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	local want = (deathCam and ns.orbit.deathRisen and not adjusting)
 		or (cinematic and not adjusting and not InCombatLockdown() and not turnBlocksStart
 		and ((onTaxi and ns.db.taxiOrbit and ns.FlightCameraOn() and not ns.orbit.settling) or (travel and ns.db[T.orbit])
-			or (vista and ns.db.vistaOrbit and not ns.IsRotationBlocked())
-			or (fish and ns.db.fishOrbit and not ns.IsRotationBlocked())
-			or (cozy and (ns.db.cozyOrbit or tele) and not ns.IsRotationBlocked())
-			or (idle and not ns.IsRotationBlocked() and not (ns.db.indoorNoSweep and Indoors()))))
+			or (vista and ns.db.vistaOrbit)
+			or (fish and ns.db.fishOrbit)
+			or (cozy and (ns.db.cozyOrbit or tele))
+			or (idle and not (ns.db.indoorNoSweep and Indoors()))))
 	local prefix = deathCam and "deathOrbit" or onTaxi and "taxiOrbit" or ((travel and ns.db[T.orbit]) and T.orbit)
 		or ((vista and ns.db.vistaOrbit) and "vistaOrbit")
 		or ((fish and ns.db.fishOrbit) and "fishOrbit")
@@ -3637,6 +3644,7 @@ function ns.UpdateTaxi()
 			and { route = ns.flight.route, start = ns.flight.start } or nil
 		-- (Saved, so a /reload on the way still knows it.)
 		ns.db.takeoffZoom = ns.PlayerZoom()
+		ns.db.takeoffInCity = ns.IsInCity() and true or nil -- (for the Flight Cam's "Turn off in: Cities")
 		flightSince, flightCamStarted = ns.flight.start or now, false
 	elseif ns.wasOnTaxi and not onTaxi then
 		ns.flight.takeoverLogged = nil
@@ -3654,7 +3662,7 @@ function ns.UpdateTaxi()
 		if ns.db.enabled and ns.db.taxiLandZoom and ns.db.takeoffZoom and not takenOver then
 			ns.ZoomBackTo(ns.db.takeoffZoom)
 		end
-		ns.db.takeoffZoom = nil
+		ns.db.takeoffZoom, ns.db.takeoffInCity = nil, nil
 		if not idleZoom.active and not idleZoom.restoring then
 			ns.ApplyCVarSet(ZOOM_MAX_CVARS, false) -- (held back on the flight: see FinishRestore)
 		end

@@ -535,7 +535,7 @@ end
 local function Wanted()
 	local db = ns.db
 	return db and db.enabled and db.eventQuestCamera ~= "none" and not InCombatLockdown()
-		and not UnitOnTaxi("player")
+		and not UnitOnTaxi("player") and not ns.IsCameraOffHere("quest")
 end
 
 local OPENS = {

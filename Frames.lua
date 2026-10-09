@@ -30,6 +30,11 @@ local FRAME_GROUPS = {
 	misc = { "DurabilityFrame" },
 	swing = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" },
 	meters = { "DamageMeter" },
+	-- The Cooldown Manager (retail and Forever). Made when its addon loads,
+	-- so a later scan picks it up.
+	cooldowns = {
+		"EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer", "BuffBarCooldownViewer",
+	},
 	-- Retail's quest waypoint: the marker in the world, with its distance,
 	-- that shows where a tracked quest or map pin is.
 	waypoint = { "SuperTrackedFrame" },
@@ -44,6 +49,49 @@ local FRAME_GROUPS = {
 -- built-in damage meter and swing timer.
 local AUTO_PATTERNS = { DamageMeter = "meters", SwingTimer = "swing" }
 ns.SCAN_INTERVAL = 5
+
+-- Other addons' frames faded out of the box, listed on the Extra frames page.
+-- Each fades as its own group ("addon:<key>") while its addon is loaded and
+-- it isn't switched off (db.addonFrames[key] = false). names: its named
+-- frames. match(frame): whether an unnamed frame on UIParent is one of its
+-- own, for addons that don't name their frames (those can't be added with
+-- /cine add, which saves frames by name). short: a shorter label, if needed.
+ns.ADDON_FRAMES = {
+	{
+		key = "fecm", addon = "ForeverEnhancedCooldownManager", label = "Forever Enhanced Cooldown Manager",
+		short = "Enhanced Cooldown Manager", -- (the Combat page's label column is narrow)
+		about = "Its cooldown and buff bars, and the pulse when a cooldown is ready.",
+		names = { "FECMPulse" },
+		-- Its bars are unnamed: told apart by the parts each bar is made with.
+		match = function(frame)
+			return (frame.kind == "cooldown" or frame.kind == "aura")
+				and type(frame.icons) == "table" and type(frame.mover) == "table"
+		end,
+	},
+}
+
+local function AddOnLoaded(name)
+	local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+	return isLoaded and isLoaded(name) and true or false
+end
+
+-- Installed, loaded or not (missing ones error or say "MISSING").
+function ns.AddOnInstalled(name)
+	local getInfo = C_AddOns and C_AddOns.GetAddOnInfo or GetAddOnInfo
+	if not getInfo then
+		return false
+	end
+	local ok, _, _, _, _, reason = pcall(getInfo, name)
+	return ok and reason ~= "MISSING"
+end
+ns.AddOnLoaded = AddOnLoaded
+
+function ns.IsAddonFramesOn(key)
+	return ns.db.addonFrames[key] ~= false
+end
+
+-- Groups whose frames set their own alpha (see AddFrame).
+local OWN_ALPHA = { chat = true, waypoint = true, cooldowns = true }
 
 ns.managed = {}       -- { frame, name, group, alpha, baseAlpha }
 local seen = {}
@@ -96,14 +144,15 @@ local function AddFrame(frame, group)
 	ns.managed[#ns.managed + 1] = entry
 
 	-- Chat frames manage their own alpha (the input bar sits faint until you
-	-- press Enter), and so does the waypoint (it dims as you look past it).
-	-- Track the alpha Blizzard last asked for, fade relative to it, and return
-	-- to it rather than to fully opaque. Only these are hooked, to keep away
-	-- from protected frames like action bars.
-	if group == "chat" or group == "waypoint" then
+	-- press Enter), and so do the waypoint (it dims as you look past it), the
+	-- Cooldown Manager (its opacity setting) and other addons' frames (their
+	-- own fades). Track the alpha last asked for, fade relative to it, and
+	-- return to it rather than to fully opaque. Only these are hooked, to keep
+	-- away from protected frames like action bars.
+	if OWN_ALPHA[group] or group:find("^addon:") then
 		entry.baseAlpha = frame:GetAlpha()
 		hooksecurefunc(frame, "SetAlpha", function(self, alpha)
-			if entry.settingAlpha then
+			if entry.settingAlpha or entry.removed then
 				return
 			end
 			entry.baseAlpha = alpha
@@ -146,6 +195,7 @@ local function RemoveFrame(frame)
 			frame:SetAlpha(entry.baseAlpha or 1)
 			entry.settingAlpha = false
 			if entry.shrunk then frame:SetScale(entry.savedScale or 1) end
+			entry.removed = true -- its SetAlpha hook (if any) can't be undone, only ignored
 			table.remove(ns.managed, i)
 			seen[frame] = nil
 			RecomputeNesting()
@@ -164,6 +214,24 @@ local function AutoPatternGroup(name)
 	end
 end
 
+-- Windows (settings, spellbook, popups) are never faded as extras: fading
+-- one you're using leaves it invisible but still taking your clicks and keys.
+-- Escape-closable and panel windows, ones the reveal lists know, and anything
+-- drawn in the dialog strata or above.
+local WINDOW_STRATA = { DIALOG = true, FULLSCREEN = true, FULLSCREEN_DIALOG = true, TOOLTIP = true }
+
+local function IsWindow(frame, name)
+	if ns.WINDOWS[name] or (UIPanelWindows and UIPanelWindows[name]) then
+		return true
+	end
+	for _, special in ipairs(UISpecialFrames or {}) do
+		if special == name then
+			return true
+		end
+	end
+	return WINDOW_STRATA[frame:GetFrameStrata()] or false
+end
+
 local function ScanTopLevelFrames()
 	for _, frame in ipairs({ UIParent:GetChildren() }) do
 		if not seen[frame] and not (frame.IsForbidden and frame:IsForbidden()) then
@@ -172,14 +240,37 @@ local function ScanTopLevelFrames()
 				local group = AutoPatternGroup(name)
 				if group then
 					AddFrame(frame, group)
-				elseif ns.db.extraFrames[name] then
+				elseif ns.db.extraFrames[name] and not IsWindow(frame, name) then
 					AddFrame(frame, "extra:" .. name)
 				end
 			end
 		end
 	end
 	for name in pairs(ns.db.extraFrames) do
-		AddFrame(_G[name], "extra:" .. name)
+		local frame = _G[name]
+		if type(frame) == "table" and frame.GetFrameStrata and not (frame.IsForbidden and frame:IsForbidden())
+			and not IsWindow(frame, name) then
+			AddFrame(frame, "extra:" .. name)
+		end
+	end
+end
+
+local function ScanAddonFrames()
+	for _, known in ipairs(ns.ADDON_FRAMES) do
+		if ns.IsAddonFramesOn(known.key) and AddOnLoaded(known.addon) then
+			local group = "addon:" .. known.key
+			for _, name in ipairs(known.names or {}) do
+				AddFrame(_G[name], group)
+			end
+			if known.match then
+				for _, frame in ipairs({ UIParent:GetChildren() }) do
+					if not seen[frame] and not (frame.IsForbidden and frame:IsForbidden())
+						and not frame:GetName() and known.match(frame) then
+						AddFrame(frame, group)
+					end
+				end
+			end
+		end
 	end
 end
 
@@ -208,12 +299,23 @@ local function TopLevelAncestor(frame)
 	end
 end
 
+-- A frame's regions or children as a list, or nil when it's off limits:
+-- a frame that isn't forbidden itself can still hold forbidden parts, and
+-- then GetRegions/GetChildren error.
+local function ReadParts(frame, method)
+	local parts = { pcall(frame[method], frame) }
+	if not table.remove(parts, 1) then
+		return nil
+	end
+	return parts
+end
+
 local function HasIssueReporterText(frame, depth)
 	if IsForbidden(frame) then
 		return false
 	end
-	for _, region in ipairs({ frame:GetRegions() }) do
-		if region.GetText then
+	for _, region in ipairs(ReadParts(frame, "GetRegions") or {}) do
+		if not IsForbidden(region) and region.GetText then
 			local text = region:GetText()
 			if type(text) == "string" and not (issecretvalue and issecretvalue(text))
 				and text:find("Issue") and text:find("Reporter") then
@@ -222,7 +324,7 @@ local function HasIssueReporterText(frame, depth)
 		end
 	end
 	if depth > 0 then
-		for _, child in ipairs({ frame:GetChildren() }) do
+		for _, child in ipairs(ReadParts(frame, "GetChildren") or {}) do
 			if HasIssueReporterText(child, depth - 1) then
 				return true
 			end
@@ -275,8 +377,26 @@ function ns.BuildManagedList()
 		AddFrame(_G["ChatFrame" .. i .. "EditBox"], "chat")
 	end
 	ScanTopLevelFrames()
+	ScanAddonFrames()
 	FindIssueReporter()
 	RecomputeNesting()
+end
+
+-- Switching a supported addon off puts its frames back at once;
+-- switching it on fades them from the next scan.
+function ns.SetAddonFramesOn(key, on)
+	ns.db.addonFrames[key] = on
+	if on then
+		ns.BuildManagedList()
+		return
+	end
+	local group = "addon:" .. key
+	for i = #ns.managed, 1, -1 do
+		local entry = ns.managed[i]
+		if entry.group == group then
+			RemoveFrame(entry.frame)
+		end
+	end
 end
 
 -- The minimap's player arrow and icons ignore alpha, and hiding the minimap
@@ -407,7 +527,16 @@ ns.COMBAT_SHOW = {
 	} },
 	{ key = "extra", label = "Extra action and zone ability", default = true, retail = true,
 		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
+	{ key = "cooldowns", label = "Cooldown Manager", default = true, addon = "Blizzard_CooldownViewer",
+		frames = FRAME_GROUPS.cooldowns },
 }
+-- Then the Other addons, by group (their frames may have no names).
+for _, known in ipairs(ns.ADDON_FRAMES) do
+	ns.COMBAT_SHOW[#ns.COMBAT_SHOW + 1] = {
+		key = "addon:" .. known.key, label = known.short or known.label, default = true, addon = known.addon,
+		groups = { "addon:" .. known.key },
+	}
+end
 
 -- Whether an option belongs on this client, for the options pages to skip
 -- the rest: retail = true or false limits it to retail or to Classic clients.
@@ -417,6 +546,10 @@ ns.COMBAT_SHOW = {
 function ns.OptionAvailable(item)
 	if item.retail ~= nil then
 		return item.retail == ns.isRetail
+	end
+	-- (Frames from an addon that loads later don't exist yet.)
+	if item.addon then
+		return ns.AddOnInstalled(item.addon)
 	end
 	if item.frames then
 		for _, name in ipairs(item.frames) do
@@ -436,7 +569,9 @@ local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 local ENEMY_SHOW_DEFAULT = {
 	player = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
+	cooldowns = true,
 }
+for _, known in ipairs(ns.ADDON_FRAMES) do ENEMY_SHOW_DEFAULT["addon:" .. known.key] = true end
 
 function ns.IsCombatShowOn(key)
 	local on = ns.db.combatShow[key]
@@ -498,8 +633,11 @@ local function GetCombatShownFrames()
 	local shown = {}
 	for _, item in ipairs(ns.COMBAT_SHOW) do
 		if isOn(item.key) then
-			for _, name in ipairs(item.frames) do
+			for _, name in ipairs(item.frames or {}) do
 				shown[name] = true
+			end
+			for _, group in ipairs(item.groups or {}) do
+				shown["group:" .. group] = true
 			end
 		end
 	end
@@ -759,7 +897,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 				or (ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused))
 			and entry.group == "minimap")
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
-		local fightingShown = combatShown and entry.name and combatShown[entry.name]
+		local listShown = combatShown
+			and (entry.name and combatShown[entry.name] or combatShown["group:" .. entry.group])
+		local fightingShown = listShown
 		if not fightingShown and entry.group == "buffs" and cinematic and buffPeekUntil > now then
 			fightingShown = true -- new or refreshed aura: show buffs briefly, normal fade speeds
 		end
@@ -767,7 +907,6 @@ function ns.UpdateFrames(cinematic, elapsed)
 			and portraitAllowed and IsPlayerRecovering() then
 			fightingShown = true -- shown like a combat frame, at the normal fade speeds
 		end
-		local listShown = combatShown and entry.name and combatShown[entry.name]
 		if listShown then
 			entry.shownBy = situation -- remembered so it fades out at that list's speed too
 		end
@@ -888,29 +1027,73 @@ function ns.UnignoreFrame(name)
 	ns.db.ignoredFrames[name] = nil
 end
 
+-- Drops a frame from the extras list altogether: an added one stops fading
+-- (without being remembered as stopped), a stopped one is no longer ignored.
+function ns.ForgetExtraFrame(name)
+	if ns.db.extraFrames[name] and _G[name] then RemoveFrame(_G[name]) end
+	ns.db.extraFrames[name] = nil
+	ns.db.ignoredFrames[name] = nil
+end
+
+-- Frames that don't take the mouse (the Cooldown Manager's icons, many
+-- addons' bars) are invisible to GetMouseFoci, so failing that, the smallest
+-- named, shown top-level frame the cursor is over. Smallest, so a frame
+-- covering the whole screen doesn't win over the one actually being pointed at.
+local function GetTopLevelFrameUnderCursor()
+	local best, bestArea
+	for _, frame in ipairs({ UIParent:GetChildren() }) do
+		if not IsForbidden(frame) and frame ~= ns.letterbox and frame:GetName()
+			and frame:IsVisible() and frame:IsMouseOver() then
+			local width, height = frame:GetSize()
+			local area = (width or 0) * (height or 0)
+			if area > 0 and (not bestArea or area < bestArea) then
+				best, bestArea = frame, area
+			end
+		end
+	end
+	return best
+end
+
 -- The top-level (direct child of UIParent) frame under the cursor, so adding
 -- e.g. a damage meter's bar picks up the whole meter window.
 local function GetTopLevelFrameUnderMouse()
-	local focus
-	if GetMouseFoci then
-		focus = GetMouseFoci()[1]
-	elseif GetMouseFocus then
-		focus = GetMouseFocus()
-	end
-	while focus and focus ~= WorldFrame and focus ~= UIParent do
+	local focus = MouseFocus()
+	while focus and focus ~= UIParent do
 		local parent = focus:GetParent()
 		if parent == UIParent or parent == nil then
-			return focus
+			if focus:GetName() then
+				return focus
+			end
+			break
 		end
 		focus = parent
 	end
+	return GetTopLevelFrameUnderCursor()
 end
 
-function ns.AddUnderMouse()
-	local frame = GetTopLevelFrameUnderMouse()
-	local name = frame and frame:GetName()
+-- name: a frame's global name (/cine add <name>), for frames that are hard
+-- to hover; nil to use the one under the mouse.
+function ns.AddUnderMouse(name)
+	local frame
+	if name and name ~= "" then
+		frame = _G[name]
+		if not IsFrame(frame) then
+			ns.Print("no frame called " .. name .. " (frame names are case-sensitive; /fstack shows them).")
+			return
+		end
+	else
+		frame = GetTopLevelFrameUnderMouse()
+		name = frame and frame:GetName()
+	end
 	if not name then
-		ns.Print("hover over a named UI element, then type /cine add and press Enter.")
+		ns.Print("hover over a named UI element, then type /cine add and press Enter " ..
+			"(or /cine add <FrameName>). Frames without a name can't be added: the Extra frames " ..
+			"settings page lists the addons faded out of the box.")
+		return
+	end
+	if IsWindow(frame, name) then
+		ns.Print(name .. " is a window, so it isn't faded (it would stay there invisible). " ..
+			"Move the mouse off it onto the frame you want, then try again.")
 		return
 	end
 	for _, entry in ipairs(ns.managed) do
@@ -933,7 +1116,7 @@ function ns.RemoveUnderMouse()
 		return
 	end
 	ns.StopFading(name)
-	ns.Print(name .. " will always be shown (undo on the Frames options page).")
+	ns.Print(name .. " will always be shown (undo on the Frames or Extra frames options page).")
 end
 
 function ns.ListExtras()

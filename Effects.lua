@@ -239,6 +239,18 @@ function ns.StopMusicNow()
 	end
 end
 
+-- Standing still or AFK, as far as music goes: the AFK camera, the wait for it
+-- (standing still with the UI faded) or being flagged AFK. With "No music
+-- while AFK" on, none of these starts music, brings it back from the move-on
+-- pause or swaps in a fresh song; music that's already playing carries on.
+local function QuietForAFK()
+	if not ns.db.noMusicWhenAFK then
+		return false
+	end
+	local mode = ns.CameraMode and ns.CameraMode()
+	return ns.Flag(UnitIsAFK("player")) or mode == "idle" or (mode == nil and ns.stillSince ~= nil)
+end
+
 -- Muting music in combat: a 0-1 level that fades down during fights and back
 -- up afterwards. Music the addon plays applies it directly; the player's own
 -- music gets its volume saved (crash-safe) and ducked, then restored.
@@ -320,12 +332,13 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	-- fresh track comes in when the next one starts. With pause on landing, a
 	-- flight's music fades out as you touch down, without waiting for you to move.
 	-- (Any camera mode lifts the pause: vista, cozy and fish start straight away
-	-- from their emote, before standing still would count.)
+	-- from their emote, before standing still would count. Not the AFK camera
+	-- with "No music while AFK" on: the music stays paused while you're away.)
 	local onTaxi = UnitOnTaxi("player")
 	local landed = combatMusic.wasOnTaxi and not onTaxi
 	combatMusic.wasOnTaxi = onTaxi
 	if not (handlesMusic and (ns.db.musicPauseWhenMoving or ns.db.musicPauseOnLanding))
-		or (ns.CameraMode and ns.CameraMode()) then
+		or (ns.CameraMode and ns.CameraMode() and not QuietForAFK()) then
 		combatMusic.movingPaused = false
 	elseif (ns.db.musicPauseWhenMoving and ns.playerMoving) or (ns.db.musicPauseOnLanding and landed) then
 		combatMusic.movingPaused = true
@@ -408,15 +421,17 @@ end
 local deathSong = { file = nil, playing = false }
 
 -- Each camera mode's "Play music" setting (Audio page): as that camera starts,
--- a fresh song, even if music played recently (music fatigue).
-local MUSIC_CAM = { flight = "musicCamFlight", idle = "musicCamIdle", cozy = "musicCamCozy",
+-- a fresh song, even if music played recently (music fatigue). The AFK
+-- camera's is "No music while AFK" (noMusicWhenAFK), the other way round.
+local MUSIC_CAM = { flight = "musicCamFlight", cozy = "musicCamCozy",
 	vista = "musicCamVista", fish = "musicCamFish", walk = "musicCamWalk", run = "musicCamRun" }
 
 -- Times music starts despite music fatigue: in a camera mode set to play
 -- music, or in a different zone from the last music.
 local function FatigueOverridden()
 	local mode = ns.CameraMode and ns.CameraMode()
-	if mode and MUSIC_CAM[mode] and ns.db[MUSIC_CAM[mode]] then
+	if (mode == "idle" and not ns.db.noMusicWhenAFK)
+		or (mode and MUSIC_CAM[mode] and ns.db[MUSIC_CAM[mode]]) then
 		return true
 	end
 	local zone = GetRealZoneText()
@@ -562,7 +577,8 @@ end
 function ns.OnRotationStart(prefix)
 	if prefix == "taxiOrbit" then
 		NewSongForFlight()
-	elseif prefix == "idleOrbit" and ns.db.musicCamIdle and ns.stillSince and songStillSince ~= ns.stillSince then
+	elseif prefix == "idleOrbit" and not ns.db.noMusicWhenAFK and ns.stillSince
+		and songStillSince ~= ns.stillSince then
 		songStillSince = ns.stillSince
 		RestartMusic()
 	end
@@ -595,6 +611,12 @@ local function ReportMusic(cinematic)
 	end
 end
 
+-- Music kept off for being AFK (QuietForAFK) this cinematic spell: it stays
+-- off as you come back and set off running, until another camera mode starts
+-- (a flight, a walk, sitting down...) or the UI comes back. (Starting it then
+-- would only bring a swell of music as the move-on pause fades it out.)
+local afkKeptQuiet = false
+
 function ns.UpdateMusic(cinematic, elapsed)
 	ReportMusic(cinematic)
 	local now = GetTime()
@@ -603,7 +625,7 @@ function ns.UpdateMusic(cinematic, elapsed)
 	-- but not for a short break in the same walk, run or spell (nor when
 	-- carrying straight on from another camera mode; see RestartMusic).
 	local mode = ns.CameraMode and ns.CameraMode()
-	if mode and mode ~= "flight" and mode ~= "idle" and MUSIC_CAM[mode] then
+	if mode and mode ~= "flight" and MUSIC_CAM[mode] then
 		if now - (lastModeAt[mode] or -math.huge) > WALK_SONG_GAP and ns.db[MUSIC_CAM[mode]] then
 			RestartMusic()
 		end
@@ -622,6 +644,9 @@ function ns.UpdateMusic(cinematic, elapsed)
 		return -- the death song has the music for now
 	end
 	local want = cinematic and ns.db.musicInCinematic
+	if not want or not ns.db.noMusicWhenAFK or (mode and not QuietForAFK()) then
+		afkKeptQuiet = false
+	end
 	-- The player changed the music volume while the addon was fading or muting
 	-- it: that's their new volume, to play at now and come back to afterwards.
 	local playerVolume = PlayerMusicVolume()
@@ -644,6 +669,12 @@ function ns.UpdateMusic(cinematic, elapsed)
 	UpdateCombatMusic(elapsed, playerVolume ~= nil or switchedOn)
 	if want and not ns.music.managing then
 		if GetCVar("Sound_EnableMusic") == "1" then
+			return
+		end
+		-- Standing still or AFK, with "No music while AFK" on: no music
+		-- until another camera mode starts it.
+		if afkKeptQuiet or QuietForAFK() then
+			afkKeptQuiet = true
 			return
 		end
 		-- Music fatigue: started music recently? Stay quiet this time. (Not
@@ -1228,9 +1259,13 @@ local function OverMinimap()
 	return Minimap ~= nil and Minimap:IsVisible() and Minimap:IsMouseOver()
 end
 
-local function IsWorldTooltip()
+local function WorldOwned()
 	local owner = GameTooltip:GetOwner()
-	return (owner == nil or owner == UIParent or owner == WorldFrame) and not OverMinimap()
+	return owner == nil or owner == UIParent or owner == WorldFrame
+end
+
+local function IsWorldTooltip()
+	return WorldOwned() and not OverMinimap()
 end
 
 -- World tooltips hide in cinematic mode (fadeTooltip), or only in the camera
@@ -1260,12 +1295,19 @@ end
 -- usual (anything gentler flashed it as it appeared), and its contents noted.
 -- If you're still on the same thing after tooltipRevealDelay seconds it's put
 -- back: a unit's from the mouseover, an object's from the noted lines (the game
--- has no way to ask about an object again). An object counts as left once the
--- cursor moves or goes over the UI, or the view moves (walking, flying, turning,
--- the camera orbiting); a unit once it's no longer the mouseover.
+-- has no way to ask about an object again). The cursor is usually still on
+-- its way as an object's tooltip appears (at once, on a big one like a shop
+-- sign), so the object's place is taken as wherever the cursor comes to rest;
+-- one that doesn't rest within CURSOR_SETTLE seconds was only passing over.
+-- Each move starts the wait over. After that, an object counts as left once
+-- the cursor strays from there or goes over the UI, or the view moves
+-- (walking, flying, turning, the camera orbiting); a unit once it's no longer
+-- the mouseover.
 -- A put-back tooltip is the add-on's own, so it's also taken down that way.
 local held, shown, revealedName, revealing
-local CURSOR_SLACK = 12 -- UI pixels the cursor may drift over an object
+local CURSOR_REACH = 32 -- UI pixels the cursor may wander over an object
+local CURSOR_REST = 3   -- UI pixels a tick that still count as resting
+local CURSOR_SETTLE = 0.5 -- seconds the cursor has to come to rest over an object
 
 -- Fades every frame (the tick is too coarse for a short fade). Fading out ends
 -- by hiding the tooltip; anything else hiding or showing it stops the fade.
@@ -1403,8 +1445,8 @@ local function HoldBack(tooltip)
 			local x, y = GetCursorPosition()
 			local px, py, facing = PlayerView()
 			held = {
-				name = name, unit = ok and unit or nil, x = x, y = y,
-				px = px, py = py, facing = facing,
+				name = name, unit = ok and unit or nil, x = x, y = y, lastX = x, lastY = y,
+				px = px, py = py, facing = facing, settleBy = GetTime() + CURSOR_SETTLE,
 				lines = not (ok and unit) and NoteLines(tooltip) or nil,
 				at = GetTime() + (ns.db.tooltipRevealDelay or 0),
 			}
@@ -1421,15 +1463,39 @@ local function StillOver(note)
 	if note.unit then
 		return UnitExists("mouseover")
 	end
+	if not note.settled then
+		return GetTime() <= note.settleBy and MouseOverWorld() and not ViewMoved(note)
+	end
 	local x, y = GetCursorPosition()
-	local slack = CURSOR_SLACK * UIParent:GetEffectiveScale()
-	return math.abs(x - note.x) <= slack and math.abs(y - note.y) <= slack and MouseOverWorld()
+	local reach = CURSOR_REACH * UIParent:GetEffectiveScale()
+	return math.abs(x - note.x) <= reach and math.abs(y - note.y) <= reach and MouseOverWorld()
 		and not ViewMoved(note)
+end
+
+-- An object's wait starts over while the cursor is still moving; until it
+-- first rests, the object's place follows it.
+local function WaitForRest(note)
+	if note.unit then
+		return
+	end
+	local x, y = GetCursorPosition()
+	local rest = CURSOR_REST * UIParent:GetEffectiveScale()
+	if math.abs(x - note.lastX) > rest or math.abs(y - note.lastY) > rest then
+		note.at = GetTime() + (ns.db.tooltipRevealDelay or 0)
+		if not note.settled then
+			note.x, note.y = x, y
+		end
+	elseif not note.settled then
+		note.settled = true
+		Trace("rests on %s", tostring(note.name))
+	end
+	note.lastX, note.lastY = x, y
 end
 
 local function Reveal()
 	local tooltip, note = GameTooltip, held
 	held = nil
+	note.settled = true -- (with no wait set, it may not have rested yet)
 	revealing = true
 	StopFade()
 	local ok, err = pcall(GameTooltip_SetDefaultAnchor, tooltip, UIParent)
@@ -1474,6 +1540,7 @@ function ns.OnTooltipShow(self)
 			tostring(HidingWorldTooltips()))
 	end
 	StopFade() -- something new: never leave it part-faded
+	shown = nil -- the game's own now (a minimap blip, a UI element, the next thing)
 	if not ShouldHideTooltip() then
 		return
 	end
@@ -1490,8 +1557,10 @@ end
 -- Runs on the tick: counts down a held tooltip, and covers a tooltip that was
 -- already up when cinematic mode started.
 function ns.UpdateTooltip()
-	-- Gone, or taken over by a UI element's tooltip (left alone).
-	if shown and not (GameTooltip:IsShown() and IsWorldTooltip()) then
+	-- Gone, or taken over by a UI element's tooltip (left alone). (Not the
+	-- minimap exception: a put-back tooltip is the add-on's to take down, and
+	-- nothing else would if the cursor went over the minimap.)
+	if shown and not (GameTooltip:IsShown() and WorldOwned()) then
 		shown, revealedName = nil, nil
 	end
 	if shown and not StillOver(shown) then
@@ -1510,8 +1579,11 @@ function ns.UpdateTooltip()
 					tostring(UnitExists("mouseover")), tostring(not held.unit and ViewMoved(held)))
 			end
 			held = nil
-		elseif GetTime() >= held.at then
-			Reveal()
+		else
+			WaitForRest(held)
+			if GetTime() >= held.at then
+				Reveal()
+			end
 		end
 	elseif not (fader:IsShown() and fadeTo == 0) -- let a fade-out finish
 		and ShouldHideTooltip() and not (revealedName and SameName(TooltipName(), revealedName)) then
