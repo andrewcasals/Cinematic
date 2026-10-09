@@ -90,9 +90,9 @@ local DEFAULTS = {
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
 	combatFadeInTime = 1,    -- how fast the "while fighting, show" frames appear
 	combatFadeOutTime = 6, -- and how fast they go once the fight is over
-	enemyFadeInTime = 2.5,   -- targeting an enemy out of combat: fade times for its frame list
+	enemyFadeInTime = 1.5,   -- targeting an enemy out of combat: fade times for its frame list
 	enemyFadeOutTime = 1.5,
-	friendlyFadeInTime = 2.5, -- targeting a friend (anything you can't attack)
+	friendlyFadeInTime = 1.5, -- targeting a friend (anything you can't attack)
 	friendlyFadeOutTime = 1.5,
 	revealOnCast = false,   -- casting or channeling brings the UI back
 	revealAtNPCs = false,     -- vendor/bank/mail/trainer/trade/auction windows bring the UI back
@@ -107,29 +107,37 @@ local DEFAULTS = {
 	buffPeekTime = 2.5,         -- seconds they stay up
 	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584", -- buffs or debuffs that never bring them up
 	                                                    -- (spell IDs or names; 8326/20584: Ghost)
+	buffHoverPadX = 40,         -- how far beside the buff icons hovering reveals them (UI units)
+	buffHoverPadY = 40,         -- ...and above and below
 	mouseover = true,      -- hovering a faded element reveals it
 	mouseoverHold = 3,     -- seconds a group stays after the mouse leaves it (per-group overrides below)
 	musicInCinematic = true,  -- turn game music on while cinematic, off after
 	musicOffOnLogout = true,  -- turn game music off when logging out
 	hideNames = true,         -- hide unit names while cinematic
 	hidePlates = true,        -- hide nameplates while cinematic
-	plateShowMobs = true,     -- nameplates for hostile and neutral mobs (off hides them everywhere)
+	plateShowMobs = true,     -- nameplates for hostile and neutral mobs out of combat
 	plateShowNPCs = true,     -- ...for friendly NPCs (when the game's friendly NPC plates are on)
 	plateShowOwn = true,      -- ...for players of your own faction
 	plateShowOther = true,    -- ...for players of the other faction
 	plateShowPets = true,     -- ...for pets, minions and guardians
 	plateShowTotems = true,   -- ...for totems
-	plateAlwaysTarget = false, -- your target's nameplate always shows, whatever the rows below say
+	plateAlwaysTargetEnemy = true,     -- your target's nameplate always shows, whatever the rows below
+	plateAlwaysTargetFriendly = false, -- say (enemy: anything you can attack, neutral mobs too)
+	plateTargetEnemyFadeIn = 1.5,      -- how fast that plate fades in when you target, and out after
+	plateTargetEnemyFadeOut = 1.5,
+	plateTargetFriendlyFadeIn = 1.5,
+	plateTargetFriendlyFadeOut = 1.5,
 	plateCombatMobs = true,   -- show these during fights (off: hidden while you're in combat)
 	plateCombatNPCs = false,
 	plateCombatOwn = false,
 	plateCombatOther = true,
 	plateCombatPets = false,
 	plateCombatTotems = false,
-	plateCinematicMobs = true,  -- keep these showing in cinematic mode despite hidePlates
+	plateCombatLinger = 30,   -- seconds kinds ticked for fights stay up after one (unticked out of combat)
+	plateCinematicMobs = false, -- keep these showing in cinematic mode despite hidePlates
 	plateCinematicNPCs = false,
 	plateCinematicOwn = false,
-	plateCinematicOther = true,
+	plateCinematicOther = false,
 	plateCinematicPets = false,
 	plateCinematicTotems = false,
 	nameKeepMobs = false,     -- keep these names up in cinematic mode despite hideNames
@@ -148,14 +156,15 @@ local DEFAULTS = {
 	nameIconTotems = false,
 	nameIconPvPMobs = false,  -- ...only on units flagged for PvP
 	nameIconPvPNPCs = false,
-	nameIconPvPOwn = true,
+	nameIconPvPOwn = false,
 	nameIconPvPOther = true,
-	nameIconPvPPets = false,
+	nameIconPvPPets = true,
 	nameIconPvPTotems = false,
 	fadeTooltip = true,       -- hide tooltips for units/objects in the world
 	tooltipReveal = true,     -- a hidden world tooltip comes back after hovering the same thing...
 	tooltipRevealDelay = 1,   -- ...for this many seconds
-	tooltipWarmTime = 5,      -- once one's shown, the rest show at once until none has been up this long (0: off)
+	tooltipQuestAtOnce = true, -- ...except at once when it shows a quest objective
+	tooltipWarmTime = 5,     -- once one's shown, the rest show at once until none has been up this long (0: off)
 	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
 	musicFadeTime = 5,        -- seconds for music to fade in or out
 	musicFatigue = 5,         -- minutes: don't start music again within this long of the last start
@@ -1383,6 +1392,16 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.plateCombatOther = true
 			ns.db.plateCombatV2 = true
 		end
+		-- An unticked Show (now "Out of combat") used to hide a kind in fights
+		-- too; its In combat tick, greyed out then, would now show it in them.
+		if not ns.db.plateOutOfCombatV1 then
+			for _, kind in ipairs(ns.PLATE_KINDS) do
+				if not ns.db["plateShow" .. kind] then
+					ns.db["plateCombat" .. kind] = false
+				end
+			end
+			ns.db.plateOutOfCombatV1 = true
+		end
 		-- "Cities and inns" used to be one setting; carry it over to inns.
 		if ns.db.offInInns == nil then ns.db.offInInns = ns.db.offInCities end
 		if ns.db.chatInInns == nil then ns.db.chatInInns = ns.db.chatInCities end
@@ -1587,6 +1606,11 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.tintFlight = ns.db.tintWhen == "flight"
 			ns.db.tintStill = ns.db.tintWhen == "idle"
 		end
+		-- "Always show your target's nameplate" used to be one switch for every target.
+		if ns.db.plateAlwaysTarget ~= nil then
+			ns.db.plateAlwaysTargetEnemy = ns.db.plateAlwaysTarget
+			ns.db.plateAlwaysTargetFriendly = ns.db.plateAlwaysTarget
+		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
 		for _, key in ipairs({
@@ -1614,6 +1638,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"cameraInputPause", "questCamRandomSide", "questCamLeft", "lastMusicStartedAt",
 			"musicCamIdle", "musicWhenAFK", -- (now noMusicWhenAFK)
 			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
+			"plateAlwaysTarget", -- (now plateAlwaysTargetEnemy, plateAlwaysTargetFriendly)
 		}) do
 			ns.db[key] = nil
 		end

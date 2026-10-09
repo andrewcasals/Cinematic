@@ -463,7 +463,8 @@ local function CreateRevealPanel()
 		end
 	end
 
-	-- Left column: what brings the UI back, portrait and buffs
+	-- One column of sections, each below the last: what brings the UI back,
+	-- combat text, your portrait, buffs, world tooltips.
 	local revealHeader = Header(content, "Bring the UI back", lastOverride, -18)
 	revealHeader:SetPoint("TOPLEFT", lastOverride, "BOTTOMLEFT", 2, -18)
 
@@ -487,8 +488,17 @@ local function CreateRevealPanel()
 		"see it when dragging there.")
 	drag:SetPoint("TOPLEFT", windows, "BOTTOMLEFT", 0, -2)
 
-	local yoursHeader = Header(content, "Your portrait and buffs", drag, -18)
-	yoursHeader:SetPoint("TOPLEFT", drag, "BOTTOMLEFT", 2, -18)
+	local combatTextHeader = Header(content, "Combat text", drag, -24)
+	combatTextHeader:SetPoint("TOPLEFT", drag, "BOTTOMLEFT", 2, -24)
+
+	local combatText = Check(content, "hideCombatText", "Hide combat text out of combat",
+		"No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
+		"mode while you're out of combat. They come back the moment a fight starts, and your " ..
+		"combat text settings are put back when the UI returns.")
+	combatText:SetPoint("TOPLEFT", combatTextHeader, "BOTTOMLEFT", -2, -6)
+
+	local yoursHeader = Header(content, "Your portrait", combatText, -24)
+	yoursHeader:SetPoint("TOPLEFT", combatText, "BOTTOMLEFT", 2, -24)
 
 	local portrait = Check(content, "portraitWhenNotFull", "Show your portrait until health and power are full",
 		"Keeps your player portrait up while you're recovering. Rage and runic power don't " ..
@@ -510,10 +520,13 @@ local function CreateRevealPanel()
 	combatWindow:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", 4, -26)
 	GreyUnless(combatWindow, IfPortrait)
 
+	local buffsHeader = Header(content, "Buffs/debuffs", combatWindow, -24)
+	buffsHeader:SetPoint("TOPLEFT", combatWindow, "BOTTOMLEFT", -2 - PORTRAIT_INDENT, -24)
+
 	local buffPeek = Check(content, "buffPeek", "Show buffs when you gain or refresh one",
 		"A new buff or debuff, or one being refreshed, briefly shows your buffs and " ..
 		"debuffs. Buffs falling off don't count, and neither do flights.")
-	buffPeek:SetPoint("TOPLEFT", combatWindow, "BOTTOMLEFT", -4 - PORTRAIT_INDENT, -18)
+	buffPeek:SetPoint("TOPLEFT", buffsHeader, "BOTTOMLEFT", -2, -6)
 	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
 
 	local function IfBuffPeek(db) return db.buffPeek end
@@ -531,8 +544,16 @@ local function CreateRevealPanel()
 	local buffPeekTime = Slider(content, "buffPeekTime", "Show buffs for", 0.5, 30, 0.5, "%.1f sec")
 	buffPeekTime:SetPoint("TOPLEFT", buffCombatWindow, "BOTTOMLEFT", -PORTRAIT_INDENT, -26)
 
+	local buffHoverX = Slider(content, "buffHoverPadX", "Hover reach sideways", 0, 100, 5, "%d")
+	buffHoverX:SetPoint("TOPLEFT", buffPeekTime, "BOTTOMLEFT", 0, -26)
+	Tooltip(buffHoverX, "How far left and right of your buff icons the mouse brings them up.")
+
+	local buffHoverY = Slider(content, "buffHoverPadY", "Hover reach up and down", 0, 100, 5, "%d")
+	buffHoverY:SetPoint("TOPLEFT", buffHoverX, "BOTTOMLEFT", 0, -26)
+	Tooltip(buffHoverY, "How far above and below your buff icons the mouse brings them up.")
+
 	local ignoreLabel = Label(content, "GameFontHighlightSmall", "Except for these buffs and debuffs (spell IDs or names):")
-	ignoreLabel:SetPoint("TOPLEFT", buffPeekTime, "BOTTOMLEFT", -2, -22)
+	ignoreLabel:SetPoint("TOPLEFT", buffHoverY, "BOTTOMLEFT", -2, -22)
 	local ignoreBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
 	ignoreBox:SetSize(270, 20)
 	ignoreBox:SetAutoFocus(false)
@@ -554,59 +575,100 @@ local function CreateRevealPanel()
 		"Names must match your game language; spell IDs work in any language (2479 is " ..
 		"Honorless Target, 8326 and 20584 are Ghost).")
 
-	-- Right column: combat text and world tooltips. World tooltips hide
-	-- throughout cinematic mode or only in the camera modes ticked here, and can
-	-- come back after hovering.
-	local worldHeader = Label(content, "GameFontNormal", "In the world")
-	worldHeader:SetPoint("TOPLEFT", revealHeader, "TOPLEFT", 320, 0)
+	-- World tooltips: when they're hidden (throughout cinematic mode or only
+	-- in the camera modes ticked Hide, and the modes where they never come
+	-- back), then how they come back after hovering.
+	local tooltipHeader = Header(content, "World tooltips", ignoreBox, -24)
+	tooltipHeader:SetPoint("TOPLEFT", ignoreBox, "BOTTOMLEFT", -6, -24)
 
-	local combatText = Check(content, "hideCombatText", "Hide combat text out of combat",
-		"No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
-		"mode while you're out of combat. They come back the moment a fight starts, and your " ..
-		"combat text settings are put back when the UI returns.")
-	combatText:SetPoint("TOPLEFT", worldHeader, "BOTTOMLEFT", -2, -6)
+	local tooltipNote = Label(content, "GameFontHighlightSmall",
+		"The tooltips for players, NPCs and objects you mouse over in the world. Tooltips for UI " ..
+		"elements always show.")
+	tooltipNote:SetPoint("TOPLEFT", tooltipHeader, "BOTTOMLEFT", 0, -6)
+	tooltipNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 
-	local tooltip = Check(content, "fadeTooltip", "Hide world tooltips",
-		"Hides the tooltip for players, NPCs and objects you mouse over in the world, throughout " ..
-		"cinematic mode. Tooltips for UI elements still show. To hide them only in some camera " ..
-		"modes, untick this and tick the modes below.")
-	tooltip:SetPoint("TOPLEFT", combatText, "BOTTOMLEFT", 0, -2)
+	local hideLabel = Label(content, "GameFontNormalSmall", "When they're hidden")
+	hideLabel:SetPoint("TOPLEFT", tooltipNote, "BOTTOMLEFT", 0, -14)
+
+	local tooltip = Check(content, "fadeTooltip", "Throughout cinematic mode",
+		"Hides world tooltips whenever cinematic mode is on. To hide them only in some camera " ..
+		"modes, untick this and tick those modes under Hide below.")
+	tooltip:SetPoint("TOPLEFT", hideLabel, "BOTTOMLEFT", -2, -6)
 	tooltip:HookScript("OnClick", Refresh) -- grey out / enable the camera modes below
 
-	local tooltipLabel = Label(content, "GameFontHighlight", "Or only in these camera modes")
+	-- A row per camera mode: hide there (when not hidden throughout), and
+	-- never show there, not even after hovering.
+	local tooltipLabel = Label(content, "GameFontHighlight", "Or in camera modes")
 	tooltipLabel:SetPoint("TOPLEFT", tooltip, "BOTTOMLEFT", 2, -8)
+	local MODE_COLUMN = 44
+	for c, heading in ipairs({ "Hide", "Never" }) do
+		local text = Label(content, "GameFontNormalSmall", heading)
+		text:SetWidth(MODE_COLUMN)
+		text:SetJustifyH("CENTER")
+		text:SetPoint("TOPLEFT", tooltipLabel, "BOTTOMLEFT", (c - 1) * MODE_COLUMN - 11, -6)
+	end
 	local tooltipModes = tooltipLabel
 	for i, mode in ipairs({
-		{ "tooltipOffFlight", "On flights" },
-		{ "tooltipOffIdle", "AFK camera (standing still or AFK)" },
-		{ "tooltipOffCozy", "Cozy (campfire, sitting, emotes)" },
-		{ "tooltipOffVista", "Vista (/stare)" },
-		{ "tooltipOffFish", "Fish (fishing)" },
-		{ "tooltipOffWalk", "RP walking" },
-		{ "tooltipOffRun", "Auto-running" },
+		{ "Flight", "On flights" },
+		{ "Idle", "AFK camera (standing still or AFK)" },
+		{ "Cozy", "Cozy (campfire, sitting, emotes)" },
+		{ "Vista", "Vista (/stare)" },
+		{ "Fish", "Fish (fishing)" },
+		{ "Walk", "RP walking" },
+		{ "Run", "Auto-running" },
 	}) do
-		local check = Check(content, mode[1], mode[2],
-			"No tooltip for players, NPCs and objects you mouse over in the world while this camera " ..
-			"is running. Tooltips for UI elements still show. (Not needed while \"Hide world " ..
-			"tooltips\" above hides them throughout cinematic mode.)")
-		check:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -4 or -2)
-		GreyUnless(check, function(db) return not db.fadeTooltip end)
-		tooltipModes = check
+		local offKey, neverKey = "tooltipOff" .. mode[1], "tooltipNever" .. mode[1]
+		local hide = Check(content, offKey, "",
+			"Hide world tooltips while this camera is running. (Not needed while \"Throughout " ..
+			"cinematic mode\" above hides them everywhere.)",
+			function(value)
+				ns.GetDB()[offKey] = value
+				Refresh() -- grey out / enable Never
+			end)
+		hide:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -18 or 0)
+		GreyUnless(hide, function(db) return not db.fadeTooltip end)
+		local never = Check(content, neverKey, "",
+			"While this camera is running, hidden world tooltips don't come back at all: not after " ..
+			"hovering, not for the exceptions (like quest objectives), not straight away after " ..
+			"another one.")
+		never:SetPoint("TOPLEFT", hide, "TOPLEFT", MODE_COLUMN, 0)
+		GreyUnless(never, function(db) return db.tooltipReveal and (db.fadeTooltip or db[offKey]) end)
+		local label = Label(content, "GameFontHighlight", mode[2])
+		label:SetPoint("LEFT", never, "RIGHT", 4, 0)
+		tooltipModes = hide
 	end
 
-	local tooltipReveal = Check(content, "tooltipReveal", "Show world tooltips after hovering",
+	local backLabel = Label(content, "GameFontNormalSmall", "Showing them again")
+	backLabel:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", 2, -14)
+
+	local tooltipReveal = Check(content, "tooltipReveal", "After hovering",
 		"A hidden world tooltip appears once you've kept the mouse on the same player, NPC or " ..
-		"object for the time below. Applies wherever world tooltips are hidden: throughout " ..
-		"cinematic mode, or in the camera modes ticked above.")
-	tooltipReveal:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", 0, -10)
+		"object for the time below. Applies wherever world tooltips are hidden, bar the camera " ..
+		"modes ticked Never.")
+	tooltipReveal:SetPoint("TOPLEFT", backLabel, "BOTTOMLEFT", -2, -6)
 	tooltipReveal:HookScript("OnClick", Refresh) -- grey out / enable the sliders
 
 	local tooltipRevealDelay = Slider(content, "tooltipRevealDelay", "After hovering for", 0, 10, 0.5, "%.1f sec")
 	tooltipRevealDelay:SetPoint("TOPLEFT", tooltipReveal, "BOTTOMLEFT", 4, -26)
 	GreyUnless(tooltipRevealDelay, function(db) return db.tooltipReveal end)
 
+	-- Tooltips that skip the wait (more may join this list).
+	local exceptWhen = Label(content, "GameFontHighlight", "Except when")
+	exceptWhen:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", -2, -14)
+	local exceptions = exceptWhen
+	for i, rule in ipairs({
+		{ "tooltipQuestAtOnce", "It shows a quest objective",
+			"Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\") " ..
+			"show straight away, so you can check your progress on what you're hunting." },
+	}) do
+		local check = Check(content, rule[1], rule[2], rule[3])
+		check:SetPoint("TOPLEFT", exceptions, "BOTTOMLEFT", i == 1 and 10 or 0, i == 1 and -4 or -2)
+		GreyUnless(check, function(db) return db.tooltipReveal end)
+		exceptions = check
+	end
+
 	local tooltipWarm = Slider(content, "tooltipWarmTime", "Then show at once until none for", 0, 15, 0.5, "%.1f sec")
-	tooltipWarm:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", 0, -26)
+	tooltipWarm:SetPoint("TOPLEFT", exceptions, "BOTTOMLEFT", -8, -26)
 	GreyUnless(tooltipWarm, function(db) return db.tooltipReveal end)
 	Tooltip(tooltipWarm, "Once a tooltip has shown, the next things you hover show theirs straight " ..
 		"away, until no world tooltip has been up for this long. 0 makes every one wait.")
@@ -2848,7 +2910,7 @@ local function CreatePlatesPanel()
 
 	local showHeader = Header(content, "Show nameplates for", hide, -18)
 	showHeader:SetPoint("TOPLEFT", hide, "BOTTOMLEFT", 2, -18)
-	local columnTop = TableTop(showHeader, { "Show", "In cinematic mode", "In combat" })
+	local columnTop = TableTop(showHeader, { "Out of combat", "In cinematic mode", "In combat" })
 
 	local KINDS = {
 		{ "Mobs", "Hostile and neutral mobs" },
@@ -2861,33 +2923,92 @@ local function CreatePlatesPanel()
 	local lastLabel
 	for r, kind in ipairs(KINDS) do
 		local showKey, cinematicKey = "plateShow" .. kind[1], "plateCinematic" .. kind[1]
-		local show = Check(content, showKey, "",
-			"Show these nameplates. Unticked, they stay hidden everywhere, in fights too. " ..
-			"The game's own nameplate options (enemy nameplates, friendly NPC nameplates...) " ..
-			"are set to match these ticks at login and whenever you change them here, so " ..
-			"changes made with the V keys or the game's options last until you log in again.",
-			function(value)
-				ns.GetDB()[showKey] = value
+		local combatKey = "plateCombat" .. kind[1]
+		local function Changed(key)
+			return function(value)
+				ns.GetDB()[key] = value
 				ns.SyncPlateCVars()
 				Refresh()
-			end)
+			end
+		end
+		local show = Check(content, showKey, "",
+			"Show these nameplates out of combat. Unticked with In combat ticked, they only " ..
+			"show in fights and for a while after (set below). Both unticked, they're hidden " ..
+			"everywhere. The game's own nameplate options (enemy nameplates, friendly NPC " ..
+			"nameplates...) are set to match these ticks at login and whenever you change them " ..
+			"here, so changes made with the V keys or the game's options last until you log in again.",
+			Changed(showKey))
 		local cinematic = Check(content, cinematicKey, "",
 			"Keep these nameplates up in cinematic mode while the others fade out.")
 		GreyUnless(cinematic, function(db) return db.hidePlates and db[showKey] end)
-		local combat = Check(content, "plateCombat" .. kind[1], "",
+		local combat = Check(content, combatKey, "",
 			"Show these nameplates during fights. Unticked, they're hidden while you're in " ..
 			"combat, in or out of cinematic mode. The game won't let nameplates be switched " ..
-			"off mid-fight, so hidden ones can still be clicked.")
-		GreyUnless(combat, function(db) return db[showKey] end)
+			"off mid-fight, so hidden ones can still be clicked; the same goes for ones shown " ..
+			"only in fights while they're hidden out of combat.", Changed(combatKey))
 		lastLabel = PlaceRow(columnTop, r, kind[2], show, cinematic, combat)
 	end
 
-	local alwaysTarget = Check(content, "plateAlwaysTarget", "Always show your target's nameplate",
-		"Your target's nameplate shows whatever the rows above say, in cinematic mode too. " ..
+	local targetTip = " shows whatever the rows above say, in cinematic mode too. " ..
 		"The game still needs its nameplates for that kind of unit switched on, so a row " ..
-		"whose game option is off (for example Friendly NPCs unticked) has no plate to show.")
+		"whose game option is off (for example Friendly NPCs unticked) has no plate to show."
+	local function Ticked(key)
+		return function(value)
+			ns.GetDB()[key] = value
+			Refresh() -- greys the fade sliders below
+		end
+	end
+	local alwaysTarget = Check(content, "plateAlwaysTargetEnemy", "Always show your enemy target's nameplate",
+		"The nameplate of a target you can attack (neutral mobs too)" .. targetTip,
+		Ticked("plateAlwaysTargetEnemy"))
 	alwaysTarget:SetPoint("TOPLEFT", lastLabel, "BOTTOMLEFT", -2, -12)
-	lastLabel = alwaysTarget
+	local alwaysFriendly = Check(content, "plateAlwaysTargetFriendly",
+		"Always show your friendly target's nameplate",
+		"The nameplate of a target you can't attack" .. targetTip, Ticked("plateAlwaysTargetFriendly"))
+	alwaysFriendly:SetPoint("TOPLEFT", alwaysTarget, "BOTTOMLEFT", 0, -2)
+
+	-- Fade times for the target's plate, a row per kind of target like the
+	-- Combat page's: fade in and fade out.
+	local TARGET_FADES = {
+		{ "Enemy", "plateAlwaysTargetEnemy", "plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut",
+			"How fast your enemy target's nameplate appears when you target it while nameplates " ..
+			"are hidden. 0 is instant.",
+			"How fast it fades away again once it's no longer targeted." },
+		{ "Friendly", "plateAlwaysTargetFriendly", "plateTargetFriendlyFadeIn", "plateTargetFriendlyFadeOut",
+			"How fast your friendly target's nameplate appears when you target it while nameplates " ..
+			"are hidden. 0 is instant.",
+			"How fast it fades away again once it's no longer targeted." },
+	}
+	local previousFade = Header(content, "Fade times", alwaysFriendly, -24)
+	previousFade:SetPoint("TOPLEFT", alwaysFriendly, "BOTTOMLEFT", 2, -24) -- checkboxes sit 2 left of the column
+	for i, fade in ipairs(TARGET_FADES) do
+		local function ticked(db) return db[fade[2]] end
+		local fadeIn = Slider(content, fade[3], fade[1] .. ": fade in", 0, 5, 0.05, "%.2f sec")
+		fadeIn:SetPoint("TOPLEFT", previousFade, "BOTTOMLEFT", i == 1 and 2 or 0, i == 1 and -26 or -34)
+		Tooltip(fadeIn, fade[5])
+		GreyUnless(fadeIn, ticked)
+		local fadeOut = Slider(content, fade[4], fade[1] .. ": fade out", 0, 30, 0.5, "%.1f sec")
+		fadeOut:SetPoint("LEFT", fadeIn, "LEFT", 300, 0)
+		Tooltip(fadeOut, fade[6])
+		GreyUnless(fadeOut, ticked)
+		previousFade = fadeIn
+	end
+
+	local linger = Slider(content, "plateCombatLinger", "Combat nameplates stay for", 0, 300, 5,
+		"%d sec after a fight")
+	linger:SetPoint("TOPLEFT", previousFade, "BOTTOMLEFT", 0, -34)
+	Tooltip(linger, "Kinds ticked In combat stay up this long after a fight ends, in cinematic " ..
+		"mode too, so they don't drop away between pulls, then fade out (unless they're ticked " ..
+		"for where you are then). The other kinds go as usual.")
+	GreyUnless(linger, function(db)
+		for _, kind in ipairs(KINDS) do
+			if db["plateCombat" .. kind[1]] then
+				return true
+			end
+		end
+		return false
+	end)
+	lastLabel = linger
 
 	-- Names, laid out the same way. "Show" is the game's own name setting
 	-- (what you see outside cinematic mode).

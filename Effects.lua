@@ -910,15 +910,103 @@ ns.PLATE_KINDS = { "Mobs", "NPCs", "Own", "Other", "Pets", "Totems" }
 
 local function AnyPlatesKeptCinematic()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		if ns.db["plateCinematic" .. kind] then
+		if ns.db["plateCinematic" .. kind] and ns.db["plateShow" .. kind] then
 			return true
 		end
 	end
 	return false
 end
 
+-- Whether a target unit's plate always shows: plateAlwaysTargetEnemy for
+-- units you can attack (neutral mobs too), plateAlwaysTargetFriendly for the rest.
+local function AlwaysShownTarget(unit)
+	local enemy, friendly = ns.db.plateAlwaysTargetEnemy, ns.db.plateAlwaysTargetFriendly
+	if not (enemy or friendly) then
+		return false
+	end
+	local ok, attackable = pcall(UnitCanAttack, "player", unit)
+	if not ok or not Known(attackable) then
+		return false
+	end
+	if attackable then
+		return enemy and true or false
+	end
+	return friendly and true or false
+end
+
 local function TargetKeptUp()
-	return ns.db.plateAlwaysTarget and UnitExists("target")
+	return UnitExists("target") and AlwaysShownTarget("target")
+end
+
+-- The always-shown target's plate fades in over its own time (the
+-- plateTarget<Enemy|Friendly>FadeIn/Out settings) rather than popping up, and
+-- once it's no longer your target fades back down to where the other plates
+-- are. Tracked by plate frame: `targetFade` is the current target's,
+-- `leavingTargets` maps old targets' plates to their fade on the way out.
+local targetFade = { plate = nil, level = 0, enemy = false }
+local leavingTargets = {}
+
+local function TargetFadeTime(enemy, fadeIn)
+	if enemy then
+		return fadeIn and ns.db.plateTargetEnemyFadeIn or ns.db.plateTargetEnemyFadeOut
+	end
+	return fadeIn and ns.db.plateTargetFriendlyFadeIn or ns.db.plateTargetFriendlyFadeOut
+end
+
+-- Moves the target fades on by `elapsed`; true while any of them is moving.
+local function UpdateTargetFade(elapsed)
+	local plate
+	if TargetKeptUp() and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+		plate = C_NamePlate.GetNamePlateForUnit("target")
+	end
+	if plate ~= targetFade.plate then
+		if targetFade.plate and targetFade.level > 0 then
+			leavingTargets[targetFade.plate] = { level = targetFade.level, enemy = targetFade.enemy }
+		end
+		-- Targeting a plate still on its way out carries on from there.
+		local leaving = plate and leavingTargets[plate]
+		targetFade.plate, targetFade.level = plate, leaving and leaving.level or 0
+		if plate then
+			leavingTargets[plate] = nil
+		end
+	end
+	local moving = false
+	if plate then
+		local ok, attackable = pcall(UnitCanAttack, "player", "target")
+		targetFade.enemy = ok and Known(attackable) and attackable or false
+		if targetFade.level < 1 then
+			targetFade.level = ns.Approach(targetFade.level, 1, elapsed, TargetFadeTime(targetFade.enemy, true))
+			moving = true
+		end
+	end
+	for leavingPlate, fade in pairs(leavingTargets) do
+		fade.level = ns.Approach(fade.level, 0, elapsed, TargetFadeTime(fade.enemy, false))
+		if fade.level <= 0 then
+			leavingTargets[leavingPlate] = nil
+		end
+		moving = true
+	end
+	return moving
+end
+
+-- A plate just given to a new unit: whatever fade it had was its last unit's.
+local function ForgetTargetFade(plate)
+	leavingTargets[plate] = nil
+	if targetFade.plate == plate then
+		targetFade.plate, targetFade.level = nil, 0
+	end
+end
+
+-- How far a plate is held up for being (or having just been) your target.
+local function TargetPlateLevel(plate)
+	if not plate then
+		return 0
+	end
+	if plate == targetFade.plate then
+		return targetFade.level
+	end
+	local leaving = leavingTargets[plate]
+	return leaving and leaving.level or 0
 end
 
 -- Name icons (nameIcon<kind>, the Names table's "Use custom icon" column):
@@ -1015,6 +1103,32 @@ end
 -- fading out again. kind -> highest alpha allowed (nil for no limit).
 local combatCap = {}
 
+-- Kinds shown in fights (plateCombat<kind> on) stay up for plateCombatLinger
+-- seconds after one, in cinematic mode too, then fade out at the fade-out
+-- speed (fight-only ones out of combat as well). Fight-only plates stay
+-- switched on throughout, only made invisible.
+local fightEndedAt = -math.huge
+local fightWatcher = CreateFrame("Frame")
+fightWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+fightWatcher:SetScript("OnEvent", function()
+	fightEndedAt = GetTime()
+end)
+
+local function FightLingering()
+	return not InCombatLockdown() and GetTime() - fightEndedAt < (ns.db.plateCombatLinger or 0)
+end
+
+local function AnyFightKinds()
+	for _, kind in ipairs(ns.PLATE_KINDS) do
+		if ns.db["plateCombat" .. kind] then
+			return true
+		end
+	end
+	return false
+end
+
+local wasShown = {} -- kind -> up last frame, so fight-only kinds fade out rather than vanish
+
 -- Whether some plates need an alpha other than the shared fade level.
 local function PlatesFiltered()
 	if next(combatCap) then
@@ -1026,7 +1140,8 @@ local function PlatesFiltered()
 			return true
 		end
 	end
-	return ns.plates.level < 1 and (AnyPlatesKeptCinematic() or TargetKeptUp() or AnyNameIcons())
+	return ns.plates.level < 1
+		and (AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil or AnyNameIcons())
 end
 
 local function IsTarget(unit)
@@ -1034,21 +1149,21 @@ local function IsTarget(unit)
 	return ok and Known(same) and same
 end
 
-local function PlateAlpha(unit)
-	if unit and ns.db.plateAlwaysTarget and IsTarget(unit) then
-		return 1
-	end
+-- The plate's alpha from the Nameplates page's rows and the fade, before any
+-- target fade lifts it.
+local function KindAlpha(unit)
 	local kind = unit and PlateKind(unit)
 	if kind then
-		if not ns.db["plateShow" .. kind] then
+		local show, combat = ns.db["plateShow" .. kind], ns.db["plateCombat" .. kind]
+		if not (show or combat) then
 			return 0
 		end
 		-- Plates can't be switched off in fights, only made invisible.
-		if InCombatLockdown() and not ns.db["plateCombat" .. kind] then
+		if InCombatLockdown() and not combat then
 			return 0
 		end
 		local cap = combatCap[kind] or 1
-		if ns.db["plateCinematic" .. kind] then
+		if show and ns.db["plateCinematic" .. kind] then
 			return cap
 		end
 		return math.min(ns.plates.level, cap)
@@ -1056,12 +1171,21 @@ local function PlateAlpha(unit)
 	return ns.plates.level
 end
 
+local function PlateAlpha(unit, plate)
+	local alpha = KindAlpha(unit)
+	if plate == targetFade.plate and not (unit and IsTarget(unit) and AlwaysShownTarget(unit)) then
+		return alpha -- a frame before the target fade catches up with a new target
+	end
+	return math.max(alpha, TargetPlateLevel(plate))
+end
+
 function ns.RefreshPlate(plate, unit)
 	if not plate then
 		return
 	end
 	unit = unit or plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-	local alpha = PlateAlpha(unit)
+	ForgetTargetFade(plate) -- only called for a plate given a new unit
+	local alpha = PlateAlpha(unit, plate)
 	if alpha < 1 or PlatesFiltered() then
 		ns.SetPlateAlpha(plate, alpha)
 	elseif plate.UnitFrame then
@@ -1078,7 +1202,7 @@ local function RefreshAllPlates()
 	end
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-		local alpha = PlateAlpha(unit)
+		local alpha = PlateAlpha(unit, plate)
 		ns.SetPlateAlpha(plate, alpha)
 		if not (plate.IsForbidden and plate:IsForbidden()) then
 			SetPlateMark(plate, unit, unit and PlateKind(unit), alpha)
@@ -1086,10 +1210,12 @@ local function RefreshAllPlates()
 	end
 end
 
--- The game's own nameplate settings follow the Nameplates page's Show ticks:
--- set at login and whenever the page changes, overriding the game's options
--- (and the V keys) from then on. A setting shared by several kinds (enemy
--- plates cover mobs and the other faction) is on while any of them shows.
+-- The game's own nameplate settings follow the Nameplates page's Out of combat
+-- and In combat ticks (on for either: a fight-only kind's plates must already
+-- be on when a fight starts): set at login and whenever the page changes,
+-- overriding the game's options (and the V keys) from then on. A setting
+-- shared by several kinds (enemy plates cover mobs and the other faction) is
+-- on while any of them shows.
 local PLATE_KIND_CVARS = {
 	Mobs = { "nameplateShowEnemies" },
 	NPCs = { "nameplateShowFriendlyNPCs" },
@@ -1113,7 +1239,7 @@ function ns.SyncPlateCVars()
 	local wanted = {}
 	for _, kind in ipairs(ns.PLATE_KINDS) do
 		for _, cvar in ipairs(PLATE_KIND_CVARS[kind]) do
-			wanted[cvar] = wanted[cvar] or (ns.db["plateShow" .. kind] and true or false)
+			wanted[cvar] = wanted[cvar] or ((ns.db["plateShow" .. kind] or ns.db["plateCombat" .. kind]) and true or false)
 		end
 	end
 	for cvar, on in pairs(wanted) do
@@ -1156,7 +1282,8 @@ function ns.PrintPlatesDebug()
 		local name = UnitName(unit)
 		local isPlayer, faction = UnitIsPlayer(unit), UnitFactionGroup(unit)
 		return ("%s: kind=%s, alpha=%.2f, can attack=%s, player=%s, faction=%s"):format(
-			Known(name) and tostring(name) or "?", tostring(PlateKind(unit)), PlateAlpha(unit),
+			Known(name) and tostring(name) or "?", tostring(PlateKind(unit)),
+			PlateAlpha(unit, C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(unit)),
 			tostring(UnitCanAttack("player", unit)),
 			Known(isPlayer) and tostring(isPlayer) or "secret", Known(faction) and tostring(faction) or "secret")
 	end
@@ -1200,14 +1327,20 @@ function ns.UpdatePlates(cinematic, elapsed)
 	if plateSyncPending and not InCombatLockdown() then
 		ns.SyncPlateCVars()
 	end
-	local hide = cinematic and ns.db.hidePlates and not InCombatLockdown()
-	local keep = AnyPlatesKeptCinematic() or TargetKeptUp() or AnyNameIcons()
+	-- Just after a fight, kinds ticked for fights stay up through their
+	-- linger even in cinematic mode; the rest go as cinematic mode comes back.
+	local inCombat = InCombatLockdown()
+	local lingering = FightLingering()
+	local holding = cinematic and ns.db.hidePlates and lingering and AnyFightKinds()
+	local hide = cinematic and ns.db.hidePlates and not inCombat and not holding
+	local keep = AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil or AnyNameIcons()
 	if not hide or keep then
 		ns.ShowPlatesNow()
 	end
 
 	local target = hide and 0 or 1
-	local changed = ns.plates.level ~= target
+	local changed = UpdateTargetFade(elapsed)
+	changed = ns.plates.level ~= target or changed
 	if changed then
 		local duration = target > ns.plates.level and ns.db.fadeInTime or ns.db.fadeOutTime
 		ns.plates.level = ns.Approach(ns.plates.level, target, elapsed, duration)
@@ -1215,12 +1348,25 @@ function ns.UpdatePlates(cinematic, elapsed)
 	-- Kinds hidden in fights: held at 0 in combat, then let back up at the
 	-- fade-in speed, but only while plates are on their way in. Heading out
 	-- (cinematic again), they stay hidden until the fade has caught up.
-	local inCombat = InCombatLockdown()
+	-- Fight-only kinds: after the fight and its linger, faded down to 0 and
+	-- held there. Held up in cinematic mode after a fight, the other kinds
+	-- (bar those kept in cinematic mode) fade down the same way.
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		if inCombat and not ns.db["plateCombat" .. kind] then
+		local show, combat = ns.db["plateShow" .. kind], ns.db["plateCombat" .. kind]
+		local cinematicKept = show and ns.db["plateCinematic" .. kind]
+		local shown = true
+		if inCombat and not combat then
 			combatCap[kind] = 0
+			shown = false
+		elseif (holding and not combat and not cinematicKept)
+			or (not inCombat and not show and not (combat and lingering)) then
+			local from = combatCap[kind] or (wasShown[kind] and 1 or 0)
+			if from > 0 then
+				changed = true
+			end
+			combatCap[kind] = ns.Approach(from, 0, elapsed, ns.db.fadeOutTime)
+			shown = false
 		elseif combatCap[kind] then
-			local cinematicKept = ns.db["plateCinematic" .. kind]
 			if hide and not cinematicKept then
 				if ns.plates.level <= combatCap[kind] then
 					combatCap[kind] = nil -- the fade is below the limit now: it takes over
@@ -1233,6 +1379,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 			end
 			changed = true
 		end
+		wasShown[kind] = shown
 	end
 	-- One more pass after filtering stops, to put every plate back.
 	local filtered = PlatesFiltered()
@@ -1287,6 +1434,17 @@ local function HidingWorldTooltips()
 	return mode ~= nil and ns.db[TOOLTIP_OFF_IN[mode]] or false
 end
 
+-- Whether hidden world tooltips come back (after hovering, the exceptions,
+-- warm): tooltipReveal, except in camera modes ticked Never (tooltipNever*).
+local function Revealing()
+	if not ns.db.tooltipReveal then
+		return false
+	end
+	local mode = ns.lastCinematic and ns.CameraMode and ns.CameraMode()
+	local key = mode and TOOLTIP_OFF_IN[mode]
+	return not (key and ns.db[key:gsub("Off", "Never")])
+end
+
 local function ShouldHideTooltip()
 	return GameTooltip:IsShown() and IsWorldTooltip() and HidingWorldTooltips()
 end
@@ -1336,11 +1494,80 @@ local function ReusedForUnit(name)
 end
 
 local function Warm()
-	return ns.db.tooltipReveal and GetTime() < warmUntil
+	return Revealing() and GetTime() < warmUntil
 end
 
 local function KeepWarm()
 	warmUntil = GetTime() + (ns.db.tooltipWarmTime or 0)
+end
+
+-- The titles of the quests in your log.
+local function QuestTitles()
+	local titles = {}
+	if C_QuestLog and C_QuestLog.GetInfo then
+		for i = 1, C_QuestLog.GetNumQuestLogEntries() do
+			local info = C_QuestLog.GetInfo(i)
+			if info and not info.isHeader and info.title then
+				titles[info.title] = true
+			end
+		end
+	elseif GetQuestLogTitle then
+		for i = 1, GetNumQuestLogEntries() do
+			local title, _, _, isHeader = GetQuestLogTitle(i)
+			if title and not isHeader then
+				titles[title] = true
+			end
+		end
+	end
+	return titles
+end
+
+-- Whether the tooltip lists a quest objective: from the lines' own kinds where
+-- the client gives them, or else (or as well) a line naming a quest in your log with an
+-- objective (" - 5/7 Thistle Boar slain") under it. Unreadable (secret) lines
+-- count as no.
+local function ShowsQuestObjective(tooltip)
+	local objective = Enum and Enum.TooltipDataLineType and Enum.TooltipDataLineType.QuestObjective
+	if objective and tooltip.GetTooltipData then
+		local ok, found = pcall(function()
+			local data = tooltip:GetTooltipData()
+			for _, line in ipairs(data and data.lines or {}) do
+				if line.type == objective then
+					return true
+				end
+			end
+			return false
+		end)
+		if ok and found then
+			return true
+		end
+	end
+	local ok, found = pcall(function()
+		local titles = QuestTitles()
+		for i = 1, tooltip:NumLines() - 1 do
+			local line, under = _G["GameTooltipTextLeft" .. i], _G["GameTooltipTextLeft" .. (i + 1)]
+			local text, below = line and line:GetText(), under and under:GetText()
+			if text and titles[text] and below and below:find("^%s*%-") then
+				return true
+			end
+		end
+		return false
+	end)
+	return ok and found
+end
+
+-- Tooltips that skip the wait ("Except when" under Show world tooltips after
+-- hovering): db key -> test.
+local SHOW_AT_ONCE = {
+	{ key = "tooltipQuestAtOnce", test = ShowsQuestObjective, why = "quest objective" },
+}
+
+local function ShowAtOnce(tooltip)
+	for _, rule in ipairs(SHOW_AT_ONCE) do
+		if ns.db[rule.key] and rule.test(tooltip) then
+			return rule.why
+		end
+	end
 end
 
 -- Fades every frame (the tick is too coarse for a short fade). Fading out ends
@@ -1466,7 +1693,15 @@ local function ViewMoved(note)
 end
 
 local function HoldBack(tooltip)
-	if ns.db.tooltipReveal then
+	-- One that skips the wait is left up, the game's own, and warms the rest.
+	local atOnce = Revealing() and ShowAtOnce(tooltip)
+	if atOnce then
+		Trace("at once (%s): %s", atOnce, tostring(TooltipName()))
+		held = nil
+		KeepWarm()
+		return
+	end
+	if Revealing() then
 		local name = TooltipName()
 		if held and SameName(name, held.name) then
 			-- The game showing the same thing again (a unit refreshing): keep counting.
@@ -1618,11 +1853,11 @@ function ns.UpdateTooltip()
 		return
 	end
 	if held then
-		if not (ns.db.tooltipReveal and HidingWorldTooltips() and StillOver(held)) then
+		if not (Revealing() and HidingWorldTooltips() and StillOver(held)) then
 			if ns.tooltipTrace then
 				local x, y = GetCursorPosition()
 				Trace("drop %s: reveal=%s hiding=%s moved=%.0f,%.0f overWorld=%s overMinimap=%s mouseover=%s view=%s",
-					tostring(held.name), tostring(ns.db.tooltipReveal), tostring(HidingWorldTooltips()),
+					tostring(held.name), tostring(Revealing()), tostring(HidingWorldTooltips()),
 					x - held.x, y - held.y, tostring(MouseOverWorld()), tostring(OverMinimap()),
 					tostring(UnitExists("mouseover")), tostring(not held.unit and ViewMoved(held)))
 			end

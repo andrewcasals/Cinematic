@@ -506,9 +506,34 @@ local function IsInside(frame, ancestor)
 	return false
 end
 
+-- Buff icons are small, so they count as hovered from a little way off, and
+-- across the gaps between them: the cursor within buffHoverPadX/Y (UI units)
+-- of any shown icon. Icons are the mouse-enabled frames up to a few levels down
+-- (BuffButtonN on Classic, the aura frames in each AuraContainer on retail).
+local BUFF_HOVER_DEPTH = 3
+
+local function IsNearIcon(depth, padX, padY, ...)
+	for i = 1, select("#", ...) do
+		local child = select(i, ...)
+		if not IsForbidden(child) and child:IsVisible() then
+			if child:IsMouseEnabled() and child:IsMouseOver(padY, -padY, -padX, padX) then
+				return true
+			end
+			if depth > 1 and IsNearIcon(depth - 1, padX, padY, child:GetChildren()) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 function ns.IsEntryHovered(entry)
 	if entry.shrunk then
 		return IsCursorInSavedRect(entry)
+	end
+	if entry.group == "buffs" then
+		return entry.frame:IsVisible() and IsNearIcon(BUFF_HOVER_DEPTH,
+			ns.db.buffHoverPadX or 20, ns.db.buffHoverPadY or 20, entry.frame:GetChildren())
 	end
 	if not (entry.frame:IsVisible() and entry.frame:IsMouseOver()) then
 		return false
