@@ -15,7 +15,8 @@
 -- Once the swing's over, the turn to the side (questCamAngle) runs alongside
 -- the rest of the zoom, then the tilt down (questCamLower) follows, after a
 -- short pause (the game won't turn and tilt at once). Going back, the zoom
--- out and the turn back go together, then the tilt up. There's no reading
+-- out and the turn back go together, then the tilt up. In between, once all
+-- that's settled, the turn drifts slowly to and fro (questCamDrift). There's no reading
 -- the camera's angle, so both are counted, and undone by as much.
 -- Both ease in and out, like the death camera's tilt: one move command is
 -- held while its speed setting is stepped along the curve (re-sending the
@@ -66,6 +67,10 @@ local STEP_GAP = 0.6   -- seconds between one move stopping and the next startin
 local TILT_TIME = 4    -- seconds the tilt down takes (squeezed into what was left of the zoom, it was rushed)
 local TILT_EASE = 0.5  -- ...one long, smooth swell: speeding up over its first half
 local TILT_BACK_TIME = 2 -- ...and back up
+local DRIFT_TIME = 7   -- seconds each leg of the drift takes, once settled (questCamDrift)
+local DRIFT_EASE = 0.3 -- ...ramps at either end (all easing, it crawled so long it seemed to stop at each
+                       -- side; much shorter, it turned round with a jump)
+local DRIFT_GAP = 0.35 -- ...seconds between legs (STEP_GAP's pause showed)
 local INPUT_GRACE = 1 -- seconds: camera input this soon is the click that opened the window
 local LOG_MAX = 4000  -- frames kept by /cine debug questlog
 
@@ -156,6 +161,11 @@ local function Command(m)
 	return grow and m.grow or m.shrink
 end
 
+-- Settled and drifting to and fro (or about to).
+local function Drifting()
+	return cam.active and not cam.handedOver and (ns.db.questCamDrift or 0) >= 1
+end
+
 local function StopMove(m)
 	if not m.moving then
 		return
@@ -164,9 +174,11 @@ local function StopMove(m)
 		Send(Command(m) .. "Stop")
 	end
 	m.moving, m.sent, m.stoppedAt = false, nil, GetTime()
-	-- (Put back a moment later, so the end of the move can't run at full speed.)
+	-- (Put back a moment later, so the end of the move can't run at full speed.
+	-- Not between the drift's legs: your setting coming back just as the
+	-- camera came to rest jumped it.)
 	C_Timer.After(SPEED_RESTORE_DELAY, function()
-		if not m.moving then
+		if not m.moving and not (m == movers.yaw and Drifting()) then
 			RestoreSpeed(m.cvar)
 		end
 	end)
@@ -174,11 +186,20 @@ end
 
 -- Moves to `target` degrees, over T seconds.
 -- ease: the share spent speeding up (and slowing down), MOVE_EASE if nil.
-local function MoveTo(m, target, T, ease)
+-- tail: { extra, speed, R }: instead of slowing to a stop at target, it slows
+-- only to `speed` (degrees per second) and carries on `extra` degrees further
+-- the same way, easing to a stop over R seconds at the end (the side turn
+-- flowing into the drift's first leg).
+local function MoveTo(m, target, T, ease, tail)
 	StopMove(m)
-	m.from, m.target, m.t, m.T = m.amount, target, 0, math.max(MOVE_MIN_TIME, T)
-	if math.abs(target - m.amount) < 0.5 then
-		m.amount = target
+	local final = target
+	if tail then
+		final = target + (target >= m.amount and tail.extra or -tail.extra)
+	end
+	m.from, m.target, m.t, m.T = m.amount, final, 0, math.max(MOVE_MIN_TIME, T)
+	m.tail = tail and { speed = tail.speed, R = tail.R } or nil
+	if math.abs(final - m.amount) < 0.5 then
+		m.amount = final
 		return
 	end
 	ns.SaveCVar(m.cvar)
@@ -187,12 +208,37 @@ local function MoveTo(m, target, T, ease)
 	local yours = tonumber(ns.db.savedCVars[m.cvar]) or m.default
 	m.ease = ease or MOVE_EASE
 	m.cruise = math.abs(target - m.amount) / (m.T * (1 - m.ease))
-	m.share = m.cruise / yours
+	m.limit = m.T + 1 + (tail and (math.abs(final - target) / tail.speed + tail.R) or 0)
+	m.share = math.max(m.cruise, m.tail and m.tail.speed or 0) / yours
 	-- The setting goes to its lowest a moment before the move starts.
 	SetCVar(m.cvar, ("%.2f"):format(MOVE_MIN_SETTING))
 	m.primedUntil = GetTime() + MOVE_PRIME_TIME
-	m.growing = target > m.amount
+	m.growing = final > m.amount
+	m.lastGrowing = m.growing
 	m.moving = true
+end
+
+-- A move with a tail: its speed at this point. Up to its cruise, down only
+-- to the tail's speed by T, on at that, and once the distance left is what
+-- easing to a stop over the tail's R covers, eased to a stop.
+local function TailSpeed(m)
+	local t, T, R, tail = m.t, m.T, m.ease * m.T, m.tail
+	if tail.stopAt then
+		local u = (t - tail.stopAt) / tail.R
+		return u >= 1 and 0 or tail.from * (1 + math.cos(math.pi * u)) / 2
+	end
+	local speed
+	if t < T - R then
+		speed = m.cruise * EaseShape(t, T, m.ease)
+	elseif t < T then
+		speed = tail.speed + (m.cruise - tail.speed) * EaseShape(t, T, m.ease)
+	else
+		speed = tail.speed
+	end
+	if t >= R and math.abs(m.target - m.amount) <= speed * tail.R / 2 then
+		tail.stopAt, tail.from = t, speed
+	end
+	return speed
 end
 
 local function StepMove(m, elapsed)
@@ -200,15 +246,18 @@ local function StepMove(m, elapsed)
 		return
 	end
 	m.t = m.t + elapsed
-	local delta = m.target - m.from
-	if math.abs(m.amount - m.from) >= math.abs(delta) or m.t >= m.T + 1 then
+	-- Done when its curve has eased right down, not when it's counted as far
+	-- as asked: the speed sent lags a little behind the curve as it slows (see
+	-- MOVE_CHANGE), so it got there early and stopped still moving, a small jump.
+	local speed = m.tail and TailSpeed(m) or m.cruise * EaseShape(m.t, m.T, m.ease)
+	if m.t >= m.limit or (m.tail and m.tail.stopAt and speed == 0) or (not m.tail and m.t >= m.T) then
 		m.amount = m.target
 		StopMove(m)
 		return
 	end
 	-- The speed setting for this point on the curve (the move's speed is the
 	-- setting times its share).
-	local setting = math.max(MOVE_MIN_SETTING, m.cruise * EaseShape(m.t, m.T, m.ease) / m.share)
+	local setting = math.max(MOVE_MIN_SETTING, speed / m.share)
 	if not m.sent then
 		-- The move goes out once, at the primed setting; after that only the
 		-- setting changes.
@@ -220,7 +269,7 @@ local function StepMove(m, elapsed)
 		m.sent = setting
 	end
 	-- How far it's come, at the speed actually sent.
-	local speed = m.sent * m.share
+	speed = m.sent * m.share
 	m.amount = m.amount + (m.growing and speed or -speed) * elapsed
 end
 
@@ -280,7 +329,7 @@ local function StepZoomRelease(elapsed)
 	-- Held at the crawl while a turn or tilt is under way or still to come:
 	-- one starting as the setting eased back snapped, and waiting for it to
 	-- finish first left a long gap between the turn and the tilt.
-	if cam.active and (#cam.steps > 0 or movers.yaw.moving or movers.pitch.moving) then
+	if cam.active and (#cam.steps > 0 or movers.yaw.moving or movers.pitch.moving or Drifting()) then
 		return
 	end
 	release.t = release.t + elapsed
@@ -384,17 +433,36 @@ local function StepZoom(elapsed)
 	end
 end
 
--- Runs the queued steps in order (cam.steps: { kind, target, T, waitZoom, ease }),
+-- Runs the queued steps in order (cam.steps: { kind, target, T, waitZoom, ease, tail }),
 -- once the swing behind you has handed camera follow back. "yaw" and "pitch"
 -- moves run one at a time; a "zoom" starts and the next step follows at once
 -- (the tilt and the zoom go together). waitZoom: not while the zoom's moving.
 local function StepSequence(now)
 	while true do
+		local drift = cam.active and not cam.handedOver and #cam.steps == 0 and (ns.db.questCamDrift or 0) >= 1
 		if movers.yaw.moving or movers.pitch.moving
-			or now - math.max(movers.yaw.stoppedAt or 0, movers.pitch.stoppedAt or 0) < STEP_GAP then
+			or now - math.max(movers.yaw.stoppedAt or 0, movers.pitch.stoppedAt or 0) < (drift and DRIFT_GAP or STEP_GAP) then
 			return
 		end
 		local step = cam.steps[1]
+		if drift then
+			-- Settled: a slow drift to and fro about the turn's angle, so the
+			-- shot isn't stock-still. (Each leg's own gentle start and stop
+			-- turn it round at either end.) Each leg's time goes by its
+			-- distance, so a first one from the middle doesn't crawl. (The
+			-- side turn usually runs on into that first leg itself.)
+			-- The first leg carries on the way the camera last turned.
+			local half = ns.db.questCamDrift / 2
+			if cam.driftOut == nil then
+				cam.driftOut = movers.yaw.lastGrowing ~= false
+			else
+				cam.driftOut = not cam.driftOut
+			end
+			local target = math.max(0, ns.db.questCamAngle) + (cam.driftOut and half or -half)
+			local T = DRIFT_TIME * math.abs(target - movers.yaw.amount) / ns.db.questCamDrift
+			step = { "yaw", target, T, false, DRIFT_EASE }
+			cam.steps[1] = step
+		end
 		if not step then
 			if not cam.active and movers.yaw.amount == 0 and movers.pitch.amount == 0 then
 				ns.ApplyCVarSet(FOLLOW_CVARS, false) -- all back: your camera follow returns
@@ -414,7 +482,12 @@ local function StepSequence(now)
 			ZoomTo(step[2], step[3])
 		else
 			ns.ApplyCVarSet(FOLLOW_CVARS, true)
-			MoveTo(movers[step[1]], step[2], step[3], step[5])
+			if step[6] then
+				-- (The turn carries on into the drift's first leg: the next
+				-- leg heads back.)
+				cam.driftOut = step[2] >= movers.yaw.amount
+			end
+			MoveTo(movers[step[1]], step[2], step[3], step[5], step[6])
 		end
 	end
 end
@@ -486,9 +559,17 @@ local function Start()
 		Note("side " .. (movers.yaw.left and "left" or "right"))
 	end
 	cam.steps, cam.stepsAt = {}, cam.startedAt + db.questCamTime + SWING_SETTLE
+	cam.driftOut, movers.yaw.lastGrowing = nil, nil
 	local turnTime = db.questCamAngle > 0 and db.questCamTurnTime or 0
 	if db.questCamAngle > 0 then
-		table.insert(cam.steps, { "yaw", db.questCamAngle, turnTime })
+		-- With nothing after it but the drift, the turn flows straight into it
+		-- (stopping and starting again showed as a pause).
+		local tail
+		if (db.questCamDrift or 0) >= 1 and db.questCamLower <= 0 then
+			tail = { extra = db.questCamDrift / 2, R = DRIFT_EASE * DRIFT_TIME,
+				speed = db.questCamDrift / (DRIFT_TIME * (1 - DRIFT_EASE)) }
+		end
+		table.insert(cam.steps, { "yaw", db.questCamAngle, turnTime, nil, nil, tail })
 	end
 	if db.questCamLower > 0 then
 		table.insert(cam.steps, { "pitch", db.questCamLower, TILT_TIME, false, TILT_EASE })

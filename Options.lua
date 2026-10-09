@@ -1697,6 +1697,10 @@ local function CreateQuestPanel()
 			GreyUnless(check, IfOn)
 		end
 	end
+	local drift = stack:Add(Slider(content, "questCamDrift", "Drift", 0, 10, 1, "%d°"), "slider")
+	Tooltip(drift, "Once the camera has settled, it drifts slowly to and fro, side to side, " ..
+		"across this many degrees, so the shot isn't stock-still. 0 holds still.")
+	GreyUnless(drift, IfOn)
 	stack:Header(content, "Height")
 	local lower = stack:Add(Slider(content, "questCamLower", "Lower the camera", 0, 45, 5, "%d°"), "slider")
 	Tooltip(lower, "How far the camera comes down toward eye level, from wherever you had it. " ..

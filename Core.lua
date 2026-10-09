@@ -233,6 +233,7 @@ local DEFAULTS = {
 	questCamAngle = 30,       -- ...degrees the camera comes round to one side of behind you (0: straight behind)
 	questCamSide = "random",  -- ...to a side picked at random each time, or "left" or "right"
 	questCamTurnTime = 4,     -- ...seconds that turn takes (once the zoom's done)
+	questCamDrift = 4,        -- ...degrees it then drifts slowly to and fro, side to side (0: holds still)
 	questCamLower = 0,        -- ...degrees the camera comes down, toward eye level (0: keep your angle)
 	questCamOverShoulder = false, -- ...and move over your shoulder (a Blizzard experimental camera setting: off by default)
 	questCamShoulder = 1,     -- ...yards the camera moves right, over your shoulder
