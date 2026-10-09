@@ -93,7 +93,7 @@ for _, event in ipairs(ns.EVENTS) do
 		ns.DEFAULTS["event" .. event.key .. "StopOnMove"] = true
 	end
 end
-ns.DEFAULTS.eventWeaponDelay = 3
+ns.DEFAULTS.eventWeaponDelay = 0
 
 -- Seconds an event has to last before its camera starts (0: right away).
 local function EventDelay(key)

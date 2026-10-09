@@ -283,7 +283,7 @@ local function CreatePanel()
 		"Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
 		"pages under this one cover what shows when (Showing the UI, Frames, Extra frames, Combat, Nameplates, " ..
-		"Chat), the look and sound, the camera modes (a page each) and keybinds.")
+		"Chat), the look and sound, the camera modes and keybinds.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -737,13 +737,13 @@ local function CreateCameraPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(cameraPanel, "GameFontHighlightSmall",
-		"While cinematic mode is on, the camera comes alive in eight situations, each with its " ..
-		"own page: Flight (on flight paths), AFK (once you've stood still a while, or go AFK), " ..
-		"Cozy (campfires and emotes), Tele (casting your Hearthstone or a teleport), Vista " ..
-		"(/stare), Fish (fishing), RP Walk (auto-walking) and Auto-run. Moving by hand cancels them all. Death Cam turns round your body when you die, and Quest Cam swings " ..
-		"behind you at quest givers. The Events page picks which camera each emote or event " ..
-		"starts. Everything goes back to normal when the UI returns. The settings here apply to " ..
-		"all of them.")
+		"While cinematic mode is on, the camera comes alive in eight situations: Flight (on " ..
+		"flight paths), AFK (once you've stood still a while, or go AFK), Cozy (campfires and " ..
+		"emotes), Tele (casting your Hearthstone or a teleport), Vista (/stare), Fish (fishing), " ..
+		"RP Walk (auto-walking) and Auto-run. Moving by hand cancels them all. Death Cam turns " ..
+		"round your body when you die, and Quest Cam swings behind you at quest givers. The Events page picks which camera each emote or " ..
+		"event starts. Everything goes back to normal when the UI returns. The settings here apply " ..
+		"to all of them.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", cameraPanel, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -770,14 +770,12 @@ local function CreateCameraPanel()
 
 	local depthOfField = Check(cameraPanel, "depthOfField", "Depth of field",
 		"A soft haze around the edges of the screen, as if the camera had focused on you. " ..
-		"Each camera mode's page sets how strong it is there (0% leaves it off). Off here: " ..
-		"no haze in any of them. /cine doftest shows it on demand.")
+		"Off: no haze in any camera mode. /cine doftest shows it on demand.")
 	depthOfField:SetPoint("TOPLEFT", menuPause, "BOTTOMLEFT", 0, -2)
 
 	local holdNote = Label(cameraPanel, "GameFontHighlightSmall",
 		"In the camera modes, the minimap and quest tracker hover holds and the buff and chat " ..
-		"peeks use their short default times, so they clear the view quickly. Each mode's page " ..
-		"sets its own pause after you move the camera.")
+		"peeks use their short default times, so they clear the view quickly.")
 	holdNote:SetPoint("TOPLEFT", depthOfField, "BOTTOMLEFT", 4, -10)
 	holdNote:SetWidth(520)
 	holdNote:SetJustifyV("TOP")
@@ -789,11 +787,13 @@ local function CreateCameraPanel()
 		"Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
 		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back " ..
 		"as usual. To keep the normal UI somewhere instead, use Turn off in on the main page. " ..
-		"For flights, Cities means taking off from one.")
+		"Always turns that camera off everywhere. For flights, Cities means taking off from one.")
 	offNote:SetPoint("TOPLEFT", offHeader, "BOTTOMLEFT", 0, -6)
 	offNote:SetWidth(520)
 	offNote:SetJustifyV("TOP")
-	local GRID_NAME_WIDTH, GRID_COLUMN = 90, 62
+	-- Always first, set a little apart from the places and groups after it.
+	local GRID_NAME_WIDTH, GRID_COLUMN, GRID_GAP = 90, 62, 10
+	local GRID_PLACES = GRID_NAME_WIDTH + GRID_COLUMN + GRID_GAP
 	local WHERE = {
 		Cities = { "Cities", "in capital cities" }, Inns = { "Inns", "in inns" },
 		Dungeons = { "Dungeons", "in dungeons and scenarios" }, Raids = { "Raids", "in raids" },
@@ -802,16 +802,21 @@ local function CreateCameraPanel()
 		RaidGroup = { "Raid group", "while you're in a raid group" },
 	}
 	local gridTop = CreateFrame("Frame", nil, cameraPanel)
-	gridTop:SetSize(GRID_NAME_WIDTH + GRID_COLUMN * #ns.CAMERA_OFF_WHERE, 16)
+	gridTop:SetSize(GRID_PLACES + GRID_COLUMN * #ns.CAMERA_OFF_WHERE, 16)
 	gridTop:SetPoint("TOPLEFT", offNote, "BOTTOMLEFT", 0, -10)
-	for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
+	local function ColumnHeader(x, label, tip)
 		local cell = CreateFrame("Frame", nil, gridTop)
 		cell:SetSize(GRID_COLUMN, 16)
-		cell:SetPoint("LEFT", gridTop, "LEFT", GRID_NAME_WIDTH + GRID_COLUMN * (i - 1), 0)
-		local text = Label(cell, "GameFontNormalSmall", WHERE[where][1])
+		cell:SetPoint("LEFT", gridTop, "LEFT", x, 0)
+		local text = Label(cell, "GameFontNormalSmall", label)
 		text:SetPoint("CENTER")
 		text:SetJustifyH("CENTER")
-		Tooltip(cell, "Tick a camera here to turn it off " .. WHERE[where][2] .. ".")
+		Tooltip(cell, tip)
+	end
+	ColumnHeader(GRID_NAME_WIDTH, "Always", "Tick a camera here to turn it off everywhere.")
+	for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
+		ColumnHeader(GRID_PLACES + GRID_COLUMN * (i - 1), WHERE[where][1],
+			"Tick a camera here to turn it off " .. WHERE[where][2] .. ".")
 	end
 	local lastRow = gridTop
 	for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
@@ -820,8 +825,13 @@ local function CreateCameraPanel()
 		row:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -2)
 		local name = Label(row, "GameFontHighlight", cam[2])
 		name:SetPoint("LEFT", row, "LEFT", 0, 0)
+		local alwaysKey = cam[1] .. "OffAlways"
+		local always = Check(row, alwaysKey, "", "No " .. cam[2] .. " Cam anywhere.")
+		always:SetPoint("CENTER", row, "LEFT", GRID_NAME_WIDTH + GRID_COLUMN * 0.5, 0)
+		always:HookScript("OnClick", Refresh) -- grey out / enable the rest of the row
+		local function IfNotAlways(db) return not db[alwaysKey] end
 		for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
-			local x = GRID_NAME_WIDTH + GRID_COLUMN * (i - 0.5)
+			local x = GRID_PLACES + GRID_COLUMN * (i - 0.5)
 			if (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
 				-- No flights from here: a greyed-out cross in place of the box.
 				local cell = CreateFrame("Frame", nil, row)
@@ -836,6 +846,7 @@ local function CreateCameraPanel()
 					or ("No " .. cam[2] .. " Cam " .. WHERE[where][2] .. ".")
 				local cb = Check(row, cam[1] .. "OffIn" .. where, "", tip)
 				cb:SetPoint("CENTER", row, "LEFT", x, 0)
+				GreyUnless(cb, IfNotAlways)
 			end
 		end
 		lastRow = row
@@ -1241,10 +1252,10 @@ local EVENT_TIPS = {
 		"swings round in front as you walk, even with Stop on move).",
 	Hearth = "Casting your Hearthstone (or Astral Recall, or any spell with \"Hearthstone\" in its " ..
 		"name). The tele camera swings round in front of you and spins faster and faster as it " ..
-		"zooms in, until you go. It's set on the Tele Cam page. The cast doesn't bring the UI back " ..
+		"zooms in, until you go. The cast doesn't bring the UI back " ..
 		"or pause the camera.",
 	Teleport = "Casting a teleport (a mage's \"Teleport: Stormwind\" and the like, or a druid's " ..
-		"Teleport: Moonglade). The tele camera, as for the Hearthstone (Tele Cam page).",
+		"Teleport: Moonglade). The tele camera, as for the Hearthstone.",
 	Logout = "Logging out or quitting where the game counts down 20 seconds first (out in the " ..
 		"world). In an inn or a city, logging out is instant, so there's nothing to see. Moving, " ..
 		"jumping, casting or Cancel ends it. It comes before any other event (a Hearthstone or " ..
@@ -1254,12 +1265,11 @@ local EVENT_TIPS = {
 		"you move or jump. The cast doesn't bring the UI back or pause the camera.",
 	AFK = "Being flagged AFK (/afk, or away long enough). With \"No camera\", the AFK camera still " ..
 		"starts once you've stood still for its delay.",
-	Flight = "Taking off on a flight path. The flight camera is set on the Flight Cam page. With a " ..
+	Flight = "Taking off on a flight path. With a " ..
 		"delay, the camera and the UI fade wait that long into the flight. With \"No camera\", the " ..
 		"camera is left to you for the whole flight.",
-	Quest = "Talking to a quest giver (a quest to pick up or hand in). The quest camera is set on " ..
-		"the Quest Cam page. With a delay, it waits that long into the conversation. Works whether " ..
-		"or not cinematic mode is on.",
+	Quest = "Talking to a quest giver (a quest to pick up or hand in). With a delay, it " ..
+		"waits that long into the conversation. Works whether or not cinematic mode is on.",
 }
 local function CreateEventsPanel()
 	local canvas, content = CreateScrollPage()
@@ -1270,8 +1280,8 @@ local function CreateEventsPanel()
 		"What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; a " ..
 		"Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a " ..
 		"drawn weapon and a campfire. Taking a flight has the flight " ..
-		"camera, and talking to a quest giver the quest camera. How each camera moves is set on its " ..
-		"own page. RP walk, auto-run and death start by themselves.")
+		"camera, and talking to a quest giver the quest camera. RP walk, auto-run and death start " ..
+		"by themselves.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -1359,8 +1369,7 @@ local function CreateEventsPanel()
 	end
 
 	local note = Label(content, "GameFontHighlightSmall",
-		"An event set to the AFK camera starts it without waiting out the AFK camera's own delay. " ..
-		"A camera whose rotation and zoom are both off on its own page shows nothing.")
+		"An event set to the AFK camera starts it without waiting out the AFK camera's own delay.")
 	note:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -28)
 	note:SetWidth(520)
 	note:SetJustifyV("TOP")
@@ -1956,7 +1965,7 @@ local function SituationChecks(content, prefix, anchor, x, y, text, onChange, en
 	local moving = Situation("Moving", "Moving around",
 		("Show %s while you're out and about, or stopped for less than the standing-still delay."):format(text.it))
 	local still = Situation("Still", "Standing still",
-		("Show %s once you've stood still for the delay on the AFK camera page."):format(text.it))
+		("Show %s once you've stood still a while."):format(text.it))
 	local flight = Situation("Flight", "On flights", ("Show %s on flight paths."):format(text.it))
 	local combat = Situation("InCombat", "In combat",
 		("Keep %s during fights. Untick to %s (and back after). Only while staying cinematic in " ..
@@ -3709,14 +3718,19 @@ CreateTintPanel()
 CreateAudioPanel()
 CreateCameraPanel()
 CreateEventsPanel()
-CreateFlightPanel()
-CreateStandingPanel()
-CreateCozyPanel()
-CreateTelePanel()
-CreateVistaPanel()
-CreateFishPanel()
-CreateWalkPanel()
-CreateAutoRunPanel()
-CreateDeathPanel()
-CreateQuestPanel()
+-- Each camera mode's own page: hidden for now (too many pages for settings few
+-- players change); their settings keep their defaults. True brings them back.
+local SHOW_CAMERA_MODE_PAGES = false
+if SHOW_CAMERA_MODE_PAGES then
+	CreateFlightPanel()
+	CreateStandingPanel()
+	CreateCozyPanel()
+	CreateTelePanel()
+	CreateVistaPanel()
+	CreateFishPanel()
+	CreateWalkPanel()
+	CreateAutoRunPanel()
+	CreateDeathPanel()
+	CreateQuestPanel()
+end
 CreateKeybindsPanel()

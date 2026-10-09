@@ -409,10 +409,11 @@ DEFAULTS.deathSong = true          -- play a song of its own meanwhile
 -- GhostMusic03 (the ghost world's music), Gloomy02, Haunted02, Haunted01,
 -- Mystery01, Undercity01, KelThuzad1A.
 DEFAULTS.deathSongFiles = "53519, 53232, 53235, 53234, 53240, 53216, 53602"
--- Each camera mode's "Turn off in" grid (Camera modes page): <cam>OffIn<where>,
--- for the cameras in ns.CAMERA_OFF_CAMS and the places and groups in
--- ns.CAMERA_OFF_WHERE, but not those in ns.CAMERA_OFF_NEVER (no flight from
--- there). All off, except no death camera in battlegrounds.
+-- Each camera mode's "Turn off in" grid (Camera modes page): <cam>OffAlways
+-- (off everywhere), then <cam>OffIn<where>, for the cameras in
+-- ns.CAMERA_OFF_CAMS and the places and groups in ns.CAMERA_OFF_WHERE, but not
+-- those in ns.CAMERA_OFF_NEVER (no flight from there). All off, except no
+-- death camera in battlegrounds.
 ns.CAMERA_OFF_CAMS = {
 	{ "flight", "Flight" }, { "idle", "AFK" }, { "cozy", "Cozy" }, { "tele", "Tele" },
 	{ "vista", "Vista" }, { "fish", "Fish" }, { "walk", "RP Walk" }, { "run", "Auto-run" },
@@ -421,6 +422,7 @@ ns.CAMERA_OFF_CAMS = {
 ns.CAMERA_OFF_WHERE = { "Cities", "Inns", "Dungeons", "Raids", "PvP", "Party", "RaidGroup" }
 ns.CAMERA_OFF_NEVER = { flight = { Inns = true, Dungeons = true, Raids = true, PvP = true } }
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+	DEFAULTS[cam[1] .. "OffAlways"] = false
 	for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
 		if not (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
 			DEFAULTS[cam[1] .. "OffIn" .. where] = false
@@ -713,6 +715,7 @@ local PLACE_SUFFIX = { city = "Cities", inn = "Inns", dungeon = "Dungeons", raid
 function ns.IsCameraOffHere(cam)
 	local db = ns.db
 	if not db then return false end
+	if db[cam .. "OffAlways"] then return true end
 	if cam == "flight" and db.flightOffInCities and db.takeoffInCity and UnitOnTaxi("player") then
 		return true
 	end
