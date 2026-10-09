@@ -52,7 +52,7 @@ local DEFAULTS = {
 	letterboxAlpha = 1,    -- bar opacity
 	letterboxInCombat = false, -- keep the bars while staying cinematic in combat
 	tintInCombat = true,      -- keep the tint while staying cinematic in combat
-	letterboxCombatWait = 8,  -- if not: seconds after a fight before the bars fade back in
+	letterboxCombatWait = 30, -- if not: seconds after a fight before the bars fade back in
 	tintCombatWait = 8,       -- ...and the tint
 	tintPreset = "zonetime",   -- screen tint over the game world (see TINT_PRESETS)
 	tintStrength = 1,
@@ -81,10 +81,10 @@ local DEFAULTS = {
 	trackingHideWhenIdle = true, -- ...except once the standing-still timer has run, or on flights
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
 	combatFadeInTime = 1,    -- how fast the "while fighting, show" frames appear
-	combatFadeOutTime = 5, -- and how fast they go once the fight is over
-	enemyFadeInTime = 1,     -- targeting an enemy out of combat: fade times for its frame list
+	combatFadeOutTime = 6, -- and how fast they go once the fight is over
+	enemyFadeInTime = 2.5,   -- targeting an enemy out of combat: fade times for its frame list
 	enemyFadeOutTime = 1.5,
-	friendlyFadeInTime = 1,  -- targeting a friend (anything you can't attack)
+	friendlyFadeInTime = 2.5, -- targeting a friend (anything you can't attack)
 	friendlyFadeOutTime = 1.5,
 	revealOnCast = false,   -- casting or channeling brings the UI back
 	revealAtNPCs = false,
@@ -1127,7 +1127,7 @@ local function EnsureTables()
 	ns.db.addonFrames = ns.db.addonFrames or {} -- Extra frames page: key -> false when switched off
 	ns.db.savedCVars = ns.db.savedCVars or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
-	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = true, LocalDefense = true }
+	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = false, LocalDefense = true }
 	ns.db.flightTimes = ns.db.flightTimes or {}
 	ns.db.zoneTints = ns.db.zoneTints or {} -- zone name -> "none", a mood key or { r, g, b }
 	ns.db.zoneTintStrength = ns.db.zoneTintStrength or {} -- zone name -> strength (0-1) for the Zone presets
@@ -1754,3 +1754,37 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		end
 	end
 end)
+
+-- The development copy (CinematicDev) wins over the released Cinematic: with
+-- both enabled (a new character starts with every addon on) they'd run twice
+-- on the same settings and their key bindings clash. The dev copy turns the
+-- released one off for every character (turning it off for just one, by name,
+-- didn't stick) and offers a reload. Released installs
+-- never have a CinematicDev folder, so this does nothing there.
+if ADDON_NAME == "CinematicDev" then
+	local IsLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+	local DisableAddOn = (C_AddOns and C_AddOns.DisableAddOn) or DisableAddOn
+	-- Changes to the enabled list are only kept once saved (the AddOn List's
+	-- Okay button does the same before it reloads).
+	local SaveAddOns = (C_AddOns and C_AddOns.SaveAddOns) or SaveAddOns
+	local devWins = CreateFrame("Frame")
+	devWins:RegisterEvent("PLAYER_LOGIN")
+	devWins:SetScript("OnEvent", function()
+		if not IsLoaded("Cinematic") then
+			return
+		end
+		DisableAddOn("Cinematic")
+		SaveAddOns()
+		ns.Print("the released Cinematic is also enabled; turned it off for all characters so the dev copy runs alone. Reload to finish.")
+		StaticPopupDialogs.CINEMATIC_DEV_WINS = {
+			text = "Cinematic (Dev) turned off the released Cinematic for all characters. Reload now?",
+			button1 = RELOADUI or "Reload UI",
+			button2 = CANCEL,
+			OnAccept = ReloadUI,
+			timeout = 0,
+			whileDead = true,
+			hideOnEscape = true,
+		}
+		StaticPopup_Show("CINEMATIC_DEV_WINS")
+	end)
+end

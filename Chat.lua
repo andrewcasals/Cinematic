@@ -34,9 +34,9 @@ ns.CHAT_PEEK_TYPES = {
 	-- Server announcements ("[SERVER] Shutdown in 9:00"); see the AddMessage hook below.
 	{ key = "server", label = "Server messages (shutdowns, restarts)", section = "game", events = {} },
 	-- Level ups arrive as a system message; see LEVEL_UP_WINDOW below.
-	{ key = "levelup", label = "Level ups", section = "game", events = {} },
-	{ key = "skill", label = "Skill ups", section = "game", events = { "CHAT_MSG_SKILL" } },
-	{ key = "achievement", label = "Achievements", section = "game",
+	{ key = "levelup", label = "Level ups", section = "game", default = false, events = {} },
+	{ key = "skill", label = "Skill ups", section = "game", default = false, events = { "CHAT_MSG_SKILL" } },
+	{ key = "achievement", label = "Achievements", section = "game", default = false,
 		events = { "CHAT_MSG_ACHIEVEMENT", "CHAT_MSG_GUILD_ACHIEVEMENT" } },
 	{ key = "xp", label = "Experience", section = "game", default = false,
 		events = { "CHAT_MSG_COMBAT_XP_GAIN" } },
@@ -44,8 +44,8 @@ ns.CHAT_PEEK_TYPES = {
 		events = { "CHAT_MSG_COMBAT_FACTION_CHANGE" } },
 	{ key = "honor", label = "Honor", section = "game", default = false,
 		events = { "CHAT_MSG_COMBAT_HONOR_GAIN" } },
-	{ key = "loot", label = "Loot", section = "game", events = { "CHAT_MSG_LOOT" } },
-	{ key = "money", label = "Money", section = "game", events = { "CHAT_MSG_MONEY" } },
+	{ key = "loot", label = "Loot", section = "game", default = false, events = { "CHAT_MSG_LOOT" } },
+	{ key = "money", label = "Money", section = "game", default = false, events = { "CHAT_MSG_MONEY" } },
 	{ key = "tradeskill", label = "Other players' crafting", section = "game", default = false,
 		events = { "CHAT_MSG_TRADESKILLS" } },
 	{ key = "system", label = "All other system messages", section = "game", default = false,

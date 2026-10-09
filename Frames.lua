@@ -566,7 +566,7 @@ ns.COMBAT_SHOW = {
 	} },
 	{ key = "extra", label = "Extra action and zone ability", default = true, retail = true,
 		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
-	{ key = "cooldowns", label = "Cooldown Manager", default = true, addon = "Blizzard_CooldownViewer",
+	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
 		frames = FRAME_GROUPS.cooldowns },
 }
 -- Then the Other addons, by group (their frames may have no names).
@@ -608,9 +608,11 @@ local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 local ENEMY_SHOW_DEFAULT = {
 	player = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
-	cooldowns = true,
 }
-for _, known in ipairs(ns.ADDON_FRAMES) do ENEMY_SHOW_DEFAULT["addon:" .. known.key] = true end
+-- Other addons' frames too, except the damage meter.
+for _, known in ipairs(ns.ADDON_FRAMES) do
+	ENEMY_SHOW_DEFAULT["addon:" .. known.key] = known.key ~= "details"
+end
 
 function ns.IsCombatShowOn(key)
 	local on = ns.db.combatShow[key]
