@@ -1309,11 +1309,22 @@ local CURSOR_REACH = 32 -- UI pixels the cursor may wander over an object
 local CURSOR_REST = 3   -- UI pixels a tick that still count as resting
 local CURSOR_SETTLE = 0.5 -- seconds the cursor has to come to rest over an object
 
+local function TooltipName()
+	local ok, text = pcall(function() return GameTooltipTextLeft1 and GameTooltipTextLeft1:GetText() end)
+	return ok and text or nil
+end
+
+-- A name that can't be compared (secret) counts as the same thing.
+local function SameName(a, b)
+	local ok, same = pcall(function() return a == b end)
+	return not ok or same
+end
+
 -- Fades every frame (the tick is too coarse for a short fade). Fading out ends
 -- by hiding the tooltip; anything else hiding or showing it stops the fade.
 local fader = CreateFrame("Frame")
 fader:Hide()
-local fadeFrom, fadeTo, fadeStart
+local fadeFrom, fadeTo, fadeStart, fadingName
 
 local function StopFade()
 	if fader:IsShown() then
@@ -1324,10 +1335,19 @@ end
 
 local function StartFade(to)
 	fadeFrom, fadeTo, fadeStart = GameTooltip:GetAlpha(), to, GetTime()
+	fadingName = TooltipName()
 	fader:Show()
 end
 
 fader:SetScript("OnUpdate", function(self)
+	-- The game reuses a tooltip that's still up (fading out) for the next unit
+	-- without showing it again, so OnShow never fires: finishing the fade would
+	-- hide the new one, and nothing would bring it back until the mouseover
+	-- changed. Treat it as newly shown instead.
+	if fadeTo == 0 and not SameName(TooltipName(), fadingName) then
+		ns.OnTooltipShow(GameTooltip)
+		return
+	end
 	local fadeTime = ns.db.tooltipFadeTime or 0
 	local t = fadeTime > 0 and (GetTime() - fadeStart) / fadeTime or 1
 	if t < 1 then
@@ -1340,17 +1360,6 @@ fader:SetScript("OnUpdate", function(self)
 	end
 	GameTooltip:SetAlpha(1)
 end)
-
-local function TooltipName()
-	local ok, text = pcall(function() return GameTooltipTextLeft1 and GameTooltipTextLeft1:GetText() end)
-	return ok and text or nil
-end
-
--- A name that can't be compared (secret) counts as the same thing.
-local function SameName(a, b)
-	local ok, same = pcall(function() return a == b end)
-	return not ok or same
-end
 
 -- Optional trace for /cine debug tooltip: what the tooltip did and why.
 local function Trace(what, ...)
@@ -1562,6 +1571,13 @@ function ns.UpdateTooltip()
 	-- nothing else would if the cursor went over the minimap.)
 	if shown and not (GameTooltip:IsShown() and WorldOwned()) then
 		shown, revealedName = nil, nil
+	end
+	-- Straight from the revealed unit onto the next: the game reuses the
+	-- tooltip without showing it again, so it's caught here as new.
+	if shown and revealedName and not SameName(TooltipName(), revealedName) then
+		Trace("replaced %s", tostring(revealedName))
+		ns.OnTooltipShow(GameTooltip)
+		return
 	end
 	if shown and not StillOver(shown) then
 		Trace("left %s, fading out", tostring(shown.name))
