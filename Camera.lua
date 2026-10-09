@@ -556,9 +556,10 @@ local function IsSeatName(name)
 end
 local CancelIdleZoom -- defined with the idle zoom below
 
-local function OnPlayerCameraInput()
+local function OnPlayerCameraInput(what)
 	if not drivingCamera then
 		lastCameraInput = GetTime()
+		ns.lastCameraInputWhat = what -- (for the log: what took a flight over)
 	end
 end
 
@@ -579,6 +580,7 @@ local function OnPlayerZoom()
 		if CancelIdleZoom then CancelIdleZoom() end
 		if ns.CancelDeathZoom then ns.CancelDeathZoom() end
 		lastCameraInput = GetTime()
+		ns.lastCameraInputWhat = "zoom"
 	end
 end
 
@@ -726,7 +728,7 @@ function ns.HookCameraInput()
 		"SetView", "ResetView",
 	}) do
 		if _G[name] then
-			hooksecurefunc(name, OnPlayerCameraInput)
+			hooksecurefunc(name, function() OnPlayerCameraInput(name) end)
 		end
 	end
 	for _, name in ipairs({ "CameraOrSelectOrMoveStart", "TurnOrActionStart" }) do
@@ -805,7 +807,11 @@ local function MoveAxis(axis, degreesPerSecond, positive)
 	if axis.moving and axis.positive ~= positive then
 		StopAxis(axis)
 	end
-	local speed = degreesPerSecond / (tonumber(GetCVar(axis.speedCVar)) or axis.defaultSpeed)
+	-- (While a fly-by holds the turn speed setting, or is about to put yours
+	-- back, the speed is worked out from yours: worked out from the fly-by's,
+	-- it would jump as yours came back.)
+	local held = axis == ns.yawAxis and ns.flyByHoldsYawSpeed and tonumber(ns.db.savedCVars[axis.speedCVar])
+	local speed = degreesPerSecond / (held or tonumber(GetCVar(axis.speedCVar)) or axis.defaultSpeed)
 	-- Every MoveView*Start call restarts the camera move, which hitches if done
 	-- every frame. Skip imperceptible changes, and while already moving the same
 	-- way, change speed at most every ORBIT_RESTART_INTERVAL. (Early in a move
@@ -1277,9 +1283,12 @@ local LINEUP_ORBIT = { walkOrbit = true, runOrbit = true, vistaOrbit = true, fis
 -- Modes whose sway favours angles near directly behind (the way you face).
 local TRAVEL_ORBIT = { walkOrbit = true, runOrbit = true, vistaOrbit = true, fishOrbit = true }
 -- Indoors (with the indoor limits on): smaller swings and zoom, so the
--- camera doesn't keep pushing into walls and ceilings.
+-- camera doesn't keep pushing into walls and ceilings. Never on a flight: the
+-- game calls you indoors around some flight points and buildings on the way,
+-- and the flag flicking on and off changed the zoom mid-flight (snapping a
+-- fly-by's turn).
 local function Indoors()
-	if not ns.db.indoorLimits then
+	if not ns.db.indoorLimits or UnitOnTaxi("player") then
 		return false
 	end
 	local ok, indoors = pcall(IsIndoors)
@@ -1500,6 +1509,7 @@ end
 -- noDrift holds still (used while the takeoff swing is moving the camera).
 local function BeginPause(startT, noDrift, forceDrift)
 	ns.orbit.phase, ns.orbit.t, ns.orbit.pauseStart = "pause", startT, startT
+	ns.orbit.pauseLen = nil -- (the setting's pause; a fly-by's hold sets its own)
 	ns.orbit.spin = false
 	ns.orbit.noDrift = noDrift or false
 	ns.orbit.forceDrift = forceDrift or false
@@ -1527,6 +1537,9 @@ end
 function ns.StopOrbitNow()
 	StopOrbitMove()
 	ns.orbit.level = 0
+	-- (A fly-by or arrival under way is dropped with it: see ns.OrbitSpecial.)
+	ns.orbit.special, ns.orbit.flyByWanted, ns.orbit.settleWanted = nil, false, false
+	ns.orbit.flyBySide = nil
 	ns.orbit.continuous, ns.orbit.contFade = false, nil
 	ns.orbit.driftVel, ns.orbit.driftSmooth = 0, 0
 end
@@ -1545,6 +1558,7 @@ ns.playerMoving = false
 local function IsAdjustingCamera(now, shortPause)
 	if IsMouseOnCamera() then
 		lastCameraInput = now
+		ns.lastCameraInputWhat = "mouse on the camera"
 	end
 	local pause = shortPause or ns.db.idleInputPause
 	return now - lastCameraInput < pause
@@ -1937,30 +1951,56 @@ local function StartIdleZoom()
 	else
 		PlanZoom(idleZoom.saved + ZoomSetting("Distance")) -- the first move always pulls back
 	end
+	if idleZoom.context == "taxi" then
+		ns.Log("zoom", ("flight zoom: %.1f -> %.1f yards%s, max factor %s"):format(idleZoom.saved,
+			idleZoom.from + idleZoom.delta, Indoors() and " (indoors)" or "",
+			tostring(GetCVar("cameraDistanceMaxZoomFactor"))))
+	end
 end
 
 local function StepIdleZoom(elapsed)
 	idleZoom.t = idleZoom.t + elapsed
 	local T = idleZoom.duration
-	local desired = idleZoom.from + idleZoom.delta * EaseProgress(idleZoom.t, T, idleZoom.ease)
+	local desired
+	if idleZoom.phase == "brake" then
+		-- Slowing from brakeV yards a second to a stop over T (see ns.BrakeIdleZoom).
+		local t = math.min(idleZoom.t, T)
+		desired = idleZoom.from + idleZoom.brakeV * (t / 2 + T / (2 * math.pi) * math.sin(math.pi * t / T))
+	else
+		desired = idleZoom.from + idleZoom.delta * EaseProgress(idleZoom.t, T, idleZoom.ease)
+	end
 	local err = CorrectZoomToward(desired)
 
 	if idleZoom.phase == "restore" then
 		if (idleZoom.t >= T and math.abs(err) < ZOOM_RESTORE_DONE) or idleZoom.t >= T + ZOOM_RESTORE_GIVE_UP then
 			FinishRestore()
 		end
-	elseif idleZoom.phase == "move" then
+	elseif idleZoom.phase == "move" or idleZoom.phase == "brake" then
 		if idleZoom.t >= T then
 			idleZoom.phase, idleZoom.t = ZoomSetting("Random") and "pause" or "hold", 0
 			idleZoom.from, idleZoom.delta, idleZoom.duration = desired, 0, 1
 			RollZoomPause()
 		end
 	elseif idleZoom.phase == "pause" and idleZoom.t >= ZoomPause() and not ns.FlyByTurning() then
-		-- (No new zoom move while a fly-by is turning the camera: a move already
-		-- under way finishes on its own curve, but freezing it mid-move, or
-		-- starting one mid-turn, showed as snaps.)
+		-- (No new zoom move while a fly-by is turning the camera: starting one
+		-- mid-turn showed as snaps. A move already under way as it began was
+		-- slowed to a stop, ns.BrakeIdleZoom: freezing it dead snapped too.)
 		PlanRandomZoom()
 	end
+end
+
+-- A fly-by or the arrival shot taking over: a zoom move under way slows to a
+-- stop over `seconds` (from the speed it's going, so there's no jolt), then
+-- pauses; the next move waits until the fly-by's over (see StepIdleZoom).
+function ns.BrakeIdleZoom(seconds)
+	if not (idleZoom.active and idleZoom.phase == "move") or idleZoom.t >= idleZoom.duration then
+		return
+	end
+	local T, t, ease, h = idleZoom.duration, idleZoom.t, idleZoom.ease, 0.05
+	local speed = idleZoom.delta * (EaseProgress(t + h, T, ease) - EaseProgress(math.max(0, t - h), T, ease))
+		/ (t + h - math.max(0, t - h))
+	idleZoom.from = idleZoom.from + idleZoom.delta * EaseProgress(t, T, ease)
+	idleZoom.brakeV, idleZoom.duration, idleZoom.t, idleZoom.phase = speed, seconds, 0, "brake"
 end
 
 -- restore: glide back to the saved distance (moving, cinematic ending).
@@ -2047,6 +2087,11 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 			-- You've moved the camera: the slow zoom lets go where it is (no
 			-- glide back) and stays off for the rest of the flight.
 			allowed = false
+			if not ns.flight.takeoverLogged then
+				ns.flight.takeoverLogged = true
+				ns.Log("zoom", ("flight taken over by %s: the flight camera stands down"):format(
+					tostring(ns.lastCameraInputWhat)))
+			end
 			if idleZoom.active and idleZoom.context == "taxi" then
 				CancelIdleZoom()
 			end
@@ -2079,6 +2124,12 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 		end
 	end
 	zoomWasIndoors = indoors
+	-- Started indoors (no going past the max there) and now out: raise the max
+	-- now, or the zoom stops dead at your own limit. (Only ever raised mid-zoom:
+	-- dropping it while pulled back would snap the camera in.)
+	if idleZoom.active and idleZoom.context == context and not indoors and ZoomSetting("PastMax") then
+		ns.ApplyCVarSet(ZOOM_MAX_CVARS, true)
+	end
 	if idleZoom.active and idleZoom.context ~= context then
 		local footHandoff = FOOT_ZOOM[idleZoom.context] and FOOT_ZOOM[context]
 		if want and footHandoff then
@@ -2652,7 +2703,9 @@ function ns.UpdateOrbit(cinematic, elapsed)
 			positive = ns.orbit.driftPositive
 		end
 		driftTarget = OrbitSetting("DriftSpeed") * (positive and 1 or -1)
-		if OrbitSetting("Mode") == "back" then
+		-- (A fly-by goes out past the edge of the swing on purpose: the drift
+		-- runs on under it.)
+		if OrbitSetting("Mode") == "back" and ns.orbit.special ~= "flyOut" then
 			-- Ease off over the last stretch before the edge of the swing (and
 			-- stay put past it), so the drift never runs into the limit and turns.
 			-- The easing is an S-curve, so the braking starts gently too.
@@ -2714,6 +2767,9 @@ function ns.UpdateOrbit(cinematic, elapsed)
 				startT = math.max(0, OrbitSetting("Pause") - (orbitPrefix == "cozyOrbit" and 0 or HANDOFF_PAUSE))
 			end
 			BeginPause(startT, false, OrbitSetting("Mode") == "back")
+			if ns.orbit.special then
+				ns.OrbitSpecialMoveDone() -- (a fly-by's or the arrival's move)
+			end
 		else
 			-- Each axis: cruise = distance / (T * (1 - ease)), shaped by the ease curve.
 			local ease = ns.orbit.ease or OrbitSetting("Ease")
@@ -2723,7 +2779,9 @@ function ns.UpdateOrbit(cinematic, elapsed)
 			MoveAxis(ns.pitchAxis, pitchSpeed, ns.orbit.pitchDelta > 0)
 			ns.orbit.pitch = ns.orbit.pitch + (ns.orbit.pitchDelta > 0 and pitchSpeed or -pitchSpeed) * elapsed
 		end
-	elseif ns.orbit.t >= OrbitSetting("Pause") then
+	elseif orbitPrefix == "taxiOrbit" and want and ns.OrbitSpecial() then
+		-- (On a flight: a fly-by or the arrival instead of the next sway.)
+	elseif ns.orbit.t >= (ns.orbit.pauseLen or OrbitSetting("Pause")) then
 		ns.orbit.phase, ns.orbit.t = "move", 0
 		PlanNextSweep()
 	end
@@ -2745,10 +2803,20 @@ end
 local FLYBY = {
 	LINE_UP_SPEED = 30, -- degrees per second, about: how long lining up behind you takes...
 	LINE_UP_MIN = 1.5,  -- ...but at least this many seconds
-	SETTLE_TURN = 6,    -- seconds, at most, to line up behind you before landing (see UpdateTaxi)
+	SETTLE_TURN = 12,   -- seconds before it must be done that the arrival's turn behind you starts (UpdateTaxi)
 	SETTLE_ZOOM = 3,    -- seconds the zoom glides back first, just before that
-	MIN_SPEED = 0.3,    -- degrees per second: slower than this is sent as still
-	SEND_EVERY = 0.1,   -- seconds between speed changes, at most (each send restarts the turn)
+	SPEED_CVAR = "cameraYawMoveSpeed",
+	MIN_SETTING = 1,    -- the lowest turn speed setting sent (lower, the game uses its full speed)
+	SETTING_CHANGE = 0.02, -- speed setting changes smaller than this share aren't sent
+	PRIME_TIME = 0.2,   -- seconds the starting speed is set before the turn starts
+	RESTORE_DELAY = 0.3, -- seconds after a turn stops before your speed setting comes back
+	HANDOVER = 0.6,     -- seconds to ease out the flight camera's drift before the first turn
+	HANDOVER_MAX = 1.5, -- ...longer from a faster sway (BRAKE_RATE degrees/sec per second), up to this...
+	BRAKE_RATE = 15,
+	QUIET = 1,          -- ...then held still this long before the turn sets off (see TakeOver)
+	BEFORE_FRAMES = 90, -- frames of the flight camera logged ahead of each fly-by (debug)
+	MAX_ACCEL = 9,      -- degrees/sec per second: fly-by and arrival turns speed up no harder (the sways' most)
+	AGAINST_DRIFT = 0.3, -- degrees/sec: a fly-by or arrival turn against a drift faster than this waits for it to fade
 	FIRST = { 30, 60 }, -- seconds after takeoff for a random one on a route not timed yet
 	CVARS = { values = { cameraSmoothStyle = "0" } }, -- camera follow off (already off on flights)
 }
@@ -2788,29 +2856,51 @@ local function AxisRate(axis)
 	return axis.positive and rate or -rate
 end
 
--- Sends the turn at this speed (degrees per second, left positive; 0 stops
--- it), as a share of your turn speed setting. Each send restarts the turn.
--- (On the yaw axis, positive turns the view right: the speed maps on negated.)
-local function SendTurn(degrees, now)
-	local axis = ns.yawAxis
-	local positive = degrees < 0
-	degrees = math.abs(degrees)
-	if degrees <= 0 then
-		StopAxis(axis)
-		return
+-- Each step's turn goes out as one held command, like the quest cam's: re-
+-- sending it at each new speed restarted it, and every start gives a small
+-- jolt (bigger the faster it's going), which showed as a jump as each turn
+-- began. Instead the turn is sent once, at the share of your turn speed
+-- setting that makes your setting its top speed, and the setting itself is
+-- stepped along the ease curve, from MIN_SETTING (a fraction of a degree per
+-- second) up toward yours and back. Your setting comes back once it stops.
+
+-- Stops the step's turn; your speed setting comes back a moment later, so the
+-- end of the turn can't run at full speed.
+local function StopTurn()
+	StopAxis(ns.yawAxis)
+	if flyby.turning then
+		flyby.turning, flyby.sent = false, nil
+		C_Timer.After(FLYBY.RESTORE_DELAY, function()
+			if not flyby.turning then
+				ns.RestoreCVar(FLYBY.SPEED_CVAR)
+				ns.flyByHoldsYawSpeed = false
+			end
+		end)
 	end
-	if axis.moving and axis.positive ~= positive then
-		StopAxis(axis)
-	end
-	local speed = degrees / (tonumber(GetCVar(axis.speedCVar)) or axis.defaultSpeed)
-	axis.positive, axis.moving, axis.speed, axis.lastStart = positive, true, speed, now
-	CallCameraFunction(positive and axis.positiveStart or axis.negativeStart, speed)
 end
 
--- The next step: turn by turn degrees over T seconds (0: hold still).
+-- The next step: turn by turn degrees (left positive) over T seconds (0: hold
+-- still). The speed setting goes to its lowest a moment before the turn starts.
 local function BeginStep(phase, turn, T)
 	flyby.phase, flyby.turn, flyby.t, flyby.T = phase, turn, 0, math.max(0.1, T)
+	T = flyby.T
+	if flyby.handover then
+		return -- (set off once the flight camera has eased out: see StepFlyBy)
+	end
+	StopTurn()
+	if math.abs(turn) < 0.5 then
+		return
+	end
+	ns.SaveCVar(FLYBY.SPEED_CVAR)
+	ns.flyByHoldsYawSpeed = true
+	local yours = tonumber(ns.db.savedCVars[FLYBY.SPEED_CVAR]) or ns.yawAxis.defaultSpeed
+	flyby.cruise = math.abs(turn) / (T * 0.5) -- top speed of one smooth swell (EaseShape, ease 0.5)
+	flyby.share = flyby.cruise / yours
+	SetCVar(FLYBY.SPEED_CVAR, ("%.2f"):format(FLYBY.MIN_SETTING))
+	flyby.primedUntil = GetTime() + FLYBY.PRIME_TIME
+	flyby.turning, flyby.sent = true, nil
 end
+
 
 -- Lines up behind you, from wherever the camera is: quicker the nearer it is.
 local function LineUpTime(maxTime)
@@ -2819,11 +2909,14 @@ end
 
 -- why: printed when it ends early (nil when it's run its course or was stopped).
 local function EndFlyBy(why)
-	flyby.active = false
+	if flyby.handover and not flyby.handover.stopped then
+		StopOrbitTilt() -- (cut short while easing the flight camera out)
+	end
+	flyby.active, flyby.handover = false, nil
 	if why then
 		FlyBySay("stopped: " .. why)
 	end
-	StopAxis(ns.yawAxis)
+	StopTurn()
 	ns.ApplyCVarSet(FLYBY.CVARS, false)
 	-- Hand the camera back to the flight camera (its angle is positive turned
 	-- right): a full pause holding still before its next sway.
@@ -2848,9 +2941,29 @@ end
 local function TakeOver()
 	local tracked = ns.orbit.level > 0 or UnitOnTaxi("player")
 	flyby.view = tracked and -ns.orbit.angle or 0
-	StopAxis(ns.yawAxis)
-	StopOrbitTilt()
-	flyby.active, flyby.started, flyby.sentAt = true, GetTime(), nil
+	-- Whatever the flight camera was doing (its drift, or a sway the arrival
+	-- shot cut into, tilt and all) eases out first: stopped dead, it showed
+	-- as a jerk as the fly-by or arrival shot began. Then the camera holds
+	-- still for QUIET seconds before the first turn: a turn sent within a
+	-- moment of the last one stopping snapped as it set off (the quest cam
+	-- found the same, see its STEP_GAP), while one after a still spell (the
+	-- turn back, after the hold) set off cleanly.
+	local rate = AxisRate(ns.yawAxis)
+	local tilt = not ns.orbit.tilting and AxisRate(ns.pitchAxis) or 0
+	-- (Longer from a faster sway, so it never brakes hard.)
+	local T = math.min(FLYBY.HANDOVER_MAX, math.max(FLYBY.HANDOVER, math.abs(rate) / FLYBY.BRAKE_RATE,
+		math.abs(tilt) / FLYBY.BRAKE_RATE))
+	flyby.handover = { rate = rate, tilt = tilt, view = flyby.view, T = T, t = 0 }
+	-- The slow zoom, if it's gliding, comes to a stop meanwhile too, done
+	-- halfway through the still moment: a zoom moving under a turn snaps it.
+	ns.BrakeIdleZoom(T + FLYBY.QUIET * 0.5)
+	if rate == 0 then
+		StopAxis(ns.yawAxis)
+	end
+	if tilt == 0 then
+		StopOrbitTilt()
+	end
+	flyby.active, flyby.started = true, GetTime()
 	flyby.onTaxi = UnitOnTaxi("player")
 end
 
@@ -2872,15 +2985,36 @@ function ns.ToggleFlyBy(quiet)
 	if IsMouseOnCamera() then
 		return false, "let go of the mouse first"
 	end
+	-- On a flight the flight camera makes it, between its sways (see
+	-- ns.OrbitSpecial): just ask.
+	if UnitOnTaxi("player") and ns.orbit.level > 0 and orbitPrefix == "taxiOrbit" then
+		if ns.orbit.special or ns.orbit.flyByWanted then
+			return false, "one's already under way"
+		elseif ns.orbit.noNewSways or ns.orbit.settleWanted then
+			return false, "too close to landing"
+		end
+		ns.orbit.flyByWanted, ns.orbit.flyByQuiet = true, quiet or false
+		return true
+	end
 	TakeOver()
 	flyby.quiet = quiet or false
 	-- Which way round: the side the camera's on, if it's off to one side
-	-- (it lines up behind you first either way); either, from behind you.
+	-- (it turns on out from there); either, from behind you.
 	flyby.side = flyby.view > 5 and 1 or flyby.view < -5 and -1 or (math.random() < 0.5 and 1 or -1)
-	BeginStep("lineup", -flyby.view, LineUpTime())
+	if math.abs(flyby.view) > 5 then
+		-- Off to one side already (the flight sway left it there): turn on out
+		-- from where it is, at the usual turn's pace. Lining up behind you first
+		-- whipped it back the other way and then reversed, which showed as a snap.
+		local turn = flyby.side * ns.db.flyByAngle - flyby.view
+		BeginStep("out", turn, math.max(FLYBY.LINE_UP_MIN,
+			ns.db.flyByTurnTime * math.abs(turn) / math.max(1, ns.db.flyByAngle)))
+	else
+		BeginStep("lineup", -flyby.view, LineUpTime())
+	end
 	if ns.db.debugFlyBy then
 		ns.db.flyByLog = {}
 		flyby.log = ns.db.flyByLog
+		ns.FlyByLogBefore()
 	end
 	-- A swing back behind you still going (the takeoff swing, say) would fight
 	-- it: end it now. On flights, follow then goes back off with the flight's
@@ -2917,25 +3051,57 @@ local function StepFlyBy(now, elapsed)
 		-- step under way is cut short: rare, as random ones end before this.)
 		BeginStep("back", -flyby.view, LineUpTime(FLYBY.SETTLE_TURN))
 	end
-	-- This step's speed now: one smooth swell from rest to rest.
-	flyby.t = flyby.t + elapsed
-	local turn = 0
-	if flyby.phase ~= "hold" and flyby.t < flyby.T then
-		turn = flyby.turn * EaseShape(flyby.t, flyby.T, 0.5) / (flyby.T * 0.5)
-		if math.abs(turn) < FLYBY.MIN_SPEED then
-			turn = 0
-		end
-	end
 	-- Where the camera actually went this frame: at the speed it was turning.
-	local turning = -AxisRate(ns.yawAxis)
-	flyby.view = WrapAngle(flyby.view + turning * elapsed)
-	-- At most every SEND_EVERY seconds (every send restarts the camera's
-	-- turn); starting and stopping go out at once.
-	local starts = (turn == 0) ~= (turning == 0) or turn * turning < 0
-	local drifted = math.abs(turn - turning) > math.max(0.2, math.abs(turning) * 0.03)
-	if starts or (drifted and now - (flyby.sentAt or 0) >= FLYBY.SEND_EVERY) then
-		SendTurn(turn, now)
-		flyby.sentAt = now
+	flyby.view = WrapAngle(flyby.view - AxisRate(ns.yawAxis) * elapsed)
+	local hand = flyby.handover
+	if hand then
+		-- Easing out the flight camera's turn and tilt (half a cosine down to a
+		-- stop), holding still a moment, then the first step sets off.
+		hand.t = hand.t + elapsed
+		if hand.t < hand.T then
+			local f = (1 + math.cos(math.pi * hand.t / hand.T)) / 2
+			local rate, tilt = hand.rate * f, hand.tilt * f
+			if hand.rate ~= 0 then
+				MoveAxis(ns.yawAxis, math.abs(rate), rate > 0)
+			end
+			if hand.tilt ~= 0 then
+				ns.orbit.pitch = ns.orbit.pitch + AxisRate(ns.pitchAxis) * elapsed -- (the flight camera's count)
+				MoveAxis(ns.pitchAxis, math.abs(tilt), tilt > 0)
+			end
+			return true
+		end
+		if not hand.stopped then
+			hand.stopped = true
+			StopAxis(ns.yawAxis)
+			if hand.tilt ~= 0 then
+				StopOrbitTilt()
+			end
+		end
+		if hand.t < hand.T + FLYBY.QUIET then
+			return true -- (held still: nothing sent, the speed setting untouched)
+		end
+		flyby.handover = nil
+		-- (Still aiming where it was: less the little way the drift carried it.)
+		BeginStep(flyby.phase, flyby.turn - WrapAngle(flyby.view - hand.view), flyby.T)
+	end
+	if flyby.turning and now < flyby.primedUntil then
+		return true -- (the lowest speed setting going in before the turn starts)
+	end
+	-- This step's speed now: one smooth swell from rest to rest, sent as the
+	-- speed setting under the one held turn (see BeginStep).
+	flyby.t = flyby.t + elapsed
+	if flyby.turning then
+		local setting = math.max(FLYBY.MIN_SETTING,
+			flyby.cruise * EaseShape(math.min(flyby.t, flyby.T), flyby.T, 0.5) / flyby.share)
+		if not flyby.sent then
+			local axis = ns.yawAxis
+			axis.positive, axis.moving, axis.speed, axis.lastStart = flyby.turn < 0, true, flyby.share, now
+			CallCameraFunction(axis.positive and axis.positiveStart or axis.negativeStart, flyby.share)
+			flyby.sent = FLYBY.MIN_SETTING
+		elseif math.abs(setting - flyby.sent) > flyby.sent * FLYBY.SETTING_CHANGE then
+			SetCVar(FLYBY.SPEED_CVAR, ("%.2f"):format(setting))
+			flyby.sent = setting
+		end
 	end
 	if flyby.t >= flyby.T then
 		if flyby.phase == "lineup" then
@@ -2963,10 +3129,15 @@ function ns.SettleBehind()
 	end
 	TakeOver()
 	flyby.quiet = true
-	BeginStep("settle", -flyby.view, LineUpTime(FLYBY.SETTLE_TURN))
+	-- The whole time there is (the settle starts SETTLE_TURN before it must be
+	-- done), less the ease-out and the still moment: a quick line-up (67 degrees
+	-- in 2 seconds) lurched as it got going.
+	BeginStep("settle", -flyby.view,
+		math.max(FLYBY.LINE_UP_MIN, FLYBY.SETTLE_TURN - flyby.handover.T - FLYBY.QUIET))
 	if ns.db.debugFlyBy then
 		ns.db.flyBySettleLog = {} -- (its own, so the last fly-by's stays)
 		flyby.log = ns.db.flyBySettleLog
+		ns.FlyByLogBefore()
 	end
 	FlyBySay("settling behind you for landing", true)
 end
@@ -3030,7 +3201,8 @@ local function PlanAutoFlyBys()
 	end
 	local start = ns.flight.start or flightSince
 	local duration = ns.flight.start and KnownFlightTime(ns.flight.route)
-	local length = ns.db.flyByTurnTime + ns.db.flyByHold + ns.db.flyByBackTime + 3 -- (+ lining up)
+	local length = ns.SpecialMoveTime(ns.db.flyByAngle, ns.db.flyByTurnTime) + ns.db.flyByHold
+		+ ns.SpecialMoveTime(ns.db.flyByAngle, ns.db.flyByBackTime)
 	if duration then
 		local a = math.min(ns.db.taxiFlyByFrom, ns.db.taxiFlyByTo) / 100
 		local b = math.max(ns.db.taxiFlyByFrom, ns.db.taxiFlyByTo) / 100
@@ -3090,21 +3262,19 @@ function ns.UpdateAutoFlyBy(now, onTaxi, cinematic, adjusting)
 	if not nextOne or now < nextOne.at then
 		return
 	end
-	if now > nextOne.latest then
-		table.remove(autoFlyBys.times, 1) -- its share is over: skip it
-		if ns.db.debugFlyBy then
-			ns.Print("fly-by (random): skipped, the camera wasn't free in time")
-		end
-		return
-	end
-	-- Wait for the flight camera to be running on its own: not mid fly-by,
-	-- not after camera input, not swinging round behind you or settling.
-	if flyby.active or adjusting or IsMouseOnCamera() or InCombatLockdown() or ns.orbit.settling
+	-- Not while you're moving the camera (or just did), in combat, swinging
+	-- round behind you after takeoff or settling for landing.
+	-- (Once asked, the flight camera starts it as its current sway ends.)
+	local blocked = flyby.active or adjusting or IsMouseOnCamera() or InCombatLockdown() or ns.orbit.settling
 		or ns.orbit.level <= 0 or now < (ns.orbit.centerUntil or 0)
-		or ns.orbit.phase ~= "pause" or math.abs(AxisRate(ns.yawAxis)) > (ns.db.taxiOrbitDriftSpeed or 3) + 1 then
-		-- (Nor mid sway: only between sways, when the camera is still or just
-		-- drifting, so it starts gently and carries on the way the drift goes.
-		-- Its share of the flight leaves time.)
+		or ns.orbit.special or ns.orbit.flyByWanted or ns.orbit.noNewSways or ns.orbit.settleWanted
+	if blocked then
+		if now > nextOne.latest then
+			table.remove(autoFlyBys.times, 1)
+			if ns.db.debugFlyBy then
+				ns.Print("fly-by (random): skipped: you were moving the camera, in combat, or it was too near landing")
+			end
+		end
 		return
 	end
 	table.remove(autoFlyBys.times, 1)
@@ -3124,8 +3294,12 @@ end
 local LOG_MAX, LOG_AFTER = 6000, 3
 local logLast = { yaw = 0, pitch = 0 }
 
-local function LogFlyBy(now, elapsed)
-	local log = flyby.log
+-- phase: logging the flight camera (its angle as the view): "before", ahead of
+-- a fly-by (into flyby.before, the last FLYBY.BEFORE_FRAMES frames, put at the
+-- top of the next fly-by's log), or its own fly-by or arrival (ns.orbit.special).
+local function LogFlyBy(now, elapsed, phase)
+	local before = phase == "before"
+	local log = before and flyby.before or flyby.log
 	if type(log) ~= "table" or #log >= LOG_MAX then
 		return
 	end
@@ -3137,22 +3311,37 @@ local function LogFlyBy(now, elapsed)
 	facing = okFacing and type(facing) == "number" and not (issecretvalue and issecretvalue(facing))
 		and math.deg(facing) or -1
 	log[#log + 1] = ("%.3f %.4f %s %.2f %.2f %d %d %.2f %.2f %.2f %s %.2f %s %.2f"):format(now, elapsed,
-		flyby.active and flyby.phase or "after", -AxisRate(yaw), AxisRate(pitch), yawRestart, pitchRestart,
-		flyby.view or 0, flyby.pitch or 0, GetCameraZoom and GetCameraZoom() or 0,
+		phase or (flyby.active and flyby.phase) or "after", -AxisRate(yaw), AxisRate(pitch),
+		yawRestart, pitchRestart, (phase and -(ns.orbit.angle or 0)) or flyby.view or 0, ns.orbit.pitch or 0, GetCameraZoom and GetCameraZoom() or 0,
 		idleZoom.active and tostring(idleZoom.phase) or (idleZoom.restoring and "restoring" or "off"),
 		ns.orbit.level or 0, tostring(ns.orbit.phase), facing)
 end
 
 -- Called from UpdateOrbit each frame: returns true while the fly-by is
 -- turning the camera (the flight camera waits meanwhile).
+-- A fly-by's log starting: the frames just before it go at the top.
+function ns.FlyByLogBefore()
+	for _, line in ipairs(flyby.before or {}) do
+		flyby.log[#flyby.log + 1] = line
+	end
+	flyby.before = {}
+end
+
 function ns.UpdateFlyBy(now, elapsed)
 	local driving = StepFlyBy(now, elapsed)
 	if ns.db.debugFlyBy then
-		if driving then
+		local special = ns.orbit.special
+		if driving or special then
 			flyby.logUntil = now + LOG_AFTER
 		end
 		if now < (flyby.logUntil or 0) then
-			LogFlyBy(now, elapsed)
+			LogFlyBy(now, elapsed, not driving and (special or "after") or nil)
+		elseif UnitOnTaxi("player") then
+			flyby.before = flyby.before or {}
+			LogFlyBy(now, elapsed, "before")
+			if #flyby.before > FLYBY.BEFORE_FRAMES then
+				table.remove(flyby.before, 1)
+			end
 		end
 	end
 	return driving
@@ -3160,7 +3349,8 @@ end
 
 -- Whether a fly-by (or the settle) is turning the camera right now.
 function ns.FlyByTurning()
-	return flyby.active
+	local special = ns.orbit.special
+	return flyby.active or special == "flyOut" or special == "flyHold" or special == "flyBack"
 end
 
 -- For /cine debug flyby.
@@ -3259,6 +3449,140 @@ local function FlightTimeLeft()
 	return duration - (GetTime() - ns.flight.start)
 end
 
+-- On flights the fly-by and the arrival are moves of the flight camera itself
+-- (ns.orbit.special), made the way its sways are: speed changes on top of the
+-- drift that always runs underneath, so the camera never stops and restarts,
+-- and no game setting changes. (Taking the camera over for them, stopping
+-- it, easing the game's turn speed setting and starting it again, jolted as
+-- the turns set off and finished, however the steps were timed.) They speed
+-- up and slow down no harder than the sways (FLYBY.MAX_ACCEL), and start as
+-- the sway under way ends:
+--   flyOut   round toward your front on the side the camera's on, to flyByAngle
+--   flyHold  held there flyByHold seconds, the drift fading to rest
+--   flyBack  back round behind you; the sways carry on after a full pause
+--   settle   the arrival: back behind you and level, the drift fading out...
+--   settled  ...and still there until you land
+-- None sets off against the drift: the camera would have to turn round
+-- partway into the move's speeding up (the game's turn stopping and starting
+-- the other way in one frame), which showed as a snap at the turn back after
+-- the hold. The drift fades out first; any turning round then happens as the
+-- move begins, everything at a crawl.
+-- Asked for with ns.orbit.flyByWanted (random fly-bys, /cine flyby) and
+-- settleWanted (UpdateTaxi, which also sets noNewSways so no sway is still
+-- going when the arrival's due).
+
+-- Seconds for a move of `degrees`: at least `seconds`, and long enough that
+-- it speeds up no harder than MAX_ACCEL. (An eased move of T seconds, ease
+-- 0.5, speeds up by at most 2 * pi * degrees / T^2 degrees/sec per second.)
+function ns.SpecialMoveTime(degrees, seconds)
+	return math.max(seconds or 0, ORBIT_MIN_SWEEP_TIME,
+		math.sqrt(2 * math.pi * math.abs(degrees) / FLYBY.MAX_ACCEL))
+end
+
+-- Starts one: round to `target` (the flight camera's angle; 0 is behind you)
+-- over at least `seconds`; level: tilt back to the height you took off at too.
+function ns.StartSpecialMove(kind, target, seconds, level)
+	local o = ns.orbit
+	local desired = WrapAngle(target - o.angle)
+	local T = ns.SpecialMoveTime(desired, seconds)
+	-- The drift runs on under the move (the arrival's fades it out instead),
+	-- adding its own bit: aim that much short.
+	local drift = (kind ~= "settle" and OrbitSetting("Drift")) and OrbitSetting("DriftSpeed") or 0
+	local delta = desired
+	if math.abs(desired) > drift * T then
+		delta = desired - (desired > 0 and drift or -drift) * T
+	end
+	o.special, o.phase, o.t = kind, "move", 0
+	o.yawDelta, o.pitchDelta = delta, level and -o.pitch or 0
+	o.ease, o.sweepTime = 0.5, T
+	o.noDrift = kind == "settle"
+end
+
+-- In a pause on a flight (each frame): starts a fly-by or the arrival if one's
+-- asked for, or holds the pause. Returns true when it has (no sway next).
+function ns.OrbitSpecial()
+	local o = ns.orbit
+	if o.special == "settled" then
+		return true -- still, behind you, until you land
+	end
+	-- Would a move toward `desired` degrees set off against the drift? If so
+	-- the drift fades out first (and the move waits).
+	local function AgainstDrift(desired)
+		local drift = o.driftSmooth or 0
+		if math.abs(drift) > FLYBY.AGAINST_DRIFT and (drift > 0) ~= (desired > 0) then
+			o.noDrift = true
+			return true
+		end
+		return false
+	end
+	if o.settleWanted then
+		if AgainstDrift(WrapAngle(-o.angle)) then
+			return true
+		end
+		-- The arrival (from a fly-by's hold too): over all the time there is,
+		-- so it's done just as the lead before landing begins.
+		flyby.quiet = true
+		ns.StartSpecialMove("settle", 0, nil, true)
+		local left = FlightTimeLeft()
+		if left then
+			o.sweepTime = math.max(ORBIT_MIN_SWEEP_TIME, left - ns.db.taxiSettleLead)
+		end
+		if ns.db.debugFlyBy then
+			ns.db.flyBySettleLog = {}
+			flyby.log = ns.db.flyBySettleLog
+			ns.FlyByLogBefore()
+		end
+		FlyBySay(("settling behind you for landing (%.0f sec)"):format(o.sweepTime), true)
+		return true
+	end
+	if o.special == "flyHold" then
+		if o.t >= (o.pauseLen or 0) and not AgainstDrift(WrapAngle(-o.angle)) then
+			local desired = math.abs(WrapAngle(-o.angle))
+			ns.StartSpecialMove("flyBack", 0, ns.db.flyByBackTime * desired / math.max(1, ns.db.flyByAngle))
+			FlyBySay("turning back behind you", true)
+		end
+		return true
+	end
+	if o.flyByWanted then
+		-- Round on the side the camera's on (either, from behind you).
+		o.flyBySide = o.flyBySide or (o.angle > 5 and 1 or o.angle < -5 and -1 or (math.random() < 0.5 and 1 or -1))
+		local side = o.flyBySide
+		local target = side * ns.db.flyByAngle
+		if AgainstDrift(WrapAngle(target - o.angle)) then
+			return true
+		end
+		o.flyByWanted, o.flyBySide = false, nil
+		flyby.quiet = o.flyByQuiet
+		local desired = math.abs(WrapAngle(target - o.angle))
+		ns.StartSpecialMove("flyOut", target, ns.db.flyByTurnTime * desired / math.max(1, ns.db.flyByAngle))
+		ns.BrakeIdleZoom(1.5) -- (the slow zoom eases to a stop, and waits until it's over)
+		if ns.db.debugFlyBy then
+			ns.db.flyByLog = {}
+			flyby.log = ns.db.flyByLog
+			ns.FlyByLogBefore()
+		end
+		-- (The flight camera's angle is positive to your right.)
+		FlyBySay(("turning round to look back (%s, %.0f sec)"):format(side > 0 and "right" or "left", o.sweepTime))
+		FlyByLook()
+		return true
+	end
+	return o.noNewSways -- (close to landing: no new sway, the arrival's next)
+end
+
+-- A fly-by's or the arrival's move has ended (the pause after it has begun).
+function ns.OrbitSpecialMoveDone()
+	local o = ns.orbit
+	if o.special == "flyOut" then
+		o.special, o.pauseLen, o.noDrift = "flyHold", ns.db.flyByHold, true
+	elseif o.special == "flyBack" then
+		o.special = nil -- (a full pause, then the sways carry on)
+		FlyBySay("done", true)
+	elseif o.special == "settle" then
+		o.special, o.noDrift = "settled", true
+		FlyBySay("behind you for landing", true)
+	end
+end
+
 -- For /cine debug flight: the route noted at the flight master (if still
 -- waiting for takeoff), the flight in progress, its known time and time left.
 function ns.GetFlightDebug()
@@ -3303,6 +3627,8 @@ function ns.UpdateTaxi()
 	if onTaxi and not ns.wasOnTaxi then
 		ns.orbit.angle, ns.orbit.pitch = 0, 0 -- assume the camera starts behind the character
 		ns.orbit.settling, ns.orbit.zoomSettled = false, false
+		ns.orbit.special, ns.orbit.flyByWanted, ns.orbit.settleWanted, ns.orbit.noNewSways = nil, false, false, false
+		ns.orbit.flyBySide = nil
 		if pendingRoute and now - pendingRouteAt < TAXI_PICK_WINDOW then
 			ns.flight.route, ns.flight.start = pendingRoute, now
 		end
@@ -3313,12 +3639,15 @@ function ns.UpdateTaxi()
 		ns.db.takeoffZoom = ns.PlayerZoom()
 		flightSince, flightCamStarted = ns.flight.start or now, false
 	elseif ns.wasOnTaxi and not onTaxi then
+		ns.flight.takeoverLogged = nil
 		if ns.flight.route then
 			RecordFlightTime(ns.flight.route, now - ns.flight.start)
 		end
 		ns.flight.route = nil
 		ns.db.currentFlight = nil
 		ns.orbit.settling, ns.orbit.zoomSettled = false, false
+		ns.orbit.special, ns.orbit.flyByWanted, ns.orbit.settleWanted, ns.orbit.noNewSways = nil, false, false, false
+		ns.orbit.flyBySide = nil
 		local takenOver = ns.FlightTakenOver() -- (before the flight's forgotten)
 		flightSince = nil
 		if ns.OnLandedForBuffs then ns.OnLandedForBuffs() end
@@ -3383,9 +3712,22 @@ function ns.UpdateTaxi()
 				ns.ZoomBackTo(distance, ns.SETTLE_ZOOM)
 			end
 		end
+		-- With the flight camera running, the arrival is its last move (see
+		-- ns.OrbitSpecial): no new sway starts once one couldn't finish before
+		-- the arrival's due, then it turns you behind. Otherwise the steered
+		-- settle takes the camera over.
+		local orbitRunning = ns.orbit.level > 0 and orbitPrefix == "taxiOrbit"
+		if left and orbitRunning
+			and left <= ns.db.taxiSettleLead + ns.SETTLE_TURN + (ns.db.taxiOrbitMoveTime or 10) then
+			ns.orbit.noNewSways = true
+		end
 		if left and left <= ns.db.taxiSettleLead + ns.SETTLE_TURN then -- (the turn's time)
-			ns.orbit.settling = true
-			ns.SettleBehind()
+			if orbitRunning then
+				ns.orbit.settleWanted = true
+			else
+				ns.orbit.settling = true
+				ns.SettleBehind()
+			end
 		end
 	end
 
