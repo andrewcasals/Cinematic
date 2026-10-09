@@ -2,6 +2,7 @@
 ## Title: Cinematic |cffff8800(Dev)|r
 ## Notes: Development copy of Cinematic. Don't enable it together with the released Cinematic.
 ## Author: Andrew Casals
+## Category: UI
 ## Version: dev
 ## SavedVariables: CinematicDB
 

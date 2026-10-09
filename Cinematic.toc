@@ -2,6 +2,7 @@
 ## Title: Cinematic
 ## Notes: Fades the UI and adds letterbox bars between fights for a more cinematic feel.
 ## Author: Andrew Casals
+## Category: UI
 ## Version: @project-version@
 ## X-Curse-Project-ID: 1730730
 ## SavedVariables: CinematicDB
