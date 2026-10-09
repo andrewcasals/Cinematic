@@ -53,10 +53,30 @@ ns.SCAN_INTERVAL = 5
 -- Other addons' frames faded out of the box, listed on the Extra frames page.
 -- Each fades as its own group ("addon:<key>") while its addon is loaded and
 -- it isn't switched off (db.addonFrames[key] = false). names: its named
--- frames. match(frame): whether an unnamed frame on UIParent is one of its
+-- frames. patterns: name patterns for top-level frames numbered per window.
+-- match(frame): whether an unnamed frame on UIParent is one of its
 -- own, for addons that don't name their frames (those can't be added with
 -- /cine add, which saves frames by name). short: a shorter label, if needed.
 ns.ADDON_FRAMES = {
+	{
+		key = "details", addon = "Details", label = "Details! Damage Meter", short = "Details!",
+		about = "Its meter windows.",
+		-- Each window is several frames side by side on UIParent (the bars sit
+		-- in their own frame), so hovering one and using /cine add misses the rest.
+		patterns = { "^DetailsBaseFrame%d+$", "^DetailsRowFrame%d+$", "^Details_SwitchButtonFrame%d+$" },
+	},
+	{
+		key = "cmc", addon = "CooldownManagerCentered", label = "Cooldown Manager Centered",
+		about = "Its buff containers, trackers and aura overlays (the Cooldown Manager itself fades on its own).",
+		-- Its icons sit in unnamed copies of these frames, which follow their
+		-- alpha, so fading these fades them too.
+		names = { "CMCUtilityLayoutHost", "CMCEssentialCustomTrackerHost" },
+		patterns = { "^CMCBuffContainer%d+$", "^CMCTracker%d+$" },
+		-- Its aura overlays: unnamed screen-sized AuraContainers.
+		match = function(frame)
+			return frame:GetObjectType() == "AuraContainer"
+		end,
+	},
 	{
 		key = "fecm", addon = "ForeverEnhancedCooldownManager", label = "Forever Enhanced Cooldown Manager",
 		short = "Enhanced Cooldown Manager", -- (the Combat page's label column is narrow)
@@ -262,11 +282,20 @@ local function ScanAddonFrames()
 			for _, name in ipairs(known.names or {}) do
 				AddFrame(_G[name], group)
 			end
-			if known.match then
+			if known.match or known.patterns then
 				for _, frame in ipairs({ UIParent:GetChildren() }) do
-					if not seen[frame] and not (frame.IsForbidden and frame:IsForbidden())
-						and not frame:GetName() and known.match(frame) then
-						AddFrame(frame, group)
+					if not seen[frame] and not (frame.IsForbidden and frame:IsForbidden()) then
+						local name = frame:GetName()
+						if name then
+							for _, pattern in ipairs(known.patterns or {}) do
+								if name:find(pattern) then
+									AddFrame(frame, group)
+									break
+								end
+							end
+						elseif known.match and known.match(frame) then
+							AddFrame(frame, group)
+						end
 					end
 				end
 			end
@@ -504,11 +533,21 @@ ns.COMBAT_SHOW = {
 	{ key = "focus", label = "Focus", default = true, frames = { "FocusFrame" } },
 	{ key = "buffs", label = "Buffs and debuffs", default = true,
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
-	{ key = "mainbar", label = "Main action bar", default = true, frames = { "MainMenuBar", "MainActionBar" } },
-	{ key = "bottomleft", label = "Bottom left bar", default = true, frames = { "MultiBarBottomLeft" } },
-	{ key = "bottomright", label = "Bottom right bar", default = true, frames = { "MultiBarBottomRight" } },
-	{ key = "right1", label = "Right bar", default = false, frames = { "MultiBarRight" } },
-	{ key = "right2", label = "Right bar 2", default = false, frames = { "MultiBarLeft" } },
+	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
+	-- bars, so there each also says where it sits.
+	{ key = "mainbar", label = "Action bar 1", default = true, frames = { "MainMenuBar", "MainActionBar" } },
+	{ key = "bottomleft", label = ns.isRetail and "Action bar 2" or "Action bar 2 (bottom left)", default = true,
+		frames = { "MultiBarBottomLeft" } },
+	{ key = "bottomright", label = ns.isRetail and "Action bar 3" or "Action bar 3 (bottom right)", default = true,
+		frames = { "MultiBarBottomRight" } },
+	{ key = "right1", label = ns.isRetail and "Action bar 4" or "Action bar 4 (right)", default = false,
+		frames = { "MultiBarRight" } },
+	{ key = "right2", label = ns.isRetail and "Action bar 5" or "Action bar 5 (right 2)", default = false,
+		frames = { "MultiBarLeft" } },
+	-- Retail only (the frames don't exist on Classic, so the rows are skipped).
+	{ key = "bar6", label = "Action bar 6", default = false, frames = { "MultiBar5" } },
+	{ key = "bar7", label = "Action bar 7", default = false, frames = { "MultiBar6" } },
+	{ key = "bar8", label = "Action bar 8", default = false, frames = { "MultiBar7" } },
 	{ key = "pet", label = "Pet bar", default = true, frames = { "PetActionBarFrame", "PetActionBar" } },
 	{ key = "stance", label = "Stance bar", default = true, frames = { "StanceBarFrame", "StanceBar" } },
 	{ key = "totems", label = "Totem bar", default = true, frames = {

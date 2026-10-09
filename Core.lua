@@ -112,16 +112,16 @@ local DEFAULTS = {
 	plateShowPets = true,     -- ...for pets, minions and guardians
 	plateShowTotems = true,   -- ...for totems
 	plateAlwaysTarget = false, -- your target's nameplate always shows, whatever the rows below say
-	plateCombatMobs = false,  -- show these during fights (off: hidden while you're in combat)
+	plateCombatMobs = true,   -- show these during fights (off: hidden while you're in combat)
 	plateCombatNPCs = false,
 	plateCombatOwn = false,
-	plateCombatOther = false,
+	plateCombatOther = true,
 	plateCombatPets = false,
 	plateCombatTotems = false,
-	plateCinematicMobs = false, -- keep these showing in cinematic mode despite hidePlates
+	plateCinematicMobs = true,  -- keep these showing in cinematic mode despite hidePlates
 	plateCinematicNPCs = false,
 	plateCinematicOwn = false,
-	plateCinematicOther = false,
+	plateCinematicOther = true,
 	plateCinematicPets = false,
 	plateCinematicTotems = false,
 	nameKeepMobs = false,     -- keep these names up in cinematic mode despite hideNames
@@ -152,10 +152,10 @@ local DEFAULTS = {
 	musicFatigue = 5,         -- minutes: don't start music again within this long of the last start
 	-- Play music with each camera: a fresh song as it starts, even within the fatigue time.
 	musicCamFlight = true,
-	musicCamCozy = true,
+	musicCamCozy = false,
 	musicCamVista = true,
-	musicCamFish = true,
-	musicCamWalk = true,      -- RP walk
+	musicCamFish = false,
+	musicCamWalk = false,     -- RP walk
 	musicCamRun = true,       -- auto-run
 	noMusicWhenAFK = true,    -- standing still, the AFK camera and going AFK don't start music (off: a fresh song as the AFK camera starts)
 	musicPauseWhenMoving = true,  -- music fades out once you move on from flying, RP walking or standing still
@@ -1115,6 +1115,12 @@ function Cinematic_Peek(down)
 	end
 end
 
+-- /cine peek: the peek key as a toggle, for macros (which can't be held).
+function ns.TogglePeek()
+	Cinematic_Peek(not peeking)
+	return peeking
+end
+
 local function EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
@@ -1337,6 +1343,12 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.runOrbitPitchUp == 8 then ns.db.runOrbitPitchUp = nil end
 			if ns.db.runOrbitPitchDown == 8 then ns.db.runOrbitPitchDown = nil end
 			ns.db.runSettingsV2 = true
+		end
+		-- Enemy nameplates were first hidden in fights by default; show them once.
+		if not ns.db.plateCombatV2 then
+			ns.db.plateCombatMobs = true
+			ns.db.plateCombatOther = true
+			ns.db.plateCombatV2 = true
 		end
 		-- "Cities and inns" used to be one setting; carry it over to inns.
 		if ns.db.offInInns == nil then ns.db.offInInns = ns.db.offInCities end

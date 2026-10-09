@@ -3426,24 +3426,39 @@ local function StopListening()
 	RefreshKeybinds()
 end
 
--- Puts key (or nothing) in the button's slot, replacing what was there.
+-- Puts key (or nothing) in the button's slot, replacing what was there. The
+-- game lists an action's keys in the order they were bound, so all of them
+-- are unbound and bound again in slot order: binding just the new key would
+-- add it at the end, and a key set in slot 1 would show up in slot 2. (A
+-- slot with nothing before it takes the first free one.)
 local function Bind(button, key)
 	StopListening()
 	if InCombatLockdown() then
 		ns.Print("keybinds can't be changed in combat")
 		return
 	end
-	local current = select(button.slot, GetBindingKey(button.action))
-	if current then
-		SetBinding(current)
-	end
+	local action = button.action
+	local keys = { GetBindingKey(action) }
 	if key then
 		local previous = GetBindingAction(key)
-		if previous and previous ~= "" and previous ~= button.action then
+		if previous and previous ~= "" and previous ~= action then
 			ns.Print(KeyText(key) .. " was bound to " .. (_G["BINDING_NAME_" .. previous] or previous) ..
 				" and now isn't")
 		end
-		SetBinding(key, button.action)
+	end
+	for _, old in ipairs(keys) do
+		SetBinding(old)
+	end
+	local wanted = {}
+	for i = 1, math.max(#keys, button.slot) do
+		if i == button.slot then
+			wanted[#wanted + 1] = key -- (nil when clearing: adds nothing)
+		elseif keys[i] and keys[i] ~= key then -- (the key moving here from the other slot)
+			wanted[#wanted + 1] = keys[i]
+		end
+	end
+	for _, k in ipairs(wanted) do
+		SetBinding(k, action)
 	end
 	SaveBindings(GetCurrentBindingSet())
 	RefreshKeybinds()

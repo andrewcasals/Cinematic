@@ -81,6 +81,8 @@ local function PrintHelp()
 	Heading("General")
 	print("  /cine - toggle cinematic mode (also /cine on, /cine off)")
 	print("  /cine config - open the settings")
+	print("  /cine peek - show the UI until you run it again (the peek key, for macros)")
+	print("  /cine hideui - hide the UI but keep the look (again to bring it back)")
 	print("  /cine delay <seconds> - calm time before fading (now " .. ns.db.delay .. ")")
 	print("  /cine size <percent> - letterbox bar height (now " .. ns.db.letterboxSize * 100 .. "%)")
 	print("  /cine button - show or hide the minimap button")
@@ -242,6 +244,10 @@ function ns.HandleSlash(msg)
 		C_Timer.After(degrees / speed, function() MoveViewLeftStop() end)
 	elseif cmd == "flyby" then
 		Cinematic_FlyBy()
+	elseif cmd == "peek" then
+		ns.Print(ns.TogglePeek() and "peeking: /cine peek again fades the UI" or "peek over")
+	elseif cmd == "hideui" then
+		Cinematic_ToggleUI()
 	elseif cmd == "debug" and arg == "flybys" then
 		ns.db.debugFlyBy = not ns.db.debugFlyBy
 		ns.Print("fly-by messages " .. (ns.db.debugFlyBy and
