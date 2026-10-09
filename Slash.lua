@@ -17,60 +17,6 @@ local function OnOff(value)
 	return value and "|cff40ff40on|r" or "|cffff4040off|r"
 end
 
-local TOGGLES = {
-	letterbox = { key = "letterbox", label = "Letterbox bars" },
-	chat = { key = "fadeChat", label = "Fade chat" },
-	cast = { key = "revealOnCast", label = "Reveal while casting" },
-	music = { key = "musicInCinematic", label = "Play music in cinematic mode" },
-	logoutmusic = { key = "musicOffOnLogout", label = "Turn music off on logout" },
-	noafkmusic = { key = "noMusicWhenAFK", label = "No music while AFK" },
-	names = { key = "hideNames", label = "Hide names in cinematic mode" },
-	plates = { key = "hidePlates", label = "Hide nameplates in cinematic mode" },
-	tooltip = { key = "fadeTooltip", label = "Hide world tooltips" },
-	orbit = { key = "taxiOrbit", label = "Flight camera sway" },
-	flybys = { key = "taxiFlyBy", label = "Random fly-bys on flight paths" },
-	flybylook = { key = "flyByLook", label = "/look as a fly-by starts" },
-	idle = { key = "idleOrbit", label = "AFK camera sweep" },
-	start = { key = "startCinematic", label = "Start in cinematic mode on login, /reload and turning it on" },
-	combat = { key = "stayInCombat", label = "Stay in cinematic mode in combat" },
-	combatbars = { key = "letterboxInCombat", label = "Keep the letterbox in combat" },
-	combattint = { key = "tintInCombat", label = "Keep the tint in combat" },
-	npcs = { key = "revealAtNPCs", label = "Reveal at vendors, banks, mail and trainers" },
-	minimap = { key = "alwaysShowMinimap", label = "Always show the minimap" },
-	tracking = { key = "minimapForTracking", label = "Keep minimap open while tracking" },
-	dungeons = { key = "offInDungeons", label = "Turn off in dungeons" },
-	raids = { key = "offInRaids", label = "Turn off in raids" },
-	pvp = { key = "offInPvP", label = "Turn off in battlegrounds and arenas" },
-	cities = { key = "offInCities", label = "Turn off in cities" },
-	inns = { key = "offInInns", label = "Turn off in inns" },
-	party = { key = "offInParty", label = "Turn off in a party" },
-	raidgroup = { key = "offInRaidGroup", label = "Turn off in a raid group" },
-	center = { key = "taxiCenter", label = "Swing round behind you at takeoff" },
-	settle = { key = "taxiSettle", label = "Lock the camera behind you before landing" },
-	flight = { key = "taxiInstant", label = "Start cinematic mode as soon as you take off" },
-	chatpeek = { key = "chatPeek", label = "Show chat when a message arrives" },
-	citychat = { key = "chatInCities", label = "Keep chat visible in cities" },
-	innchat = { key = "chatInInns", label = "Keep chat visible in inns" },
-	dungeonchat = { key = "chatInDungeons", label = "Keep chat visible in dungeons" },
-	raidchat = { key = "chatInRaids", label = "Keep chat visible in raids" },
-	pvpchat = { key = "chatInPvP", label = "Keep chat visible in battlegrounds and arenas" },
-	mouseover = { key = "mouseover", label = "Mouseover reveal" },
-	timetitle = { key = "timeOfDayMessage", label = "Show the time of day" },
-	windows = { key = "stayWithWindows", label = "Stay in cinematic mode when opening windows" },
-	walkcam = { key = "walkOrbit", label = "RP walk camera" },
-	autoruncam = { key = "runOrbit", label = "Auto-run camera" },
-	cozy = { key = "cozyOrbit", label = "Cozy camera" },
-	vista = { key = "vistaOrbit", label = "Vista camera" },
-	fish = { key = "fishOrbit", label = "Fish camera" },
-	death = { key = "deathOrbit", label = "Death camera" },
-	deathsong = { key = "deathSong", label = "Death song" },
-	musicpause = { key = "musicPauseWhenMoving", label = "Pause music when you move on" },
-	landingpause = { key = "musicPauseOnLanding", label = "Pause music when a flight lands" },
-	indoor = { key = "indoorLimits", label = "Limit the camera indoors" },
-	combattext = { key = "hideCombatText", label = "Hide combat text out of combat" },
-	drag = { key = "revealOnDrag", label = "Bring the UI back while dragging something" },
-}
-
 local function Heading(text)
 	print("|cffffd100" .. text .. "|r")
 end
@@ -79,11 +25,10 @@ local function PrintHelp()
 	logPrints = false
 	ns.Print("commands")
 	Heading("General")
-	print("  /cine - toggle cinematic mode (also /cine on, /cine off)")
+	print("  /cine - toggle CineMode (also /cine on, /cine off)")
 	print("  /cine config - open the settings")
 	print("  /cine peek - show the UI until you run it again (the peek key, for macros)")
 	print("  /cine hideui - hide the UI but keep the look (again to bring it back)")
-	print("  /cine delay <seconds> - calm time before fading (now " .. ns.db.delay .. ")")
 	print("  /cine size <percent> - letterbox bar height (now " .. ns.db.letterboxSize * 100 .. "%)")
 	print("  /cine button - show or hide the minimap button")
 	print("  /cine reset - restore the default settings")
@@ -96,14 +41,6 @@ local function PrintHelp()
 	print("  /cine flyby - turn the camera slowly round to look back, then back behind you (again to stop)")
 	print("  /cine walk - does the addon think you're walking or auto-running?")
 	print("  /cine walk flip - fix it if it has walk and run backwards")
-	Heading("Switches: /cine <name> turns one on or off")
-	local names = {}
-	for cmd in pairs(TOGGLES) do names[#names + 1] = cmd end
-	table.sort(names)
-	for _, cmd in ipairs(names) do
-		local toggle = TOGGLES[cmd]
-		print("  " .. cmd .. " - " .. toggle.label .. " (" .. OnOff(ns.db[toggle.key]) .. ")")
-	end
 	Heading("More")
 	print("  /cine debug help - troubleshooting commands")
 	print("  /cine log - copy the log and your setup for a bug report (/cine log clear empties it)")
@@ -190,17 +127,10 @@ function ns.HandleSlash(msg)
 		if ns.IsSuspended() then
 			ns.Print("(still stopped after an error: /cine resume starts it again)")
 		end
-	elseif cmd == "delay" and num and num >= 0 then
-		ns.db.delay = num
-		ns.Print("fade delay set to " .. num .. "s")
 	elseif cmd == "size" and num and num >= 0 and num <= 40 then
 		ns.db.letterboxSize = num / 100
 		ns.letterboxDirty = true
 		ns.Print("letterbox size set to " .. num .. "%")
-	elseif TOGGLES[cmd] then
-		local toggle = TOGGLES[cmd]
-		ns.db[toggle.key] = not ns.db[toggle.key]
-		ns.Print(toggle.label .. ": " .. OnOff(ns.db[toggle.key]))
 	elseif cmd == "add" then
 		-- Frame names are case-sensitive, so take the name before lowercasing.
 		ns.AddUnderMouse(msg:match("^%s*%S+%s+(%S+)"))
@@ -346,9 +276,8 @@ function ns.HandleSlash(msg)
 		else
 			ns.Print(("last emote: %s (caught by %s), %.0f sec ago"):format(e.token, e.via, GetTime() - e.at))
 		end
-		local event, camera, wait = ns.GetEventDebug()
-		ns.Print(event and ("event now: %s -> %s camera%s"):format(event, camera,
-			wait > 0 and (", starts in %d sec"):format(math.ceil(wait)) or "")
+		local event, camera = ns.GetEventDebug()
+		ns.Print(event and ("event now: %s -> %s camera"):format(event, camera)
 			or "event now: none (or set to no camera)")
 		local d = ns.seatDebug
 		if d then

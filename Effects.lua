@@ -8,70 +8,85 @@ ns.letterboxDirty = false
 -- values are saved on the way in and put back on the way out. Originals are
 -- also kept in the saved variables so a crash or disconnect can't leave names
 -- switched off for good. CVars this client doesn't have are skipped.
--- Names, in the groups the Nameplates page lists. In cinematic mode each group
--- hides with "Hide names" unless its nameKeep<key> option keeps it up.
+-- Names, in the rows the Nameplates page lists: the game's own name
+-- options, in its order. In cinematic mode each row hides unless kept up:
+-- nameCombat<key> in fights, otherwise nameKeep<key> in the open world and
+-- nameIn<place><key> elsewhere, like the plates. Minions rows (indent) sit
+-- under their players' rows and cover pets, guardians and totems too.
 ns.NAME_GROUPS = {
-	{ key = "Mobs", label = "Hostile and neutral mobs",
-		cvars = { "UnitNameHostleNPC", "UnitNameNonCombatCreatureName" } },
-	{ key = "NPCs", label = "Friendly NPCs",
-		cvars = { "UnitNameNPC", "UnitNameInteractiveNPC", "UnitNameFriendlySpecialNPCName" } },
-	{ key = "Own", label = "Players of your faction", cvars = { "UnitNameFriendlyPlayerName" } },
-	{ key = "Other", label = "Players of the other faction", cvars = { "UnitNameEnemyPlayerName" } },
-	{ key = "Pets", label = "Pets", cvars = { "UnitNameFriendlyPetName", "UnitNameEnemyPetName" } },
-	{ key = "Minions", label = "Minions and guardians",
+	{ key = "Self", label = "My Name", cvars = { "UnitNameOwn" } },
+	-- The game's NPC Names choice (None, quest NPCs... all NPCs) is these
+	-- together; switched on, it only changes from None (to all).
+	{ key = "NPCs", label = "NPC Names", anyOn = true,
+		cvars = { "UnitNameNPC", "UnitNameHostleNPC", "UnitNameInteractiveNPC", "UnitNameFriendlySpecialNPCName" } },
+	{ key = "Critters", label = "Critters and Companions", cvars = { "UnitNameNonCombatCreatureName" } },
+	{ key = "Friends", label = "Friendly Players", cvars = { "UnitNameFriendlyPlayerName" } },
+	{ key = "FriendlyMinions", label = "Minions", indent = true,
 		cvars = {
-			"UnitNameFriendlyMinionName", "UnitNameEnemyMinionName",
-			"UnitNameFriendlyGuardianName", "UnitNameEnemyGuardianName",
+			"UnitNameFriendlyMinionName", "UnitNameFriendlyPetName", "UnitNameFriendlyGuardianName",
+			"UnitNameFriendlyTotemName",
 		} },
-	{ key = "Totems", label = "Totems", cvars = { "UnitNameFriendlyTotemName", "UnitNameEnemyTotemName" } },
-	{ key = "Self", label = "Your own name", cvars = { "UnitNameOwn" } },
+	{ key = "Enemies", label = "Enemy Players", cvars = { "UnitNameEnemyPlayerName" } },
+	{ key = "EnemyMinions", label = "Minions", indent = true,
+		cvars = {
+			"UnitNameEnemyMinionName", "UnitNameEnemyPetName", "UnitNameEnemyGuardianName",
+			"UnitNameEnemyTotemName",
+		} },
 }
 
 local CVAR_SETS = {}
 for _, group in ipairs(ns.NAME_GROUPS) do
 	local values = {}
 	for _, cvar in ipairs(group.cvars) do values[cvar] = "0" end
-	CVAR_SETS[#CVAR_SETS + 1] = { option = "hideNames", unless = "nameKeep" .. group.key, values = values }
+	CVAR_SETS[#CVAR_SETS + 1] = { key = group.key, values = values }
 end
 
--- The player's own setting for a group of names (what comes back after
--- cinematic mode), or nil when this client has none of its settings.
-function ns.GetNamesShown(group)
-	local any = false
+-- Whether this client has any of a group's name settings.
+function ns.HasNameSettings(group)
 	for _, cvar in ipairs(group.cvars) do
-		local value = ns.db.savedCVars[cvar] or GetCVar(cvar)
-		if value ~= nil then
-			any = true
-			if value == "0" then
-				return false
+		if GetCVar(cvar) ~= nil then
+			return true
+		end
+	end
+	return false
+end
+
+-- The player's own value for a game setting: what comes back after cinematic
+-- mode if it's put away for now.
+local function OwnValue(cvar)
+	local saved = ns.db.savedCVars[cvar]
+	if saved ~= nil then
+		return saved
+	end
+	return GetCVar(cvar)
+end
+
+-- Switches a game setting on for good: straight away, or, while cinematic
+-- mode has it put away, in the value it comes back to.
+local function SwitchOn(cvar)
+	if GetCVar(cvar) == nil then
+		return
+	end
+	if ns.db.savedCVars[cvar] ~= nil then
+		ns.db.savedCVars[cvar] = "1"
+	elseif GetCVar(cvar) ~= "1" then
+		SetCVar(cvar, "1")
+	end
+end
+
+-- Ticking anything in a names row switches the game's own option for it on
+-- (only names the game shows can stay up). Unticking leaves it alone.
+function ns.EnableNameRow(group)
+	if group.anyOn then
+		for _, cvar in ipairs(group.cvars) do
+			local value = OwnValue(cvar)
+			if value ~= nil and value ~= "0" then
+				return
 			end
 		end
 	end
-	return any or nil
-end
-
-function ns.SetNamesShown(group, shown)
-	local value = shown and "1" or "0"
 	for _, cvar in ipairs(group.cvars) do
-		if ns.db.savedCVars[cvar] ~= nil then
-			ns.db.savedCVars[cvar] = value -- hidden for cinematic mode: comes back like this
-		elseif GetCVar(cvar) ~= nil and GetCVar(cvar) ~= value then
-			SetCVar(cvar, value)
-		end
-	end
-end
-
--- The game's name settings follow the Nameplates page's Show ticks
--- (nameShow<key>), set at login and whenever the page changes, like the
--- nameplate settings. A tick never set yet starts from the game's own setting.
-function ns.SyncNameCVars()
-	for _, group in ipairs(ns.NAME_GROUPS) do
-		local key = "nameShow" .. group.key
-		if ns.db[key] == nil then
-			ns.db[key] = ns.GetNamesShown(group) -- stays nil where this client has none
-		else
-			ns.SetNamesShown(group, ns.db[key])
-		end
+		SwitchOn(cvar)
 	end
 end
 
@@ -100,12 +115,22 @@ local COMBAT_TEXT_CVARS = {
 	},
 }
 
+-- Names ticked In combat stay up through the fight and for the Calm Timer (calmTime)
+-- after it, like the plates.
+local function NameKeptHere(key, inCombat)
+	if inCombat or (ns.FightLingering() and ns.db["nameCombat" .. key]) then
+		return ns.db["nameCombat" .. key]
+	end
+	local place = ns.PlaceSuffix()
+	return ns.db[place and ("nameIn" .. place .. key) or ("nameKeep" .. key)]
+end
+
 function ns.UpdateCVars(cinematic)
+	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 	for _, set in ipairs(CVAR_SETS) do
-		local want = cinematic and ns.db[set.option] and not (set.unless and ns.db[set.unless])
+		local want = cinematic and not NameKeptHere(set.key, inCombat)
 		ns.ApplyCVarSet(set, want or false)
 	end
-	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not inCombat) or false)
 end
 
@@ -322,10 +347,10 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
 		combatMusic.lastFightAt = now
 	end
-	-- Stays muted until musicCombatResume seconds after the last fight ended,
-	-- so back-to-back fights don't bring the music in and out.
+	-- Stays muted until the Calm Timer (calmTime) has passed since the last
+	-- fight ended, so back-to-back fights don't bring the music in and out.
 	local fighting = handlesMusic and ns.db.musicOffInCombat
-		and now - combatMusic.lastFightAt < ns.db.musicCombatResume
+		and now - combatMusic.lastFightAt < ns.db.calmTime
 	local flying = handlesMusic and ns.db.musicOffOnFlights and UnitOnTaxi("player")
 	-- Music belongs to the camera modes (flying, RP walking, standing still,
 	-- vista, cozy, fishing...): once you move on from one, it fades out, and a
@@ -420,18 +445,28 @@ end
 -- The death song picked for this death (a music file ID), or nil; see SetDeathSong.
 local deathSong = { file = nil, playing = false }
 
--- Each camera mode's "Play music" setting (Audio page): as that camera starts,
--- a fresh song, even if music played recently (music fatigue). The AFK
+-- "Play music": as a camera starts, a fresh song, even if music played
+-- recently (music fatigue). The flight, RP walk and auto-run cameras each have
+-- a switch; the cozy, vista and fish cameras follow the event that started
+-- them (the Camera Triggers page's Music column, event<key>Music). The AFK
 -- camera's is "No music while AFK" (noMusicWhenAFK), the other way round.
-local MUSIC_CAM = { flight = "musicCamFlight", cozy = "musicCamCozy",
-	vista = "musicCamVista", fish = "musicCamFish", walk = "musicCamWalk", run = "musicCamRun" }
+local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "musicCamRun" }
+local EVENT_MUSIC_CAMS = { cozy = true, vista = true, fish = true }
+
+local function CameraMusicOn(mode)
+	if EVENT_MUSIC_CAMS[mode] then
+		local key = ns.ActiveEvent and ns.ActiveEvent()
+		return key ~= nil and ns.db["event" .. key .. "Music"] or false
+	end
+	return MUSIC_CAM[mode] ~= nil and ns.db[MUSIC_CAM[mode]] or false
+end
 
 -- Times music starts despite music fatigue: in a camera mode set to play
 -- music, or in a different zone from the last music.
 local function FatigueOverridden()
 	local mode = ns.CameraMode and ns.CameraMode()
 	if (mode == "idle" and not ns.db.noMusicWhenAFK)
-		or (mode and MUSIC_CAM[mode] and ns.db[MUSIC_CAM[mode]]) then
+		or (mode and CameraMusicOn(mode)) then
 		return true
 	end
 	local zone = GetRealZoneText()
@@ -625,8 +660,8 @@ function ns.UpdateMusic(cinematic, elapsed)
 	-- but not for a short break in the same walk, run or spell (nor when
 	-- carrying straight on from another camera mode; see RestartMusic).
 	local mode = ns.CameraMode and ns.CameraMode()
-	if mode and mode ~= "flight" and MUSIC_CAM[mode] then
-		if now - (lastModeAt[mode] or -math.huge) > WALK_SONG_GAP and ns.db[MUSIC_CAM[mode]] then
+	if mode and mode ~= "flight" and (MUSIC_CAM[mode] or EVENT_MUSIC_CAMS[mode]) then
+		if now - (lastModeAt[mode] or -math.huge) > WALK_SONG_GAP and CameraMusicOn(mode) then
 			RestartMusic()
 		end
 		lastModeAt[mode] = now
@@ -776,7 +811,7 @@ local function AdoptSavedAmbience()
 	ambience.level = 1
 	ambience.current = tonumber(GetCVar("Sound_AmbienceVolume")) or ambience.original
 	ambience.written = ambience.current
-	ambience.holdUntil = GetTime() + ns.db.delay + 2
+	ambience.holdUntil = GetTime() + ns.db.returnDelay + 2
 end
 
 function ns.UpdateAmbience(cinematic, elapsed)
@@ -872,85 +907,103 @@ local function Known(value)
 	return not (issecretvalue and issecretvalue(value))
 end
 
--- The Nameplates page sorts plates into mobs (hostile or neutral), friendly
--- NPCs, your own faction's players, the other faction's, totems, and pets
--- (anything else a player controls: pets, minions, guardians). nil when the
--- game won't say (secret values in combat): such plates just follow the fade.
+-- The Nameplates page's rows: enemy players (their minions apart), enemy
+-- NPCs (minor units apart), friendly players (their minions apart) and
+-- friendly NPCs. Friendly or not is the game's own test, so the other
+-- faction's players are enemies. Minions are anything a player controls
+-- (pets, guardians, totems). nil when the game won't say (secret values in
+-- combat): such plates just follow the fade.
 local function PlateKind(unit)
+	local okFriend, friend = pcall(UnitIsFriend, "player", unit)
 	local ok, isPlayer = pcall(UnitIsPlayer, unit)
-	if not ok or not Known(isPlayer) then
+	if not (okFriend and ok and Known(friend) and Known(isPlayer)) then
 		return nil
 	end
-	if not isPlayer then
-		local okType, creatureType = pcall(UnitCreatureType, unit)
-		if okType and Known(creatureType) and creatureType == TOTEM_TYPE then
-			return "Totems"
-		end
-		local okControl, controlled = pcall(UnitPlayerControlled, unit)
-		if not okControl or not Known(controlled) then
-			return nil
-		end
-		if controlled then
-			return "Pets"
-		end
-		local okFriend, friend = pcall(UnitIsFriend, "player", unit)
-		return okFriend and Known(friend) and friend and "NPCs" or "Mobs"
+	if isPlayer then
+		return friend and "Friends" or "Enemies"
 	end
-	local okFaction, faction = pcall(UnitFactionGroup, unit)
-	local mine = UnitFactionGroup("player")
-	if not okFaction or type(faction) ~= "string" or (issecretvalue and issecretvalue(faction))
-		or (faction ~= "Alliance" and faction ~= "Horde") then
+	local okType, creatureType = pcall(UnitCreatureType, unit)
+	local totem = okType and Known(creatureType) and creatureType == TOTEM_TYPE
+	local okControl, controlled = pcall(UnitPlayerControlled, unit)
+	if not okControl or not Known(controlled) then
 		return nil
 	end
-	return faction == mine and "Own" or "Other"
+	if controlled or totem then
+		return friend and "FriendlyMinions" or "EnemyMinions"
+	end
+	if friend then
+		return "FriendlyNPCs"
+	end
+	local okClass, class = pcall(UnitClassification, unit)
+	if okClass and Known(class) and class == "minus" then
+		return "EnemyMinor"
+	end
+	return "EnemyNPCs"
 end
 
--- Any kind ticked to stay up in cinematic mode keeps the plates switched on.
-ns.PLATE_KINDS = { "Mobs", "NPCs", "Own", "Other", "Pets", "Totems" }
+-- The Nameplates page only steers plates in cinematic mode: outside it the
+-- game's own options decide. Set each frame.
+local platesActive = false
 
+-- Where you are, for the Nameplates page's place columns: "Cities", "Dungeons"...
+-- or nil for the open world. Set each frame.
+local placeSuffix
+
+-- Whether a kind stays up in cinematic mode out of combat where you are:
+-- plateCinematic<kind> in the open world, plateIn<place><kind> elsewhere.
+local function KeptHere(kind)
+	local key = placeSuffix and ("plateIn" .. placeSuffix .. kind) or ("plateCinematic" .. kind)
+	return ns.db[key] and true or false
+end
+
+-- How far each kind is held up by KeptHere, faded so moving between places
+-- (or changing the ticks) doesn't pop plates on or off. kind -> 0 to 1.
+local keptLevel = {}
+
+-- Any kind kept up in cinematic mode keeps the plates switched on.
 local function AnyPlatesKeptCinematic()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		if ns.db["plateCinematic" .. kind] and ns.db["plateShow" .. kind] then
+		if KeptHere(kind) or (keptLevel[kind] or 0) > 0 then
 			return true
 		end
 	end
 	return false
 end
 
--- Whether a target unit's plate always shows: plateAlwaysTargetEnemy for
--- units you can attack (neutral mobs too), plateAlwaysTargetFriendly for the rest.
-local function AlwaysShownTarget(unit)
-	local enemy, friendly = ns.db.plateAlwaysTargetEnemy, ns.db.plateAlwaysTargetFriendly
-	if not (enemy or friendly) then
-		return false
+-- Whether your target's plate always shows here, from the Nameplates grid's
+-- Enemy Target row (units you can attack, neutral mobs too) or Friendly
+-- Target row (the rest): its In combat column in fights and for the Calm
+-- Timer after, else the column for where you are.
+local function TargetRowKept(row)
+	local combat = ns.db["plateCombat" .. row]
+	if InCombatLockdown() or (combat and ns.FightLingering and ns.FightLingering()) then
+		return combat and true or false
 	end
+	return KeptHere(row)
+end
+
+local function AlwaysShownTarget(unit)
 	local ok, attackable = pcall(UnitCanAttack, "player", unit)
 	if not ok or not Known(attackable) then
 		return false
 	end
-	if attackable then
-		return enemy and true or false
-	end
-	return friendly and true or false
+	return TargetRowKept(attackable and "EnemyTarget" or "FriendlyTarget")
 end
 
 local function TargetKeptUp()
 	return UnitExists("target") and AlwaysShownTarget("target")
 end
 
--- The always-shown target's plate fades in over its own time (the
--- plateTarget<Enemy|Friendly>FadeIn/Out settings) rather than popping up, and
+-- The always-shown target's plate fades in (at the UI's fade-in time) rather
+-- than popping up, and
 -- once it's no longer your target fades back down to where the other plates
 -- are. Tracked by plate frame: `targetFade` is the current target's,
 -- `leavingTargets` maps old targets' plates to their fade on the way out.
 local targetFade = { plate = nil, level = 0, enemy = false }
 local leavingTargets = {}
 
-local function TargetFadeTime(enemy, fadeIn)
-	if enemy then
-		return fadeIn and ns.db.plateTargetEnemyFadeIn or ns.db.plateTargetEnemyFadeOut
-	end
-	return fadeIn and ns.db.plateTargetFriendlyFadeIn or ns.db.plateTargetFriendlyFadeOut
+local function TargetFadeTime(fadeIn)
+	return fadeIn and ns.db.fadeInTime or ns.db.fadeOutTime
 end
 
 -- Moves the target fades on by `elapsed`; true while any of them is moving.
@@ -975,12 +1028,12 @@ local function UpdateTargetFade(elapsed)
 		local ok, attackable = pcall(UnitCanAttack, "player", "target")
 		targetFade.enemy = ok and Known(attackable) and attackable or false
 		if targetFade.level < 1 then
-			targetFade.level = ns.Approach(targetFade.level, 1, elapsed, TargetFadeTime(targetFade.enemy, true))
+			targetFade.level = ns.Approach(targetFade.level, 1, elapsed, TargetFadeTime(true))
 			moving = true
 		end
 	end
 	for leavingPlate, fade in pairs(leavingTargets) do
-		fade.level = ns.Approach(fade.level, 0, elapsed, TargetFadeTime(fade.enemy, false))
+		fade.level = ns.Approach(fade.level, 0, elapsed, TargetFadeTime(false))
 		if fade.level <= 0 then
 			leavingTargets[leavingPlate] = nil
 		end
@@ -1009,104 +1062,15 @@ local function TargetPlateLevel(plate)
 	return leaving and leaving.level or 0
 end
 
--- Name icons (nameIcon<kind>, the Names table's "Use custom icon" column):
--- while names are hidden in cinematic mode, units of a ticked kind get a small
--- icon where their nameplate would be. The icon sits on the plate itself, not
--- its UnitFrame, so it stays up while the UnitFrame is faded out; the plates
--- are kept switched on for it, like a kind ticked to stay up.
-local FACTION_ICONS = {
-	Alliance = "Interface\\TargetingFrame\\UI-PVP-Alliance",
-	Horde = "Interface\\TargetingFrame\\UI-PVP-Horde",
-}
-local PVP_COORDS = { 0, 0.62, 0, 0.62 } -- the PvP icons sit in the top left of a larger texture
-local SPELL_COORDS = { 0.08, 0.92, 0.08, 0.92 } -- trims a spell icon's border
-local FULL_COORDS = { 0, 1, 0, 1 }
-
--- Each kind's icon: a texture path (or a function giving one), its coords and
--- optionally a size (a share of MARK_SIZE).
-local NAME_ICONS = {
-	Mobs = { "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", FULL_COORDS },
-	NPCs = { "Interface\\GossipFrame\\GossipGossipIcon", FULL_COORDS },
-	Own = { function() return FACTION_ICONS[UnitFactionGroup("player") or ""] end, PVP_COORDS },
-	Other = { function()
-		return FACTION_ICONS[UnitFactionGroup("player") == "Horde" and "Alliance" or "Horde"]
-	end, PVP_COORDS },
-	Pets = { "Interface\\Icons\\Ability_Hunter_BeastTaming", SPELL_COORDS, 0.6 },
-	Totems = { "Interface\\Icons\\Spell_Nature_StoneSkinTotem", SPELL_COORDS },
-}
-ns.NAME_ICON_KINDS = NAME_ICONS
-local MARK_SIZE = 24
-
-local function IconOn(kind)
-	return ns.db["nameIcon" .. kind] and ns.db["plateShow" .. kind] and true or false
-end
-
-local function AnyNameIcons()
-	if not ns.db.hideNames then
-		return false
-	end
-	for kind in pairs(NAME_ICONS) do
-		if IconOn(kind) then
-			return true
-		end
-	end
-	return false
-end
-
--- How visible a plate's mark is: the reverse of the plate itself, so as the
--- plate fades out the mark fades in, and back again on the way out.
-local function FlaggedForPvP(unit)
-	local ok, flagged = pcall(UnitIsPVP, unit)
-	return ok and Known(flagged) and flagged and true or false
-end
-
-local function SetPlateMark(plate, unit, kind, plateAlpha)
-	local alpha = 0
-	if kind and NAME_ICONS[kind] and ns.db.hideNames and IconOn(kind)
-		and (ns.lastCinematic or ns.plates.level < 1)
-		and (not ns.db["nameIconPvP" .. kind] or FlaggedForPvP(unit)) then
-		alpha = 1 - plateAlpha
-	end
-	local mark = plate.cinematicMark
-	if alpha <= 0 then
-		if mark then
-			mark:Hide()
-		end
-		return
-	end
-	if not mark then
-		mark = plate:CreateTexture(nil, "OVERLAY")
-		mark:SetPoint("CENTER", plate, "CENTER", 0, 0)
-		-- The game dims plates other than your target's (and far ones): the
-		-- mark keeps its own alpha so every one shows as clearly as the target's.
-		if mark.SetIgnoreParentAlpha then
-			mark:SetIgnoreParentAlpha(true)
-		end
-		plate.cinematicMark = mark
-	end
-	local icon = NAME_ICONS[kind]
-	local texture = icon[1]
-	if type(texture) == "function" then
-		texture = texture()
-	end
-	mark:SetTexture(texture)
-	mark:SetTexCoord(unpack(icon[2]))
-	local size = MARK_SIZE * (icon[3] or 1) -- set each time: a plate is reused for other kinds
-	mark:SetSize(size, size)
-	mark:SetAlpha(alpha)
-	mark:Show()
-end
-
--- Kinds hidden in fights (plateCombat<kind> off) come out of combat at 0 and
+-- Kinds hidden in cinematic fights (plateCombat<kind> off) come out of combat at 0 and
 -- only rise again as far as the shared fade level lets them, rather than
 -- jumping to it: it's still at 1 from the fight, so they'd flash up before
 -- fading out again. kind -> highest alpha allowed (nil for no limit).
 local combatCap = {}
 
--- Kinds shown in fights (plateCombat<kind> on) stay up for plateCombatLinger
--- seconds after one, in cinematic mode too, then fade out at the fade-out
--- speed (fight-only ones out of combat as well). Fight-only plates stay
--- switched on throughout, only made invisible.
+-- Kinds shown in fights (plateCombat<kind> on) stay up for the Calm Timer (calmTime)
+-- seconds after one in cinematic mode, then fade out at the fade-out speed
+-- (unless kept up where you are).
 local fightEndedAt = -math.huge
 local fightWatcher = CreateFrame("Frame")
 fightWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -1115,8 +1079,9 @@ fightWatcher:SetScript("OnEvent", function()
 end)
 
 local function FightLingering()
-	return not InCombatLockdown() and GetTime() - fightEndedAt < (ns.db.plateCombatLinger or 0)
+	return not InCombatLockdown() and GetTime() - fightEndedAt < (ns.db.calmTime or 0)
 end
+ns.FightLingering = FightLingering -- (names linger too)
 
 local function AnyFightKinds()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
@@ -1127,21 +1092,20 @@ local function AnyFightKinds()
 	return false
 end
 
-local wasShown = {} -- kind -> up last frame, so fight-only kinds fade out rather than vanish
-
 -- Whether some plates need an alpha other than the shared fade level.
 local function PlatesFiltered()
 	if next(combatCap) then
 		return true
 	end
-	local inCombat = InCombatLockdown()
-	for _, kind in ipairs(ns.PLATE_KINDS) do
-		if not ns.db["plateShow" .. kind] or (inCombat and not ns.db["plateCombat" .. kind]) then
-			return true
+	if platesActive and InCombatLockdown() then
+		for _, kind in ipairs(ns.PLATE_KINDS) do
+			if not ns.db["plateCombat" .. kind] then
+				return true
+			end
 		end
 	end
 	return ns.plates.level < 1
-		and (AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil or AnyNameIcons())
+		and (AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil)
 end
 
 local function IsTarget(unit)
@@ -1154,19 +1118,11 @@ end
 local function KindAlpha(unit)
 	local kind = unit and PlateKind(unit)
 	if kind then
-		local show, combat = ns.db["plateShow" .. kind], ns.db["plateCombat" .. kind]
-		if not (show or combat) then
-			return 0
-		end
 		-- Plates can't be switched off in fights, only made invisible.
-		if InCombatLockdown() and not combat then
+		if platesActive and InCombatLockdown() and not ns.db["plateCombat" .. kind] then
 			return 0
 		end
-		local cap = combatCap[kind] or 1
-		if show and ns.db["plateCinematic" .. kind] then
-			return cap
-		end
-		return math.min(ns.plates.level, cap)
+		return math.min(math.max(ns.plates.level, keptLevel[kind] or 0), combatCap[kind] or 1)
 	end
 	return ns.plates.level
 end
@@ -1191,9 +1147,6 @@ function ns.RefreshPlate(plate, unit)
 	elseif plate.UnitFrame then
 		plate.UnitFrame.cinematicAlpha = nil -- a reused plate: let go of its last unit's alpha
 	end
-	if not (plate.IsForbidden and plate:IsForbidden()) then
-		SetPlateMark(plate, unit, unit and PlateKind(unit), alpha) -- a reused plate: its last unit's mark goes
-	end
 end
 
 local function RefreshAllPlates()
@@ -1202,53 +1155,7 @@ local function RefreshAllPlates()
 	end
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-		local alpha = PlateAlpha(unit, plate)
-		ns.SetPlateAlpha(plate, alpha)
-		if not (plate.IsForbidden and plate:IsForbidden()) then
-			SetPlateMark(plate, unit, unit and PlateKind(unit), alpha)
-		end
-	end
-end
-
--- The game's own nameplate settings follow the Nameplates page's Out of combat
--- and In combat ticks (on for either: a fight-only kind's plates must already
--- be on when a fight starts): set at login and whenever the page changes,
--- overriding the game's options (and the V keys) from then on. A setting
--- shared by several kinds (enemy plates cover mobs and the other faction) is
--- on while any of them shows.
-local PLATE_KIND_CVARS = {
-	Mobs = { "nameplateShowEnemies" },
-	NPCs = { "nameplateShowFriendlyNPCs" },
-	Own = { "nameplateShowFriends", "nameplateShowFriendlyPlayers" }, -- older and newer clients' names
-	Other = { "nameplateShowEnemies" },
-	Pets = {
-		"nameplateShowEnemyPets", "nameplateShowEnemyMinions", "nameplateShowEnemyGuardians",
-		"nameplateShowFriendlyPets", "nameplateShowFriendlyMinions", "nameplateShowFriendlyGuardians",
-	},
-	Totems = { "nameplateShowEnemyTotems", "nameplateShowFriendlyTotems" },
-}
-
-local plateSyncPending = false
-
-function ns.SyncPlateCVars()
-	if InCombatLockdown() then
-		plateSyncPending = true -- nameplate settings are locked in fights: after this one
-		return
-	end
-	plateSyncPending = false
-	local wanted = {}
-	for _, kind in ipairs(ns.PLATE_KINDS) do
-		for _, cvar in ipairs(PLATE_KIND_CVARS[kind]) do
-			wanted[cvar] = wanted[cvar] or ((ns.db["plateShow" .. kind] or ns.db["plateCombat" .. kind]) and true or false)
-		end
-	end
-	for cvar, on in pairs(wanted) do
-		local value = on and "1" or "0"
-		if ns.db.savedCVars[cvar] ~= nil then
-			ns.db.savedCVars[cvar] = value -- hidden for cinematic mode: comes back like this
-		elseif GetCVar(cvar) ~= nil and GetCVar(cvar) ~= value then
-			SetCVar(cvar, value)
-		end
+		ns.SetPlateAlpha(plate, PlateAlpha(unit, plate))
 	end
 end
 
@@ -1273,11 +1180,17 @@ function ns.PrintPlatesDebug()
 	if #extra > 0 then
 		ns.Print(table.concat(extra, ", "))
 	end
-	ns.Print(("icons: hideNames=%s, other=%s, own=%s"):format(tostring(ns.db.hideNames),
-		tostring(ns.db.nameIconOther), tostring(ns.db.nameIconOwn)))
 	ns.Print(("fade level=%.2f, switched off=%s, filtered=%s, kept in cinematic=%s, cinematic=%s, combat=%s"):format(
 		ns.plates.level, tostring(ns.plates.off), tostring(PlatesFiltered()),
 		tostring(AnyPlatesKeptCinematic()), tostring(ns.lastCinematic), tostring(InCombatLockdown())))
+	local keptHere = {}
+	for _, kind in ipairs(ns.PLATE_KINDS) do
+		if KeptHere(kind) then
+			keptHere[#keptHere + 1] = kind
+		end
+	end
+	ns.Print(("place=%s, kept up here=%s"):format(placeSuffix or "open world",
+		#keptHere > 0 and table.concat(keptHere, ", ") or "none"))
 	local function describe(unit)
 		local name = UnitName(unit)
 		local isPlayer, faction = UnitIsPlayer(unit), UnitFactionGroup(unit)
@@ -1301,9 +1214,7 @@ function ns.PrintPlatesDebug()
 		if i > 8 then break end
 		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 		local shown = plate.UnitFrame and ("%.2f"):format(plate.UnitFrame:GetAlpha()) or "-"
-		local mark = plate.cinematicMark
-		local marked = mark and mark:IsShown() and (", mark %.2f"):format(mark:GetAlpha()) or ""
-		ns.Print(("  %s (unit %s, frame alpha %s%s)"):format(unit and describe(unit) or "?", tostring(unit), shown, marked))
+		ns.Print(("  %s (unit %s, frame alpha %s)"):format(unit and describe(unit) or "?", tostring(unit), shown))
 	end
 	if UnitExists("target") then
 		local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit("target")
@@ -1319,23 +1230,91 @@ function ns.ShowPlatesNow()
 	end
 end
 
+-- Each row's game settings (older and newer clients' names, and the pets,
+-- guardians and totems a Minions row covers). Anything ticked in a row
+-- switches them on for good, and its parent's too (Minions and Minor need
+-- their units' plates on); unticking leaves them alone. The game has one
+-- switch for all enemy plates, so both enemy rows turn it on. Nameplate
+-- settings can't change in a fight: then it happens once the fight ends.
+local PLATE_KIND_CVARS = {
+	Enemies = { "nameplateShowEnemies", "nameplateShowEnemyPlayers" },
+	EnemyNPCs = { "nameplateShowEnemies" },
+	EnemyMinions = {
+		"nameplateShowEnemyMinions", "nameplateShowEnemyPets", "nameplateShowEnemyGuardians",
+		"nameplateShowEnemyTotems",
+	},
+	EnemyMinor = { "nameplateShowEnemyMinus" },
+	Friends = { "nameplateShowFriends", "nameplateShowFriendlyPlayers" },
+	FriendlyMinions = {
+		"nameplateShowFriendlyMinions", "nameplateShowFriendlyPets", "nameplateShowFriendlyGuardians",
+		"nameplateShowFriendlyTotems",
+		-- (newer clients' names)
+		"nameplateShowFriendlyPlayerMinions", "nameplateShowFriendlyPlayerPets",
+		"nameplateShowFriendlyPlayerGuardians", "nameplateShowFriendlyPlayerTotems",
+	},
+	FriendlyNPCs = { "nameplateShowFriendlyNPCs" },
+}
+local PLATE_ROW_PARENT = { EnemyMinions = "Enemies", EnemyMinor = "EnemyNPCs", FriendlyMinions = "Friends" }
+local pendingPlateRows = {}
+
+-- Whether this client has any of a row's nameplate settings.
+function ns.HasPlateSettings(kind)
+	for _, cvar in ipairs(PLATE_KIND_CVARS[kind]) do
+		if GetCVar(cvar) ~= nil then
+			return true
+		end
+	end
+	return false
+end
+
+function ns.EnablePlateRow(kind)
+	if InCombatLockdown() then
+		pendingPlateRows[kind] = true
+		return
+	end
+	pendingPlateRows[kind] = nil
+	for _, row in ipairs({ kind, PLATE_ROW_PARENT[kind] }) do
+		for _, cvar in ipairs(PLATE_KIND_CVARS[row]) do
+			SwitchOn(cvar)
+		end
+	end
+end
+
+-- At login, every row with anything ticked has its game settings switched on
+-- (in case they were turned off in the game's options since). Rows with
+-- nothing ticked are left alone.
+function ns.EnsurePlateRows()
+	for _, kind in ipairs(ns.PLATE_KINDS) do
+		for _, prefix in ipairs({ "plateCombat", "plateCinematic", "plateInCities",
+			"plateInDungeons", "plateInRaids", "plateInPvP" }) do
+			if ns.db[prefix .. kind] then
+				ns.EnablePlateRow(kind)
+				break
+			end
+		end
+	end
+end
+
 local platesWereFiltered = false
 
 function ns.UpdatePlates(cinematic, elapsed)
-	-- Nameplate settings can't change in combat, so plates show for every
-	-- fight (even when staying cinematic) and hide again afterwards.
-	if plateSyncPending and not InCombatLockdown() then
-		ns.SyncPlateCVars()
-	end
-	-- Just after a fight, kinds ticked for fights stay up through their
-	-- linger even in cinematic mode; the rest go as cinematic mode comes back.
+	platesActive = cinematic and true or false
+	placeSuffix = ns.PlaceSuffix()
+	-- Plates show for every fight (bar kinds cinematic mode hides in fights)
+	-- and hide again afterwards. Just after a fight, kinds ticked for fights
+	-- stay up through their linger; the rest go as cinematic mode comes back.
 	local inCombat = InCombatLockdown()
 	local lingering = FightLingering()
-	local holding = cinematic and ns.db.hidePlates and lingering and AnyFightKinds()
-	local hide = cinematic and ns.db.hidePlates and not inCombat and not holding
-	local keep = AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil or AnyNameIcons()
+	local holding = platesActive and lingering and AnyFightKinds()
+	local hide = platesActive and not inCombat and not holding
+	local keep = AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil
 	if not hide or keep then
 		ns.ShowPlatesNow()
+	end
+	if next(pendingPlateRows) and not inCombat then
+		for kind in pairs(pendingPlateRows) do
+			ns.EnablePlateRow(kind)
+		end
 	end
 
 	local target = hide and 0 or 1
@@ -1345,27 +1324,30 @@ function ns.UpdatePlates(cinematic, elapsed)
 		local duration = target > ns.plates.level and ns.db.fadeInTime or ns.db.fadeOutTime
 		ns.plates.level = ns.Approach(ns.plates.level, target, elapsed, duration)
 	end
-	-- Kinds hidden in fights: held at 0 in combat, then let back up at the
-	-- fade-in speed, but only while plates are on their way in. Heading out
-	-- (cinematic again), they stay hidden until the fade has caught up.
-	-- Fight-only kinds: after the fight and its linger, faded down to 0 and
-	-- held there. Held up in cinematic mode after a fight, the other kinds
-	-- (bar those kept in cinematic mode) fade down the same way.
+	-- Kinds hidden in cinematic fights: held at 0 in combat, then let back up
+	-- at the fade-in speed, but only while plates are on their way in. Heading
+	-- out (cinematic again), they stay hidden until the fade has caught up.
+	-- Held up after a fight, the kinds not ticked for fights (bar those kept
+	-- up where you are) fade down the same way.
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		local show, combat = ns.db["plateShow" .. kind], ns.db["plateCombat" .. kind]
-		local cinematicKept = show and ns.db["plateCinematic" .. kind]
-		local shown = true
-		if inCombat and not combat then
+		local combat = ns.db["plateCombat" .. kind]
+		local cinematicKept = KeptHere(kind)
+		local keptTarget = cinematicKept and 1 or 0
+		if keptLevel[kind] == nil then
+			keptLevel[kind] = keptTarget -- logging in: no fade
+		elseif keptLevel[kind] ~= keptTarget then
+			keptLevel[kind] = ns.Approach(keptLevel[kind], keptTarget, elapsed,
+				keptTarget > keptLevel[kind] and ns.db.fadeInTime or ns.db.fadeOutTime)
+			changed = true
+		end
+		if inCombat and platesActive and not combat then
 			combatCap[kind] = 0
-			shown = false
-		elseif (holding and not combat and not cinematicKept)
-			or (not inCombat and not show and not (combat and lingering)) then
-			local from = combatCap[kind] or (wasShown[kind] and 1 or 0)
+		elseif holding and not combat and not cinematicKept then
+			local from = combatCap[kind] or 1
 			if from > 0 then
 				changed = true
 			end
 			combatCap[kind] = ns.Approach(from, 0, elapsed, ns.db.fadeOutTime)
-			shown = false
 		elseif combatCap[kind] then
 			if hide and not cinematicKept then
 				if ns.plates.level <= combatCap[kind] then
@@ -1379,7 +1361,6 @@ function ns.UpdatePlates(cinematic, elapsed)
 			end
 			changed = true
 		end
-		wasShown[kind] = shown
 	end
 	-- One more pass after filtering stops, to put every plate back.
 	local filtered = PlatesFiltered()
@@ -1419,30 +1400,43 @@ end
 -- modes, each chosen on its own (tooltipOff*).
 local TOOLTIP_OFF_IN = {
 	flight = "tooltipOffFlight", idle = "tooltipOffIdle", cozy = "tooltipOffCozy",
-	walk = "tooltipOffWalk", run = "tooltipOffRun", vista = "tooltipOffVista",
-	fish = "tooltipOffFish",
+	tele = "tooltipOffTele", walk = "tooltipOffWalk", run = "tooltipOffRun",
+	vista = "tooltipOffVista", fish = "tooltipOffFish", death = "tooltipOffDeath",
+	quest = "tooltipOffQuest",
 }
+
+-- The camera mode running now, for the tooltip settings: the death, quest and
+-- tele cameras as well as the ones ns.CameraMode knows (it counts tele as cozy).
+local function TooltipCameraMode()
+	if ns.IsDeathCinematic and ns.IsDeathCinematic() then
+		return "death"
+	elseif ns.QuestCamActive and ns.QuestCamActive() then
+		return "quest"
+	elseif ns.IsTele and ns.IsTele() then
+		return "tele"
+	end
+	return ns.CameraMode and ns.CameraMode()
+end
 -- Whether world tooltips are hidden right now (not whether one is up).
+-- Hiding world tooltips is switched off for now, its page hidden with it:
+-- they always show. True brings the feature (and its saved settings) back.
+ns.WORLD_TOOLTIP_HIDING = false
+
 local function HidingWorldTooltips()
-	if not ns.lastCinematic then
+	if not (ns.WORLD_TOOLTIP_HIDING and ns.lastCinematic) then
 		return false
 	end
 	if ns.db.fadeTooltip then
 		return true
 	end
-	local mode = ns.CameraMode and ns.CameraMode()
+	local mode = TooltipCameraMode()
 	return mode ~= nil and ns.db[TOOLTIP_OFF_IN[mode]] or false
 end
 
 -- Whether hidden world tooltips come back (after hovering, the exceptions,
--- warm): tooltipReveal, except in camera modes ticked Never (tooltipNever*).
+-- warm): tooltipReveal.
 local function Revealing()
-	if not ns.db.tooltipReveal then
-		return false
-	end
-	local mode = ns.lastCinematic and ns.CameraMode and ns.CameraMode()
-	local key = mode and TOOLTIP_OFF_IN[mode]
-	return not (key and ns.db[key:gsub("Off", "Never")])
+	return ns.db.tooltipReveal and true or false
 end
 
 local function ShouldHideTooltip()
@@ -1556,10 +1550,85 @@ local function ShowsQuestObjective(tooltip)
 	return ok and found
 end
 
+-- Words that mark something gatherable, in the game's language: Herbalism and
+-- Mining (from its "Requires Herbalism" and "Requires Mining" lines) and
+-- "Skinnable" (English if those can't be read).
+local gatherSkills
+local function GatherSkills()
+	if not gatherSkills then
+		gatherSkills = {}
+		local pattern
+		if type(ITEM_REQ_SKILL) == "string" then
+			pattern = "^" .. ITEM_REQ_SKILL:gsub("([%%%(%)%.%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)") .. "$"
+		end
+		for _, entry in ipairs({ { UNIT_SKINNABLE_HERB, "Herbalism" }, { UNIT_SKINNABLE_ROCK, "Mining" } }) do
+			local requires = entry[1]
+			local name = pattern and type(requires) == "string" and requires:match(pattern)
+			gatherSkills[#gatherSkills + 1] = name or entry[2]
+		end
+		gatherSkills[#gatherSkills + 1] = type(UNIT_SKINNABLE_LEATHER) == "string" and UNIT_SKINNABLE_LEATHER
+			or "Skinnable"
+	end
+	return gatherSkills
+end
+
+-- Whether the tooltip is something gatherable: an herb or ore node, or a
+-- creature to skin (a line under its name says Herbalism, Mining or
+-- Skinnable). Unreadable lines count as no.
+local function ShowsGatheringNode(tooltip)
+	local ok, found = pcall(function()
+		local skills = GatherSkills()
+		for i = 2, tooltip:NumLines() do
+			local line = _G["GameTooltipTextLeft" .. i]
+			local text = line and line:GetText()
+			if type(text) == "string" and not (issecretvalue and issecretvalue(text)) then
+				for _, skill in ipairs(skills) do
+					if text:find(skill, 1, true) then
+						return true
+					end
+				end
+			end
+		end
+		return false
+	end)
+	return ok and found
+end
+
+-- Whether the tooltip is a unit's you can attack (true) or can't (false):
+-- players, NPCs and their minions and totems alike; nil for an object, or
+-- when the game won't say (secret values in combat).
+local function TooltipUnitIsEnemy(tooltip)
+	local ok, enemy = pcall(function()
+		local _, unit = tooltip:GetUnit()
+		if not unit then
+			return nil
+		end
+		local attackable = UnitCanAttack("player", unit)
+		if issecretvalue and issecretvalue(attackable) then
+			return nil
+		end
+		return attackable and true or false
+	end)
+	if ok then
+		return enemy
+	end
+end
+
+local function ShowsEnemy(tooltip)
+	return TooltipUnitIsEnemy(tooltip) == true
+end
+
+local function ShowsFriend(tooltip)
+	return TooltipUnitIsEnemy(tooltip) == false
+end
+
 -- Tooltips that skip the wait ("Except when" under Show world tooltips after
 -- hovering): db key -> test.
 local SHOW_AT_ONCE = {
 	{ key = "tooltipQuestAtOnce", test = ShowsQuestObjective, why = "quest objective" },
+	{ key = "tooltipGatherAtOnce", test = ShowsGatheringNode, why = "gatherable" },
+	{ key = "tooltipEnemyAtOnce", test = ShowsEnemy, why = "enemy" },
+	{ key = "tooltipFriendlyAtOnce", test = ShowsFriend, why = "friendly" },
 }
 
 local function ShowAtOnce(tooltip)

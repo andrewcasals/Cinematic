@@ -11,7 +11,7 @@ local ADDON_NAME, ns = ...
 ns.isRetail = WOW_PROJECT_ID ~= nil and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 
 BINDING_HEADER_CINEMATIC = "Cinematic"
-BINDING_NAME_CINEMATIC_TOGGLE = "Cinematic: Toggle cinematic mode"
+BINDING_NAME_CINEMATIC_TOGGLE = "Cinematic: Toggle CineMode"
 BINDING_NAME_CINEMATIC_PEEK = "Cinematic: Peek at UI (hold)"
 BINDING_NAME_CINEMATIC_HIDEUI = "Cinematic: Hide the UI (keep the look)"
 BINDING_NAME_CINEMATIC_FLYBY = "Cinematic: Fly-by (turn round to look back)"
@@ -25,7 +25,6 @@ local DEFAULTS = {
 	enabled = true,
 	minimapButton = true,     -- show the minimap button
 	minimapAngle = 225,       -- its position around the minimap, in degrees
-	startCinematic = true,   -- be in cinematic mode straight away on login, /reload and turning it on
 	-- Hide world tooltips in each camera mode:
 	tooltipOffFlight = true,
 	tooltipOffIdle = true,    -- standing still
@@ -34,19 +33,22 @@ local DEFAULTS = {
 	tooltipOffFish = true,    -- fishing
 	tooltipOffWalk = true,    -- RP walking
 	tooltipOffRun = true,      -- auto-running
+	tooltipOffTele = true,    -- Hearthstone and teleports (counted as cozy before they had their own)
+	tooltipOffDeath = true,   -- the death camera
+	tooltipOffQuest = true,   -- the quest camera
 	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat
+	visualEffects = true,     -- the Visual Effects page's master switch (off: none of its effects)
 	timeOfDayMessage = true,  -- "Dusk" under the zone name on login and /reload, and when it
 	                          -- changes, with a fitting sound (rooster, bells, frogs, owl, wolf)
-	offInDungeons = true,     -- no cinematic mode in dungeons (and scenarios)
-	offInRaids = true,
-	offInPvP = true,          -- battlegrounds and arenas
+	offInDungeons = false,    -- no cinematic mode in dungeons (and scenarios)
+	offInRaids = false,
+	offInPvP = false,         -- battlegrounds and arenas
 	offInCities = false,      -- capital cities
-	offInInns = false,        -- inns (resting outside a capital)
+	offInWorld = false,       -- the open world: anywhere outside instances, cities and inns
 	offInParty = false,       -- while in a party (not a raid group)
 	offInRaidGroup = false,   -- while in a raid group
-	delay = 15,            -- seconds of calm before fading out
 	fadeOutTime = 1.5,
-	fadeInTime = 0.5,
+	fadeInTime = 1.5,
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
@@ -56,8 +58,8 @@ local DEFAULTS = {
 	letterboxInCombat = false,
 	tintMoving = true, tintStill = true, tintFlight = true,
 	tintInCombat = true,
-	letterboxCombatWait = 30, -- if not: seconds after a fight before the bars fade back in
-	tintCombatWait = 8,       -- ...and the tint
+	calmTime = 60,            -- Calm Timer: seconds after a fight before things settle back (nameplates
+	                          -- and names shown for fights go, the letterbox and tint fade back in)
 	tintPreset = "zonetime",   -- screen tint over the game world (see TINT_PRESETS)
 	tintStrength = 1,
 	tintCustomR = 1, tintCustomG = 0.8, tintCustomB = 0.6,
@@ -72,7 +74,6 @@ local DEFAULTS = {
 	tintClock = "game",    -- time-of-day tint follows "game" (realm) time or "local" (computer) time
 	timeTintStrength = 0.5,-- how strongly the time-of-day colour applies (both time presets)
 	tintPreviewHour = -1,  -- options-page preview of the time-of-day tint at this hour (-1 = now)
-	fadeChat = true,
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
 	alwaysShowWaypoint = false, -- keep retail's quest waypoint visible in cinematic mode
 	minimapForTracking = true, -- master switch for the minimapFor* tracking options below
@@ -83,27 +84,19 @@ local DEFAULTS = {
 	minimapForCreatures = false,
 	trackingHideWhenIdle = true, -- ...except once the standing-still timer has run, or on flights
 	trackingOffInCities = true,  -- ...and in these places (no nodes there; dungeons have some)
-	trackingOffInInns = true,
-	trackingOffInDungeons = false,
-	trackingOffInRaids = false,
+	trackingOffInDungeons = true,
+	trackingOffInRaids = true,
 	trackingOffInPvP = true,
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
-	combatFadeInTime = 1,    -- how fast the "while fighting, show" frames appear
-	combatFadeOutTime = 6, -- and how fast they go once the fight is over
-	enemyFadeInTime = 1.5,   -- targeting an enemy out of combat: fade times for its frame list
-	enemyFadeOutTime = 1.5,
-	friendlyFadeInTime = 1.5, -- targeting a friend (anything you can't attack)
-	friendlyFadeOutTime = 1.5,
 	revealOnCast = false,   -- casting or channeling brings the UI back
 	revealAtNPCs = false,     -- vendor/bank/mail/trainer/trade/auction windows bring the UI back
 	revealOnDrag = false,     -- bring the UI back while something's held on the cursor (dragging)
+	returnDelay = 15,         -- seconds things must stay calm (no cast, window...) before CineMode returns
 	stayWithWindows = true, -- stay cinematic when opening the spellbook, options and similar
 	portraitWhenNotFull = true, -- keep the player portrait up while health or power isn't full
-	portraitAfterCombat = true,  -- ...but only within portraitCombatWindow seconds of combat
-	portraitCombatWindow = 60,
+	portraitAfterCombat = true,  -- ...but only within the Calm Timer (calmTime) of combat
 	buffPeek = true,          -- briefly show buffs/debuffs when one is gained or refreshed
-	buffPeekAfterCombat = true,  -- ...but only within buffPeekCombatWindow seconds of combat
-	buffPeekCombatWindow = 60,
+	buffPeekAfterCombat = true,  -- ...but only within the Calm Timer of a fight
 	buffPeekTime = 2.5,         -- seconds they stay up
 	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584", -- buffs or debuffs that never bring them up
 	                                                    -- (spell IDs or names; 8326/20584: Ghost)
@@ -113,66 +106,40 @@ local DEFAULTS = {
 	mouseoverHold = 3,     -- seconds a group stays after the mouse leaves it (per-group overrides below)
 	musicInCinematic = true,  -- turn game music on while cinematic, off after
 	musicOffOnLogout = true,  -- turn game music off when logging out
-	hideNames = true,         -- hide unit names while cinematic
-	hidePlates = true,        -- hide nameplates while cinematic
-	plateShowMobs = true,     -- nameplates for hostile and neutral mobs out of combat
-	plateShowNPCs = true,     -- ...for friendly NPCs (when the game's friendly NPC plates are on)
-	plateShowOwn = true,      -- ...for players of your own faction
-	plateShowOther = true,    -- ...for players of the other faction
-	plateShowPets = true,     -- ...for pets, minions and guardians
-	plateShowTotems = true,   -- ...for totems
-	plateAlwaysTargetEnemy = true,     -- your target's nameplate always shows, whatever the rows below
-	plateAlwaysTargetFriendly = false, -- say (enemy: anything you can attack, neutral mobs too)
-	plateTargetEnemyFadeIn = 1.5,      -- how fast that plate fades in when you target, and out after
-	plateTargetEnemyFadeOut = 1.5,
-	plateTargetFriendlyFadeIn = 1.5,
-	plateTargetFriendlyFadeOut = 1.5,
-	plateCombatMobs = true,   -- show these during fights (off: hidden while you're in combat)
-	plateCombatNPCs = false,
-	plateCombatOwn = false,
-	plateCombatOther = true,
-	plateCombatPets = false,
-	plateCombatTotems = false,
-	plateCombatLinger = 30,   -- seconds kinds ticked for fights stay up after one (unticked out of combat)
-	plateCinematicMobs = false, -- keep these showing in cinematic mode despite hidePlates
-	plateCinematicNPCs = false,
-	plateCinematicOwn = false,
-	plateCinematicOther = false,
-	plateCinematicPets = false,
-	plateCinematicTotems = false,
-	nameKeepMobs = false,     -- keep these names up in cinematic mode despite hideNames
+	plateCombatEnemies = true, -- in cinematic mode, show these during fights (Enemies: enemy players)
+	plateCombatEnemyMinions = true,
+	plateCombatEnemyNPCs = true,
+	plateCombatEnemyMinor = true,
+	plateCombatFriends = false,
+	plateCombatFriendlyMinions = false,
+	plateCombatFriendlyNPCs = false,
+	plateCinematicEnemies = false, -- keep these up in cinematic mode in the open world (plateIn<place><kind> elsewhere)
+	plateCinematicEnemyMinions = false,
+	plateCinematicEnemyNPCs = false,
+	plateCinematicEnemyMinor = false,
+	plateCinematicFriends = false,
+	plateCinematicFriendlyMinions = false,
+	plateCinematicFriendlyNPCs = false,
+	nameKeepSelf = false,     -- keep these names up in cinematic mode in the open world (see nameIn<place><key>)
 	nameKeepNPCs = false,
-	nameKeepOwn = false,
-	nameKeepOther = false,
-	nameKeepPets = false,
-	nameKeepMinions = false,  -- minions and guardians
-	nameKeepTotems = false,
-	nameKeepSelf = false,     -- your own name
-	nameIconMobs = false,     -- in cinematic mode, an icon in place of these names
-	nameIconNPCs = false,
-	nameIconOwn = false,
-	nameIconOther = true,
-	nameIconPets = true,      -- pets, minions and guardians (they share a nameplate kind)
-	nameIconTotems = false,
-	nameIconPvPMobs = false,  -- ...only on units flagged for PvP
-	nameIconPvPNPCs = false,
-	nameIconPvPOwn = false,
-	nameIconPvPOther = true,
-	nameIconPvPPets = true,
-	nameIconPvPTotems = false,
+	nameKeepCritters = false,
+	nameKeepFriends = false,
+	nameKeepFriendlyMinions = true,
+	nameKeepEnemies = false,
+	nameKeepEnemyMinions = false,
 	fadeTooltip = true,       -- hide tooltips for units/objects in the world
 	tooltipReveal = true,     -- a hidden world tooltip comes back after hovering the same thing...
 	tooltipRevealDelay = 1,   -- ...for this many seconds
 	tooltipQuestAtOnce = true, -- ...except at once when it shows a quest objective
+	tooltipGatherAtOnce = true, -- ...or it's gatherable (herb, ore, skinnable)
+	tooltipEnemyAtOnce = true,  -- ...or it's a unit you can attack
+	tooltipFriendlyAtOnce = false, -- ...or a unit you can't
 	tooltipWarmTime = 5,     -- once one's shown, the rest show at once until none has been up this long (0: off)
 	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
 	musicFadeTime = 5,        -- seconds for music to fade in or out
 	musicFatigue = 5,         -- minutes: don't start music again within this long of the last start
 	-- Play music with each camera: a fresh song as it starts, even within the fatigue time.
 	musicCamFlight = true,
-	musicCamCozy = false,
-	musicCamVista = true,
-	musicCamFish = false,
 	musicCamWalk = false,     -- RP walk
 	musicCamRun = true,       -- auto-run
 	noMusicWhenAFK = true,    -- standing still, the AFK camera and going AFK don't start music (off: a fresh song as the AFK camera starts)
@@ -182,10 +149,8 @@ local DEFAULTS = {
 	fatigueIgnoreNewZone = true,   -- start music anyway in a different zone from the last music
 	ambienceFollowsMusic = false, -- set ambient sound to a share of the music volume while cinematic
 	musicOffInCombat = false, -- fade game music out while in combat
-	musicCombatResume = 30,   -- ...and keep it off until this many seconds after the fight
 	musicOffOnFlights = false, -- ...and while on a flight path
 	musicOffInCities = false, -- ...and in these places
-	musicOffInInns = false,
 	musicOffInDungeons = false,
 	musicOffInRaids = false,
 	musicOffInPvP = false,
@@ -194,7 +159,6 @@ local DEFAULTS = {
 	chatPeekChannels = false, -- old "include public channels"; now the default for channels not yet set
 	chatPeekTime = 8,         -- seconds the chat window stays up
 	chatInCities = false,     -- keep chat visible in capital cities
-	chatInInns = false,       -- ...in inns
 	chatInDungeons = false,   -- ...in dungeons and scenarios
 	chatInRaids = false,
 	chatInPvP = false,        -- ...in battlegrounds and arenas
@@ -220,7 +184,7 @@ local DEFAULTS = {
 	idleOrbit = true,         -- also rotate it after standing still for a while
 	idleOrbitDelay = 30,      -- seconds of standing still before it starts
 	-- Cozy camera: swings round to face you and sways in front, when an event
-	-- picks it (Events page: ns.EVENTS in Camera.lua has their defaults).
+	-- picks it (Camera Triggers page: ns.EVENTS in Camera.lua has their defaults).
 	cozyOrbit = true,         -- sway in front of you
 	cozyZoom = true,          -- with a close, gentle zoom
 	cozyBuffs = "Welcoming Campfire", -- the campfire event's buffs: names or spell IDs, comma-separated
@@ -240,10 +204,7 @@ local DEFAULTS = {
 	idleOpeningDrift = 5,     -- random/behind modes: seconds of slow drift before the first move
 	taxiInputPause = 15,      -- seconds the flight camera waits after the player moves the camera
 	idleInputPause = 15,      -- ...and the AFK camera
-	cameraPauseAtNPCs = true, -- no standing-still camera while an NPC window (auction house...) is open
-	cameraPauseCasting = true, -- ...or while you're casting (crafting, say)
-	cameraPauseInMenus = true, -- ...or while a menu or game window (spellbook, options...) is open
-	-- Quest cam (eventQuestCamera on the Events page): talking to a quest giver, zoom in and swing behind you
+	-- Quest cam (eventQuestCamera on the Camera Triggers page): talking to a quest giver, zoom in and swing behind you
 	questCamDistance = 4,     -- ...yards it zooms in to (if you're further out)
 	questCamTime = 3,         -- ...seconds the swing behind you takes
 	questCamZoomTime = 7,     -- ...seconds the zoom in takes (the side turn and tilt finish with it)
@@ -409,18 +370,17 @@ DEFAULTS.deathSong = true          -- play a song of its own meanwhile
 -- GhostMusic03 (the ghost world's music), Gloomy02, Haunted02, Haunted01,
 -- Mystery01, Undercity01, KelThuzad1A.
 DEFAULTS.deathSongFiles = "53519, 53232, 53235, 53234, 53240, 53216, 53602"
--- Each camera mode's "Turn off in" grid (Camera modes page): <cam>OffAlways
+-- Each camera mode's "Turn off in" grid (Camera Modes page): <cam>OffAlways
 -- (off everywhere), then <cam>OffIn<where>, for the cameras in
 -- ns.CAMERA_OFF_CAMS and the places and groups in ns.CAMERA_OFF_WHERE, but not
--- those in ns.CAMERA_OFF_NEVER (no flight from there). All off, except no
--- death camera in battlegrounds.
+-- those in ns.CAMERA_OFF_NEVER (no flight from there). All off.
 ns.CAMERA_OFF_CAMS = {
 	{ "flight", "Flight" }, { "idle", "AFK" }, { "cozy", "Cozy" }, { "tele", "Tele" },
 	{ "vista", "Vista" }, { "fish", "Fish" }, { "walk", "RP Walk" }, { "run", "Auto-run" },
 	{ "death", "Death" }, { "quest", "Quest" },
 }
-ns.CAMERA_OFF_WHERE = { "Cities", "Inns", "Dungeons", "Raids", "PvP", "Party", "RaidGroup" }
-ns.CAMERA_OFF_NEVER = { flight = { Inns = true, Dungeons = true, Raids = true, PvP = true } }
+ns.CAMERA_OFF_WHERE = { "Cities", "Dungeons", "Raids", "PvP", "Party", "RaidGroup" }
+ns.CAMERA_OFF_NEVER = { flight = { Dungeons = true, Raids = true, PvP = true } }
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 	DEFAULTS[cam[1] .. "OffAlways"] = false
 	for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
@@ -429,7 +389,6 @@ for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 		end
 	end
 end
-DEFAULTS.deathOffInPvP = true
 DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
 DEFAULTS.deathScreenStrength = 1
 DEFAULTS.deathZoom = 4             -- yards it pulls back meanwhile
@@ -455,15 +414,40 @@ for key, value in pairs({
 }) do
 	DEFAULTS["walkOrbit" .. key] = value
 end
--- Seconds after a fight before each camera mode may start (0: no wait).
-DEFAULTS.taxiCombatWait = 0
-DEFAULTS.idleCombatWait = 0
-DEFAULTS.walkCombatWait = 15
-DEFAULTS.runCombatWait = 30
-DEFAULTS.cozyCombatWait = 30
-DEFAULTS.teleCombatWait = 0 -- (hearthing out after a fight is common)
-DEFAULTS.vistaCombatWait = 0
-DEFAULTS.fishCombatWait = 0
+-- The Nameplates page's kinds of unit (see Effects), and its columns per
+-- place: keep these up in cinematic mode out of combat there.
+ns.PLATE_KINDS = {
+	"Enemies", "EnemyMinions", "EnemyNPCs", "EnemyMinor", "Friends", "FriendlyMinions", "FriendlyNPCs",
+}
+for _, kind in ipairs(ns.PLATE_KINDS) do
+	for _, suffix in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do -- (inns go with the open world)
+		DEFAULTS["plateIn" .. suffix .. kind] = false
+	end
+end
+-- Kept up in dungeons and raids: friendly players and NPCs; in battlegrounds
+-- and arenas: players on both sides and friendly minions.
+for _, key in ipairs({ "plateInDungeonsFriends", "plateInDungeonsFriendlyNPCs", "plateInRaidsFriends",
+	"plateInRaidsFriendlyNPCs", "plateInPvPEnemies", "plateInPvPEnemyNPCs", "plateInPvPFriends",
+	"plateInPvPFriendlyMinions" }) do
+	DEFAULTS[key] = true
+end
+-- And its two rows for your target, shown whatever its own row says: your
+-- target, enemy or friendly, everywhere.
+ns.PLATE_TARGET_ROWS = { EnemyTarget = true, FriendlyTarget = true }
+for row, on in pairs(ns.PLATE_TARGET_ROWS) do
+	DEFAULTS["plateCombat" .. row], DEFAULTS["plateCinematic" .. row] = on, on
+	for _, suffix in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do
+		DEFAULTS["plateIn" .. suffix .. row] = on
+	end
+end
+-- Names likewise (the groups are in Effects): kept up in fights, and in each place.
+for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
+	DEFAULTS["nameCombat" .. key] = false
+	for _, suffix in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do
+		DEFAULTS["nameIn" .. suffix .. key] = false
+	end
+end
+DEFAULTS.nameInPvPEnemyMinions = true
 -- Slow zoom settings likewise: idleZoom* for standing still, taxiZoom* for
 -- flights, with the flight defaults copying the standing-still ones.
 local ZOOM_PROFILE_KEYS = { "Distance", "In", "Time", "Pause", "Random", "Ease", "PastMax" }
@@ -488,7 +472,8 @@ for _, prefix in ipairs({ "idleZoom", "taxiZoom", "walkZoom", "runZoom", "cozyZo
 end
 DEFAULTS.taxiZoomPauseVary = 3
 -- Depth of field (faked): a soft haze round the screen edges in the camera
--- modes. One switch for all, then a strength per mode (0 is off there).
+-- modes. One switch for all (on the Visual Effects page), then a strength
+-- per mode (0 is off there).
 DEFAULTS.depthOfField = true
 DEFAULTS.dofIdle = 0.025
 DEFAULTS.dofCozy = 0.025
@@ -512,6 +497,9 @@ local REVEAL_AT_NPCS = {
 }
 
 local lastBusy = 0
+-- After a fight, login, /reload or turning it on, cinematic mode starts at
+-- once instead of waiting the fade delay (until something else brings the UI back).
+local quickStart = false
 local peeking = false
 
 function ns.Print(msg)
@@ -530,7 +518,7 @@ local function AnyShown(names)
 end
 
 -- Talking to an NPC: their windows, plus quest givers, gossip and the flight
--- map. The camera modes wait while one is open (cameraPauseAtNPCs).
+-- map. The camera modes wait while one is open.
 local NPC_WINDOWS = {
 	"GossipFrame", "QuestFrame", "TaxiFrame", "ItemTextFrame",
 }
@@ -545,7 +533,7 @@ function ns.NPCWindowOpen()
 end
 
 -- Menus and game windows (the Escape menu, options, spellbook, character
--- sheet, map...). The camera modes wait while one is open (cameraPauseInMenus).
+-- sheet, map...). The camera modes wait while one is open.
 local MENU_WINDOWS = {
 	"GameMenuFrame", "WorldMapFrame", "QuestLogFrame", "FriendsFrame", "PVEFrame",
 	"CollectionsJournal", "EncounterJournal", "AchievementFrame", "CommunitiesFrame",
@@ -621,7 +609,7 @@ local function IsBusy()
 	if inCombat and not ns.db.stayInCombat then
 		return true
 	end
-	-- Targeting never brings the whole UI back; it shows the Combat page's
+	-- Targeting never brings the whole UI back; it shows the Combat Frames page's
 	-- target lists instead (see GetCombatShownFrames).
 	-- Dead: the UI comes back, unless the death camera is watching (then the
 	-- release button, a popup, shows anyway). A ghost keeps cinematic mode as
@@ -697,16 +685,28 @@ function ns.GetPlaceType()
 	end
 end
 
+-- The place for the per-place options: as ns.GetPlaceType, except that an
+-- inn counts as the open world (nil). (The inn glow still tells inns apart.)
+function ns.GetOptionPlace()
+	local place = ns.GetPlaceType()
+	return place ~= "inn" and place or nil
+end
+
 local OFF_IN = {
-	city = "offInCities", inn = "offInInns",
-	dungeon = "offInDungeons", raid = "offInRaids", pvp = "offInPvP",
+	city = "offInCities", dungeon = "offInDungeons", raid = "offInRaids", pvp = "offInPvP",
 }
 ns.CHAT_IN = {
-	city = "chatInCities", inn = "chatInInns",
-	dungeon = "chatInDungeons", raid = "chatInRaids", pvp = "chatInPvP",
+	city = "chatInCities", dungeon = "chatInDungeons", raid = "chatInRaids", pvp = "chatInPvP",
 }
 
-local PLACE_SUFFIX = { city = "Cities", inn = "Inns", dungeon = "Dungeons", raid = "Raids", pvp = "PvP" }
+local PLACE_SUFFIX = { city = "Cities", dungeon = "Dungeons", raid = "Raids", pvp = "PvP" }
+
+-- The place you're in as the options' keys name it ("Cities", "Dungeons"...),
+-- or nil for the open world (inns too).
+function ns.PlaceSuffix()
+	local place = ns.GetOptionPlace()
+	return place and PLACE_SUFFIX[place]
+end
 
 -- A camera mode ("flight", "idle", "cozy"... see ns.CAMERA_OFF_CAMS) turned
 -- off where you are, or for the group you're in. A flight doesn't count as
@@ -719,8 +719,8 @@ function ns.IsCameraOffHere(cam)
 	if cam == "flight" and db.flightOffInCities and db.takeoffInCity and UnitOnTaxi("player") then
 		return true
 	end
-	local place = ns.GetPlaceType()
-	if place ~= nil and db[cam .. "OffIn" .. PLACE_SUFFIX[place]] then
+	local place = ns.PlaceSuffix()
+	if place ~= nil and db[cam .. "OffIn" .. place] then
 		return true
 	end
 	if IsInRaid() then
@@ -730,19 +730,23 @@ function ns.IsCameraOffHere(cam)
 end
 
 function ns.IsMusicBlocked()
-	local place = ns.GetPlaceType()
-	return place ~= nil and ns.db["musicOffIn" .. PLACE_SUFFIX[place]] or false
+	local place = ns.PlaceSuffix()
+	return place ~= nil and ns.db["musicOffIn" .. place] or false
 end
 
--- Tracking doesn't keep the minimap up here (Frames page, "Except in").
+-- Tracking doesn't keep the minimap up here (Minimap page, "Except in").
 function ns.IsTrackingOffHere()
-	local place = ns.GetPlaceType()
-	return place ~= nil and ns.db["trackingOffIn" .. PLACE_SUFFIX[place]] or false
+	local place = ns.PlaceSuffix()
+	return place ~= nil and ns.db["trackingOffIn" .. place] or false
 end
 
 local function IsInDisabledZone()
-	local place = ns.GetPlaceType()
-	return place ~= nil and ns.db[OFF_IN[place]] or false
+	local place = ns.GetOptionPlace()
+	if place == nil then
+		-- The open world (inns too). Flights still go cinematic, as they do leaving a city.
+		return ns.db.offInWorld and not UnitOnTaxi("player") and not IsInInstance() or false
+	end
+	return ns.db[OFF_IN[place]] or false
 end
 
 -- "Turn off in" a party or raid group: who you're with, not where you are.
@@ -761,19 +765,26 @@ local function ShouldBeCinematic(now)
 	if not ns.db.enabled or peeking or GetTime() < snoozeUntil or IsInDisabledZone()
 		or IsInDisabledGroup() then
 		lastBusy = now -- the full fade delay applies after leaving
+		quickStart = false
 		return false
 	end
 	if IsBusy() then
 		lastBusy = now
+		-- Only the fight itself counts: anything else (a cast, a window) still
+		-- busy as it ends waits the full fade delay.
+		quickStart = not ns.db.stayInCombat
+			and (InCombatLockdown() or Flag(UnitAffectingCombat("player"))) and true or false
 		return false
 	end
 	-- Flights: right away with the option on, or as the flight event's delay ends.
-	local instant = (ns.FlightStarted and ns.FlightStarted() and (ns.db.taxiInstant or ns.db.eventFlightDelay))
+	local instant = (ns.FlightStarted and ns.FlightStarted() and ns.db.taxiInstant)
 		or (ns.db.walkInstant and ns.IsRPWalking())
 		or (ns.db.runInstant and ns.IsAutoRunning())
 		or (ns.ActiveEvent and ns.ActiveEvent())
 		or (ns.IsDeathCinematic and ns.IsDeathCinematic())
-	local delay = instant and 0 or ns.db.delay
+	-- Otherwise things must stay calm (no cast, window or the like) for the
+	-- "Back into CineMode after" time first. After fights and at login, at once.
+	local delay = (instant or quickStart) and 0 or ns.db.returnDelay
 	return now - lastBusy >= delay
 end
 
@@ -882,14 +893,14 @@ local function OnOrbitUpdate(_, elapsed)
 	Step(ns.UpdateOrbit, ns.lastCinematic, elapsed)
 end
 
--- Set at login (and on turning it on) when "start in cinematic mode" is on: the first cinematic tick
+-- Set at login (and on turning it on) when cinematic mode starts at once: the first cinematic tick
 -- within this window snaps straight to cinematic. Expires so a busy login
 -- (say, an enemy targeted) falls back to the normal fade later.
 local START_SNAP_WINDOW = 5
 local startSnapUntil = 0
 
 -- Effects shown only in some situations (db.<key>Moving, Still, Flight and
--- InCombat), fading back in a while after a fight (db.<key>CombatWait seconds).
+-- InCombat), fading back in once the Calm Timer (db.calmTime) has run out after a fight.
 local SITUATION_EFFECTS = {
 	{ key = "letterbox", update = "UpdateLetterbox" },
 	{ key = "tint", update = "UpdateTint" },
@@ -960,9 +971,9 @@ local function OnUpdate(_, elapsed)
 			wanted = ns.db[key .. "InCombat"]
 		else
 			wanted = ns.db[key .. situation]
-				and (ns.db[key .. "InCombat"] or now - lastFightAt >= ns.db[key .. "CombatWait"])
+				and (ns.db[key .. "InCombat"] or now - lastFightAt >= ns.db.calmTime)
 		end
-		Step(ns[effect.update], cinematic and wanted and true or false, elapsed)
+		Step(ns[effect.update], cinematic and wanted and ns.db.visualEffects and true or false, elapsed)
 	end
 	Step(ns.UpdateCVars, cinematic)
 	Step(ns.UpdateMusic, cinematic, elapsed)
@@ -1079,9 +1090,9 @@ end
 function ns.SetEnabled(enabled)
 	ns.db.enabled = enabled
 	lastBusy = GetTime()
-	if enabled and ns.db.startCinematic then
-		-- "Start in cinematic mode" covers turning it on too: straight in, as at login.
-		lastBusy = GetTime() - ns.db.delay
+	quickStart = enabled
+	if enabled then
+		-- Starting at once covers turning it on too: straight in, as at login.
 		startSnapUntil = GetTime() + START_SNAP_WINDOW
 	end
 end
@@ -1157,6 +1168,7 @@ function Cinematic_Peek(down)
 	peeking = down
 	if not down then
 		lastBusy = GetTime()
+		quickStart = false
 	end
 end
 
@@ -1169,7 +1181,7 @@ end
 local function EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
-	ns.db.addonFrames = ns.db.addonFrames or {} -- Extra frames page: key -> false when switched off
+	ns.db.addonFrames = ns.db.addonFrames or {} -- 3rd Party Addon page: key -> false when switched off
 	ns.db.savedCVars = ns.db.savedCVars or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
 	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = false, LocalDefense = true }
@@ -1194,8 +1206,8 @@ end
 -- Restores the tunable settings but keeps the player's added/ignored frames.
 function ns.ResetSettings()
 	for k, v in pairs(DEFAULTS) do ns.db[k] = v end
-	ns.SyncPlateCVars() -- the game's nameplate options follow the restored ticks
 	lastBusy = GetTime()
+	quickStart = false
 	ns.letterboxDirty = true
 end
 
@@ -1291,6 +1303,7 @@ end
 ns.Unsnooze = function()
 	snoozeUntil = 0
 	lastBusy = GetTime()
+	quickStart = false
 end
 -- Seconds left on a snooze (math.huge until logout), or nil if not snoozed.
 ns.GetSnoozeLeft = function()
@@ -1356,10 +1369,6 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.nameKeepOther = true
 		end
 		ns.db.plateEnemyNamesCinematic = nil
-		-- The other faction's icon used to be its own option (markOther).
-		if ns.db.markOther == false then
-			ns.db.nameIconOther = false
-		end
 		ns.db.markOther = nil
 		-- The AFK camera's "Turn rotation off in" and "Turn zoom off in" (and
 		-- before them "Turn camera effects off in") are now its row of the
@@ -1395,19 +1404,160 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.plateCombatOther = true
 			ns.db.plateCombatV2 = true
 		end
+		-- (The migrations below up to the rows' renaming use the old rows.)
+		local OLD_PLATE_KINDS = { "Mobs", "NPCs", "Own", "Other", "Pets", "Totems" }
+		local OLD_NAME_KEYS = { "Mobs", "NPCs", "Own", "Other", "Pets", "Minions", "Totems", "Self" }
 		-- An unticked Show (now "Out of combat") used to hide a kind in fights
 		-- too; its In combat tick, greyed out then, would now show it in them.
 		if not ns.db.plateOutOfCombatV1 then
-			for _, kind in ipairs(ns.PLATE_KINDS) do
-				if not ns.db["plateShow" .. kind] then
+			for _, kind in ipairs(OLD_PLATE_KINDS) do
+				if ns.db["plateShow" .. kind] == false then
 					ns.db["plateCombat" .. kind] = false
 				end
 			end
 			ns.db.plateOutOfCombatV1 = true
 		end
-		-- "Cities and inns" used to be one setting; carry it over to inns.
-		if ns.db.offInInns == nil then ns.db.offInInns = ns.db.offInCities end
-		if ns.db.chatInInns == nil then ns.db.chatInInns = ns.db.chatInCities end
+		-- The Nameplates page had an Out of combat column (plateShow<kind>) that
+		-- also set the game's own nameplate options. It now only steers plates
+		-- in cinematic mode, with a column per place: a kind kept up in
+		-- cinematic mode stays kept everywhere, unless Out of combat was off.
+		if ns.db.plateShowMobs ~= nil then
+			for _, kind in ipairs(OLD_PLATE_KINDS) do
+				local kept = (ns.db["plateCinematic" .. kind] and ns.db["plateShow" .. kind] ~= false) and true or false
+				ns.db["plateCinematic" .. kind] = kept
+				for _, suffix in ipairs({ "Cities", "Inns", "Dungeons", "Raids", "PvP" }) do
+					ns.db["plateIn" .. suffix .. kind] = kept
+				end
+			end
+		end
+		-- "Hide nameplates in cinematic mode" was a switch of its own; with it
+		-- off, every kind now stays up everywhere instead.
+		if ns.db.hidePlates == false then
+			for _, kind in ipairs(OLD_PLATE_KINDS) do
+				ns.db["plateCombat" .. kind], ns.db["plateCinematic" .. kind] = true, true
+				for _, suffix in ipairs({ "Cities", "Inns", "Dungeons", "Raids", "PvP" }) do
+					ns.db["plateIn" .. suffix .. kind] = true
+				end
+			end
+		end
+		ns.db.hidePlates = nil
+		-- "Hide names in cinematic mode" likewise: off, every name stays up.
+		if ns.db.hideNames == false then
+			for _, key in ipairs(OLD_NAME_KEYS) do
+				ns.db["nameKeep" .. key] = true
+			end
+		end
+		ns.db.hideNames = nil
+		-- Names had one Keep column; a kept name stays kept in fights and everywhere.
+		if not ns.db.nameGridV1 then
+			for _, key in ipairs(OLD_NAME_KEYS) do
+				if ns.db["nameKeep" .. key] then
+					ns.db["nameCombat" .. key] = true
+					for _, suffix in ipairs({ "Cities", "Inns", "Dungeons", "Raids", "PvP" }) do
+						ns.db["nameIn" .. suffix .. key] = true
+					end
+				end
+			end
+			ns.db.nameGridV1 = true
+		end
+		-- The Nameplates page's rows now follow the game's own options. Each
+		-- new row is ticked in a column wherever an old row it covers was.
+		if not ns.db.plateRowsV1 then
+			local function Regroup(prefixes, map, oldKeys)
+				for _, prefix in ipairs(prefixes) do
+					local new = {}
+					for newKey, olds in pairs(map) do
+						for _, old in ipairs(olds) do
+							new[newKey] = new[newKey] or ns.db[prefix .. old] or nil
+						end
+					end
+					for _, old in ipairs(oldKeys) do
+						ns.db[prefix .. old] = nil
+					end
+					for newKey, value in pairs(new) do
+						ns.db[prefix .. newKey] = value
+					end
+				end
+			end
+			local function Columns(head, open)
+				local list = { head .. "Combat", open }
+				for _, suffix in ipairs({ "Cities", "Inns", "Dungeons", "Raids", "PvP" }) do
+					list[#list + 1] = head .. "In" .. suffix
+				end
+				return list
+			end
+			Regroup(Columns("plate", "plateCinematic"), {
+				Enemies = { "Mobs", "Other" }, EnemyMinions = { "Pets", "Totems" }, EnemyMinor = { "Mobs" },
+				Friends = { "Own" }, FriendlyMinions = { "Pets", "Totems" }, FriendlyNPCs = { "NPCs" },
+			}, OLD_PLATE_KINDS)
+			Regroup(Columns("name", "nameKeep"), {
+				Self = { "Self" }, NPCs = { "Mobs", "NPCs" }, Critters = { "Mobs" }, Friends = { "Own" },
+				FriendlyMinions = { "Pets", "Minions", "Totems" }, Enemies = { "Other" },
+				EnemyMinions = { "Pets", "Minions", "Totems" },
+			}, OLD_NAME_KEYS)
+			ns.db.plateRowsV1 = true
+		end
+		-- Enemy Units split into Enemy Players (still "Enemies") and Enemy NPCs:
+		-- the new row starts out ticked wherever the old one was.
+		if not ns.db.plateEnemyNPCsV1 then
+			for _, prefix in ipairs({ "plateCombat", "plateCinematic", "plateInCities", "plateInInns",
+				"plateInDungeons", "plateInRaids", "plateInPvP" }) do
+				if ns.db[prefix .. "Enemies"] ~= nil then
+					ns.db[prefix .. "EnemyNPCs"] = ns.db[prefix .. "Enemies"]
+				end
+			end
+			ns.db.plateEnemyNPCsV1 = true
+		end
+		-- The grids' Inns column joined Open world: ticked there wherever either was.
+		for _, kind in ipairs(ns.PLATE_KINDS) do
+			if ns.db["plateInInns" .. kind] then ns.db["plateCinematic" .. kind] = true end
+			ns.db["plateInInns" .. kind] = nil
+		end
+		for _, group in ipairs(ns.NAME_GROUPS) do
+			if ns.db["nameInInns" .. group.key] then ns.db["nameKeep" .. group.key] = true end
+			ns.db["nameInInns" .. group.key] = nil
+		end
+		ns.db.namePlateLinkV1 = nil
+		-- The cozy, vista and fish cameras' "Play music" switches became a Music
+		-- column per event: each starts from the switch for the camera it's set to.
+		if ns.db.musicCamCozy ~= nil or ns.db.musicCamVista ~= nil or ns.db.musicCamFish ~= nil then
+			local old = { cozy = ns.db.musicCamCozy, tele = ns.db.musicCamCozy, vista = ns.db.musicCamVista,
+				fish = ns.db.musicCamFish }
+			for _, event in ipairs(ns.EVENTS) do
+				local camera = ns.db["event" .. event.key .. "Camera"] or event.camera
+				if ns.EVENT_MUSIC_DEFAULT[event.camera] ~= nil and old[camera] ~= nil
+					and ns.db["event" .. event.key .. "Music"] == nil then
+					ns.db["event" .. event.key .. "Music"] = old[camera]
+				end
+			end
+			ns.db.musicCamCozy, ns.db.musicCamVista, ns.db.musicCamFish = nil, nil, nil
+		end
+		-- The Calm Timer replaced the nameplates' linger and the letterbox's and
+		-- tint's own waits after a fight; it starts from the linger.
+		if ns.db.calmTime == nil then
+			ns.db.calmTime = ns.db.plateCombatLinger or ns.db.letterboxCombatWait
+		end
+		ns.db.plateCombatLinger, ns.db.letterboxCombatWait, ns.db.tintCombatWait = nil, nil, nil
+		-- And the buffs' window after a fight and each camera's own wait.
+		ns.db.buffPeekCombatWindow, ns.db.musicCombatResume = nil, nil
+		ns.db.fadeChat = nil -- (chat always fades in CineMode now; mouseover shows it)
+		for _, mode in ipairs({ "taxi", "idle", "walk", "run", "cozy", "vista", "fish", "tele" }) do
+			ns.db[mode .. "CombatWait"] = nil
+		end
+		-- The tele camera's tooltips followed the cozy camera's until it had its own row.
+		if ns.db.tooltipOffTele == nil and ns.db.tooltipOffCozy ~= nil then
+			ns.db.tooltipOffTele = ns.db.tooltipOffCozy
+		end
+		-- The tooltips' Never column (no showing again after hovering in a camera mode) is gone.
+		for _, mode in ipairs({ "Flight", "Idle", "Cozy", "Tele", "Vista", "Fish", "Walk", "Run", "Death", "Quest" }) do
+			ns.db["tooltipNever" .. mode] = nil
+		end
+		-- Inns had their own place in every "Turn off in" and "Keep ... in" list;
+		-- they count as the open world now.
+		ns.db.offInInns, ns.db.chatInInns, ns.db.musicOffInInns, ns.db.trackingOffInInns = nil, nil, nil, nil
+		for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+			ns.db[cam[1] .. "OffInInns"] = nil
+		end
 		-- The cozy zoom first pulled back further and came in less; update it
 		-- once, unless changed.
 		if not ns.db.cozySettingsV2 then
@@ -1580,17 +1730,11 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 				ns.db["event" .. event .. "Camera"] = "none"
 			end
 		end
-		-- "Start right away" and the shared eventDelay became a delay per event
-		-- (empty: right away). Only a changed eventDelay carries over, to the
-		-- events that weren't set to start right away.
-		local oldDelay = ns.db.eventDelay
+		-- Events had "Start right away", then a delay ("Wait") and a "Stop on
+		-- move" switch each; they now start right away and always stop on moving.
 		for _, event in ipairs(ns.EVENTS) do
 			local key = "event" .. event.key
-			if oldDelay and oldDelay ~= 10 and not ns.db[key .. "Instant"] and ns.db[key .. "Delay"] == nil
-				and event.key ~= "Flight" and event.key ~= "Quest" and event.key ~= "Fishing" then -- (added after; never had the shared delay)
-				ns.db[key .. "Delay"] = oldDelay
-			end
-			ns.db[key .. "Instant"] = nil
+			ns.db[key .. "Instant"], ns.db[key .. "Delay"], ns.db[key .. "StopOnMove"] = nil, nil, nil
 		end
 		-- One camera input pause used to cover the flight and AFK cameras; each
 		-- has its own now. Only a changed one carries over.
@@ -1614,6 +1758,18 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.plateAlwaysTargetEnemy = ns.db.plateAlwaysTarget
 			ns.db.plateAlwaysTargetFriendly = ns.db.plateAlwaysTarget
 		end
+		-- Then a switch each for enemy and friendly targets; now they're rows in
+		-- the Nameplates grid, ticked everywhere if the switch was on.
+		for row, old in pairs({ EnemyTarget = "plateAlwaysTargetEnemy", FriendlyTarget = "plateAlwaysTargetFriendly" }) do
+			if ns.db[old] ~= nil then
+				local on = ns.db[old] and true or false
+				ns.db["plateCombat" .. row], ns.db["plateCinematic" .. row] = on, on
+				for _, suffix in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do
+					ns.db["plateIn" .. suffix .. row] = on
+				end
+				ns.db[old] = nil
+			end
+		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
 		for _, key in ipairs({
@@ -1625,7 +1781,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"thirdsFraming", "thirdsStrength", "thirdsInterval", "thirdsHold",
 			"taxiThirdsInterval", "taxiThirdsStrength", "taxiThirds", "walkThirds", "runThirds",
 			"idleThirds", "cozyThirds", "vistaThirds", "deathThirds",
-			"startCinematicOnReload", "timeOfDayChange", "timeOfDaySound",
+			"delay", "startCinematic", "startCinematicOnReload", "startDelay", "timeOfDayChange", "timeOfDaySound",
 			"revealOnTarget", "ignoreDeadTarget",
 			"plateHurtMobs", "plateHurtNPCs", "plateHurtOwn", "plateHurtOther", "plateHurtPets",
 			"plateHurtTotems",
@@ -1642,6 +1798,18 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"musicCamIdle", "musicWhenAFK", -- (now noMusicWhenAFK)
 			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
 			"plateAlwaysTarget", -- (now plateAlwaysTargetEnemy, plateAlwaysTargetFriendly)
+			"plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut", "plateTargetFriendlyFadeIn",
+			"plateTargetFriendlyFadeOut", -- (the target's plate fades at the UI's fade times now)
+			"combatFadeInTime", "combatFadeOutTime", "enemyFadeInTime", "enemyFadeOutTime",
+			"friendlyFadeInTime", "friendlyFadeOutTime", -- (combat frames likewise)
+			"plateShowMobs", "plateShowNPCs", "plateShowOwn", "plateShowOther", "plateShowPets",
+			"plateShowTotems", -- (nameplates outside cinematic mode are the game's own now)
+			"nameIconMobs", "nameIconNPCs", "nameIconOwn", "nameIconOther", "nameIconPets", "nameIconTotems",
+			"nameIconPvPMobs", "nameIconPvPNPCs", "nameIconPvPOwn", "nameIconPvPOther", "nameIconPvPPets",
+			"nameIconPvPTotems", -- (custom icons in place of names, removed)
+			"nameShowMobs", "nameShowNPCs", "nameShowOwn", "nameShowOther", "nameShowPets",
+			"nameShowMinions", "nameShowTotems", "nameShowSelf", -- (names outside cinematic mode are the game's own)
+			"cameraPauseAtNPCs", "cameraPauseCasting", "cameraPauseInMenus", -- (always on now)
 		}) do
 			ns.db[key] = nil
 		end
@@ -1656,9 +1824,8 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 	elseif event == "PLAYER_LOGIN" then
 		ns.MusicTrace(("LOGIN volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 		RestoreSavedCVars()
+		ns.EnsurePlateRows()
 		ns.RestoreMusicVolume()
-		ns.SyncPlateCVars()
-		ns.SyncNameCVars()
 		ns.PruneBuiltInExtras()
 		ns.wasOnTaxi = UnitOnTaxi("player") -- don't re-center after a /reload mid-flight
 		ns.RegisterChatPeek()
@@ -1768,11 +1935,12 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		C_Timer.After(1, CheckMoving) -- (the speed can read 0 for a moment while loading)
 		-- arg1 is isInitialLogin (a real login), arg2 isReloadingUi (a /reload).
 		-- Other loading screens never start straight in cinematic mode.
-		if (arg1 or arg2) and ns.db.timeOfDayMessage then
+		if (arg1 or arg2) and ns.db.timeOfDayMessage and ns.db.visualEffects then
 			ns.ShowTimeOfDayTitle()
 		end
-		if (arg1 or arg2) and ns.db.startCinematic then
-			lastBusy = GetTime() - ns.db.delay -- skip the fade delay
+		if arg1 or arg2 then
+			lastBusy = GetTime()
+			quickStart = true -- straight in rather than after the fade delay
 			startSnapUntil = GetTime() + START_SNAP_WINDOW
 		end
 	elseif event == "PLAYER_LOGOUT" then

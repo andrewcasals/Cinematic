@@ -1,6 +1,6 @@
 -- Cinematic depth of field (faked): a soft haze around the screen edges, as if
 -- the camera had pulled focus onto you. Shown in the camera modes while
--- cinematic mode is on (depthOfField), at each mode's own strength (dof*,
+-- cinematic mode is on (depthOfField, under visualEffects), at each mode's own strength (dof*,
 -- set on its page). /cine doftest shows it on demand.
 local _, ns = ...
 
@@ -26,7 +26,8 @@ local function WantedStrength()
 		return demoStrength or DEMO_STRENGTH
 	end
 	local db = ns.db
-	if not db or not db.enabled or not db.depthOfField or not ns.lastCinematic then
+	if not db or not db.enabled or not db.visualEffects or not db.depthOfField
+		or not ns.lastCinematic then
 		return 0
 	end
 	local mode = ns.CameraMode()

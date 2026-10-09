@@ -61,16 +61,14 @@ ns.CallCameraFunction = CallCameraFunction -- (for the quest cam's tilt)
 
 local idleZoom = { active = false, saved = nil }
 local turnKeys = { left = false, right = false }
--- Events that start a standing-still camera, in the order the Events page
--- lists them. Each has its own settings: event<key>Camera (which camera:
--- "cozy", "vista", "fish", "afk", "tele" or "none") and event<key>Delay (seconds the event
--- has to last first; nil starts it right away). Once it counts, the camera
--- starts and the UI fades at once. The emotes and seats always end as you move
--- or jump; those marked stopsOnMove (a state that carries on as you move) have
--- event<key>StopOnMove: moving or jumping ends it until it starts afresh.
+-- Events that start a standing-still camera, in the order the Camera Triggers page
+-- lists them. Each picks its camera with event<key>Camera ("cozy", "vista",
+-- "fish", "afk", "tele" or "none"); the camera starts and the UI fades at once.
+-- The emotes and seats end as you move or jump; those marked stopsOnMove (a
+-- state that carries on as you move) end too, until they start afresh.
 ns.EVENTS = {
 	{ key = "Campfire", label = "Resting with a listed buff (campfire)", camera = "cozy", stopsOnMove = true },
-	{ key = "Sit", label = "/sit (or press the sit key)", camera = "cozy" },
+	{ key = "Sit", label = "/sit (or press the sit key)", camera = "vista" },
 	{ key = "Sleep", label = "/sleep or /lie down", camera = "cozy" },
 	{ key = "Dance", label = "/dance", camera = "cozy" },
 	{ key = "Kneel", label = "/kneel", camera = "cozy" },
@@ -87,26 +85,23 @@ ns.EVENTS = {
 	-- Nor this: the quest cam (QuestCam.lua) or none.
 	{ key = "Quest", label = "Talk to a quest giver", camera = "quest" },
 }
+-- Each event's Music column (event<key>Music): a fresh song as its camera
+-- starts. Flights use the flight camera's own switch (musicCamFlight), the
+-- AFK camera "No music while AFK", and the quest camera has none.
+ns.EVENT_MUSIC_DEFAULT = { cozy = false, tele = false, vista = true, fish = false }
 for _, event in ipairs(ns.EVENTS) do
 	ns.DEFAULTS["event" .. event.key .. "Camera"] = event.camera
-	if event.stopsOnMove then
-		ns.DEFAULTS["event" .. event.key .. "StopOnMove"] = true
+	if ns.EVENT_MUSIC_DEFAULT[event.camera] ~= nil then
+		ns.DEFAULTS["event" .. event.key .. "Music"] = ns.EVENT_MUSIC_DEFAULT[event.camera]
 	end
 end
-ns.DEFAULTS.eventWeaponDelay = 0
+ns.DEFAULTS.eventSitMusic = false -- (/sit picks the vista camera, but quietly)
 
--- Seconds an event has to last before its camera starts (0: right away).
-local function EventDelay(key)
-	return tonumber(ns.db["event" .. key .. "Delay"]) or 0
-end
-
--- Taking a flight: it counts once the flight has lasted its delay. The flight
--- camera runs then, unless the event is set to no camera.
+-- Taking a flight: the flight camera runs, unless the event is set to no camera.
 local flightSince -- when this flight took off, or nil on the ground
 local flightCamStarted = false -- this flight's camera has started (takeoff swing done)
 function ns.FlightStarted()
 	return ns.db ~= nil and UnitOnTaxi("player") and flightSince ~= nil
-		and GetTime() - flightSince >= EventDelay("Flight")
 end
 function ns.FlightCameraOn()
 	return ns.FlightStarted() and ns.db.eventFlightCamera ~= "none" and not ns.IsCameraOffHere("flight")
@@ -953,7 +948,7 @@ function ns.GetWeaponDebug()
 	}
 end
 
--- The camera an event is set to on the Events page, or nil for none.
+-- The camera an event is set to on the Camera Triggers page, or nil for none.
 local function EventCamera(key)
 	local camera = key and ns.db["event" .. key .. "Camera"]
 	if camera and camera ~= "none" then
@@ -991,14 +986,13 @@ do
 			return ns.Flag(UnitIsAFK("player"))
 		end
 	end
-	-- Moving or jumping now: stop the events that are on and set to stop.
+	-- Moving or jumping now: stop the events that are on and stop on moving.
 	function ns.StopEventsOnMove(except)
 		if not ns.db then
 			return
 		end
 		for _, event in ipairs(ns.EVENTS) do
-			if event.stopsOnMove and event.key ~= except and ns.db["event" .. event.key .. "StopOnMove"]
-				and EventOn(event.key) then
+			if event.stopsOnMove and event.key ~= except and EventOn(event.key) then
 				stoppedByMove[event.key] = true
 			end
 		end
@@ -1080,21 +1074,29 @@ do
 			end
 			return nil
 		end
-		if ns.db.cameraPauseAtNPCs and ns.NPCWindowOpen and ns.NPCWindowOpen() then
+		if ns.NPCWindowOpen and ns.NPCWindowOpen() then
 			return nil -- talking to an NPC: waits until the window closes
 		end
-		if ns.db.cameraPauseInMenus and ns.MenuWindowOpen and ns.MenuWindowOpen() then
+		if ns.MenuWindowOpen and ns.MenuWindowOpen() then
 			return nil -- in a menu or game window: waits until it closes
 		end
 		if ns.manualCam then
 			return "Manual", ns.manualCam -- started from a key binding (Cinematic_StartCam)
 		end
+		-- Sitting or lying down (or in a seat) with the campfire buff: the
+		-- campfire's camera takes over from the emote's. Settling down by the
+		-- fire starts it afresh, even if walking up to it had stopped it.
+		local resting = emoteEvent == "Sit" or emoteEvent == "Sleep" or emoteEvent == "Chair"
+		local byFire = resting and atCampfire and EventCamera("Campfire") ~= nil
+		if byFire then
+			stoppedByMove.Campfire = nil
+		end
 		-- A Hearthstone or teleport cast first (it calls a logout off anyway),
 		-- then logging out, then going AFK (it comes after whatever you were
 		-- doing: AFK while sitting is the AFK camera), then the rest.
 		local departing = (emoteEvent == "Hearth" or emoteEvent == "Teleport") and emoteEvent
-		for _, key in ipairs({ departing, LoggingOut() and "Logout", afk and "AFK", emoteEvent or false,
-			weapon and "Weapon", campfire and "Campfire" }) do
+		for _, key in ipairs({ departing, LoggingOut() and "Logout", afk and "AFK", byFire and "Campfire",
+			emoteEvent or false, weapon and "Weapon", campfire and "Campfire" }) do
 			local camera = key and EventCamera(key)
 			if camera then
 				return key, camera
@@ -1107,34 +1109,20 @@ end
 -- The event that picks the standing-still camera now, and its camera ("cozy",
 -- "vista", "fish", "afk" or "tele"), or nil. A Hearthstone or teleport cast
 -- comes first, then logging out, going AFK, the latest emote (or seat), a
--- drawn weapon and a campfire buff; one set to no camera is passed over.
--- An event with a delay counts only once it has lasted that many seconds, and
--- one whose camera is turned off here (Camera modes page) doesn't count.
+-- drawn weapon and a campfire buff; one set to no camera is passed over, and
+-- one whose camera is turned off here (Camera Modes page) doesn't count.
 local EVENT_CAM = { cozy = "cozy", vista = "vista", fish = "fish", afk = "idle", tele = "tele" }
-local lastEvent, eventSince = nil, 0
 function ns.ActiveEvent()
 	local key, camera = CurrentEvent()
-	local now = GetTime()
-	if key ~= lastEvent then
-		lastEvent, eventSince = key, now
-	end
-	if key and now - eventSince < EventDelay(key) then
-		return nil
-	end
 	if camera and EVENT_CAM[camera] and ns.IsCameraOffHere(EVENT_CAM[camera]) then
 		return nil
 	end
 	return key, camera
 end
 
--- For /cine debug emote: the event happening now, and how long until it counts.
+-- For /cine debug emote: the event happening now.
 function ns.GetEventDebug()
-	local key, camera = CurrentEvent()
-	local wait = 0
-	if key and key == lastEvent then
-		wait = math.max(0, EventDelay(key) - (GetTime() - eventSince))
-	end
-	return key, camera, wait
+	return CurrentEvent()
 end
 
 -- Vista: the camera lines up behind you and sways gently there, looking out
@@ -1177,18 +1165,18 @@ local CALM_CENTER_RAMP = 0.8
 local CALM_CENTER_YAW = 70
 local CALM_CENTER_PITCH = 40
 local lastCombatAt = -math.huge
--- Each camera mode can hold off for a while after a fight (its <mode>CombatWait
--- setting, in seconds; 0: no wait). Looked up by mode ("run") or orbit prefix
--- ("runOrbit"). The death camera has none: it runs in combat by design.
-local COMBAT_WAIT_KEY = {}
-for _, mode in ipairs({ "taxi", "idle", "walk", "run", "cozy", "vista", "fish", "tele" }) do
-	COMBAT_WAIT_KEY[mode] = mode .. "CombatWait"
-	COMBAT_WAIT_KEY[mode .. "Orbit"] = mode .. "CombatWait"
+-- The cameras you'd settle into after a fight (walking, auto-running, cozy)
+-- hold off until the Calm Timer (calmTime) has run out after one. The rest
+-- start straight away: flights, the AFK camera, vista, fishing, hearthing out
+-- (common right after a fight) and the death camera. Looked up by mode ("run")
+-- or orbit prefix ("runOrbit").
+local WAITS_FOR_CALM = {}
+for _, mode in ipairs({ "walk", "run", "cozy" }) do
+	WAITS_FOR_CALM[mode], WAITS_FOR_CALM[mode .. "Orbit"] = true, true
 end
 -- (On ns, not a local: UpdateOrbit is close to Lua's upvalue limit.)
 function ns.CombatWaitOver(mode, now)
-	local key = COMBAT_WAIT_KEY[mode]
-	return not key or now - lastCombatAt >= (ns.db[key] or 0)
+	return not WAITS_FOR_CALM[mode] or now - lastCombatAt >= (ns.db.calmTime or 0)
 end
 local lastAnyTurnAt = -math.huge
 local followArmed = false -- turn hold-and-glide ready (not armed mid-turn)
@@ -2354,13 +2342,12 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	WeaponCozy() -- follow the weapon every frame, moving or not
 	-- An NPC window open (auction house, vendor, quest giver...): you're busy,
 	-- not idling, so the standing-still timer waits too.
-	local atNPC = ns.db.cameraPauseAtNPCs and ns.NPCWindowOpen and ns.NPCWindowOpen()
+	local atNPC = ns.NPCWindowOpen and ns.NPCWindowOpen()
 	-- Same for a menu or game window (options, spellbook...).
-	local inMenu = ns.db.cameraPauseInMenus and ns.MenuWindowOpen and ns.MenuWindowOpen()
+	local inMenu = ns.MenuWindowOpen and ns.MenuWindowOpen()
 	-- Casting (crafting, say) is busy too. (The cozy camera keeps going: cooking
 	-- at a campfire is still cozy.)
-	local casting = ns.db.cameraPauseCasting
-		and (ns.Flag(UnitCastingInfo("player")) or ns.Flag(UnitChannelInfo("player")))
+	local casting = (ns.Flag(UnitCastingInfo("player")) or ns.Flag(UnitChannelInfo("player")))
 		and not ns.IsFishingEvent() and not ns.IsDepartEvent()
 	if onTaxi or active or atNPC or inMenu or (casting and not ns.IsCozy()) then
 		ns.stillSince = nil
@@ -2378,7 +2365,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		emoteEvent = nil
 		ns.manualCam = nil -- (and a camera started from a key binding)
 	end
-	-- An event (Events page) for the cozy, vista or AFK camera: no waiting; the
+	-- An event (Camera Triggers page) for the cozy, vista or AFK camera: no waiting; the
 	-- AFK camera's timer counts as run, for the tint, tooltips and music too.
 	local vista = ns.IsVista()
 	local fish = ns.IsFish()

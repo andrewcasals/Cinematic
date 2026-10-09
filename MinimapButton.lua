@@ -185,7 +185,7 @@ local function ShowMenu(owner)
 		end
 
 		root:CreateDivider()
-		root:CreateCheckbox("Stay in cinematic mode in combat",
+		root:CreateCheckbox("Stay in CineMode in combat",
 			function() return db.stayInCombat end,
 			function() db.stayInCombat = not db.stayInCombat end)
 		root:CreateCheckbox("Always show the minimap",

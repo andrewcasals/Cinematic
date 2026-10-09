@@ -1,6 +1,6 @@
 -- Cinematic: the frames that fade. The built-in fade list, fading and
 -- nesting, the minimap shrink, scanning for frames created later, the Issue
--- Reporter, hover, and the Always shown / Extra frames lists.
+-- Reporter, hover, and the 3rd Party Addon page's lists.
 local _, ns = ...
 
 -- Frames to fade, grouped so hovering one member reveals the whole group.
@@ -50,7 +50,7 @@ local FRAME_GROUPS = {
 local AUTO_PATTERNS = { DamageMeter = "meters", SwingTimer = "swing" }
 ns.SCAN_INTERVAL = 5
 
--- Other addons' frames faded out of the box, listed on the Extra frames page.
+-- Other addons' frames faded out of the box, listed on the 3rd Party Addon page.
 -- Each fades as its own group ("addon:<key>") while its addon is loaded and
 -- it isn't switched off (db.addonFrames[key] = false). names: its named
 -- frames. patterns: name patterns for top-level frames numbered per window.
@@ -79,7 +79,7 @@ ns.ADDON_FRAMES = {
 	},
 	{
 		key = "fecm", addon = "ForeverEnhancedCooldownManager", label = "Forever Enhanced Cooldown Manager",
-		short = "Enhanced Cooldown Manager", -- (the Combat page's label column is narrow)
+		short = "Enhanced Cooldown Manager", -- (the Combat Frames page's label column is narrow)
 		about = "Its cooldown and buff bars, and the pulse when a cooldown is ready.",
 		names = { "FECMPulse" },
 		-- Its bars are unnamed: told apart by the parts each bar is made with.
@@ -634,9 +634,9 @@ local ENEMY_SHOW_DEFAULT = {
 	player = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
 }
--- Other addons' frames too, except the damage meter.
+-- Other addons' frames too.
 for _, known in ipairs(ns.ADDON_FRAMES) do
-	ENEMY_SHOW_DEFAULT["addon:" .. known.key] = known.key ~= "details"
+	ENEMY_SHOW_DEFAULT["addon:" .. known.key] = true
 end
 
 function ns.IsCombatShowOn(key)
@@ -660,13 +660,6 @@ end
 function ns.IsEnemyShowOn(key) return IsListOn("enemyShow", key, ENEMY_SHOW_DEFAULT) end
 function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SHOW_DEFAULT) end
 
--- Fade times for frames shown by each situation.
-local SITUATION_FADE = {
-	combat = { "combatFadeInTime", "combatFadeOutTime" },
-	enemy = { "enemyFadeInTime", "enemyFadeOutTime" },
-	friendly = { "friendlyFadeInTime", "friendlyFadeOutTime" },
-}
-
 -- Frame names to show right now: only while staying cinematic and fighting
 -- (in combat, or with an enemy targeted). Also returns whether the player is
 -- actually in combat, since the fast fade-in only applies then.
@@ -675,26 +668,26 @@ local function HasAnyTarget()
 	return ns.HasTarget()
 end
 
--- Frame names to show right now and the situation that shows them:
--- "combat" (in combat, while staying cinematic), "enemy" (out of combat with a
--- living enemy targeted) or "friendly" (anything else targeted: friends, NPCs,
--- dead enemies).
+-- Frame names to show right now, from the Combat Frames page's column that
+-- applies: In combat (while staying cinematic), Tar Enemy (out of combat with
+-- a living enemy targeted) or Tar Friendly (anything else targeted: friends,
+-- NPCs, dead enemies).
 local function GetCombatShownFrames()
 	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
-	local isOn, situation
+	local isOn
 	if inCombat then
 		if not ns.db.stayInCombat then
-			return nil, nil
+			return nil
 		end
-		isOn, situation = ns.IsCombatShowOn, "combat"
+		isOn = ns.IsCombatShowOn
 	elseif HasAnyTarget() then
 		if ns.Flag(UnitCanAttack("player", "target")) and not ns.Flag(UnitIsDeadOrGhost("target")) then
-			isOn, situation = ns.IsEnemyShowOn, "enemy"
+			isOn = ns.IsEnemyShowOn
 		else
-			isOn, situation = ns.IsFriendlyShowOn, "friendly"
+			isOn = ns.IsFriendlyShowOn
 		end
 	else
-		return nil, nil
+		return nil
 	end
 	local shown = {}
 	for _, item in ipairs(ns.COMBAT_SHOW) do
@@ -707,7 +700,7 @@ local function GetCombatShownFrames()
 			end
 		end
 	end
-	return shown, situation
+	return shown
 end
 
 -- Power types that sit empty at rest (rage, runic power) don't count: leftover
@@ -858,7 +851,7 @@ auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
 	if not (ns.db and ns.db.buffPeek) then
 		return
 	end
-	if ns.db.buffPeekAfterCombat and GetTime() - lastCombatAt > ns.db.buffPeekCombatWindow then
+	if ns.db.buffPeekAfterCombat and GetTime() - lastCombatAt > ns.db.calmTime then
 		return
 	end
 	-- (wasOnTaxi: landed this instant, before the flight code has noticed.)
@@ -931,9 +924,9 @@ local DEATH_FADE_TIME = 0.5 -- seconds for the UI to go when you die (death came
 
 function ns.UpdateFrames(cinematic, elapsed)
 	local now = GetTime()
-	local combatShown, situation
+	local combatShown
 	if cinematic then
-		combatShown, situation = GetCombatShownFrames()
+		combatShown = GetCombatShownFrames()
 	end
 	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
 		lastCombatAt = now
@@ -942,15 +935,15 @@ function ns.UpdateFrames(cinematic, elapsed)
 		lastFallingAt = now
 	end
 	local portraitAllowed = ns.db.portraitWhenNotFull and (not ns.db.portraitAfterCombat
-		or now - math.max(lastCombatAt, lastFallDamageAt) <= ns.db.portraitCombatWindow)
+		or now - math.max(lastCombatAt, lastFallDamageAt) < ns.db.calmTime)
 	if ns.IsChatActive() then
 		ns.chatTypingUntil = now + ns.HoldTime("chatPeekTime")
 	end
 	local typing = ns.chatTypingUntil > now
 	-- Chat stays put when it isn't faded at all, or in a place chosen under
-	-- "Keep chat visible in".
-	local place = ns.GetPlaceType()
-	local fadeChat = ns.db.fadeChat and not (place and ns.db[ns.CHAT_IN[place]])
+	-- "Always show in" (Chat page).
+	local place = ns.GetOptionPlace()
+	local fadeChat = not (place and ns.db[ns.CHAT_IN[place]])
 	local keepMinimapForTracking = ns.IsKeepingMinimapForTracking(now)
 	-- Work out which groups are hovered so the whole group reveals together.
 	local hovered = {}
@@ -1006,9 +999,6 @@ function ns.UpdateFrames(cinematic, elapsed)
 			and portraitAllowed and IsPlayerRecovering() then
 			fightingShown = true -- shown like a combat frame, at the normal fade speeds
 		end
-		if listShown then
-			entry.shownBy = situation -- remembered so it fades out at that list's speed too
-		end
 		if cinematic and not hovered[entry.group] and not chatShowing and not tracking
 			and not fightingShown and (fadeChat or entry.group ~= "chat") then
 			target = 0
@@ -1023,46 +1013,17 @@ function ns.UpdateFrames(cinematic, elapsed)
 		-- once fully revealed, leave the frame alone.
 		elseif entry.alpha ~= target or target == 0 or entry.shrunk then
 			local duration
-			-- Frames shown by a combat/enemy/friend list use that list's fade times;
-			-- everything else uses the normal ones.
 			if target > entry.alpha then
-				local fade = listShown and SITUATION_FADE[situation]
-				duration = fade and ns.db[fade[1]] or ns.db.fadeInTime
+				duration = ns.db.fadeInTime
 			else
-				local fade = entry.shownBy and SITUATION_FADE[entry.shownBy]
-				duration = deathFade and DEATH_FADE_TIME or fade and ns.db[fade[2]] or ns.db.fadeOutTime
+				duration = deathFade and DEATH_FADE_TIME or ns.db.fadeOutTime
 			end
 			ns.SetEntryAlpha(entry, ns.Approach(entry.alpha, target, elapsed, duration))
-			if entry.alpha <= 0 then
-				entry.shownBy = nil
-			end
 		end
 	end
 end
 
-
--- Built-in frames (the default fade list) for the "Always shown" page, which
--- lets any of them be kept visible. Chat windows are listed only if shown, so
--- the ten mostly unused chat frame slots don't clutter the list.
-local GROUP_LABELS = {}
-for _, group in ipairs(ns.HOVER_GROUPS) do GROUP_LABELS[group[1]] = group[2] end
-GROUP_LABELS.waypoint = "Quest waypoint" -- (no hover settings of its own)
-
-local function IsBuiltInName(name)
-	if name:find("^ChatFrame%d+$") or name:find("^ChatFrame%d+EditBox$") then
-		return true
-	end
-	for _, names in pairs(FRAME_GROUPS) do
-		for _, builtIn in ipairs(names) do
-			if builtIn == name then
-				return true
-			end
-		end
-	end
-	return false
-end
-
--- Frames beyond the built-in list: added ones (including auto-matched) and
+-- Frames beyond the built-in list (and built-in ones kept up): added ones (including auto-matched) and
 -- ones the player chose to stop fading. Sorted for stable display.
 -- Lists saved names rather than managed frames, so frames that don't exist
 -- yet (created later in the session) still show.
@@ -1072,47 +1033,11 @@ function ns.GetExtraFrames()
 		faded[#faded + 1] = name
 	end
 	for name in pairs(ns.db.ignoredFrames) do
-		if not IsBuiltInName(name) then
-			ignored[#ignored + 1] = name
-		end
+		ignored[#ignored + 1] = name -- (built-in frames kept with /cine keep too)
 	end
 	table.sort(faded)
 	table.sort(ignored)
 	return faded, ignored
-end
-
-function ns.GetBuiltInFrames()
-	local list, added = {}, {}
-	local function add(name, group)
-		local frame = _G[name]
-		if not added[name] and type(frame) == "table" and frame.GetObjectType then
-			added[name] = true
-			list[#list + 1] = {
-				name = name, group = group, groupLabel = GROUP_LABELS[group] or group,
-				kept = ns.db.ignoredFrames[name] and true or false,
-			}
-		end
-	end
-	for group, names in pairs(FRAME_GROUPS) do
-		for _, name in ipairs(names) do
-			add(name, group)
-		end
-	end
-	for i = 1, (NUM_CHAT_WINDOWS or 10) do
-		local name = "ChatFrame" .. i
-		local frame = _G[name]
-		if frame and (frame:IsShown() or ns.db.ignoredFrames[name]) then
-			add(name, "chat")
-			add(name .. "EditBox", "chat")
-		end
-	end
-	table.sort(list, function(a, b)
-		if a.groupLabel ~= b.groupLabel then
-			return a.groupLabel < b.groupLabel
-		end
-		return a.name < b.name
-	end)
-	return list
 end
 
 function ns.StopFading(name)
@@ -1186,7 +1111,7 @@ function ns.AddUnderMouse(name)
 	end
 	if not name then
 		ns.Print("hover over a named UI element, then type /cine add and press Enter " ..
-			"(or /cine add <FrameName>). Frames without a name can't be added: the Extra frames " ..
+			"(or /cine add <FrameName>). Frames without a name can't be added: the 3rd Party Addon " ..
 			"settings page lists the addons faded out of the box.")
 		return
 	end
@@ -1215,7 +1140,7 @@ function ns.RemoveUnderMouse()
 		return
 	end
 	ns.StopFading(name)
-	ns.Print(name .. " will always be shown (undo on the Frames or Extra frames options page).")
+	ns.Print(name .. " will always be shown (undo under Custom frames on the 3rd Party Addon options page).")
 end
 
 function ns.ListExtras()

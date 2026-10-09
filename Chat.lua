@@ -14,7 +14,7 @@ end
 -- missing = db.chatPeekChannels). "game" types are game events rather than
 -- conversation; the noisy ones default off.
 ns.CHAT_PEEK_TYPES = {
-	{ key = "say", label = "Say", default = false, events = { "CHAT_MSG_SAY" } },
+	{ key = "say", label = "Say", events = { "CHAT_MSG_SAY" } },
 	{ key = "yell", label = "Yell", events = { "CHAT_MSG_YELL" } },
 	{ key = "emote", label = "Emotes", events = { "CHAT_MSG_EMOTE", "CHAT_MSG_TEXT_EMOTE" } },
 	{ key = "whisper", label = "Whispers", events = { "CHAT_MSG_WHISPER", "CHAT_MSG_BN_WHISPER" } },
@@ -34,8 +34,8 @@ ns.CHAT_PEEK_TYPES = {
 	-- Server announcements ("[SERVER] Shutdown in 9:00"); see the AddMessage hook below.
 	{ key = "server", label = "Server messages (shutdowns, restarts)", section = "game", events = {} },
 	-- Level ups arrive as a system message; see LEVEL_UP_WINDOW below.
-	{ key = "levelup", label = "Level ups", section = "game", default = false, events = {} },
-	{ key = "skill", label = "Skill ups", section = "game", default = false, events = { "CHAT_MSG_SKILL" } },
+	{ key = "levelup", label = "Level ups", section = "game", events = {} },
+	{ key = "skill", label = "Skill ups", section = "game", events = { "CHAT_MSG_SKILL" } },
 	{ key = "achievement", label = "Achievements", section = "game", default = false,
 		events = { "CHAT_MSG_ACHIEVEMENT", "CHAT_MSG_GUILD_ACHIEVEMENT" } },
 	{ key = "xp", label = "Experience", section = "game", default = false,
@@ -44,7 +44,9 @@ ns.CHAT_PEEK_TYPES = {
 		events = { "CHAT_MSG_COMBAT_FACTION_CHANGE" } },
 	{ key = "honor", label = "Honor", section = "game", default = false,
 		events = { "CHAT_MSG_COMBAT_HONOR_GAIN" } },
-	{ key = "loot", label = "Loot", section = "game", default = false, events = { "CHAT_MSG_LOOT" } },
+	-- Group loot rolls arrive as loot messages; see IsLootRollLine below.
+	{ key = "rolls", label = "Loot rolls (need, greed, won)", section = "game", events = {} },
+	{ key = "loot", label = "All loot", section = "game", default = false, events = { "CHAT_MSG_LOOT" } },
 	{ key = "money", label = "Money", section = "game", default = false, events = { "CHAT_MSG_MONEY" } },
 	{ key = "tradeskill", label = "Other players' crafting", section = "game", default = false,
 		events = { "CHAT_MSG_TRADESKILLS" } },
@@ -76,6 +78,48 @@ for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 		EVENT_PEEK_TYPE[event] = peekType.key
 		CHAT_PEEK_EVENTS[#CHAT_PEEK_EVENTS + 1] = event
 	end
+end
+
+-- Roll lines are told apart from other loot lines by the game's own
+-- (localised) format strings, turned into patterns. Missing ones (not on this
+-- client) are skipped.
+local LOOT_ROLL_FORMATS = {
+	"LOOT_ROLL_NEED", "LOOT_ROLL_NEED_SELF", "LOOT_ROLL_GREED", "LOOT_ROLL_GREED_SELF",
+	"LOOT_ROLL_DISENCHANT", "LOOT_ROLL_DISENCHANT_SELF", "LOOT_ROLL_TRANSMOG", "LOOT_ROLL_TRANSMOG_SELF",
+	"LOOT_ROLL_PASSED", "LOOT_ROLL_PASSED_SELF", "LOOT_ROLL_PASSED_AUTO", "LOOT_ROLL_PASSED_AUTO_FEMALE",
+	"LOOT_ROLL_PASSED_SELF_AUTO", "LOOT_ROLL_ALL_PASSED",
+	"LOOT_ROLL_ROLLED_NEED", "LOOT_ROLL_ROLLED_NEED_ROLE_BONUS", "LOOT_ROLL_ROLLED_GREED",
+	"LOOT_ROLL_ROLLED_DE", "LOOT_ROLL_ROLLED_TRANSMOG", "LOOT_ROLL_WON", "LOOT_ROLL_YOU_WON",
+}
+local lootRollPatterns
+
+local function FormatToPattern(format)
+	-- Mark the %s / %d / %1$s slots, escape the rest, then fill the slots in.
+	local pattern = format:gsub("%%%d*%$?([sd])", "\1%1")
+	pattern = pattern:gsub("[%^%$%(%)%.%[%]%*%+%-%?%%]", "%%%0")
+	pattern = pattern:gsub("\1s", ".+"):gsub("\1d", "%%d+")
+	return "^" .. pattern .. "$"
+end
+
+local function IsLootRollLine(text)
+	if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then
+		return false
+	end
+	if not lootRollPatterns then
+		lootRollPatterns = {}
+		for _, name in ipairs(LOOT_ROLL_FORMATS) do
+			local format = _G[name]
+			if type(format) == "string" and format:find("%", 1, true) then
+				lootRollPatterns[#lootRollPatterns + 1] = FormatToPattern(format)
+			end
+		end
+	end
+	for _, pattern in ipairs(lootRollPatterns) do
+		if text:find(pattern) then
+			return true
+		end
+	end
+	return false
 end
 
 function ns.IsChannelPeekOn(name)
@@ -116,7 +160,7 @@ ns.chatTypingUntil = 0 -- typing shows the whole chat group without leaving cine
 
 -- Message filters run once per chat window that will show the message, which
 -- tells us exactly which window to reveal. Never filters anything out.
-local function ChatPeekFilter(chatFrame, event, _, _, _, channelString, _, _, _, _, channelBaseName)
+local function ChatPeekFilter(chatFrame, event, text, _, _, channelString, _, _, _, _, channelBaseName)
 	if not ns.db.chatPeek then
 		return false
 	end
@@ -124,6 +168,8 @@ local function ChatPeekFilter(chatFrame, event, _, _, _, channelString, _, _, _,
 	if event == "CHAT_MSG_CHANNEL" then
 		wanted = ns.IsChannelPeekOn(ChannelBaseName(channelBaseName, channelString))
 	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < ns.levelUpUntil and IsPeekTypeOn("levelup") then
+		wanted = true
+	elseif event == "CHAT_MSG_LOOT" and IsPeekTypeOn("rolls") and IsLootRollLine(text) then
 		wanted = true
 	else
 		wanted = IsPeekTypeOn(EVENT_PEEK_TYPE[event])

@@ -617,7 +617,7 @@ local function Stop()
 	cam.zoom, cam.zoomedTo = nil, nil
 end
 
--- The quest giver event (Events page): its camera isn't "none".
+-- The quest giver event (Camera Triggers page): its camera isn't "none".
 local function Wanted()
 	local db = ns.db
 	return db and db.enabled and db.eventQuestCamera ~= "none" and not InCombatLockdown()
@@ -716,8 +716,7 @@ local function OnUpdate(_, elapsed)
 	elseif cam.active and ns.playerMoving then
 		Stop() -- walked off: back to normal, and no more until the next conversation
 		cam.cancelled = true
-	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving and Wanted()
-		and now - cam.since >= (tonumber(ns.db.eventQuestDelay) or 0) then
+	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving and Wanted() then
 		Start()
 	end
 end
@@ -748,6 +747,11 @@ for _, name in ipairs({ "MoveViewLeftStart", "MoveViewLeftStop", "MoveViewRightS
 	end
 end
 frame:SetScript("OnUpdate", OnUpdate)
+
+-- Whether the quest cam is running now.
+function ns.QuestCamActive()
+	return cam.active and true or false
+end
 
 -- For /cine debug: whether the quest cam is on now, its moves and the shoulder state.
 function ns.GetQuestCamDebug()

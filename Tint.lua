@@ -427,7 +427,7 @@ local function GetClockTime()
 	return GetGameTime()
 end
 
--- Showing a preview: the Look page is open, or a quick preview from
+-- Showing a preview: the Visual Effects page is open, or a quick preview from
 -- the minimap menu is running.
 local function Previewing()
 	return tintPreview or GetTime() < menuPreviewUntil
@@ -455,7 +455,7 @@ local function AppliedPhaseColor(name)
 end
 
 -- The tint colour for the current time, the phase's name, and the time.
--- A previewed hour (menu preview, or the Look page), else the clock.
+-- A previewed hour (menu preview, or the Visual Effects page), else the clock.
 -- Time-of-day strength blends the colour toward no change.
 local function TimeOfDayColor()
 	local hour, minute
@@ -487,7 +487,7 @@ local function TimeOfDayColor()
 	return color, phase, hour, minute
 end
 -- The drift multiplier on tint strength: 1 +/- the drift amount, wandering
--- slowly. Off while previewing, so the Look page shows the strength you set.
+-- slowly. Off while previewing, so the Visual Effects page shows the strength you set.
 local function DriftFactor()
 	if not db.tintDrift or Previewing() then
 		return 1
@@ -656,7 +656,7 @@ end
 
 -- cinematic: already false outside the situations ticked for the tint (see Core).
 local function TintWanted(cinematic)
-	return cinematic or Previewing()
+	return (cinematic or Previewing()) and db.visualEffects ~= false
 end
 
 -- Death screen: while the death camera runs, the world goes dim and cold and a
@@ -926,7 +926,7 @@ ns.GetWeatherDebug = function()
 	info.target, info.shown = weatherTarget, weatherColor
 	return info
 end
--- While the Look page is open, show the tint at full strength.
+-- While the Visual Effects page is open, show the tint at full strength.
 ns.SetTintPreview = function(on)
 	tintPreview = on
 	tintDirty = true
@@ -1236,7 +1236,7 @@ local function ShowChangeTitle(text)
 	changeTitle.t = 0
 	changeTitle:SetAlpha(0)
 	changeTitle:Show()
-	if db and db.timeOfDayMessage then
+	if db and db.timeOfDayMessage and db.visualEffects ~= false then
 		PlayTimeSound(text)
 	end
 end
@@ -1254,7 +1254,7 @@ C_Timer.NewTicker(CHANGE_CHECK, function()
 	end
 	local hour = GetClockTime()
 	local title = TimeTitleAt(hour)
-	if lastTitle and title ~= lastTitle and db.timeOfDayMessage
+	if lastTitle and title ~= lastTitle and db.timeOfDayMessage and db.visualEffects ~= false
 		and not InCombatLockdown() and not (ZoneTextFrame and ZoneTextFrame:IsShown()) then
 		ShowChangeTitle(title)
 	end
