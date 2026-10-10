@@ -747,7 +747,28 @@ function ns.HookCameraInput()
 	end
 end
 
+-- Mouse steering: turning with the right mouse button while auto-running or
+-- auto-walking (RP walk) is steering, not taking the camera. The sway, zoom
+-- and tilt carry on; only the yaw holds off (under mouselook your character
+-- faces the camera, so turning it would turn you). Left-drag still takes the
+-- camera. Set every frame from UpdateOrbit, read as ns.mouseSteering.
+function ns.UpdateMouseSteer()
+	local was = ns.mouseSteering
+	local walking = ns.IsRPWalking and ns.IsRPWalking()
+	local travel = (walking and not ns.IsCozy() and not ns.IsCameraOffHere("walk"))
+		or (not walking and ns.IsAutoRunning and ns.IsAutoRunning() and not ns.IsCameraOffHere("run"))
+	ns.mouseSteering = (travel and IsMouselooking and IsMouselooking() and not IsMouseButtonDown("LeftButton")
+		and not UnitOnTaxi("player")) or false
+	if ns.mouseSteering then
+		ns.orbit.angle = 0 -- mouselook keeps the camera behind you: sway on from there
+	end
+	if was ~= ns.mouseSteering then
+		ns.Log("state", "mouse steering " .. (ns.mouseSteering and "on" or "off"))
+	end
+end
+
 local function IsMouseOnCamera()
+	if ns.mouseSteering then return false end -- (steering with the mouse while traveling)
 	-- Fishing: a quick click (right-clicking the bobber) isn't moving the camera;
 	-- only holding the button down a moment is.
 	if mouseCameraHeld and ns.IsFishingEvent and ns.IsFishingEvent() then
@@ -1215,6 +1236,7 @@ local lastTurnAt = -math.huge
 -- The camera's yaw: the orbit's own speed (signed, left positive) plus any
 -- turn-follow speed.
 local function DriveYaw(speed)
+	if ns.mouseSteering then StopAxis(ns.yawAxis) return end -- (turning it would turn you)
 	local total = speed + yawExtra
 	MoveAxis(ns.yawAxis, math.abs(total), total > 0)
 end
@@ -2208,6 +2230,7 @@ local function UpdateTurnFollow(now, elapsed, travel, T, cinematic, turning, tur
 	local testing = now < (ns.turnTestUntil or 0) -- /cine turnhold
 	local follow = ((travel and cinematic and ns.db[T.swing]) or testing) and not IsMouseOnCamera()
 		and not InCombatLockdown()
+		and not ns.mouseSteering -- (mouselook keeps the camera behind you)
 	-- Only arm once you've stopped turning for a moment: catching a turn that's
 	-- already under way (auto-run started mid-turn, say) would stop the camera
 	-- dead mid-swing. That turn just carries on as normal.
@@ -2334,6 +2357,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	local onTaxi = UnitOnTaxi("player")
 	local active = IsPlayerActive()
 	local now = GetTime()
+	ns.UpdateMouseSteer()
 	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
 		lastCombatAt = now
 	end

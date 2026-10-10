@@ -1166,8 +1166,8 @@ local function TurningExtras(swingKey, delayKey)
 		local swing = stack:Add(Check(content, swingKey, "Glide round gently when you turn",
 			"When you turn left or right, the camera doesn't snap round with you: it carries on " ..
 			"as it was (sway and all) until you stop turning, then glides gently round to your " ..
-			"new facing, easing in and out. Steering with the mouse hands the camera straight " ..
-			"back to you."), "check")
+			"new facing, easing in and out. Steering with the right mouse button keeps the camera " ..
+			"going behind you; dragging with the left button hands it straight back to you."), "check")
 		swing:HookScript("OnClick", Refresh) -- grey out / enable the wait below
 		local glideDelay = stack:Add(Slider(content, delayKey, "Wait before gliding", 0, 5, 0.5, "%.1f sec"),
 			"slider")
