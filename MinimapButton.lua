@@ -66,38 +66,32 @@ local function AddStrengthChoices(menu, get, set, defaultLabel, choices)
 	end
 end
 
--- Screen tint section: tint and vignette on/off and their strengths. Presets,
--- colours and the rest are in settings. Switching the tint off sets the main
--- preset to None and remembers the old one for switching it back on.
+-- Screen tint section: tint and vignette strengths, 0% being off. Presets,
+-- colours and the rest are in settings. A strength above 0% also brings back a
+-- tint preset or vignette that was switched off in settings.
 local function AddTintMenu(root, db)
 	local tint = root
 	tint:CreateDivider()
 	tint:CreateTitle("Screen tint")
 
-	tint:CreateCheckbox("Tint", function() return db.tintPreset ~= "none" end, function()
-		if db.tintPreset == "none" then
+	local strength = tint:CreateButton("Tint strength")
+	AddStrengthChoices(strength, function()
+		return db.tintPreset == "none" and 0 or db.tintStrength
+	end, function(value)
+		db.tintStrength = value
+		if value > 0 and db.tintPreset == "none" then
 			db.tintPreset = db.tintPresetBeforeOff or ns.DEFAULTS.tintPreset
 			db.tintPresetBeforeOff = nil
-		else
-			db.tintPresetBeforeOff = db.tintPreset
-			db.tintPreset = "none"
 		end
 		ns.RefreshTint()
 	end)
-	local strength = tint:CreateButton("Tint strength")
-	AddStrengthChoices(strength, function() return db.tintStrength end, function(value)
-		db.tintStrength = value
-		ns.RefreshTint()
-	end)
 
-	tint:CreateCheckbox("Vignette", function() return db.vignette end, function()
-		db.vignette = not db.vignette
-		ns.RefreshTint()
-	end)
 	local vignetteStrength = tint:CreateButton("Vignette strength")
-	AddStrengthChoices(vignetteStrength, function() return db.vignetteStrength end, function(value)
+	AddStrengthChoices(vignetteStrength, function()
+		return db.vignette and db.vignetteStrength or 0
+	end, function(value)
 		db.vignetteStrength = value
-		db.vignette = true -- picking a strength means you want it on
+		db.vignette = true
 		ns.RefreshTint()
 	end, nil, VIGNETTE_STRENGTHS)
 end

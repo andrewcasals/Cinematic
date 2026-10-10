@@ -344,7 +344,7 @@ local function CreatePanel()
 	local subtitle = Label(panel, "GameFontHighlightSmall",
 		"Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
-		"pages under this one cover what shows when (CineMode, Minimap, Standard Frames, 3rd Party Frames, Nameplates, " ..
+		"pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Nameplates, " ..
 		"Chat), visual effects and sound, the camera modes and triggers, and keybinds.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
@@ -2806,11 +2806,28 @@ local function CreateCombatPanel()
 		local y = -16 - (r - 1) * ROW_HEIGHT
 		local rowLabel = Label(content, "GameFontHighlight", item.label)
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
+		-- An asterisk, with a tip, on rows that have a page of their own.
+		if item.morePage then
+			rowLabel:SetText(item.label .. " |cffffd100*|r")
+			local hover = CreateFrame("Frame", nil, content)
+			hover:SetAllPoints(rowLabel)
+			hover:EnableMouse(true)
+			Tooltip(hover, ("More settings on the %s page. They can keep it up beyond what's " ..
+				"ticked here (hovering, tracking, new auras and the like)."):format(item.morePage))
+		end
+		if ns.CINE_SHOW_SETTING[item.key] then
+			RecordKey(content, ns.CINE_SHOW_SETTING[item.key]) -- (for the page's Reset)
+		end
 		for c, column in ipairs(COLUMNS) do
 			local isOn, tableKey, needsStay = column[2], column[3], column[4]
 			local check = Check(content, tableKey, "", c == 1 and
 				"Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)" or nil, function(value)
-				ns.GetDB()[tableKey][item.key] = value
+				local setting = c == 1 and ns.CINE_SHOW_SETTING[item.key]
+				if setting then
+					ns.GetDB()[setting] = value
+				else
+					ns.GetDB()[tableKey][item.key] = value
+				end
 				if c == 1 then Refresh() end -- (greys the other columns)
 			end)
 			check:SetPoint("TOPLEFT", columnTop, "TOPLEFT",
@@ -3187,25 +3204,19 @@ local function CreateMinimapPanel()
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		"When the minimap (and on retail the quest waypoint) stays up in CineMode. " ..
-		"Hovering the minimap always shows it.")
+		"Hovering the minimap always shows it. To keep it up all the time, or in fights, " ..
+		"see the Standard Frames page.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	-- The minimap is several nested frames (and shrinks when faded), so ticking
-	-- one of them below isn't enough; this keeps the whole group up.
-	local alwaysMinimap = Check(content, "alwaysShowMinimap", "Always show the minimap",
-		"Keeps the whole minimap visible in CineMode: the map, its ring, zone text " ..
-		"and the Cinematic button.")
-	alwaysMinimap:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
-	local aboveTracking = alwaysMinimap
-
 	-- Retail's quest waypoint (the marker in the world showing where to go).
+	local aboveTracking
 	if ns.OptionAvailable({ retail = true }) then
 		local waypoint = Check(content, "alwaysShowWaypoint", "Always show the quest waypoint",
 			"Keeps the marker showing where your tracked quest or map pin is, with its " ..
 			"distance, visible in CineMode. Off, it fades with the rest of the UI.")
-		waypoint:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
+		waypoint:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 		aboveTracking = waypoint
 	end
 
@@ -3216,7 +3227,11 @@ local function CreateMinimapPanel()
 			ns.GetDB().minimapForTracking = value
 			Refresh()
 		end)
-	trackingMaster:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
+	if aboveTracking then
+		trackingMaster:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
+	else
+		trackingMaster:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+	end
 	local TRACKING_TIP = "While this tracking is active, the minimap stays up during cinematic " ..
 		"mode so you can spot nodes or creatures."
 	local previousTracking = trackingMaster
@@ -3635,7 +3650,13 @@ local function CreateKeybindsPanel()
 	RegisterSubpage(canvas, "Keybinds")
 end
 
+-- The settings window can't open in combat (the game blocks it, "Interface
+-- action failed because of an AddOn"): just say so.
 function ns.OpenOptions()
+	if InCombatLockdown() then
+		ns.Print("settings can't be opened in combat")
+		return
+	end
 	if category and Settings and Settings.OpenToCategory then
 		Settings.OpenToCategory(category:GetID())
 	elseif InterfaceOptionsFrame_OpenToCategory then
@@ -3648,16 +3669,16 @@ end
 CreatePanel()
 -- Sub-pages in the order they're listed: what fades and shows, then the look
 -- and sound, then the camera modes (their shared page and events first),
--- keybinds. (3rd Party Frames sits right after Standard Frames.)
+-- keybinds. (Standard Frames and 3rd Party Frames come right after CineMode.)
 CreateRevealPanel()
+CreateCombatPanel()
+CreateExtrasPanel()
 CreateMinimapPanel()
 -- World tooltips always show for now (see ns.WORLD_TOOLTIP_HIDING): no page.
 if ns.WORLD_TOOLTIP_HIDING then
 	CreateTooltipPanel()
 end
 CreateBuffsPanel()
-CreateCombatPanel()
-CreateExtrasPanel()
 CreatePlatesPanel()
 CreateChatPanel()
 CreateTintPanel()

@@ -333,6 +333,8 @@ for _, key in ipairs({ "Mode", "Right", "Step", "Speed", "MinChange", "PitchUp",
 	DEFAULTS["fishOrbit" .. key] = DEFAULTS["vistaOrbit" .. key]
 end
 DEFAULTS.fishOrbitBackArc = 12     -- (vista: 30)
+DEFAULTS.fishOrbitPitchUp = 3      -- (vista: 5)
+DEFAULTS.fishOrbitPitchDown = 2    -- (vista: 3)
 DEFAULTS.fishOrbitMinChange = 4    -- (vista: 10)
 DEFAULTS.fishOrbitDriftSpeed = 0.3 -- (vista: 0.5)
 for _, key in ipairs({ "Distance", "In", "Time", "Pause", "Random", "Ease", "PastMax" }) do

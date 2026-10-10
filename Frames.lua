@@ -563,7 +563,9 @@ ns.COMBAT_SHOW = {
 	{ key = "target", label = "Target", default = true, frames = { "TargetFrame" } },
 	{ key = "tot", label = "Target of target", default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = "Focus", default = true, frames = { "FocusFrame" } },
-	{ key = "buffs", label = "Buffs and debuffs", default = true,
+	-- morePage: the options page with more settings for it, which can keep it up besides.
+	{ key = "minimap", label = "Minimap", default = false, groups = { "minimap" }, morePage = "Minimap" },
+	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
@@ -598,6 +600,7 @@ ns.COMBAT_SHOW = {
 	} },
 	{ key = "extra", label = "Extra action and zone ability", default = true, retail = true,
 		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
+	{ key = "quests", label = "Quest tracker", default = false, frames = FRAME_GROUPS.quests },
 	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
 		frames = FRAME_GROUPS.cooldowns },
 }
@@ -665,7 +668,15 @@ local function IsListOn(list, key, defaults)
 end
 
 -- Standard Frames page's CineMode column: ticked, a row's frames stay shown all through CineMode.
-function ns.IsCineShowOn(key) return ns.db.cineShow[key] or false end
+-- Some rows' CineMode tick is an option elsewhere too (the same setting).
+ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap" }
+function ns.IsCineShowOn(key)
+	local setting = ns.CINE_SHOW_SETTING[key]
+	if setting then
+		return ns.db[setting] or false
+	end
+	return ns.db.cineShow[key] or false
+end
 function ns.IsEnemyShowOn(key) return IsListOn("enemyShow", key, ENEMY_SHOW_DEFAULT) end
 function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SHOW_DEFAULT) end
 
