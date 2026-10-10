@@ -404,8 +404,9 @@ function ns.BuildManagedList()
 		end
 	end
 	for i = 1, (NUM_CHAT_WINDOWS or 10) do
+		-- Not the input box: it fades with its chat frame, and hooking its
+		-- SetAlpha breaks the game's own chat code (errors on opening chat).
 		AddFrame(_G["ChatFrame" .. i], "chat")
-		AddFrame(_G["ChatFrame" .. i .. "EditBox"], "chat")
 	end
 	ScanTopLevelFrames()
 	ScanAddonFrames()
