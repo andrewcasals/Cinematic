@@ -53,7 +53,7 @@ Each situation has its own camera, and they hand over seamlessly:
 ## Easy to tweak
 
 * **A minimap button** with quick switches for tints, zoom, music, combat and the minimap, plus a snooze.
-* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus CineMode, Minimap, Buffs/debuffs, Combat Frames, Nameplates, Chat, Visual Effects, Audio, Camera Modes, Camera Triggers, Keybinds and 3rd Party Addon.
+* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus CineMode, Minimap, Buffs/debuffs, Standard Frames, 3rd Party Frames, Nameplates, Chat, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds.
 * **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, or start any camera on demand.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.
 

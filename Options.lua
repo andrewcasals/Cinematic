@@ -243,7 +243,7 @@ end
 local SCROLLBAR_WIDTH = 26
 
 -- Puts a page's settings back to their defaults: each setting its controls
--- show (a list kept as a table, like the Combat Frames columns, is emptied,
+-- show (a list kept as a table, like the Standard Frames columns, is emptied,
 -- which means its defaults).
 local function ResetPage(content)
 	local db = ns.GetDB()
@@ -344,7 +344,7 @@ local function CreatePanel()
 	local subtitle = Label(panel, "GameFontHighlightSmall",
 		"Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
-		"pages under this one cover what shows when (CineMode, Minimap, Combat Frames, Nameplates, 3rd Party Addon, " ..
+		"pages under this one cover what shows when (CineMode, Minimap, Standard Frames, 3rd Party Frames, Nameplates, " ..
 		"Chat), visual effects and sound, the camera modes and triggers, and keybinds.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
@@ -368,7 +368,7 @@ local function CreatePanel()
 	-- The same setting as "Turn off in: Combat" on the right, the right way round.
 	local stay = Check(panel, "stayInCombat", "Stay in CineMode in combat",
 		"Fights don't bring the whole UI back: only the frames ticked under In combat on the " ..
-		"Combat Frames page show. Off: being in combat brings the UI back. Same as unticking " ..
+		"Standard Frames page show. Off: being in combat brings the UI back. Same as unticking " ..
 		"\"Turn off in: Combat\".", function(value)
 			ns.GetDB().stayInCombat = value
 			Refresh() -- grey out / enable the In combat column
@@ -379,10 +379,10 @@ local function CreatePanel()
 	local placesHeader = Label(panel, "GameFontNormal", "Turn off in")
 	placesHeader:SetPoint("TOPLEFT", general, "TOPLEFT", 320, 0)
 
-	-- Stored the other way round (stayInCombat), as the Combat Frames page's lists apply while staying.
+	-- Stored the other way round (stayInCombat), as the Standard Frames page's lists apply while staying.
 	local combat = Check(panel, "stayInCombat", "Combat",
 		"Being in combat brings the UI back. Targeting an enemy only shows the frames chosen " ..
-		"for it on the Combat Frames page. Untick to stay cinematic in combat too.", function(value)
+		"for it on the Standard Frames page. Untick to stay cinematic in combat too.", function(value)
 			ns.GetDB().stayInCombat = not value
 			Refresh()
 		end)
@@ -458,7 +458,7 @@ local function CreateRevealPanel()
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		"How fast the UI fades, what brings it (or parts of it) back while CineMode " ..
-		"is on, and combat text. Fights and targeting are on the Combat Frames page, names and " ..
+		"is on, and combat text. Fights and targeting are on the Standard Frames page, names and " ..
 		"nameplates on the Nameplates page, buffs on the " ..
 		"Buffs/debuffs page, the minimap on the Minimap page, chat on the Chat page.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
@@ -1968,7 +1968,7 @@ local function CreateTintPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"How the game world looks while CineMode is active: letterbox bars, colour " ..
+		"How the game world looks in CineMode (or always, if you choose): letterbox bars, colour " ..
 		"grading, vignette, inn glow and weather. The UI isn't tinted. While this page is open " ..
 		"the tint is previewed behind the options window. Names and nameplates are on the " ..
 		"Nameplates page.")
@@ -1990,9 +1990,19 @@ local function CreateTintPanel()
 		end)
 	master:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 
+	local always = Check(content, "visualEffectsAlways", "Enabled outside of CineMode",
+		"Shows this page's effects with the normal UI up too, not just in CineMode: say, the tint " ..
+		"and vignette while you play with every frame visible. Each still shows only in the " ..
+		"situations ticked for it. Not while Cinematic is turned off or snoozed.", function(value)
+			ns.GetDB().visualEffectsAlways = value
+			ns.letterboxDirty = true
+			if ns.RefreshTint then ns.RefreshTint() end
+		end)
+	always:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 16, -2)
+
 	-- Letterbox
-	local letterboxHeader = Header(content, "Letterbox", master, -20)
-	letterboxHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
+	local letterboxHeader = Header(content, "Letterbox", always, -20)
+	letterboxHeader:SetPoint("TOPLEFT", always, "BOTTOMLEFT", -14, -18)
 
 	local letterbox = Check(content, "letterbox", "Show letterbox bars",
 		"Black bars slide in at the top and bottom of the screen.", function(value)
@@ -2757,13 +2767,14 @@ end
 local function CreateCombatPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Combat Frames")
+	local title = Label(content, "GameFontNormalLarge", "Standard Frames")
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Which frames show when you fight or target something while CineMode is on. " ..
-		"They fade in and out at the fade times on the CineMode page. Other addons' " ..
-		"frames are on the 3rd Party Addon page.")
+		"Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
+		"CineMode shows it the whole time, the others only while you fight or have something " ..
+		"targeted. Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
+		"frames are on the 3rd Party Frames page.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -2771,6 +2782,7 @@ local function CreateCombatPanel()
 	-- One table: a row per frame, a column per situation.
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 100, 24
 	local COLUMNS = {
+		{ "CineMode", ns.IsCineShowOn, "cineShow", false },
 		{ "In combat", ns.IsCombatShowOn, "combatShow", true },
 		{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
 		{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
@@ -2786,7 +2798,7 @@ local function CreateCombatPanel()
 	end
 
 	-- The game's frames this client has. Other addons' frames have the same
-	-- columns on the 3rd Party Addon page.
+	-- columns on the 3rd Party Frames page.
 	local rows = {}
 	for _, item in ipairs(ns.COMBAT_SHOW) do
 		if ns.OptionAvailable(item) and not item.key:find("^addon:") then
@@ -2799,21 +2811,24 @@ local function CreateCombatPanel()
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
 		for c, column in ipairs(COLUMNS) do
 			local isOn, tableKey, needsStay = column[2], column[3], column[4]
-			local check = Check(content, tableKey, "", nil, function(value)
+			local check = Check(content, tableKey, "", c == 1 and
+				"Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)" or nil, function(value)
 				ns.GetDB()[tableKey][item.key] = value
+				if c == 1 then Refresh() end -- (greys the other columns)
 			end)
 			check:SetPoint("TOPLEFT", columnTop, "TOPLEFT",
 				LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
 			check.Refresh = function(self)
 				self:SetChecked(isOn(item.key))
-				self:SetEnabled(not needsStay or ns.GetDB().stayInCombat)
+				self:SetEnabled(c == 1 or (not ns.IsCineShowOn(item.key)
+					and (not needsStay or ns.GetDB().stayInCombat)))
 			end
 		end
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Combat Frames")
+	RegisterSubpage(canvas, "Standard Frames")
 end
 
 -- Sub-page: which nameplates show (mobs, your faction, the other faction),
@@ -3350,15 +3365,15 @@ local function CreateExtrasPanel()
 	local canvas, content = CreateScrollPage()
 	extrasPanel = content
 
-	local title = Label(content, "GameFontNormalLarge", "3rd Party Addon")
+	local title = Label(content, "GameFontNormalLarge", "3rd Party Frames")
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	-- (As if the title were a note, so the first heading gets a full gap below it.)
 	local stack = Stack(title, "label")
 	stack:Header(content, "Supported addons")
-	stack:Note(content, "Frames from these addons are hidden in CineMode. Untick CineMode to leave " ..
-		"an addon's frames alone. The other columns bring them back in fights and when you target " ..
-		"something, like the Combat Frames page does for the game's frames.", 560)
+	stack:Note(content, "These addons' frames are hidden in CineMode unless ticked, like the game's " ..
+		"frames on the Standard Frames page. Tick CineMode to leave an addon's frames alone (shown the " ..
+		"whole time); the other columns show them only while you fight or have something targeted.", 560)
 
 	local installed, missing = {}, {}
 	for _, known in ipairs(ns.ADDON_FRAMES) do
@@ -3368,7 +3383,7 @@ local function CreateExtrasPanel()
 			missing[#missing + 1] = known.label
 		end
 	end
-	-- A row per addon: CineMode (hidden in CineMode), then the Combat Frames page's columns.
+	-- A row per addon: CineMode (ticked: left alone, so shown), then the Standard Frames page's columns.
 	if #installed > 0 then
 		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, TOP = 220, 100, 24, 16
 		local COLUMNS = {
@@ -3398,11 +3413,11 @@ local function CreateExtrasPanel()
 				local check
 				if c == 1 then
 					check = Check(content, nil, "", known.about, function(value)
-						ns.SetAddonFramesOn(known.key, value)
+						ns.SetAddonFramesOn(known.key, not value)
 						Refresh() -- (greys the other columns)
 					end)
 					check.Refresh = function(self)
-						self:SetChecked(ns.IsAddonFramesOn(known.key))
+						self:SetChecked(not ns.IsAddonFramesOn(known.key))
 						note:SetShown(not ns.AddOnLoaded(known.addon))
 					end
 				else
@@ -3441,7 +3456,7 @@ local function CreateExtrasPanel()
 		end
 	end, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "3rd Party Addon")
+	RegisterSubpage(canvas, "3rd Party Frames")
 end
 
 -- Sub-page: keybinds. The same bindings as Key Bindings > AddOns, with two
@@ -3634,7 +3649,7 @@ end
 CreatePanel()
 -- Sub-pages in the order they're listed: what fades and shows, then the look
 -- and sound, then the camera modes (their shared page and events first),
--- keybinds, and last the extra frames.
+-- keybinds. (3rd Party Frames sits right after Standard Frames.)
 CreateRevealPanel()
 CreateMinimapPanel()
 -- World tooltips always show for now (see ns.WORLD_TOOLTIP_HIDING): no page.
@@ -3643,6 +3658,7 @@ if ns.WORLD_TOOLTIP_HIDING then
 end
 CreateBuffsPanel()
 CreateCombatPanel()
+CreateExtrasPanel()
 CreatePlatesPanel()
 CreateChatPanel()
 CreateTintPanel()
@@ -3665,4 +3681,3 @@ if SHOW_CAMERA_MODE_PAGES then
 	CreateQuestPanel()
 end
 CreateKeybindsPanel()
-CreateExtrasPanel()

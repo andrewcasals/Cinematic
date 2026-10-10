@@ -38,6 +38,7 @@ local DEFAULTS = {
 	tooltipOffQuest = true,   -- the quest camera
 	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat
 	visualEffects = true,     -- the Visual Effects page's master switch (off: none of its effects)
+	visualEffectsAlways = true, -- ...and they show outside CineMode too (not while it's off or snoozed)
 	timeOfDayMessage = true,  -- "Dusk" under the zone name on login and /reload, and when it
 	                          -- changes, with a fitting sound (rooster, bells, frogs, owl, wolf)
 	offInDungeons = false,    -- no cinematic mode in dungeons (and scenarios)
@@ -88,7 +89,7 @@ local DEFAULTS = {
 	trackingOffInRaids = true,
 	trackingOffInPvP = true,
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
-	revealOnCast = false,   -- casting or channeling brings the UI back
+	revealOnCast = true,    -- casting or channeling brings the UI back
 	revealAtNPCs = false,     -- vendor/bank/mail/trainer/trade/auction windows bring the UI back
 	revealOnDrag = false,     -- bring the UI back while something's held on the cursor (dragging)
 	returnDelay = 15,         -- seconds things must stay calm (no cast, window...) before CineMode returns
@@ -609,7 +610,7 @@ local function IsBusy()
 	if inCombat and not ns.db.stayInCombat then
 		return true
 	end
-	-- Targeting never brings the whole UI back; it shows the Combat Frames page's
+	-- Targeting never brings the whole UI back; it shows the Standard Frames page's
 	-- target lists instead (see GetCombatShownFrames).
 	-- Dead: the UI comes back, unless the death camera is watching (then the
 	-- release button, a popup, shows anyway). A ghost keeps cinematic mode as
@@ -964,6 +965,9 @@ local function OnUpdate(_, elapsed)
 		lastFightAt = now
 	end
 	local situation = Situation(now)
+	-- Outside CineMode too, if chosen: still not while it's turned off or snoozed.
+	local effectsOn = cinematic
+		or (ns.db.visualEffectsAlways and ns.db.enabled and now >= snoozeUntil) or false
 	for _, effect in ipairs(SITUATION_EFFECTS) do
 		local key = effect.key
 		local wanted
@@ -973,7 +977,7 @@ local function OnUpdate(_, elapsed)
 			wanted = ns.db[key .. situation]
 				and (ns.db[key .. "InCombat"] or now - lastFightAt >= ns.db.calmTime)
 		end
-		Step(ns[effect.update], cinematic and wanted and ns.db.visualEffects and true or false, elapsed)
+		Step(ns[effect.update], effectsOn and wanted and ns.db.visualEffects and true or false, elapsed)
 	end
 	Step(ns.UpdateCVars, cinematic)
 	Step(ns.UpdateMusic, cinematic, elapsed)
@@ -1181,7 +1185,7 @@ end
 local function EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
-	ns.db.addonFrames = ns.db.addonFrames or {} -- 3rd Party Addon page: key -> false when switched off
+	ns.db.addonFrames = ns.db.addonFrames or {} -- 3rd Party Frames page: key -> false when switched off
 	ns.db.savedCVars = ns.db.savedCVars or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
 	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = false, LocalDefense = true }
@@ -1192,6 +1196,7 @@ local function EnsureTables()
 	ns.db.timePhaseColors = ns.db.timePhaseColors or {} -- "Night", "Dawn"... -> { r, g, b } of your own
 	ns.db.timePhaseStrength = ns.db.timePhaseStrength or {} -- "Night", "Dawn"... -> strength (0-1) of your own
 	ns.db.combatShow = ns.db.combatShow or {}
+	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode
 	ns.db.targetShow = ns.db.targetShow or {}
 	-- The target list used to cover friend and foe alike; both new lists start from it.
 	local function copy(source)

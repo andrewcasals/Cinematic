@@ -1,6 +1,6 @@
 -- Cinematic: the frames that fade. The built-in fade list, fading and
 -- nesting, the minimap shrink, scanning for frames created later, the Issue
--- Reporter, hover, and the 3rd Party Addon page's lists.
+-- Reporter, hover, and the 3rd Party Frames page's lists.
 local _, ns = ...
 
 -- Frames to fade, grouped so hovering one member reveals the whole group.
@@ -50,7 +50,7 @@ local FRAME_GROUPS = {
 local AUTO_PATTERNS = { DamageMeter = "meters", SwingTimer = "swing" }
 ns.SCAN_INTERVAL = 5
 
--- Other addons' frames faded out of the box, listed on the 3rd Party Addon page.
+-- Other addons' frames faded out of the box, listed on the 3rd Party Frames page.
 -- Each fades as its own group ("addon:<key>") while its addon is loaded and
 -- it isn't switched off (db.addonFrames[key] = false). names: its named
 -- frames. patterns: name patterns for top-level frames numbered per window.
@@ -79,7 +79,7 @@ ns.ADDON_FRAMES = {
 	},
 	{
 		key = "fecm", addon = "ForeverEnhancedCooldownManager", label = "Forever Enhanced Cooldown Manager",
-		short = "Enhanced Cooldown Manager", -- (the Combat Frames page's label column is narrow)
+		short = "Enhanced Cooldown Manager", -- (the Standard Frames page's label column is narrow)
 		about = "Its cooldown and buff bars, and the pulse when a cooldown is ready.",
 		names = { "FECMPulse" },
 		-- Its bars are unnamed: told apart by the parts each bar is made with.
@@ -657,6 +657,8 @@ local function IsListOn(list, key, defaults)
 	return on
 end
 
+-- Standard Frames page's CineMode column: ticked, a row's frames stay shown all through CineMode.
+function ns.IsCineShowOn(key) return ns.db.cineShow[key] or false end
 function ns.IsEnemyShowOn(key) return IsListOn("enemyShow", key, ENEMY_SHOW_DEFAULT) end
 function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SHOW_DEFAULT) end
 
@@ -668,30 +670,28 @@ local function HasAnyTarget()
 	return ns.HasTarget()
 end
 
--- Frame names to show right now, from the Combat Frames page's column that
+-- Frame names to show right now, from the Standard Frames page's column that
 -- applies: In combat (while staying cinematic), Tar Enemy (out of combat with
 -- a living enemy targeted) or Tar Friendly (anything else targeted: friends,
 -- NPCs, dead enemies).
+-- Rows with CineMode ticked are always in it: they don't fade in CineMode at all.
 local function GetCombatShownFrames()
 	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 	local isOn
 	if inCombat then
-		if not ns.db.stayInCombat then
-			return nil
+		if ns.db.stayInCombat then
+			isOn = ns.IsCombatShowOn
 		end
-		isOn = ns.IsCombatShowOn
 	elseif HasAnyTarget() then
 		if ns.Flag(UnitCanAttack("player", "target")) and not ns.Flag(UnitIsDeadOrGhost("target")) then
 			isOn = ns.IsEnemyShowOn
 		else
 			isOn = ns.IsFriendlyShowOn
 		end
-	else
-		return nil
 	end
 	local shown = {}
 	for _, item in ipairs(ns.COMBAT_SHOW) do
-		if isOn(item.key) then
+		if ns.IsCineShowOn(item.key) or (isOn and isOn(item.key)) then
 			for _, name in ipairs(item.frames or {}) do
 				shown[name] = true
 			end
@@ -1111,7 +1111,7 @@ function ns.AddUnderMouse(name)
 	end
 	if not name then
 		ns.Print("hover over a named UI element, then type /cine add and press Enter " ..
-			"(or /cine add <FrameName>). Frames without a name can't be added: the 3rd Party Addon " ..
+			"(or /cine add <FrameName>). Frames without a name can't be added: the 3rd Party Frames " ..
 			"settings page lists the addons faded out of the box.")
 		return
 	end
@@ -1140,7 +1140,7 @@ function ns.RemoveUnderMouse()
 		return
 	end
 	ns.StopFading(name)
-	ns.Print(name .. " will always be shown (undo under Custom frames on the 3rd Party Addon options page).")
+	ns.Print(name .. " will always be shown (undo under Custom frames on the 3rd Party Frames options page).")
 end
 
 function ns.ListExtras()
