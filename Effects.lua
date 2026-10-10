@@ -879,28 +879,37 @@ function ns.GetAmbienceDebug()
 end
 
 -- The game resets a plate's alpha itself (for one, when its unit enters
--- combat), so while a plate is faded or hidden, any alpha the game sets is
--- put straight back to ours. At full alpha the game is left to do as it likes.
-local function KeepPlateAlpha(frame, alpha)
-	local wanted = frame.cinematicAlpha
-	if wanted and alpha ~= wanted and not frame.cinematicSetting then
-		frame.cinematicSetting = true
-		frame:SetAlpha(wanted)
-		frame.cinematicSetting = false
+-- combat), so while a plate is faded or hidden, its alpha is put back to ours
+-- every frame. At full alpha the game is left to do as it likes. (Not by
+-- hooking the plate's SetAlpha: that breaks the game's own calls to it.)
+local fadedPlates = {} -- [plate unit frame] = true while it has a cinematicAlpha
+local plateKeeper = CreateFrame("Frame")
+plateKeeper:Hide()
+plateKeeper:SetScript("OnUpdate", function(self)
+	for frame in pairs(fadedPlates) do
+		local wanted = frame.cinematicAlpha
+		if wanted then
+			if frame:GetAlpha() ~= wanted then
+				frame:SetAlpha(wanted)
+			end
+		else
+			fadedPlates[frame] = nil
+		end
 	end
-end
+	if not next(fadedPlates) then
+		self:Hide()
+	end
+end)
 
 function ns.SetPlateAlpha(plate, alpha)
 	if plate and plate.UnitFrame and not (plate.IsForbidden and plate:IsForbidden()) then
 		local frame = plate.UnitFrame
-		if not frame.cinematicHooked then
-			frame.cinematicHooked = true
-			hooksecurefunc(frame, "SetAlpha", KeepPlateAlpha)
-		end
 		frame.cinematicAlpha = alpha < 1 and alpha or nil
-		frame.cinematicSetting = true
+		if frame.cinematicAlpha then
+			fadedPlates[frame] = true
+			plateKeeper:Show()
+		end
 		frame:SetAlpha(alpha)
-		frame.cinematicSetting = false
 	end
 end
 

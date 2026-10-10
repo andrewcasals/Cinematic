@@ -469,11 +469,6 @@ do
 	missWatcher:SetScript("OnEvent", function(_, _, a, b)
 		OnErrorText(type(b) == "string" and b or a, "event") -- (message second on newer clients)
 	end)
-	-- The same red text as it reaches the screen, in case a client sends it
-	-- some other way than the event.
-	if UIErrorsFrame and UIErrorsFrame.AddMessage then
-		hooksecurefunc(UIErrorsFrame, "AddMessage", function(_, message) OnErrorText(message, "screen") end)
-	end
 	local OBJECT_REACH = 40 -- pixels (UI scale aside) the mouse can wander and still be on it
 	local function MouseOnSomething()
 		if UnitExists("mouseover") then

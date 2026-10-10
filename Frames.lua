@@ -142,9 +142,23 @@ local function VisualAlpha(entry)
 end
 
 local function ApplyAlpha(entry)
-	entry.settingAlpha = true
-	entry.frame:SetAlpha(VisualAlpha(entry) * (entry.baseAlpha or 1))
-	entry.settingAlpha = false
+	entry.applied = VisualAlpha(entry) * (entry.baseAlpha or 1)
+	entry.frame:SetAlpha(entry.applied)
+end
+
+-- How far a frame's alpha can read back from what was set (it's stored with
+-- less precision) before it counts as the frame setting its own.
+local ALPHA_SLACK = 0.005
+
+-- For frames that set their own alpha (see AddFrame): one now at something
+-- other than what was last applied set it itself, so take that as its new
+-- base alpha and fade relative to it.
+local function SyncOwnAlpha(entry)
+	local alpha = entry.frame:GetAlpha()
+	if math.abs(alpha - entry.applied) > ALPHA_SLACK then
+		entry.baseAlpha = alpha
+		ApplyAlpha(entry)
+	end
 end
 
 local function AddFrame(frame, group)
@@ -169,21 +183,13 @@ local function AddFrame(frame, group)
 	-- press Enter), and so do the waypoint (it dims as you look past it), the
 	-- Cooldown Manager (its opacity setting) and other addons' frames (their
 	-- own fades). Track the alpha last asked for, fade relative to it, and
-	-- return to it rather than to fully opaque. Only these are hooked, to keep
-	-- away from protected frames like action bars.
+	-- return to it rather than to fully opaque. Watched each frame rather than
+	-- by hooking SetAlpha: hooking a game frame's methods breaks the game's
+	-- own calls to them ("attempt to call a nil value").
 	if OWN_ALPHA[group] or group:find("^addon:") then
 		entry.baseAlpha = frame:GetAlpha()
-		hooksecurefunc(frame, "SetAlpha", function(self, alpha)
-			if entry.settingAlpha or entry.removed then
-				return
-			end
-			entry.baseAlpha = alpha
-			if VisualAlpha(entry) < 1 then
-				entry.settingAlpha = true
-				self:SetAlpha(alpha * VisualAlpha(entry))
-				entry.settingAlpha = false
-			end
-		end)
+		entry.applied = entry.baseAlpha
+		entry.ownAlpha = true
 	end
 	return true
 end
@@ -213,11 +219,8 @@ end
 local function RemoveFrame(frame)
 	for i, entry in ipairs(ns.managed) do
 		if entry.frame == frame then
-			entry.settingAlpha = true
 			frame:SetAlpha(entry.baseAlpha or 1)
-			entry.settingAlpha = false
 			if entry.shrunk then frame:SetScale(entry.savedScale or 1) end
-			entry.removed = true -- its SetAlpha hook (if any) can't be undone, only ignored
 			table.remove(ns.managed, i)
 			seen[frame] = nil
 			RecomputeNesting()
@@ -985,6 +988,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 	end
 
 	for _, entry in ipairs(ns.managed) do
+		if entry.ownAlpha then
+			SyncOwnAlpha(entry)
+		end
 		local target = 1
 		local chatShowing = (ns.chatPeekUntil[entry.frame] or 0) > now
 			or (typing and entry.group == "chat")

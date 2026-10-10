@@ -181,28 +181,62 @@ local function ChatPeekFilter(chatFrame, event, text, _, _, channelString, _, _,
 end
 
 -- Server announcements don't arrive as a chat event addons can filter, so
--- watch what each chat window adds for lines starting with the game's own
--- (localised) "[SERVER]" prefix.
-local function OnChatLineAdded(chatFrame, text)
-	if not ns.db.chatPeek or not IsPeekTypeOn("server") then
-		return
-	end
-	if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then
-		return
-	end
-	local prefix = SERVER_MESSAGE_PREFIX or "[SERVER]"
-	if text:find(prefix, 1, true) then
-		ns.chatPeekUntil[chatFrame] = GetTime() + ns.HoldTime("chatPeekTime")
-	end
+-- look at the newest lines in each chat window for ones starting with the
+-- game's own (localised) "[SERVER]" prefix. Checked a few times a second
+-- rather than by hooking AddMessage: hooking a game frame's methods breaks
+-- the game's own calls to them ("attempt to call a nil value").
+local SERVER_CHECK_INTERVAL = 0.25
+local LINES_CHECKED = 10 -- newest lines looked at each check, at most
+local serverWatch = {} -- [chat frame] = { newest = newest line already looked at, server = last [SERVER] line peeked for }
+
+local function Readable(text)
+	return type(text) == "string" and not (issecretvalue and issecretvalue(text))
 end
 
-local function HookServerMessages()
-	for i = 1, (NUM_CHAT_WINDOWS or 10) do
-		local chatFrame = _G["ChatFrame" .. i]
-		if chatFrame and chatFrame.AddMessage then
-			hooksecurefunc(chatFrame, "AddMessage", OnChatLineAdded)
+local function CheckServerLines(chatFrame, watch, peekOn)
+	local count = chatFrame:GetNumMessages()
+	local newest
+	for i = count, math.max(1, count - LINES_CHECKED + 1), -1 do
+		local text = chatFrame:GetMessageInfo(i)
+		if Readable(text) then
+			if text == watch.newest then
+				break
+			end
+			newest = newest or text
+			local prefix = SERVER_MESSAGE_PREFIX or "[SERVER]"
+			if peekOn and watch.newest ~= nil and text ~= watch.server and text:find(prefix, 1, true) then
+				watch.server = text
+				ns.chatPeekUntil[chatFrame] = GetTime() + ns.HoldTime("chatPeekTime")
+			end
 		end
 	end
+	-- (The first check only notes where chat is up to: no peeking at old lines.)
+	watch.newest = newest or watch.newest or false
+end
+
+local function WatchServerMessages()
+	for i = 1, (NUM_CHAT_WINDOWS or 10) do
+		local chatFrame = _G["ChatFrame" .. i]
+		if chatFrame and chatFrame.GetNumMessages and chatFrame.GetMessageInfo then
+			serverWatch[chatFrame] = {}
+		end
+	end
+	if not next(serverWatch) then
+		return
+	end
+	local watcher = CreateFrame("Frame")
+	local sinceCheck = 0
+	watcher:SetScript("OnUpdate", function(_, elapsed)
+		sinceCheck = sinceCheck + elapsed
+		if sinceCheck < SERVER_CHECK_INTERVAL then
+			return
+		end
+		sinceCheck = 0
+		local peekOn = ns.db.chatPeek and IsPeekTypeOn("server")
+		for chatFrame, watch in pairs(serverWatch) do
+			CheckServerLines(chatFrame, watch, peekOn)
+		end
+	end)
 end
 
 function ns.RegisterChatPeek()
@@ -214,5 +248,5 @@ function ns.RegisterChatPeek()
 	for _, event in ipairs(CHAT_PEEK_EVENTS) do
 		addFilter(event, ChatPeekFilter)
 	end
-	HookServerMessages()
+	WatchServerMessages()
 end
