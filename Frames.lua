@@ -53,21 +53,23 @@ ns.SCAN_INTERVAL = 5
 -- Other addons' frames faded out of the box, listed on the 3rd Party Frames page.
 -- Each fades as its own group ("addon:<key>") while its addon is loaded and
 -- it isn't switched off (db.addonFrames[key] = false). names: its named
--- frames. patterns: name patterns for top-level frames numbered per window.
+-- frames. about: what they are, for the options page (note: more to say there).
+-- patterns: name patterns for top-level frames numbered per window.
 -- match(frame): whether an unnamed frame on UIParent is one of its
 -- own, for addons that don't name their frames (those can't be added with
 -- /cine add, which saves frames by name). short: a shorter label, if needed.
 ns.ADDON_FRAMES = {
 	{
 		key = "details", addon = "Details", label = "Details! Damage Meter", short = "Details!",
-		about = "Its meter windows.",
+		about = "its meter windows",
 		-- Each window is several frames side by side on UIParent (the bars sit
 		-- in their own frame), so hovering one and using /cine add misses the rest.
 		patterns = { "^DetailsBaseFrame%d+$", "^DetailsRowFrame%d+$", "^Details_SwitchButtonFrame%d+$" },
 	},
 	{
 		key = "cmc", addon = "CooldownManagerCentered", label = "Cooldown Manager Centered",
-		about = "Its buff containers, trackers and aura overlays (the Cooldown Manager itself fades on its own).",
+		about = "its buff containers, trackers and aura overlays",
+		note = "The game's Cooldown Manager itself is a row on the Standard Frames page.",
 		-- Its icons sit in unnamed copies of these frames, which follow their
 		-- alpha, so fading these fades them too.
 		names = { "CMCUtilityLayoutHost", "CMCEssentialCustomTrackerHost" },
@@ -80,7 +82,7 @@ ns.ADDON_FRAMES = {
 	{
 		key = "fecm", addon = "ForeverEnhancedCooldownManager", label = "Forever Enhanced Cooldown Manager",
 		short = "Enhanced Cooldown Manager", -- (the Standard Frames page's label column is narrow)
-		about = "Its cooldown and buff bars, and the pulse when a cooldown is ready.",
+		about = "its cooldown and buff bars, and the pulse when a cooldown is ready",
 		names = { "FECMPulse" },
 		-- Its bars are unnamed: told apart by the parts each bar is made with.
 		match = function(frame)

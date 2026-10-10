@@ -3412,7 +3412,9 @@ local function CreateExtrasPanel()
 			for c, column in ipairs(COLUMNS) do
 				local check
 				if c == 1 then
-					check = Check(content, nil, "", known.about, function(value)
+					check = Check(content, nil, "", ("Show %s the whole time in CineMode (Cinematic leaves them " ..
+						"alone). Unticked, they're hidden, except as the other columns say.%s"):format(known.about,
+						known.note and " " .. known.note or ""), function(value)
 						ns.SetAddonFramesOn(known.key, not value)
 						Refresh() -- (greys the other columns)
 					end)
