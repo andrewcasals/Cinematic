@@ -333,10 +333,24 @@ local function TopLevelAncestor(frame)
 	end
 end
 
+-- The Issue Reporter's text is never in a frame this big. Unpacking a frame
+-- with thousands of regions (EllesmereUI's unlock-mode tools) overflows the
+-- Lua stack in the game's GetRegions: a client crash pcall can't catch.
+local MAX_PARTS = 200
+local COUNT_METHOD = { GetRegions = "GetNumRegions", GetChildren = "GetNumChildren" }
+
 -- A frame's regions or children as a list, or nil when it's off limits:
 -- a frame that isn't forbidden itself can still hold forbidden parts, and
--- then GetRegions/GetChildren error.
+-- then GetRegions/GetChildren error. Frames with too many parts are skipped.
 local function ReadParts(frame, method)
+	local countMethod = frame[COUNT_METHOD[method]]
+	if type(countMethod) ~= "function" then
+		return nil
+	end
+	local ok, count = pcall(countMethod, frame)
+	if not ok or type(count) ~= "number" or count > MAX_PARTS then
+		return nil
+	end
 	local parts = { pcall(frame[method], frame) }
 	if not table.remove(parts, 1) then
 		return nil
