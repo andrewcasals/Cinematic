@@ -265,11 +265,11 @@ function ns.StopMusicNow()
 end
 
 -- Standing still or AFK, as far as music goes: the AFK camera, the wait for it
--- (standing still with the UI faded) or being flagged AFK. With "No music
--- while AFK" on, none of these starts music, brings it back from the move-on
--- pause or swaps in a fresh song; music that's already playing carries on.
+-- (standing still with the UI faded) or being flagged AFK. With Go AFK's
+-- music off (Camera Triggers page), none of these starts music, brings it back
+-- from the move-on pause or swaps in a fresh song; music already playing carries on.
 local function QuietForAFK()
-	if not ns.db.noMusicWhenAFK then
+	if ns.db.eventAFKMusic then
 		return false
 	end
 	local mode = ns.CameraMode and ns.CameraMode()
@@ -358,7 +358,7 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	-- flight's music fades out as you touch down, without waiting for you to move.
 	-- (Any camera mode lifts the pause: vista, cozy and fish start straight away
 	-- from their emote, before standing still would count. Not the AFK camera
-	-- with "No music while AFK" on: the music stays paused while you're away.)
+	-- with Go AFK's music off: the music stays paused while you're away.)
 	local onTaxi = UnitOnTaxi("player")
 	local landed = combatMusic.wasOnTaxi and not onTaxi
 	combatMusic.wasOnTaxi = onTaxi
@@ -449,7 +449,8 @@ local deathSong = { file = nil, playing = false }
 -- recently (music fatigue). The flight, RP walk and auto-run cameras each have
 -- a switch; the cozy, vista and fish cameras follow the event that started
 -- them (the Camera Triggers page's Music column, event<key>Music). The AFK
--- camera's is "No music while AFK" (noMusicWhenAFK), the other way round.
+-- camera's is Go AFK's (eventAFKMusic), and the quest camera's its own event's
+-- (eventQuestMusic).
 local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "musicCamRun" }
 local EVENT_MUSIC_CAMS = { cozy = true, vista = true, fish = true }
 
@@ -465,8 +466,9 @@ end
 -- music, or in a different zone from the last music.
 local function FatigueOverridden()
 	local mode = ns.CameraMode and ns.CameraMode()
-	if (mode == "idle" and not ns.db.noMusicWhenAFK)
-		or (mode and CameraMusicOn(mode)) then
+	if (mode == "idle" and ns.db.eventAFKMusic)
+		or (mode and CameraMusicOn(mode))
+		or (ns.db.eventQuestMusic and ns.QuestCamActive and ns.QuestCamActive()) then
 		return true
 	end
 	local zone = GetRealZoneText()
@@ -513,13 +515,14 @@ local function NoteCameraMode()
 	modeSeenAt = now
 end
 
-local function RestartMusic()
+-- (anyway: for the quest cam, not a camera mode, so never carrying on from one.)
+local function RestartMusic(anyway)
 	if not ns.db.musicInCinematic or GetCVar("Sound_EnableMusic") ~= "1" then
 		return
 	end
 	-- Carrying on from another camera mode: the song already playing stays.
 	NoteCameraMode()
-	if modeHandover then
+	if modeHandover and not anyway then
 		return
 	end
 	-- Already swapping, or the addon's music is still fading in (it's a fresh
@@ -612,7 +615,7 @@ end
 function ns.OnRotationStart(prefix)
 	if prefix == "taxiOrbit" then
 		NewSongForFlight()
-	elseif prefix == "idleOrbit" and not ns.db.noMusicWhenAFK and ns.stillSince
+	elseif prefix == "idleOrbit" and ns.db.eventAFKMusic and ns.stillSince
 		and songStillSince ~= ns.stillSince then
 		songStillSince = ns.stillSince
 		RestartMusic()
@@ -666,6 +669,13 @@ function ns.UpdateMusic(cinematic, elapsed)
 		end
 		lastModeAt[mode] = now
 	end
+	-- The quest cam likewise (eventQuestMusic), not for each quest giver in a row.
+	if ns.QuestCamActive and ns.QuestCamActive() then
+		if now - (lastModeAt.quest or -math.huge) > WALK_SONG_GAP and ns.db.eventQuestMusic then
+			RestartMusic(true)
+		end
+		lastModeAt.quest = now
+	end
 	local onTaxi = UnitOnTaxi("player")
 	if onTaxi ~= wasOnTaxiForMusic then
 		wasOnTaxiForMusic = onTaxi
@@ -679,7 +689,7 @@ function ns.UpdateMusic(cinematic, elapsed)
 		return -- the death song has the music for now
 	end
 	local want = cinematic and ns.db.musicInCinematic
-	if not want or not ns.db.noMusicWhenAFK or (mode and not QuietForAFK()) then
+	if not want or ns.db.eventAFKMusic or (mode and not QuietForAFK()) then
 		afkKeptQuiet = false
 	end
 	-- The player changed the music volume while the addon was fading or muting
@@ -706,7 +716,7 @@ function ns.UpdateMusic(cinematic, elapsed)
 		if GetCVar("Sound_EnableMusic") == "1" then
 			return
 		end
-		-- Standing still or AFK, with "No music while AFK" on: no music
+		-- Standing still or AFK, with Go AFK's music off: no music
 		-- until another camera mode starts it.
 		if afkKeptQuiet or QuietForAFK() then
 			afkKeptQuiet = true

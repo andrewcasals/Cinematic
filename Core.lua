@@ -106,7 +106,7 @@ local DEFAULTS = {
 	mouseover = true,      -- hovering a faded element reveals it
 	mouseoverHold = 3,     -- seconds a group stays after the mouse leaves it (per-group overrides below)
 	musicInCinematic = true,  -- turn game music on while cinematic, off after
-	musicOffOnLogout = true,  -- turn game music off when logging out
+	musicOffOnLogout = false, -- turn game music off when logging out
 	plateCombatEnemies = true, -- in cinematic mode, show these during fights (Enemies: enemy players)
 	plateCombatEnemyMinions = true,
 	plateCombatEnemyNPCs = true,
@@ -143,7 +143,6 @@ local DEFAULTS = {
 	musicCamFlight = true,
 	musicCamWalk = false,     -- RP walk
 	musicCamRun = true,       -- auto-run
-	noMusicWhenAFK = true,    -- standing still, the AFK camera and going AFK don't start music (off: a fresh song as the AFK camera starts)
 	musicPauseWhenMoving = true,  -- music fades out once you move on from flying, RP walking or standing still
 	musicPauseOnLanding = true,   -- ...and as soon as a flight lands, without waiting for you to move
 	musicPauseFadeTime = 3,      -- seconds that pause takes to fade out (and the music to come back)
@@ -1410,6 +1409,21 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.plateCombatOther = true
 			ns.db.plateCombatV2 = true
 		end
+		-- "Turn music off on logout" was first on by default, leaving game music
+		-- switched off outside cinematic mode (and after removing the addon).
+		-- Turn it off once, and switch game music back on at login if it left it off.
+		if not ns.db.musicLogoutV1 then
+			if ns.db.musicOffOnLogout then
+				ns.musicBackOn = true
+			end
+			ns.db.musicOffOnLogout = false
+			ns.db.musicLogoutV1 = true
+		end
+		-- "No music while AFK" (Audio page) is now Go AFK's Music column on the
+		-- Camera Triggers page, the other way round.
+		if ns.db.noMusicWhenAFK == false and ns.db.eventAFKMusic == nil then
+			ns.db.eventAFKMusic = true
+		end
 		-- (The migrations below up to the rows' renaming use the old rows.)
 		local OLD_PLATE_KINDS = { "Mobs", "NPCs", "Own", "Other", "Pets", "Totems" }
 		local OLD_NAME_KEYS = { "Mobs", "NPCs", "Own", "Other", "Pets", "Minions", "Totems", "Self" }
@@ -1801,7 +1815,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"cursorTuckVista", "cursorTuckWalk", "cursorTuckRun", "cursorTuckOther", "cursorTuckDelay",
 			"flyByDistance", "flyByMinDistance", "flyByMaxDistance", "flyByTrace", "flyByLower",
 			"cameraInputPause", "questCamRandomSide", "questCamLeft", "lastMusicStartedAt",
-			"musicCamIdle", "musicWhenAFK", -- (now noMusicWhenAFK)
+			"musicCamIdle", "musicWhenAFK", "noMusicWhenAFK", -- (now eventAFKMusic)
 			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
 			"plateAlwaysTarget", -- (now plateAlwaysTargetEnemy, plateAlwaysTargetFriendly)
 			"plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut", "plateTargetFriendlyFadeIn",
@@ -1830,6 +1844,10 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 	elseif event == "PLAYER_LOGIN" then
 		ns.MusicTrace(("LOGIN volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 		RestoreSavedCVars()
+		if ns.musicBackOn and GetCVar("Sound_EnableMusic") == "0" then
+			SetCVar("Sound_EnableMusic", 1)
+		end
+		ns.musicBackOn = nil
 		ns.EnsurePlateRows()
 		ns.RestoreMusicVolume()
 		ns.PruneBuiltInExtras()

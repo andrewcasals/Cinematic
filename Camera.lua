@@ -86,8 +86,9 @@ ns.EVENTS = {
 	{ key = "Quest", label = "Talk to a quest giver", camera = "quest" },
 }
 -- Each event's Music column (event<key>Music): a fresh song as its camera
--- starts. Flights use the flight camera's own switch (musicCamFlight), the
--- AFK camera "No music while AFK", and the quest camera has none.
+-- starts. Flights use the flight camera's own switch (musicCamFlight). Going
+-- AFK's (eventAFKMusic) covers the AFK camera however it starts: off, it
+-- keeps music from starting while you're away.
 ns.EVENT_MUSIC_DEFAULT = { cozy = false, tele = false, vista = true, fish = false }
 for _, event in ipairs(ns.EVENTS) do
 	ns.DEFAULTS["event" .. event.key .. "Camera"] = event.camera
@@ -96,6 +97,8 @@ for _, event in ipairs(ns.EVENTS) do
 	end
 end
 ns.DEFAULTS.eventSitMusic = false -- (/sit picks the vista camera, but quietly)
+ns.DEFAULTS.eventAFKMusic = false
+ns.DEFAULTS.eventQuestMusic = false
 
 -- Taking a flight: the flight camera runs, unless the event is set to no camera.
 local flightSince -- when this flight took off, or nil on the ground
