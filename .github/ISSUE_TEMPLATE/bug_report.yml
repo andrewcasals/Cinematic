@@ -1,0 +1,59 @@
+name: Bug report
+description: A Lua error, or something in Cinematic not working as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        The most useful thing you can send is Cinematic's log. In game, type **/cine log**,
+        press **Ctrl+C** to copy it all, and paste it below. It already includes your
+        Cinematic version, game version and the addons that might overlap with this one.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: What were you doing at the time? (flying, in a dungeon, talking to an NPC, ...)
+      placeholder: |
+        1. Take a flight from Stormwind
+        2. Press Escape during the fly-by
+        3. ...
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Cinematic log (/cine log)
+      description: Paste everything from the /cine log window here.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Lua error (if you got one)
+      description: |
+        The full error text and stack. With BugSack installed, open it and copy the whole
+        error. Without it, turn on Lua errors with `/console scriptErrors 1` and copy the popup.
+      render: text
+
+  - type: dropdown
+    id: client
+    attributes:
+      label: Game client
+      options:
+        - Retail
+        - WoW Forever
+        - Other / not sure
+    validations:
+      required: true
