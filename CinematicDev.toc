@@ -9,6 +9,11 @@
 Diagnostics.lua
 Core.lua
 HideUI.lua
+AddonSupport.lua
+Support\Details.lua
+Support\CooldownManagerCentered.lua
+Support\ForeverEnhancedCooldownManager.lua
+Support\EllesmereUI.lua
 Frames.lua
 Chat.lua
 Effects.lua

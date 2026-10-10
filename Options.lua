@@ -3401,70 +3401,216 @@ local function CreateExtrasPanel()
 		"frames on the Standard Frames page. Tick CineMode to leave an addon's frames alone (shown the " ..
 		"whole time); the other columns show them only while you fight or have something targeted.", 560)
 
-	local installed, missing = {}, {}
+	-- The addons, laid out afresh each time the page opens (most load after
+	-- this one, so whether they're loaded isn't known when it's built): those
+	-- loaded, those installed but not loaded, then the rest supported. A suite's
+	-- parts (suite = its name) sit under a header that opens and closes (closed
+	-- to start with).
+	local box = CreateFrame("Frame", nil, content)
+	box:SetSize(640, 1)
+	stack:Add(box, "label")
+
+	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, INDENT = 220, 100, 24, 18
+	local COLUMNS = {
+		{ "CineMode" },
+		{ "In combat", ns.IsCombatShowOn, "combatShow", true },
+		{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
+		{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
+	}
+	local headings = {}
+	for c, column in ipairs(COLUMNS) do
+		local heading = Label(box, "GameFontNormalSmall", column[1])
+		heading:SetWidth(COLUMN_WIDTH)
+		heading:SetJustifyH("CENTER")
+		headings[c] = heading
+	end
+
+	-- A row per installed addon: CineMode (ticked: left alone, so shown), then
+	-- the Standard Frames page's columns. Made once, placed by Layout. (The
+	-- ticks belong to the page itself, for its Reset.)
+	local rows = {}
+	local function MakeRow(known)
+		local row = { known = known, checks = {} }
+		row.label = Label(box, "GameFontHighlight", known.short or known.label)
+		row.label:SetWidth(LABEL_WIDTH - INDENT)
+		row.label:SetJustifyH("LEFT")
+		row.label:SetWordWrap(false)
+		-- In its suite's list: its name without the suite's ("Data Bars").
+		if known.suite and known.label:sub(1, #known.suite + 1) == known.suite .. " " then
+			row.suiteLabel = known.label:sub(#known.suite + 2)
+		end
+		local item = "addon:" .. known.key
+		for c, column in ipairs(COLUMNS) do
+			local check
+			if c == 1 then
+				check = Check(content, nil, "", ("Show %s the whole time in CineMode (Cinematic leaves them " ..
+					"alone). Unticked, they're hidden, except as the other columns say.%s"):format(known.about,
+					known.note and " " .. known.note or ""), function(value)
+					ns.SetAddonFramesOn(known.key, not value)
+					Refresh() -- (greys the other columns)
+				end)
+				check.Refresh = function(self)
+					self:SetChecked(not ns.IsAddonFramesOn(known.key))
+				end
+			else
+				local isOn, tableKey, needsStay = column[2], column[3], column[4]
+				check = Check(content, tableKey, "", nil, function(value)
+					ns.GetDB()[tableKey][item] = value
+				end)
+				check.Refresh = function(self)
+					self:SetChecked(isOn(item))
+					self:SetEnabled(ns.IsAddonFramesOn(known.key) and (not needsStay or ns.GetDB().stayInCombat))
+				end
+			end
+			row.checks[c] = check
+		end
+		return row
+	end
 	for _, known in ipairs(ns.ADDON_FRAMES) do
 		if ns.AddOnInstalled(known.addon) then
-			installed[#installed + 1] = known
-		else
-			missing[#missing + 1] = known.label
+			rows[#rows + 1] = MakeRow(known)
 		end
 	end
-	-- A row per addon: CineMode (ticked: left alone, so shown), then the Standard Frames page's columns.
-	if #installed > 0 then
-		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, TOP = 220, 100, 24, 16
-		local COLUMNS = {
-			{ "CineMode" },
-			{ "In combat", ns.IsCombatShowOn, "combatShow", true },
-			{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
-			{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
-		}
-		local grid = CreateFrame("Frame", nil, content)
-		grid:SetSize(LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH, TOP + #installed * ROW_HEIGHT)
-		stack:Add(grid, "label")
-		for c, column in ipairs(COLUMNS) do
-			local heading = Label(content, "GameFontNormalSmall", column[1])
-			heading:SetWidth(COLUMN_WIDTH)
-			heading:SetJustifyH("CENTER")
-			heading:SetPoint("TOPLEFT", grid, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+
+	local sectionTitles, suiteHeaders = {}, {}
+	local missingNote = Label(box, "GameFontHighlightSmall", "")
+	missingNote:SetWidth(560)
+	missingNote:SetJustifyH("LEFT")
+	missingNote:SetJustifyV("TOP")
+	local Layout
+
+	local function SectionTitle(text)
+		if not sectionTitles[text] then
+			sectionTitles[text] = Label(box, "GameFontNormal", text)
 		end
-		for r, known in ipairs(installed) do
-			local y = -TOP - (r - 1) * ROW_HEIGHT
-			local rowLabel = Label(content, "GameFontHighlight", known.short or known.label)
-			rowLabel:SetPoint("TOPLEFT", grid, "TOPLEFT", 0, y - 5)
-			-- (Shown as the page opens: it may load after this addon.)
-			local note = Label(content, "GameFontDisableSmall", "(not loaded)")
-			note:SetPoint("LEFT", rowLabel, "RIGHT", 6, 0)
-			local item = "addon:" .. known.key
-			for c, column in ipairs(COLUMNS) do
-				local check
-				if c == 1 then
-					check = Check(content, nil, "", ("Show %s the whole time in CineMode (Cinematic leaves them " ..
-						"alone). Unticked, they're hidden, except as the other columns say.%s"):format(known.about,
-						known.note and " " .. known.note or ""), function(value)
-						ns.SetAddonFramesOn(known.key, not value)
-						Refresh() -- (greys the other columns)
-					end)
-					check.Refresh = function(self)
-						self:SetChecked(not ns.IsAddonFramesOn(known.key))
-						note:SetShown(not ns.AddOnLoaded(known.addon))
+		return sectionTitles[text]
+	end
+
+	-- A suite's header: + or - and its name, with how many parts it has.
+	local function SuiteHeader(suite)
+		local header = suiteHeaders[suite]
+		if not header then
+			header = CreateFrame("Button", nil, box)
+			header:SetSize(LABEL_WIDTH, ROW_HEIGHT)
+			header.icon = header:CreateTexture(nil, "ARTWORK")
+			header.icon:SetSize(14, 14)
+			header.icon:SetPoint("LEFT", 0, 0)
+			header.text = header:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+			header.text:SetPoint("LEFT", header.icon, "RIGHT", 4, 0)
+			header:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight", "ADD")
+			header:GetHighlightTexture():SetAllPoints(header.icon)
+			header:SetScript("OnClick", function()
+				local open = ns.GetDB().addonSuitesOpen
+				open[suite] = not open[suite] or nil
+				Layout()
+				FitContentHeight(content)
+			end)
+			Tooltip(header, "Click to show or hide its parts.")
+			suiteHeaders[suite] = header
+		end
+		return header
+	end
+
+	Layout = function()
+		local db = ns.GetDB()
+		local y = 0
+		local function Place(region, x, height)
+			region:ClearAllPoints()
+			region:SetPoint("TOPLEFT", box, "TOPLEFT", x, -y)
+			region:Show()
+			y = y + height
+		end
+		for _, region in pairs(sectionTitles) do region:Hide() end
+		for _, header in pairs(suiteHeaders) do header:Hide() end
+		for _, row in ipairs(rows) do
+			row.label:Hide()
+			for _, check in ipairs(row.checks) do check:Hide() end
+		end
+
+		local function PlaceRow(row, indent)
+			row.label:SetText(indent > 0 and row.suiteLabel or row.known.short or row.known.label)
+			row.label:ClearAllPoints()
+			row.label:SetPoint("TOPLEFT", box, "TOPLEFT", indent, -y - 5)
+			row.label:Show()
+			for c, check in ipairs(row.checks) do
+				check:ClearAllPoints()
+				check:SetPoint("TOPLEFT", box, "TOPLEFT",
+					LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, -y)
+				check:Show()
+			end
+			y = y + ROW_HEIGHT
+		end
+
+		-- One section: its addons in the page's order, a suite's together under its header.
+		local function Section(title, wanted)
+			local list = {}
+			for _, row in ipairs(rows) do
+				if wanted(row.known) then
+					list[#list + 1] = row
+				end
+			end
+			if #list == 0 then
+				return
+			end
+			y = y + (y > 16 and 12 or 0)
+			Place(SectionTitle(title), 0, 20)
+			local done = {}
+			for _, row in ipairs(list) do
+				local suite = row.known.suite
+				if not suite then
+					PlaceRow(row, 0)
+				elseif not done[suite] then
+					done[suite] = true
+					local parts = {}
+					for _, other in ipairs(list) do
+						if other.known.suite == suite then
+							parts[#parts + 1] = other
+						end
 					end
-				else
-					local isOn, tableKey, needsStay = column[2], column[3], column[4]
-					check = Check(content, tableKey, "", nil, function(value)
-						ns.GetDB()[tableKey][item] = value
-					end)
-					check.Refresh = function(self)
-						self:SetChecked(isOn(item))
-						self:SetEnabled(ns.IsAddonFramesOn(known.key) and (not needsStay or ns.GetDB().stayInCombat))
+					local header = SuiteHeader(suite)
+					local closed = not db.addonSuitesOpen[suite]
+					header.icon:SetTexture(closed and "Interface\\Buttons\\UI-PlusButton-Up"
+						or "Interface\\Buttons\\UI-MinusButton-Up")
+					header.text:SetText(("%s |cff808080(%d)|r"):format(suite, #parts))
+					Place(header, 0, ROW_HEIGHT)
+					if not closed then
+						for _, part in ipairs(parts) do
+							PlaceRow(part, part.suiteLabel and INDENT or 0)
+						end
 					end
 				end
-				check:SetPoint("TOPLEFT", grid, "TOPLEFT",
-					LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
 			end
 		end
-	end
-	if #missing > 0 then
-		stack:Note(content, "|cff808080Also supported, when installed: " .. table.concat(missing, ", ") .. "|r", 560)
+
+		if #rows > 0 then
+			for c, heading in ipairs(headings) do
+				Place(heading, LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+			end
+			y = 16
+		else
+			for _, heading in ipairs(headings) do heading:Hide() end
+		end
+		Section("Loaded", function(known) return ns.AddOnLoaded(known.addon) end)
+		Section("Installed, not loaded", function(known) return not ns.AddOnLoaded(known.addon) end)
+
+		-- The rest supported, by name (a suite once).
+		local missing, listed = {}, {}
+		for _, known in ipairs(ns.ADDON_FRAMES) do
+			local name = known.suite or known.label
+			if not ns.AddOnInstalled(known.addon) and not listed[name] then
+				listed[name] = true
+				missing[#missing + 1] = name
+			end
+		end
+		if #missing > 0 then
+			y = y + (y > 0 and 12 or 0)
+			Place(SectionTitle("Not installed"), 0, 20)
+			missingNote:SetText("|cff808080Also supported, when installed: " .. table.concat(missing, ", ") .. "|r")
+			Place(missingNote, 0, missingNote:GetStringHeight() + 4)
+		else
+			missingNote:Hide()
+		end
+		box:SetHeight(math.max(1, y))
 	end
 
 	stack:Header(content, "Custom frames")
@@ -3479,6 +3625,7 @@ local function CreateExtrasPanel()
 
 	canvas:SetScript("OnShow", PageShown(function()
 		if ns.GetDB() then
+			Layout()
 			Refresh()
 			RefreshExtras()
 		end

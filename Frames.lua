@@ -14,6 +14,9 @@ local FRAME_GROUPS = {
 		"MicroButtonAndBagsBar", "MicroMenuContainer", "BagsBar",
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
 		"StatusTrackingBarManager", "ExtraActionBarFrame", "ZoneAbilityFrame",
+		-- The leave vehicle / stop flight button: in the main bar, unless an
+		-- action bar addon moves it out (EllesmereUI does).
+		"MainMenuBarVehicleLeaveButton",
 	},
 	sidebars = { "MultiBarLeft", "MultiBarRight" },
 	player = { "PlayerFrame", "PetFrame", "TotemFrame" },
@@ -46,53 +49,22 @@ local FRAME_GROUPS = {
 	},
 }
 
+local function AddName(list, name)
+	for _, existing in ipairs(list) do
+		if existing == name then
+			return
+		end
+	end
+	list[#list + 1] = name
+end
+
 -- Top-level frames whose names contain any of these are faded too. This picks
 -- up client features (and addons) whose exact frame names vary, like the
 -- built-in damage meter and swing timer.
 local AUTO_PATTERNS = { DamageMeter = "meters", SwingTimer = "swing" }
 ns.SCAN_INTERVAL = 5
 
--- Other addons' frames faded out of the box, listed on the 3rd Party Frames page.
--- Each fades as its own group ("addon:<key>") while its addon is loaded and
--- it isn't switched off (db.addonFrames[key] = false). names: its named
--- frames. about: what they are, for the options page (note: more to say there).
--- patterns: name patterns for top-level frames numbered per window.
--- match(frame): whether an unnamed frame on UIParent is one of its
--- own, for addons that don't name their frames (those can't be added with
--- /cine add, which saves frames by name). short: a shorter label, if needed.
-ns.ADDON_FRAMES = {
-	{
-		key = "details", addon = "Details", label = "Details! Damage Meter", short = "Details!",
-		about = "its meter windows",
-		-- Each window is several frames side by side on UIParent (the bars sit
-		-- in their own frame), so hovering one and using /cine add misses the rest.
-		patterns = { "^DetailsBaseFrame%d+$", "^DetailsRowFrame%d+$", "^Details_SwitchButtonFrame%d+$" },
-	},
-	{
-		key = "cmc", addon = "CooldownManagerCentered", label = "Cooldown Manager Centered",
-		about = "its buff containers, trackers and aura overlays",
-		note = "The game's Cooldown Manager itself is a row on the Standard Frames page.",
-		-- Its icons sit in unnamed copies of these frames, which follow their
-		-- alpha, so fading these fades them too.
-		names = { "CMCUtilityLayoutHost", "CMCEssentialCustomTrackerHost" },
-		patterns = { "^CMCBuffContainer%d+$", "^CMCTracker%d+$" },
-		-- Its aura overlays: unnamed screen-sized AuraContainers.
-		match = function(frame)
-			return frame:GetObjectType() == "AuraContainer"
-		end,
-	},
-	{
-		key = "fecm", addon = "ForeverEnhancedCooldownManager", label = "Forever Enhanced Cooldown Manager",
-		short = "Enhanced Cooldown Manager", -- (the Standard Frames page's label column is narrow)
-		about = "its cooldown and buff bars, and the pulse when a cooldown is ready",
-		names = { "FECMPulse" },
-		-- Its bars are unnamed: told apart by the parts each bar is made with.
-		match = function(frame)
-			return (frame.kind == "cooldown" or frame.kind == "aura")
-				and type(frame.icons) == "table" and type(frame.mover) == "table"
-		end,
-	},
-}
+-- Other addons' frames: ns.ADDON_FRAMES (AddonSupport.lua), filled by Support/.
 
 local function AddOnLoaded(name)
 	local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
@@ -143,23 +115,105 @@ local function VisualAlpha(entry)
 	return 1
 end
 
-local function ApplyAlpha(entry)
-	entry.applied = VisualAlpha(entry) * (entry.baseAlpha or 1)
-	entry.frame:SetAlpha(entry.applied)
-end
-
 -- How far a frame's alpha can read back from what was set (it's stored with
 -- less precision) before it counts as the frame setting its own.
 local ALPHA_SLACK = 0.005
 
 -- For frames that set their own alpha (see AddFrame): one now at something
 -- other than what was last applied set it itself, so take that as its new
--- base alpha and fade relative to it.
-local function SyncOwnAlpha(entry)
+-- base alpha and fade relative to it. Checked before every change too, or
+-- an alpha it set since would be written over unseen and its new base lost
+-- (EllesmereUI's bars start at 0 and come up a moment after login).
+-- An alpha set from a secret value reads back secret (EllesmereUI's
+-- show-when-health-missing): it can't be compared, so ours just goes back.
+-- /cine debug alpha: report frames setting their own alpha (at most twice a
+-- second each), to track down one flashing up.
+local alphaReportedAt = {}
+local function ReportOwnAlpha(entry, alpha, how)
+	if not ns.alphaWatch then
+		return
+	end
+	local now = GetTime()
+	if (alphaReportedAt[entry.frame] or 0) > now - 0.5 then
+		return
+	end
+	alphaReportedAt[entry.frame] = now
+	local shown = (issecretvalue and issecretvalue(alpha)) and "secret" or ("%.2f"):format(alpha)
+	ns.Print(("%s [%s] set its alpha to %s (ours %.2f, %s)"):format(entry.name or entry.frame:GetDebugName(),
+		entry.group, shown, entry.applied or -1, how))
+end
+
+local function TakeOwnAlpha(entry)
 	local alpha = entry.frame:GetAlpha()
-	if math.abs(alpha - entry.applied) > ALPHA_SLACK then
+	if issecretvalue and issecretvalue(alpha) then
+		ReportOwnAlpha(entry, alpha, "seen")
+		return true
+	elseif math.abs(alpha - entry.applied) > ALPHA_SLACK then
+		ReportOwnAlpha(entry, alpha, "seen")
 		entry.baseAlpha = alpha
+		return true
+	end
+	return false
+end
+
+local function ApplyAlpha(entry)
+	if entry.ownAlpha then
+		TakeOwnAlpha(entry)
+	end
+	entry.applied = VisualAlpha(entry) * (entry.baseAlpha or 1)
+	entry.settingAlpha = true
+	entry.frame:SetAlpha(entry.applied)
+	entry.settingAlpha = false
+end
+
+local function SyncOwnAlpha(entry)
+	if TakeOwnAlpha(entry) then
 		ApplyAlpha(entry)
+	end
+end
+
+-- Some addons set their own frames' alpha all the time (EllesmereUI: target
+-- changes, combat, mouseover), and a frame caught at that alpha even for a
+-- moment flashes up. So their frames (only those: never the game's, whose own
+-- calls a hook would get in the way of) have SetAlpha followed straight away by
+-- ours, taking what it set as the new base. A hook can't be taken off: one
+-- for a frame no longer faded does nothing.
+local alphaHooked = {} -- frame -> its entry while managed (false once not)
+
+local function OnOwnSetAlpha(frame, alpha)
+	local entry = alphaHooked[frame]
+	if not entry or entry.settingAlpha then
+		return
+	end
+	if (issecretvalue and issecretvalue(alpha)) or math.abs(alpha - (entry.applied or -1)) > ALPHA_SLACK then
+		ReportOwnAlpha(entry, alpha, "hooked")
+	end
+	if not (issecretvalue and issecretvalue(alpha)) then
+		entry.baseAlpha = alpha
+	end
+	entry.applied = alpha -- (so ApplyAlpha doesn't take it again)
+	ApplyAlpha(entry)
+end
+
+local function HookOwnAlpha(entry)
+	if alphaHooked[entry.frame] == nil then
+		hooksecurefunc(entry.frame, "SetAlpha", OnOwnSetAlpha)
+	end
+	alphaHooked[entry.frame] = entry
+end
+
+-- What supported addons' setups (Support/) ask for, filled only once the
+-- addon has loaded. Frames that set their own alpha (by name, or the frame
+-- itself for unnamed ones), those of them hooked as well, and game frames an
+-- addon hides for good (fading them in again would bring them back).
+local ownAlphaNames, ownAlphaFrames = {}, {}
+local hookedNames, hookedFrames = {}, {}
+local leftAlone = {}
+-- 3rd Party Frames groups hooked (hookAlpha), from their rows.
+local HOOKED_GROUPS = {}
+for _, known in ipairs(ns.ADDON_FRAMES) do
+	if known.hookAlpha then
+		HOOKED_GROUPS["addon:" .. known.key] = true
 	end
 end
 
@@ -171,7 +225,7 @@ local function AddFrame(frame, group)
 		return false
 	end
 	local name = frame:GetName()
-	if name and ns.db.ignoredFrames[name] then
+	if name and (ns.db.ignoredFrames[name] or leftAlone[name]) then
 		return false
 	end
 	seen[frame] = true
@@ -190,11 +244,18 @@ local function AddFrame(frame, group)
 	-- own fades). Track the alpha last asked for, fade relative to it, and
 	-- return to it rather than to fully opaque. Watched each frame rather than
 	-- by hooking SetAlpha: hooking a game frame's methods breaks the game's
-	-- own calls to them ("attempt to call a nil value").
-	if OWN_ALPHA[group] or group:find("^addon:") then
-		entry.baseAlpha = frame:GetAlpha()
+	-- own calls to them ("attempt to call a nil value"). Some addons' own
+	-- frames are hooked as well (see HookOwnAlpha).
+	local hooked = (name and hookedNames[name]) or hookedFrames[frame] or HOOKED_GROUPS[group]
+	if hooked or OWN_ALPHA[group] or group:find("^addon:") or (name and ownAlphaNames[name])
+		or ownAlphaFrames[frame] then
+		local alpha = frame:GetAlpha()
+		entry.baseAlpha = (issecretvalue and issecretvalue(alpha)) and 1 or alpha
 		entry.applied = entry.baseAlpha
 		entry.ownAlpha = true
+		if hooked then
+			HookOwnAlpha(entry)
+		end
 	end
 	return true
 end
@@ -226,6 +287,9 @@ end
 local function RemoveFrame(frame)
 	for i, entry in ipairs(ns.managed) do
 		if entry.frame == frame then
+			if alphaHooked[frame] then
+				alphaHooked[frame] = false
+			end
 			frame:SetAlpha(entry.baseAlpha or 1)
 			if entry.shrunk then frame:SetScale(entry.savedScale or 1) end
 			table.remove(ns.managed, i)
@@ -289,7 +353,7 @@ end
 
 local function ScanAddonFrames()
 	for _, known in ipairs(ns.ADDON_FRAMES) do
-		if ns.IsAddonFramesOn(known.key) and AddOnLoaded(known.addon) then
+		if known.loaded and ns.IsAddonFramesOn(known.key) then
 			local group = "addon:" .. known.key
 			for _, name in ipairs(known.names or {}) do
 				AddFrame(_G[name], group)
@@ -343,7 +407,7 @@ end
 -- The Issue Reporter's text is never in a frame this big. Unpacking a frame
 -- with thousands of regions (EllesmereUI's unlock-mode tools) overflows the
 -- Lua stack in the game's GetRegions: a client crash pcall can't catch.
-local MAX_PARTS = 200
+local MAX_PARTS = 100
 local COUNT_METHOD = { GetRegions = "GetNumRegions", GetChildren = "GetNumChildren" }
 
 -- A frame's regions or children as a list, or nil when it's off limits:
@@ -365,8 +429,11 @@ local function ReadParts(frame, method)
 	return parts
 end
 
+-- Hidden frames are skipped: a hidden reporter gets found by a later scan once
+-- it shows, and addons build pages off-screen in hidden frames (EllesmereUI's
+-- search index), which crash the client when read mid-build.
 local function HasIssueReporterText(frame, depth)
-	if IsForbidden(frame) then
+	if IsForbidden(frame) or not frame:IsShown() then
 		return false
 	end
 	for _, region in ipairs(ReadParts(frame, "GetRegions") or {}) do
@@ -419,6 +486,30 @@ function ns.PruneBuiltInExtras()
 	end
 end
 
+local function SyncAllOwnAlpha()
+	for _, entry in ipairs(ns.managed) do
+		if entry.ownAlpha then
+			SyncOwnAlpha(entry)
+		elseif ns.alphaWatch and entry.applied then
+			-- (/cine debug alpha: the rest are only reported, to find a frame
+			-- that should count as setting its own.)
+			local alpha = entry.frame:GetAlpha()
+			if (issecretvalue and issecretvalue(alpha)) or math.abs(alpha - entry.applied) > ALPHA_SLACK then
+				ReportOwnAlpha(entry, alpha, "not followed")
+			end
+		end
+	end
+end
+
+-- Every frame, not just on the update tick, when a supported addon asks
+-- (ns.syncEveryFrame): a frame it sets the alpha of would otherwise show at
+-- it for several frames until the next tick at a high frame rate. Otherwise
+-- the tick does (see UpdateFrames).
+ns.SyncOwnAlphas = SyncAllOwnAlpha
+
+-- Supported addons' own searches for their frames (Support/), run with each scan.
+local scanners = {}
+
 -- Safe to call repeatedly: frames already managed are skipped, and frames
 -- created after login get picked up on a later call.
 function ns.BuildManagedList()
@@ -432,6 +523,9 @@ function ns.BuildManagedList()
 		-- faded on its own (it sets its own alpha too: see AddFrame).
 		AddFrame(_G["ChatFrame" .. i], "chat")
 		AddFrame(_G["ChatFrame" .. i .. "EditBox"], "chat")
+	end
+	for _, scan in ipairs(scanners) do
+		scan()
 	end
 	ScanTopLevelFrames()
 	ScanAddonFrames()
@@ -476,9 +570,16 @@ local function ShrinkEntry(entry)
 	entry.shrunkAt = GetTime()
 end
 
+-- Run once the minimap has its size back (see ns.OnMinimapRestored): an addon
+-- laying it out while shrunk can leave its parts out of place.
+local restoredHandlers = {}
+
 local function UnshrinkEntry(entry)
 	entry.frame:SetScale(entry.savedScale or 1)
 	entry.shrunk = false
+	for _, handler in ipairs(restoredHandlers) do
+		pcall(handler)
+	end
 end
 
 function ns.SetEntryAlpha(entry, alpha)
@@ -491,6 +592,10 @@ function ns.SetEntryAlpha(entry, alpha)
 		elseif not entry.shrunk then
 			-- Shrink in the same step it reaches 0, so it's never at alpha 0
 			-- while full size.
+			ShrinkEntry(entry)
+		elseif math.abs(entry.frame:GetScale() - SHRUNK_SCALE) > SHRUNK_SCALE / 2 then
+			-- Something put its size back (EllesmereUI does when it lays the
+			-- minimap out again): take that as its size and shrink it again.
 			ShrinkEntry(entry)
 		end
 	end
@@ -592,7 +697,8 @@ ns.COMBAT_SHOW = {
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
-	{ key = "mainbar", label = "Action bar 1", default = true, frames = { "MainMenuBar", "MainActionBar" } },
+	{ key = "mainbar", label = "Action bar 1", default = true,
+		frames = { "MainMenuBar", "MainActionBar", "MainMenuBarVehicleLeaveButton" } },
 	{ key = "bottomleft", label = ns.isRetail and "Action bar 2" or "Action bar 2 (bottom left)", default = true,
 		frames = { "MultiBarBottomLeft" } },
 	{ key = "bottomright", label = ns.isRetail and "Action bar 3" or "Action bar 3 (bottom right)", default = true,
@@ -986,6 +1092,39 @@ local function HasQuestTimer()
 	return frame ~= nil and frame:IsShown()
 end
 
+-- /cine debug frame <text>: how the faded frames with <text> in their name
+-- stand (the name is matched ignoring case: slash commands come lowercased).
+function ns.ReportFrames(text)
+	local found = false
+	for _, entry in ipairs(ns.managed) do
+		local name = entry.name or entry.frame:GetDebugName()
+		if name:lower():find(text, 1, true) then
+			found = true
+			local frame = entry.frame
+			local function Number(value)
+				if issecretvalue and issecretvalue(value) then
+					return "secret"
+				end
+				return value and ("%.2f"):format(value) or "-"
+			end
+			local parent = frame:GetParent()
+			ns.Print(("%s [%s] shown=%s visible=%s nested=%s"):format(name, entry.group,
+				tostring(frame:IsShown()), tostring(frame:IsVisible()), tostring(entry.nested or false)))
+			ns.Print(("  alpha now %s, fade %s, applied %s, base %s, own=%s hooked=%s scale %s"):format(
+				Number(frame:GetAlpha()), Number(entry.alpha), Number(entry.applied), Number(entry.baseAlpha),
+				tostring(entry.ownAlpha or false), tostring(alphaHooked[frame] == entry),
+				Number(frame:GetScale())))
+			ns.Print(("  parent %s (shown=%s, alpha %s, on screen %s)"):format(
+				parent and (parent:GetName() or parent:GetDebugName()) or "none",
+				tostring(parent and parent:IsShown()), Number(parent and parent:GetAlpha()),
+				Number(frame.GetEffectiveAlpha and frame:GetEffectiveAlpha())))
+		end
+	end
+	if not found then
+		ns.Print("no faded frames with " .. text .. " in the name")
+	end
+end
+
 -- /cine debug questtimer: why the quest timer is or isn't kept up.
 function ns.ReportQuestTimer()
 	local frame = _G.QuestTimerFrame
@@ -1019,6 +1158,9 @@ function ns.ReportQuestTimer()
 end
 
 local DEATH_FADE_TIME = 0.5 -- seconds for the UI to go when you die (death camera)
+-- The portrait shown while health or power recovers (addons' can stand in
+-- for the game's: see ns.AddPortraitFrame).
+local PORTRAIT_FRAMES = { PlayerFrame = true }
 
 function ns.UpdateFrames(cinematic, elapsed)
 	local now = GetTime()
@@ -1100,7 +1242,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if not fightingShown and entry.group == "buffs" and cinematic and buffPeekUntil > now then
 			fightingShown = true -- new or refreshed aura: show buffs briefly, normal fade speeds
 		end
-		if not fightingShown and entry.name == "PlayerFrame" and cinematic
+		if not fightingShown and PORTRAIT_FRAMES[entry.name] and cinematic
 			and portraitAllowed and IsPlayerRecovering() then
 			fightingShown = true -- shown like a combat frame, at the normal fade speeds
 		end
@@ -1255,4 +1397,78 @@ function ns.ListExtras()
 	if #faded + #ignored == 0 then
 		ns.Print("no extra frames.")
 	end
+end
+
+-- For supported addons' setups (Support/), which run only once their addon
+-- has loaded. A frame already faded is let go, to be picked up again by the
+-- next scan the new way.
+local function LetGo(name)
+	local frame = _G[name]
+	if frame and seen[frame] then
+		RemoveFrame(frame)
+	end
+end
+
+-- Its frames that stand in for the game's: they fade in that group and follow
+-- the Standard Frames page's row (by key, see COMBAT_SHOW). own: they set
+-- their own alpha; hook: follow it at once (the addon's own frames only).
+function ns.FadeWithRow(rowKey, group, names, own, hook)
+	local row
+	for _, item in ipairs(ns.COMBAT_SHOW) do
+		if item.key == rowKey then
+			row = item
+		end
+	end
+	for _, name in ipairs(names) do
+		AddName(FRAME_GROUPS[group], name)
+		if row and row.frames then
+			AddName(row.frames, name)
+		end
+		ownAlphaNames[name] = own or nil
+		hookedNames[name] = hook or nil
+		LetGo(name)
+	end
+end
+
+-- Game frames whose alpha the addon sets: followed (checked, never hooked).
+function ns.FollowOwnAlpha(names)
+	for _, name in ipairs(names) do
+		ownAlphaNames[name] = true
+		LetGo(name)
+	end
+end
+
+-- Game frames the addon hides for good: never faded.
+function ns.LeaveAlone(names)
+	for _, name in ipairs(names) do
+		leftAlone[name] = true
+		LetGo(name)
+	end
+end
+
+-- A frame its own search found (see ns.AddScanner), unnamed ones too. own and
+-- hook as for ns.FadeWithRow.
+function ns.AddFoundFrame(frame, group, own, hook)
+	ownAlphaFrames[frame] = own or nil
+	hookedFrames[frame] = hook or nil
+	return AddFrame(frame, group)
+end
+
+function ns.IsFaded(frame)
+	return seen[frame] or false
+end
+
+-- fn runs with each scan for the frames to fade.
+function ns.AddScanner(fn)
+	table.insert(scanners, fn)
+end
+
+-- fn runs each time the minimap gets its size back after being faded.
+function ns.OnMinimapRestored(fn)
+	table.insert(restoredHandlers, fn)
+end
+
+-- Its player frame, shown like the game's while health or power recovers.
+function ns.AddPortraitFrame(name)
+	PORTRAIT_FRAMES[name] = true
 end

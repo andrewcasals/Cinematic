@@ -54,6 +54,8 @@ local function PrintDebugHelp()
 	logPrints = false
 	print("  /cine log - copy the log for a bug report: what's printed below goes in it too")
 	print("  /cine debug record - also log game setting changes and music in detail (again to stop)")
+	print("  /cine debug frame <name> - how faded frames with <name> in their name stand")
+	print("  /cine debug alpha - print frames setting their own alpha (again to stop)")
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
@@ -225,6 +227,11 @@ function ns.HandleSlash(msg)
 		ns.db.debugCameraMode = not ns.db.debugCameraMode
 		ns.ResetCameraModeReport() -- print the current mode straight away
 		ns.Print("print camera mode changes to chat: " .. OnOff(ns.db.debugCameraMode))
+	elseif cmd == "debug" and arg:find("^frame ") then
+		ns.ReportFrames(arg:match("^frame%s+(.+)$"))
+	elseif cmd == "debug" and arg == "alpha" then
+		ns.alphaWatch = not ns.alphaWatch
+		ns.Print("print frames setting their own alpha: " .. OnOff(ns.alphaWatch) .. " (until you /reload)")
 	elseif cmd == "debug" and arg == "questtimer" then
 		ns.ReportQuestTimer()
 	elseif cmd == "debug" and arg == "death" then

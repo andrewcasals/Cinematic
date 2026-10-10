@@ -898,8 +898,13 @@ end
 -- Set at login (and on turning it on) when cinematic mode starts at once: the first cinematic tick
 -- within this window snaps straight to cinematic. Expires so a busy login
 -- (say, an enemy targeted) falls back to the normal fade later.
+-- Frames found during the window snap too (UI addons make some a moment after
+-- login), so it's scanned for them more often meanwhile. snapRound marks the
+-- frames already snapped, so one shown again (hovered, say) stays shown.
 local START_SNAP_WINDOW = 5
+local START_SCAN_INTERVAL = 0.5
 local startSnapUntil = 0
+local snapRound = 0
 
 -- Effects shown only in some situations (db.<key>Moving, Still, Flight and
 -- InCombat), fading back in once the Calm Timer (db.calmTime) has run out after a fight.
@@ -920,6 +925,11 @@ local function Situation(now)
 end
 
 local function OnUpdate(_, elapsed)
+	-- Every frame (with EllesmereUI, or watching with /cine debug alpha): frames
+	-- setting their own alpha are faded again before they're drawn.
+	if (ns.syncEveryFrame or ns.alphaWatch) and ns.SyncOwnAlphas then
+		Step(ns.SyncOwnAlphas)
+	end
 	accumulated = accumulated + elapsed
 	if accumulated < TICK then
 		return
@@ -937,8 +947,9 @@ local function OnUpdate(_, elapsed)
 	end
 
 	-- Some frames (like the damage meter) are created on demand, so keep looking.
+	local starting = GetTime() < startSnapUntil
 	sinceScan = sinceScan + elapsed
-	if sinceScan >= ns.SCAN_INTERVAL then
+	if sinceScan >= (starting and START_SCAN_INTERVAL or ns.SCAN_INTERVAL) then
 		sinceScan = 0
 		Step(ns.BuildManagedList)
 		if ns.UpdateMinimapButton then Step(ns.UpdateMinimapButton) end
@@ -946,12 +957,14 @@ local function OnUpdate(_, elapsed)
 
 	Step(UpdateDroppedTarget)
 	local cinematic = Step(ShouldBeCinematic, GetTime()) or false -- (an error: the normal UI)
-	if cinematic and GetTime() < startSnapUntil then
+	if cinematic and starting then
 		-- Start in cinematic mode: hide the UI at once instead of fading. The
 		-- letterbox bars still slide in at their usual pace.
-		startSnapUntil = 0
 		for _, entry in ipairs(ns.managed) do
-			Step(ns.SetEntryAlpha, entry, 0)
+			if entry.snapRound ~= snapRound then
+				entry.snapRound = snapRound
+				Step(ns.SetEntryAlpha, entry, 0)
+			end
 		end
 	end
 	if cinematic ~= ns.lastCinematic then
@@ -1097,6 +1110,7 @@ function ns.SetEnabled(enabled)
 	if enabled then
 		-- Starting at once covers turning it on too: straight in, as at login.
 		startSnapUntil = GetTime() + START_SNAP_WINDOW
+		snapRound = snapRound + 1
 	end
 end
 
@@ -1185,6 +1199,9 @@ local function EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
 	ns.db.addonFrames = ns.db.addonFrames or {} -- 3rd Party Frames page: key -> false when switched off
+	-- 3rd Party Frames page: suite -> true when opened (they start collapsed).
+	ns.db.addonSuitesOpen = ns.db.addonSuitesOpen or {}
+	ns.db.addonSuitesClosed = nil -- (a test build's: they started open then)
 	ns.db.savedCVars = ns.db.savedCVars or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
 	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = false, LocalDefense = true }
@@ -1974,6 +1991,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			lastBusy = GetTime()
 			quickStart = true -- straight in rather than after the fade delay
 			startSnapUntil = GetTime() + START_SNAP_WINDOW
+			snapRound = snapRound + 1
 		end
 	elseif event == "PLAYER_LOGOUT" then
 		ns.MusicTrace(("LOGOUT volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
