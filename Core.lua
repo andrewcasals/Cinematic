@@ -207,7 +207,7 @@ local DEFAULTS = {
 	questCamDistance = 4,     -- ...yards it zooms in to (if you're further out)
 	questCamTime = 3,         -- ...seconds the swing behind you takes
 	questCamZoomTime = 7,     -- ...seconds the zoom in takes (the side turn and tilt finish with it)
-	questCamZoomOutTime = 1.5, -- ...seconds the zoom back out takes, leaving
+	questCamZoomOutTime = 5,  -- ...seconds the zoom back out takes, leaving (walking off: quicker)
 	questCamAngle = 30,       -- ...degrees the camera comes round to one side of behind you (0: straight behind)
 	questCamSide = "click",   -- ...the side of the screen you clicked them on (else at random), or "random", "left" or "right"
 	questCamTurnTime = 4,     -- ...seconds that turn takes (once the zoom's done)
@@ -1656,6 +1656,10 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		if not ns.db.deathSettingsV3 then -- a gentler rise
 			if ns.db.deathLevel == 70 or ns.db.deathLevel == 60 then ns.db.deathLevel = nil end
 			ns.db.deathSettingsV3 = true
+		end
+		if not ns.db.questCamSettingsV6 then -- a slower zoom back out (walking off, it's still quick)
+			if ns.db.questCamZoomOutTime == 1.5 then ns.db.questCamZoomOutTime = nil end
+			ns.db.questCamSettingsV6 = true
 		end
 		if not ns.db.questCamSettingsV5 then -- the side you clicked them on
 			if ns.db.questCamSide == "random" then ns.db.questCamSide = nil end

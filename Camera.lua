@@ -2126,6 +2126,7 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 		allowed = ns.db.idleZoom and still and not ns.IsCameraOffHere("idle")
 	end
 	local want = cinematic and allowed and not InCombatLockdown() and ns.CombatWaitOver(context, now)
+		and not (ns.QuestCamZoomingBack and ns.QuestCamZoomingBack()) -- (then from your own distance)
 	-- Walked indoors with the camera pulled back: glide in to the indoor limit.
 	local indoors = Indoors()
 	if indoors and not zoomWasIndoors and idleZoom.active and idleZoom.saved then

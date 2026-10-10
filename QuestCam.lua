@@ -36,6 +36,12 @@
 -- nudges showed as small snaps.)
 -- Moving off (walking away from the quest giver) ends it: everything goes
 -- back, and it doesn't start again until the next conversation.
+-- The zoom back out takes its time (questCamZoomOutTime) while you stand
+-- still; walk off, or start walking as it goes, and it's quick (ZOOM_HURRY).
+-- It starts at once, not queued behind the turn back (walking, the RP walk
+-- and auto-run cameras' own swing behind you held the queue up, and it never
+-- came), and turning the camera yourself as you go doesn't stop it: only
+-- zooming yourself does.
 -- Moving the camera yourself while talking hands it over: nothing is undone.
 local _, ns = ...
 
@@ -61,6 +67,8 @@ local ZOOM_CVAR = "cameraZoomSpeed"
 local ZOOM_MIN_SPEED = 0.3 -- yards per second: the slowest step sent
 local ZOOM_DONE = 0.05     -- yards: arrived
 local ZOOM_GIVE_UP = 4     -- extra seconds to settle before a zoom that can't get there stops
+local ZOOM_HURRY = 1.5     -- seconds the zoom back out takes once you're walking (at most)
+local ZOOM_HURRY_RAMP = 0.5 -- seconds it takes to speed up to that (all at once, it lurched)
 local FOLLOW_GAP = 0.5 -- seconds between the swing handing camera follow back and the turn starting
 local STEP_GAP = 0.6   -- seconds between one move stopping and the next starting (on neighbouring frames, it
                        -- snapped; and clear of the speed setting coming back, SPEED_RESTORE_DELAY after)
@@ -389,7 +397,17 @@ local function ZoomTo(distance, T)
 	zoomer.from, zoomer.goal, zoomer.t, zoomer.T = now, distance, 0, math.max(MOVE_MIN_TIME, T)
 	zoomer.cruise = math.abs(distance - now) / (zoomer.T * (1 - MOVE_EASE))
 	zoomer.last, zoomer.sentAt, zoomer.stillSince, zoomer.sent = now, 0, nil, nil
+	zoomer.rate, zoomer.rateGoal, zoomer.leaving = 1, 1, false
 	zoomer.moving = true
+end
+
+-- Hurries the zoom along so what's left of it takes about T seconds. It runs
+-- along the same path, just faster (the speed rising over ZOOM_HURRY_RAMP),
+-- so it doesn't stop and start again.
+local function HurryZoom(T)
+	if zoomer.moving and zoomer.t < zoomer.T then
+		zoomer.rateGoal = math.max(zoomer.rateGoal, (zoomer.T - zoomer.t) / T)
+	end
 end
 
 local function StepZoom(elapsed)
@@ -397,7 +415,12 @@ local function StepZoom(elapsed)
 		return
 	end
 	local now, zoom = GetTime(), GetCameraZoom()
-	zoomer.t = zoomer.t + elapsed
+	if zoomer.rate < zoomer.rateGoal then
+		zoomer.rate = math.min(zoomer.rateGoal, zoomer.rate + zoomer.rateGoal * elapsed / ZOOM_HURRY_RAMP)
+	end
+	-- (Hurried, the path's time runs faster; once it's over, settling is in real time.)
+	local rate = zoomer.t < zoomer.T and zoomer.rate or 1
+	zoomer.t = zoomer.t + elapsed * rate
 	local t, T = zoomer.t, zoomer.T
 	local still = math.abs(zoom - zoomer.last) < ZOOM_STILL
 	zoomer.last = zoom
@@ -420,13 +443,13 @@ local function StepZoom(elapsed)
 	-- The speed setting: just above the path's speed, then a crawl.
 	local speed = ZOOM_SETTLE_SPEED
 	if t < T then
-		local pathSpeed = zoomer.cruise * EaseShape(t, T, MOVE_EASE)
+		local pathSpeed = zoomer.cruise * EaseShape(t, T, MOVE_EASE) * rate
 		speed = math.max(ZOOM_MIN_SPEED, pathSpeed * ZOOM_HEADROOM + ZOOM_SPEED_EXTRA)
 	end
 	SetZoomSpeed(speed)
 	-- Steer toward where the path will be shortly.
 	if now - zoomer.sentAt >= ZOOM_SEND_EVERY then
-		local miss = ZoomPath(math.min(T, t + ZOOM_LEAD)) - zoom -- (positive: further out)
+		local miss = ZoomPath(math.min(T, t + ZOOM_LEAD * rate)) - zoom -- (positive: further out)
 		if math.abs(miss) > ZOOM_DONE then
 			zoomer.sentAt = now
 			Send(miss < 0 and "CameraZoomIn" or "CameraZoomOut", math.abs(miss) * ZOOM_GAIN)
@@ -493,14 +516,17 @@ local function StepSequence(now)
 	end
 end
 
--- You moved the camera yourself: it's yours, nothing to put back.
+-- You moved the camera yourself: it's yours, nothing to put back. (Except
+-- the zoom back out to your distance, once it's over, unless you zoomed.)
 local function HandOver()
 	for _, m in pairs(movers) do
 		StopMove(m)
 		m.amount = 0
 	end
-	StopZoom(true) -- (your own zooming goes at your speed)
-	ns.RestoreZoomLimit()
+	if not (zoomer.leaving and zoomer.moving and ns.lastCameraInputWhat ~= "zoom") then
+		StopZoom(true) -- (your own zooming goes at your speed)
+		ns.RestoreZoomLimit()
+	end
 	cam.steps, cam.handedOver = {}, true
 	ns.ApplyCVarSet(FOLLOW_CVARS, false)
 end
@@ -588,12 +614,14 @@ local function Start()
 	end
 end
 
-local function Stop()
+-- walkedOff: the zoom back out is quick.
+local function Stop(walkedOff)
 	cam.active, cam.closingAt = false, nil
 	ns.ApplyCVarSet(SHOULDER_CVARS, false)
 	ns.ApplyCVarSet(CENTERED_CVARS, false)
 	-- The zoom out and the turn back behind you together, then the tilt up.
 	cam.steps, cam.stepsAt = {}, 0
+	zoomer.leaving = false
 	if not cam.handedOver then
 		for _, m in pairs(movers) do
 			StopMove(m) -- (cut short if still on the way in: undone from where it got to)
@@ -603,7 +631,9 @@ local function Stop()
 	-- (Still on its way in counts as ours.)
 	if cam.zoomedTo and cam.zoom and GetCameraZoom
 		and (zoomer.moving or math.abs(GetCameraZoom() - cam.zoomedTo) < ZOOM_YOURS) then
-		table.insert(cam.steps, { "zoom", cam.zoom, ns.db.questCamZoomOutTime })
+		local T = ns.db.questCamZoomOutTime
+		ZoomTo(cam.zoom, walkedOff and math.min(T, ZOOM_HURRY) or T)
+		zoomer.leaving = true
 	end
 	if not cam.handedOver then
 		local turnBack = math.max(BACK_MIN, ns.db.questCamTurnTime * BACK_SHARE)
@@ -698,6 +728,10 @@ local function OnUpdate(_, elapsed)
 		and ns.GetLastCameraInput() > cam.startedAt + INPUT_GRACE then
 		HandOver()
 	end
+	-- Walking off as it zooms back out: hurry it along.
+	if zoomer.leaving and ns.playerMoving then
+		HurryZoom(ZOOM_HURRY)
+	end
 	StepSequence(now)
 	if busy or Zooming() or zoomer.release then
 		Log(now)
@@ -714,7 +748,7 @@ local function OnUpdate(_, elapsed)
 		Stop() -- turned off (or set to no camera) mid-conversation
 		cam.since = nil
 	elseif cam.active and ns.playerMoving then
-		Stop() -- walked off: back to normal, and no more until the next conversation
+		Stop(true) -- walked off: back to normal, and no more until the next conversation
 		cam.cancelled = true
 	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving and Wanted() then
 		Start()
@@ -747,6 +781,12 @@ for _, name in ipairs({ "MoveViewLeftStart", "MoveViewLeftStop", "MoveViewRightS
 	end
 end
 frame:SetScript("OnUpdate", OnUpdate)
+
+-- Whether the quest cam is zooming back out to your distance (the RP walk
+-- and auto-run cameras' own zoom waits for it, rather than starting from close in).
+function ns.QuestCamZoomingBack()
+	return zoomer.leaving and zoomer.moving
+end
 
 -- Whether the quest cam is running now.
 function ns.QuestCamActive()

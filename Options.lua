@@ -1809,9 +1809,10 @@ local function CreateQuestPanel()
 	local zoomTime = right:Add(Slider(content, "questCamZoomTime", "Zoom in takes", 1, 10, 0.5, "%.1f sec"), "slider")
 	Tooltip(zoomTime, "The turn to the side happens along the way, then the tilt down.")
 	GreyUnless(zoomTime, IfOn)
-	local zoomOutTime = right:Add(Slider(content, "questCamZoomOutTime", "Zoom back out takes", 1.5, 6, 0.5, "%.1f sec"), "slider")
+	local zoomOutTime = right:Add(Slider(content, "questCamZoomOutTime", "Zoom back out takes", 1.5, 10, 0.5, "%.1f sec"), "slider")
 	Tooltip(zoomOutTime, "Leaving the quest giver, the camera zooms back out to your own distance " ..
-		"this quickly (turning back behind you and tilting back up as it goes).")
+		"this slowly while you stand still (turning back behind you and tilting back up as it goes). " ..
+		"Walk off and it speeds up, back out in a moment.")
 	GreyUnless(zoomOutTime, IfOn)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
