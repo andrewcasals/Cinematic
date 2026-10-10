@@ -40,7 +40,7 @@ for _, group in ipairs(ns.NAME_GROUPS) do
 	for _, cvar in ipairs(group.cvars) do values[cvar] = "0" end
 	-- Secure: the game blocks changing name settings in combat. A fight's
 	-- names are set just before it starts (ns.UpdateCVarsForFight).
-	CVAR_SETS[#CVAR_SETS + 1] = { key = group.key, values = values, secure = true }
+	CVAR_SETS[#CVAR_SETS + 1] = { key = group.key, values = values, secure = true, playerWins = true }
 end
 
 -- Whether this client has any of a group's name settings.
@@ -69,9 +69,13 @@ local function SwitchOn(cvar)
 	if GetCVar(cvar) == nil then
 		return
 	end
-	if ns.db.savedCVars[cvar] ~= nil then
+	if ns.IsCVarHeld(cvar) then
 		ns.db.savedCVars[cvar] = "1"
-	elseif GetCVar(cvar) ~= "1" then
+		return
+	end
+	-- (A value left over from a fight or a crash isn't holding it off.)
+	ns.db.savedCVars[cvar] = nil
+	if GetCVar(cvar) ~= "1" then
 		SetCVar(cvar, "1")
 	end
 end
@@ -96,6 +100,7 @@ end
 -- clicked). Can't be changed during combat lockdown.
 local PLATE_CVARS = {
 	secure = true,
+	playerWins = true,
 	values = {
 		nameplateShowEnemies = "0", nameplateShowFriends = "0", nameplateShowFriendlyPlayers = "0",
 		nameplateShowFriendlyNPCs = "0",
@@ -106,6 +111,7 @@ local PLATE_CVARS = {
 -- regen): off in cinematic mode while you're out of combat; back for fights.
 -- CVars this client doesn't have are skipped.
 local COMBAT_TEXT_CVARS = {
+	playerWins = true,
 	values = {
 		enableFloatingCombatText = "0",
 		floatingCombatTextCombatHealing = "0",
@@ -119,7 +125,11 @@ local COMBAT_TEXT_CVARS = {
 
 -- Names ticked In combat stay up through the fight and for the Calm Timer (calmTime)
 -- after it, like the plates.
+-- (Always on the Nameplates page keeps a row up whatever its other boxes say.)
 local function NameKeptHere(key, inCombat)
+	if ns.db["nameAlways" .. key] then
+		return true
+	end
 	if inCombat or (ns.FightLingering() and ns.db["nameCombat" .. key]) then
 		return ns.db["nameCombat" .. key]
 	end
@@ -862,11 +872,17 @@ local platesActive = false
 -- or nil for the open world. Set each frame.
 local placeSuffix
 
+-- Whether a kind shows in fights in cinematic mode (plateCombat<kind>, or
+-- Always on the Nameplates page, which keeps a row up whatever its other boxes say).
+local function ShownInFights(kind)
+	return (ns.db["plateCombat" .. kind] or ns.db["plateAlways" .. kind]) and true or false
+end
+
 -- Whether a kind stays up in cinematic mode out of combat where you are:
 -- plateCinematic<kind> in the open world, plateIn<place><kind> elsewhere.
 local function KeptHere(kind)
 	local key = placeSuffix and ("plateIn" .. placeSuffix .. kind) or ("plateCinematic" .. kind)
-	return ns.db[key] and true or false
+	return (ns.db[key] or ns.db["plateAlways" .. kind]) and true or false
 end
 
 -- How far each kind is held up by KeptHere, faded so moving between places
@@ -888,7 +904,7 @@ end
 -- Target row (the rest): its In combat column in fights and for the Calm
 -- Timer after, else the column for where you are.
 local function TargetRowKept(row)
-	local combat = ns.db["plateCombat" .. row]
+	local combat = ShownInFights(row)
 	if InCombatLockdown() or (combat and ns.FightLingering and ns.FightLingering()) then
 		return combat and true or false
 	end
@@ -998,7 +1014,7 @@ ns.FightLingering = FightLingering -- (names linger too)
 
 local function AnyFightKinds()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		if ns.db["plateCombat" .. kind] then
+		if ShownInFights(kind) then
 			return true
 		end
 	end
@@ -1012,7 +1028,7 @@ local function PlatesFiltered()
 	end
 	if platesActive and InCombatLockdown() then
 		for _, kind in ipairs(ns.PLATE_KINDS) do
-			if not ns.db["plateCombat" .. kind] then
+			if not ShownInFights(kind) then
 				return true
 			end
 		end
@@ -1032,7 +1048,7 @@ local function KindAlpha(unit)
 	local kind = unit and PlateKind(unit)
 	if kind then
 		-- Plates can't be switched off in fights, only made invisible.
-		if platesActive and InCombatLockdown() and not ns.db["plateCombat" .. kind] then
+		if platesActive and InCombatLockdown() and not ShownInFights(kind) then
 			return 0
 		end
 		return math.min(math.max(ns.plates.level, keptLevel[kind] or 0), combatCap[kind] or 1)
@@ -1198,7 +1214,7 @@ end
 -- nothing ticked are left alone.
 function ns.EnsurePlateRows()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		for _, prefix in ipairs({ "plateCombat", "plateCinematic", "plateInCities",
+		for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCinematic", "plateInCities",
 			"plateInDungeons", "plateInRaids", "plateInPvP" }) do
 			if ns.db[prefix .. kind] then
 				ns.EnablePlateRow(kind)
@@ -1243,7 +1259,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 	-- Held up after a fight, the kinds not ticked for fights (bar those kept
 	-- up where you are) fade down the same way.
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		local combat = ns.db["plateCombat" .. kind]
+		local combat = ShownInFights(kind)
 		local cinematicKept = KeptHere(kind)
 		local keptTarget = cinematicKept and 1 or 0
 		if keptLevel[kind] == nil then

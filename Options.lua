@@ -2866,6 +2866,22 @@ local function CreatePlatesPanel()
 		end
 		return rowLabel
 	end
+	-- The Always column: ticks (or clears) every other box in its row, and
+	-- shows ticked while they all are. enable: switches the row's game options on.
+	-- The Always column: keeps its row up everywhere, whatever the other
+	-- boxes say. They're greyed out meanwhile and kept as they were, for when
+	-- it's unticked. enable: switches the row's game options on.
+	local ALWAYS_TIP = "Keep these up everywhere in CineMode, in fights and out, whatever the " ..
+		"rest of this row says. The other boxes keep their ticks for when you untick it."
+	local function AlwaysCheck(alwaysKey, enable)
+		return Check(content, alwaysKey, "", ALWAYS_TIP, function(value)
+			ns.GetDB()[alwaysKey] = value
+			if value and enable then
+				enable()
+			end
+			Refresh()
+		end)
+	end
 
 	local showHeader = Header(content, "Nameplates", subtitle, -18)
 	-- The grid can't keep plates up out of fights while the game's own
@@ -2882,11 +2898,13 @@ local function CreatePlatesPanel()
 		{ "Dungeons", "Dungeons", "in dungeons and scenarios" }, { "Raids", "Raids", "in raids" },
 		{ "PvP", "BGs", "in battlegrounds and arenas" },
 	}
-	local headings = { "In combat" }
+	-- Always first, set apart: it stands for the rest of its row.
+	local headings = { "Always", "In combat" }
 	for _, place in ipairs(PLACE_COLUMNS) do
 		headings[#headings + 1] = place[2]
 	end
-	local columnTop = TableTop(showHeader, headings, 200, 62, 10)
+	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 160, 60, 10
+	local columnTop = TableTop(showHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 
 	-- The game's own nameplate options, with enemy players and NPCs apart.
 	local KINDS = {
@@ -2931,12 +2949,17 @@ local function CreatePlatesPanel()
 				("Keep these nameplates up in CineMode %s when you're not in a fight."):format(place[3])
 				.. tip, Ticked(key))
 		end
-		if not target then
-			for _, check in ipairs(checks) do
-				-- Greyed out where this client has no such setting.
-				GreyUnless(check, function() return ns.HasPlateSettings(kind[1]) end)
-			end
+		local alwaysKey = "plateAlways" .. kind[1]
+		-- Greyed out where this client has no such setting, and under Always.
+		local function Available()
+			return target ~= nil or ns.HasPlateSettings(kind[1])
 		end
+		for _, check in ipairs(checks) do
+			GreyUnless(check, function(db) return Available() and not db[alwaysKey] end)
+		end
+		local always = AlwaysCheck(alwaysKey, not target and function() ns.EnablePlateRow(kind[1]) end)
+		GreyUnless(always, Available)
+		table.insert(checks, 1, always)
 		lastLabel = PlaceRow(columnTop, r, kind[2], kind[3], unpack(checks))
 	end
 	local lastPlateRow = lastLabel
@@ -2944,7 +2967,7 @@ local function CreatePlatesPanel()
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
 	local namesHeader = Header(content, "Names", lastLabel, -24)
-	local namesTop = TableTop(namesHeader, headings, 200, 62, 10)
+	local namesTop = TableTop(namesHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 	local nameTip = " Ticking it switches these names on in the game's own options."
 	for r, group in ipairs(ns.NAME_GROUPS) do
 		local function Ticked(key)
@@ -2968,10 +2991,14 @@ local function CreatePlatesPanel()
 				("Keep these names up in CineMode %s when you're not in a fight."):format(place[3])
 				.. nameTip, Ticked(key))
 		end
+		local alwaysKey = "nameAlways" .. group.key
+		-- Greyed out where this client has no such setting, and under Always.
 		for _, check in ipairs(checks) do
-			-- Greyed out where this client has no such setting.
-			GreyUnless(check, function() return ns.HasNameSettings(group) end)
+			GreyUnless(check, function(db) return ns.HasNameSettings(group) and not db[alwaysKey] end)
 		end
+		local always = AlwaysCheck(alwaysKey, function() ns.EnableNameRow(group) end)
+		GreyUnless(always, function() return ns.HasNameSettings(group) end)
+		table.insert(checks, 1, always)
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 

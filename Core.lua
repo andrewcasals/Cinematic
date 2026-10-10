@@ -449,6 +449,16 @@ for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions",
 	end
 end
 DEFAULTS.nameInPvPEnemyMinions = true
+-- Both grids' Always column: the row stays up everywhere, whatever its other boxes say.
+for _, kind in ipairs(ns.PLATE_KINDS) do
+	DEFAULTS["plateAlways" .. kind] = false
+end
+for row in pairs(ns.PLATE_TARGET_ROWS) do
+	DEFAULTS["plateAlways" .. row] = false
+end
+for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
+	DEFAULTS["nameAlways" .. key] = false
+end
 -- Slow zoom settings likewise: idleZoom* for standing still, taxiZoom* for
 -- flights, with the flight defaults copying the standing-still ones.
 local ZOOM_PROFILE_KEYS = { "Distance", "In", "Time", "Pause", "Random", "Ease", "PastMax" }
@@ -789,6 +799,54 @@ local function ShouldBeCinematic(now)
 	return now - lastBusy >= delay
 end
 
+-- Settings held by a set marked playerWins, and the value written: if the
+-- player (or another addon) changes one meanwhile, theirs stands. It's let go
+-- rather than put back later, which would undo their change.
+local heldCVars = {} -- [lowercased cvar] = { name = cvar, value = written }
+local writingCVar = false
+
+local function SameValue(a, b)
+	return a == b or (tonumber(a) ~= nil and tonumber(a) == tonumber(b))
+end
+
+local function CheckHeldCVar(name)
+	if writingCVar or type(name) ~= "string" then
+		return
+	end
+	local held = heldCVars[name:lower()]
+	if not held then
+		return
+	end
+	local now = GetCVar(held.name)
+	if now ~= nil and not SameValue(now, held.value) then
+		heldCVars[name:lower()] = nil
+		ns.db.savedCVars[held.name] = nil
+		ns.Log("cvar", ("%s changed to %s outside the addon: left as is"):format(held.name, tostring(now)))
+	end
+end
+
+if C_CVar and C_CVar.SetCVar then
+	hooksecurefunc(C_CVar, "SetCVar", CheckHeldCVar)
+end
+hooksecurefunc("SetCVar", CheckHeldCVar)
+-- Changes made outside Lua (console commands) only show up as this event.
+local heldWatcher = CreateFrame("Frame")
+heldWatcher:RegisterEvent("CVAR_UPDATE")
+heldWatcher:SetScript("OnEvent", function(_, _, name)
+	CheckHeldCVar(name)
+end)
+
+-- Whether a set has this setting switched off for now (and will put it back).
+function ns.IsCVarHeld(cvar)
+	return heldCVars[cvar:lower()] ~= nil
+end
+
+local function WriteCVar(cvar, value)
+	writingCVar = true
+	SetCVar(cvar, value)
+	writingCVar = false
+end
+
 function ns.ApplyCVarSet(set, want)
 	if (set.active or false) == want then
 		return
@@ -805,12 +863,18 @@ function ns.ApplyCVarSet(set, want)
 					ns.db.savedCVars[cvar] = original
 				end
 				ns.LogDetail("cvar", ("%s %s -> %s"):format(cvar, tostring(original), tostring(value)))
-				SetCVar(cvar, value)
+				WriteCVar(cvar, value)
+				if set.playerWins then
+					heldCVars[cvar:lower()] = { name = cvar, value = value }
+				end
 			end
-		elseif ns.db.savedCVars[cvar] ~= nil then
-			ns.LogDetail("cvar", ("%s back to %s"):format(cvar, tostring(ns.db.savedCVars[cvar])))
-			SetCVar(cvar, ns.db.savedCVars[cvar])
-			ns.db.savedCVars[cvar] = nil
+		else
+			heldCVars[cvar:lower()] = nil
+			if ns.db.savedCVars[cvar] ~= nil then
+				ns.LogDetail("cvar", ("%s back to %s"):format(cvar, tostring(ns.db.savedCVars[cvar])))
+				WriteCVar(cvar, ns.db.savedCVars[cvar])
+				ns.db.savedCVars[cvar] = nil
+			end
 		end
 	end
 end
@@ -827,8 +891,9 @@ local function RestoreSavedCVars()
 			local same = now == value or (tonumber(now) ~= nil and tonumber(now) == tonumber(value))
 			if not same then
 				ns.Log("cvar", ("%s put back to %s (left over)"):format(cvar, tostring(value)))
-				SetCVar(cvar, value)
+				WriteCVar(cvar, value)
 			end
+			heldCVars[cvar:lower()] = nil
 			ns.db.savedCVars[cvar] = nil
 		end
 	end
