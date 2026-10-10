@@ -2010,7 +2010,9 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		-- to restore nameplate settings until the fight ends.
 		ns.ShowPlatesNow()
 		ns.StopOrbitNow()
-		if not ns.db.stayInCombat then
+		if ns.db.stayInCombat then
+			ns.UpdateCVarsForFight()
+		else
 			lastBusy = GetTime()
 			ns.UpdateCVars(false)
 			for _, entry in ipairs(ns.managed) do

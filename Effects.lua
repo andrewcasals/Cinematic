@@ -38,7 +38,9 @@ local CVAR_SETS = {}
 for _, group in ipairs(ns.NAME_GROUPS) do
 	local values = {}
 	for _, cvar in ipairs(group.cvars) do values[cvar] = "0" end
-	CVAR_SETS[#CVAR_SETS + 1] = { key = group.key, values = values }
+	-- Secure: the game blocks changing name settings in combat. A fight's
+	-- names are set just before it starts (ns.UpdateCVarsForFight).
+	CVAR_SETS[#CVAR_SETS + 1] = { key = group.key, values = values, secure = true }
 end
 
 -- Whether this client has any of a group's name settings.
@@ -125,13 +127,22 @@ local function NameKeptHere(key, inCombat)
 	return ns.db[place and ("nameIn" .. place .. key) or ("nameKeep" .. key)]
 end
 
-function ns.UpdateCVars(cinematic)
-	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+local lastCinematic = false
+
+-- fightStarting: called as a fight starts, just before combat lockdown.
+function ns.UpdateCVars(cinematic, fightStarting)
+	lastCinematic = cinematic
+	local inCombat = fightStarting or InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 	for _, set in ipairs(CVAR_SETS) do
 		local want = cinematic and not NameKeptHere(set.key, inCombat)
 		ns.ApplyCVarSet(set, want or false)
 	end
 	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not inCombat) or false)
+end
+
+-- The last chance to switch names to the "In combat" choices before lockdown.
+function ns.UpdateCVarsForFight()
+	ns.UpdateCVars(lastCinematic, true)
 end
 
 -- Music fades by ramping the music volume from 0 up to the player's own
