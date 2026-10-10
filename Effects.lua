@@ -473,18 +473,12 @@ local function CameraMusicOn(mode)
 	return MUSIC_CAM[mode] ~= nil and ns.db[MUSIC_CAM[mode]] or false
 end
 
--- Times music starts despite music fatigue: in a camera mode set to play
--- music, or in a different zone from the last music.
+-- Times music starts despite music fatigue: in a camera mode set to play music.
 local function FatigueOverridden()
 	local mode = ns.CameraMode and ns.CameraMode()
 	if (mode == "idle" and ns.db.eventAFKMusic)
 		or (mode and CameraMusicOn(mode))
 		or (ns.db.eventQuestMusic and ns.QuestCamActive and ns.QuestCamActive()) then
-		return true
-	end
-	local zone = GetRealZoneText()
-	if ns.db.fatigueIgnoreNewZone and zone and zone ~= "" and ns.db.lastMusicZone
-		and zone ~= ns.db.lastMusicZone then
 		return true
 	end
 	return false
@@ -740,7 +734,6 @@ function ns.UpdateMusic(cinematic, elapsed)
 			return
 		end
 		musicStartedAt = GetTime()
-		ns.db.lastMusicZone = GetRealZoneText()
 		ns.SaveCVar("Sound_EnableMusic")
 		ns.SaveCVar("Sound_MusicVolume")
 		ns.music.managing = true
@@ -778,116 +771,6 @@ end
 -- switched off once invisible. On the way back they're switched on straight
 -- away and faded in.
 ns.plates = { level = 1, off = false }
-
--- Ambience follows music: while cinematic, the ambient sound volume becomes a
--- share (ambienceScale) of the music volume as it currently plays, so it
--- tracks the music fade too. Eases in and out over musicFadeTime, starting
--- from and returning to the player's own ambience volume (saved crash-safe).
-local AMBIENCE_EPSILON = 0.005 -- skip CVar writes for imperceptible changes
-local ambience = { level = 0, active = false, original = 1, written = nil, current = nil, holdUntil = 0 }
-
--- The music's full volume (what it plays at once faded in) and how much of
--- it is playing right now (0 = none: off, muted, or skipped for fatigue).
-local function MusicFullVolume()
-	if ns.music.managing then
-		return ns.music.volume
-	end
-	if combatMusic.ducking then
-		return combatMusic.original
-	end
-	return tonumber(GetCVar("Sound_MusicVolume")) or 0
-end
-
-local function MusicPresence()
-	if combatMusic.musicOff or combatMusic.managedOff then
-		return 0
-	end
-	if ns.music.managing then
-		return ns.music.level * combatMusic.level
-	end
-	if GetCVar("Sound_EnableMusic") ~= "1" then
-		return 0
-	end
-	return combatMusic.level
-end
-
-function ns.StopAmbienceNow()
-	if ambience.active then
-		ns.RestoreCVar("Sound_AmbienceVolume")
-		ambience.active, ambience.level, ambience.written, ambience.current = false, 0, nil, nil
-	end
-end
-
--- After a /reload (or login) the player's original ambience volume is still in
--- the saved settings, and the lowered volume is still applied: carry on from
--- there instead of jumping back. Cinematic mode only resumes after the fade
--- delay, so hold the current level until then.
-local function AdoptSavedAmbience()
-	local saved = ns.db.savedCVars.Sound_AmbienceVolume
-	if saved == nil or ambience.active then
-		return
-	end
-	ambience.active = true
-	ambience.original = tonumber(saved) or 1
-	ambience.level = 1
-	ambience.current = tonumber(GetCVar("Sound_AmbienceVolume")) or ambience.original
-	ambience.written = ambience.current
-	ambience.holdUntil = GetTime() + ns.db.returnDelay + 2
-end
-
-function ns.UpdateAmbience(cinematic, elapsed)
-	AdoptSavedAmbience()
-	-- Like the music mutes, only when the addon handles music at all.
-	local want = cinematic and ns.db.ambienceFollowsMusic and ns.db.musicInCinematic
-	if want and not ambience.active then
-		ns.SaveCVar("Sound_AmbienceVolume")
-		ambience.active = true
-		ambience.original = tonumber(ns.db.savedCVars.Sound_AmbienceVolume) or 1
-		ambience.current = ambience.original
-	end
-	if not ambience.active then
-		return
-	end
-	-- You changed the ambience volume yourself (in the sound settings) while
-	-- it was lowered: that's your new level, to come back to afterwards.
-	local actual = tonumber(GetCVar("Sound_AmbienceVolume"))
-	if actual and ambience.written and math.abs(actual - ambience.written) > AMBIENCE_EPSILON then
-		ambience.original = actual
-		ns.db.savedCVars.Sound_AmbienceVolume = tostring(actual)
-		ambience.current, ambience.written = actual, actual
-	end
-	if not want and GetTime() < ambience.holdUntil then
-		return -- just reloaded: wait for cinematic mode to come back
-	end
-	ambience.level = ns.Approach(ambience.level, want and 1 or 0, elapsed, ns.db.musicFadeTime)
-	-- Ambience steps down to its share of the music only as far as music is
-	-- actually playing; with no music it stays at the player's own level.
-	local desired = math.min(1, MusicFullVolume() * ns.db.ambienceScale)
-	local share = ambience.level * MusicPresence()
-	local target = ambience.original + (desired - ambience.original) * share
-	-- However the target moves (music restarting, the scale changing), the
-	-- volume itself only ever glides there, at the music fade speed.
-	ambience.current = ns.Approach(ambience.current or target, target, elapsed, ns.db.musicFadeTime)
-	if ambience.level <= 0 and not want and math.abs(ambience.current - ambience.original) < AMBIENCE_EPSILON then
-		ns.StopAmbienceNow()
-		return
-	end
-	if not ambience.written or math.abs(ambience.current - ambience.written) > AMBIENCE_EPSILON then
-		ambience.written = ambience.current
-		SetCVar("Sound_AmbienceVolume", ("%.3f"):format(ambience.current))
-	end
-end
-
--- For /cine debug ambience.
-function ns.GetAmbienceDebug()
-	return {
-		active = ambience.active, level = ambience.level, original = ambience.original,
-		current = ambience.current, written = ambience.written,
-		saved = ns.db.savedCVars.Sound_AmbienceVolume, cvar = GetCVar("Sound_AmbienceVolume"),
-		musicVolume = MusicFullVolume(), presence = MusicPresence(),
-		hold = math.max(0, ambience.holdUntil - GetTime()),
-	}
-end
 
 -- The game resets a plate's alpha itself (for one, when its unit enters
 -- combat), so while a plate is faded or hidden, its alpha is put back to ours

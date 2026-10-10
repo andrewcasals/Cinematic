@@ -2640,7 +2640,7 @@ local function CreateTintPanel()
 	RegisterSubpage(canvas, "Visual Effects")
 end
 
--- Sub-page for audio: music and ambience during cinematic mode.
+-- Sub-page for audio: music during cinematic mode.
 local function CreateAudioPanel()
 	local canvas, content = CreateScrollPage()
 
@@ -2669,7 +2669,7 @@ local function CreateAudioPanel()
 
 	local musicFade = Slider(content, "musicFadeTime", "Music fade time", 0.5, 10, 0.5, "%.1f sec")
 	musicFade:SetPoint("TOPLEFT", logoutMusic, "BOTTOMLEFT", 4, -26)
-	Tooltip(musicFade, "How long music (and ambience) takes to fade in or out with CineMode.")
+	Tooltip(musicFade, "How long music takes to fade in or out with CineMode.")
 
 	local fatigueHeader = Header(content, "Fatigue", musicFade, -24)
 	fatigueHeader:SetPoint("TOPLEFT", musicFade, "BOTTOMLEFT", -2, -24)
@@ -2681,12 +2681,7 @@ local function CreateAudioPanel()
 		"Music on the Camera Triggers page start it anyway. Music coming back after a mute doesn't count. 0 turns this off.")
 	DependsOnMusic(fatigue)
 
-	local newZone = Check(content, "fatigueIgnoreNewZone", "Start music anyway in a new zone",
-		"Music starts in a zone other than the one it last played in, even if it played recently.")
-	newZone:SetPoint("TOPLEFT", fatigue, "BOTTOMLEFT", -4, -18)
-	DependsOnMusic(newZone)
-
-	-- Right column: muting, ambience
+	-- Right column: muting
 	local muteHeader = Label(content, "GameFontNormal", "Muting")
 	muteHeader:SetPoint("TOPLEFT", musicHeader, "TOPLEFT", 320, 0)
 
@@ -2734,26 +2729,9 @@ local function CreateAudioPanel()
 
 	local placeChecks = PlaceList(content, Stack(pauseFadeEdge, "check"), "Mute music in", "musicOffIn",
 		"Music fades out here (your own game music too) and back in when you leave.")
-	local lastPlace = placeChecks[#placeChecks]
 	for _, check in ipairs(placeChecks) do
 		DependsOnMusic(check)
 	end
-
-	local ambienceHeader = Label(content, "GameFontNormal", "Ambience")
-	ambienceHeader:SetPoint("TOPLEFT", lastPlace, "BOTTOMLEFT", 2, -18)
-
-	local ambience = Check(content, "ambienceFollowsMusic", "Ambience follows music",
-		"While cinematic, ambient sound (wind, water, crowds) is set to a share of the " ..
-		"music volume, following the music as it fades. Your own ambience volume comes " ..
-		"back afterwards.")
-	ambience:SetPoint("TOPLEFT", ambienceHeader, "BOTTOMLEFT", -2, -6)
-	DependsOnMusic(ambience)
-
-	local ambienceScale = Slider(content, "ambienceScale", "Ambience level", 0, 200, 5, "%d%% of music", 100)
-	ambienceScale:SetPoint("TOPLEFT", ambience, "BOTTOMLEFT", 4, -26)
-	Tooltip(ambienceScale, "Ambient sound volume as a share of the music volume. 50% keeps it " ..
-		"under the music; 100% matches it.")
-	DependsOnMusic(ambienceScale)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()

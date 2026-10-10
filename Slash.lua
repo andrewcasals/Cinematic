@@ -63,7 +63,6 @@ local function PrintDebugHelp()
 	print("  /cine debug questlog - save every frame of the next quest cams (for tracking down snaps)")
 	print("  /cine debug zoom - the slow zoom's state")
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
-	print("  /cine debug ambience - ambience volume and what it follows")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
 	print("  /cine debug flight - the flight route, its known time and when the camera settles")
@@ -531,13 +530,6 @@ function ns.HandleSlash(msg)
 			ns.GetDB().weatherTint and "on" or "off", rgb(w.target), rgb(w.shown)))
 	elseif cmd == "debug" and arg == "plates" then
 		ns.PrintPlatesDebug()
-	elseif cmd == "debug" and arg == "ambience" then
-		local a = ns.GetAmbienceDebug()
-		local function n(v) return v and ("%.2f"):format(tonumber(v) or 0) or "-" end
-		ns.Print(("ambience: active=%s level=%s, your level=%s (saved %s), volume now=%s (written %s, target glide %s)"):format(
-			tostring(a.active), n(a.level), n(a.original), n(a.saved), n(a.cvar), n(a.written), n(a.current)))
-		ns.Print(("music: full volume=%s, playing share=%s, reload hold=%.0fs"):format(
-			n(a.musicVolume), n(a.presence), a.hold))
 	elseif cmd == "facing" then
 		-- Test: can the addon tell when you turn? For 10 seconds, reports the
 		-- turning events, the turn keys, and your facing direction.

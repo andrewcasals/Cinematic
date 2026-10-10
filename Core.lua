@@ -143,18 +143,15 @@ local DEFAULTS = {
 	musicCamFlight = true,
 	musicCamWalk = false,     -- RP walk
 	musicCamRun = true,       -- auto-run
-	musicPauseWhenMoving = true,  -- music fades out once you move on from flying, RP walking or standing still
-	musicPauseOnLanding = true,   -- ...and as soon as a flight lands, without waiting for you to move
+	musicPauseWhenMoving = false, -- music fades out once you move on from flying, RP walking or standing still
+	musicPauseOnLanding = false,  -- ...and as soon as a flight lands, without waiting for you to move
 	musicPauseFadeTime = 3,      -- seconds that pause takes to fade out (and the music to come back)
-	fatigueIgnoreNewZone = true,   -- start music anyway in a different zone from the last music
-	ambienceFollowsMusic = false, -- set ambient sound to a share of the music volume while cinematic
 	musicOffInCombat = false, -- fade game music out while in combat
 	musicOffOnFlights = false, -- ...and while on a flight path
 	musicOffInCities = false, -- ...and in these places
 	musicOffInDungeons = false,
 	musicOffInRaids = false,
 	musicOffInPvP = false,
-	ambienceScale = 0.5,      -- ...this share (0-2)
 	chatPeek = true,          -- briefly show a chat window when a message arrives
 	chatPeekChannels = false, -- old "include public channels"; now the default for channels not yet set
 	chatPeekTime = 8,         -- seconds the chat window stays up
@@ -817,10 +814,11 @@ function ns.ApplyCVarSet(set, want)
 end
 
 -- Puts back anything left over from a session that ended without restoring.
--- (Ambience is left for Effects.lua to fade back smoothly instead.)
+-- Plate and name settings can't change in combat: they wait for it to end.
 local function RestoreSavedCVars()
 	for cvar, value in pairs(ns.db.savedCVars) do
-		if cvar ~= "Sound_AmbienceVolume" and not (cvar:find("^nameplate") and InCombatLockdown()) then
+		local secure = cvar:find("^nameplate") or cvar:find("^UnitName")
+		if not (secure and InCombatLockdown()) then
 			-- Skip values that are already right: writing a test_ CVar at all
 			-- brings up Blizzard's experimental-camera warning.
 			local now = GetCVar(cvar)
@@ -982,7 +980,6 @@ local function OnUpdate(_, elapsed)
 	end
 	Step(ns.UpdateCVars, cinematic)
 	Step(ns.UpdateMusic, cinematic, elapsed)
-	Step(ns.UpdateAmbience, cinematic, elapsed)
 	Step(ns.UpdatePlates, cinematic, elapsed)
 	Step(ns.UpdateTooltip)
 	Step(ns.UpdateTaxi)
@@ -1016,7 +1013,6 @@ local function RestoreEverything()
 	Try(ns.UpdateCVars, false)
 	Try(ns.StopMusicNow)
 	Try(ns.StopCombatMusicNow)
-	Try(ns.StopAmbienceNow)
 	Try(ns.ShowPlatesNow)
 	Try(ns.ApplyCVarSet, ns.FLIGHT_CVARS, false)
 	Try(ns.ApplyCVarSet, ns.RECENTER_CVARS, false)
@@ -1692,6 +1688,10 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			end
 			ns.db[old[1]], ns.db[old[2]] = nil, nil
 		end
+		-- Gone: "Start music anyway in a new zone" and "Ambience follows music".
+		-- (A lowered ambience volume left over is put back with the other settings.)
+		ns.db.fatigueIgnoreNewZone, ns.db.lastMusicZone = nil, nil
+		ns.db.ambienceFollowsMusic, ns.db.ambienceScale = nil, nil
 		if not ns.db.fishMissPauseV2 then -- 5 sec became 30 (moving to a new spot still ends it)
 			if ns.db.fishMissPause == 5 then ns.db.fishMissPause = nil end
 			ns.db.fishMissPauseV2 = true
@@ -1976,8 +1976,6 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		ns.StopIdleZoomNow()
 		ns.StopMusicNow()
 		ns.StopCombatMusicNow()
-		-- Ambience is deliberately left as is: it can't fade during a reload, so the
-		-- reloaded addon picks it up and carries on smoothly (see Effects.lua).
 		ns.ShowPlatesNow()
 		ns.StopOrbitNow()
 		ns.ApplyCVarSet(ns.FLIGHT_CVARS, false)

@@ -46,8 +46,7 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Choose which cameras play music:** flights, AFK, cozy, vista, fishing, RP walks and auto-runs can each start a fresh track.
 * **No music while you're away:** standing still or going AFK doesn't start music, unless you'd rather it did.
 * **Pause the music** as you move on or when a flight lands. Mute it in combat, on flights, or in cities, inns, dungeons, raids and battlegrounds.
-* **Music fatigue** stops music restarting too often, with exceptions for the moments that matter and new zones.
-* **Ambience follows the music**, keeping wind and water under the soundtrack.
+* **Music fatigue** stops music restarting too often, with exceptions for the moments that matter.
 * **Your own sound and game settings are always restored**, even after a crash.
 
 ## Easy to tweak
