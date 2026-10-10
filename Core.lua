@@ -77,6 +77,8 @@ local DEFAULTS = {
 	tintPreviewHour = -1,  -- options-page preview of the time-of-day tint at this hour (-1 = now)
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
 	alwaysShowWaypoint = false, -- keep retail's quest waypoint visible in cinematic mode
+	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (not retail)
+	questRevealOnAccept = true, -- accepting a quest shows the quest tracker as a mouseover would
 	minimapForTracking = true, -- master switch for the minimapFor* tracking options below
 	minimapForHerbs = true,    -- keep the minimap visible while this tracking is active
 	minimapForMinerals = true,

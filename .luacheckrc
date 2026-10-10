@@ -79,6 +79,7 @@ read_globals = {
 	"GetNumQuestLogEntries",
 	"GetPlayerFacing",
 	"GetQuestLogTitle",
+	"GetQuestTimers",
 	"GetRealZoneText",
 	"GetSheathState",
 	"GetSpellInfo",

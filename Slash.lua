@@ -69,6 +69,7 @@ local function PrintDebugHelp()
 	print("  /cine debug orbit - the camera rotation's state")
 	print("  /cine debug flyby - the fly-by's state and the random ones planned")
 	print("  /cine debug flybys - print each fly-by's start and end, random ones too (again to stop)")
+	print("  /cine debug questtimer - say whether a quest timer is running and how its box fades")
 	print("  /cine debug death - print what the death camera does on real deaths (again to stop)")
 	print("  /cine debug place - city, inn, dungeon detection")
 	print("  /cine debug portrait - the portrait-until-full rule")
@@ -224,6 +225,8 @@ function ns.HandleSlash(msg)
 		ns.db.debugCameraMode = not ns.db.debugCameraMode
 		ns.ResetCameraModeReport() -- print the current mode straight away
 		ns.Print("print camera mode changes to chat: " .. OnOff(ns.db.debugCameraMode))
+	elseif cmd == "debug" and arg == "questtimer" then
+		ns.ReportQuestTimer()
 	elseif cmd == "debug" and arg == "death" then
 		ns.deathDebug = not ns.deathDebug
 		ns.Print("death camera log on real deaths: " .. OnOff(ns.deathDebug) .. " (until you /reload)")

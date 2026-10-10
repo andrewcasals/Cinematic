@@ -26,7 +26,9 @@ local FRAME_GROUPS = {
 	target = { "TargetFrame", "TargetFrameToT", "FocusFrame" },
 	minimap = { "MinimapCluster", "Minimap", "GameTimeFrame", "CinematicMinimapButton" },
 	buffs = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" },
-	quests = { "QuestWatchFrame", "WatchFrame", "ObjectiveTrackerFrame", "QuestTimerFrame" },
+	quests = { "QuestWatchFrame", "WatchFrame", "ObjectiveTrackerFrame" },
+	-- Classic's quest timer box: its own group, so it can stay up without the tracker.
+	questtimer = { "QuestTimerFrame" },
 	misc = { "DurabilityFrame" },
 	swing = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" },
 	meters = { "DamageMeter" },
@@ -178,6 +180,9 @@ local function AddFrame(frame, group)
 		shrinkWhenFaded = frame == Minimap,
 	}
 	ns.managed[#ns.managed + 1] = entry
+	if group == "questtimer" and frame.SetIgnoreParentAlpha then
+		frame:SetIgnoreParentAlpha(true)
+	end
 
 	-- Chat frames manage their own alpha (the input bar sits faint until you
 	-- press Enter), and so do the waypoint (it dims as you look past it), the
@@ -196,7 +201,9 @@ end
 
 -- Frames that fade on their own even though they sit inside another faded
 -- frame, so they can be shown separately (target of target during combat).
-local NEVER_NESTED = { TargetFrameToT = true }
+-- The quest timer can sit inside the quest tracker: it ignores the tracker's
+-- fade (see AddFrame) so it can stay up while the tracker is faded.
+local NEVER_NESTED = { TargetFrameToT = true, QuestTimerFrame = true }
 
 local function RecomputeNesting()
 	for _, entry in ipairs(ns.managed) do
@@ -579,6 +586,8 @@ ns.COMBAT_SHOW = {
 	{ key = "focus", label = "Focus", default = true, frames = { "FocusFrame" } },
 	-- morePage: the options page with more settings for it, which can keep it up besides.
 	{ key = "minimap", label = "Minimap", default = false, groups = { "minimap" }, morePage = "Minimap" },
+	{ key = "quests", label = "Quest tracker", default = false, frames = FRAME_GROUPS.quests,
+		morePage = "Quest tracker" },
 	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
@@ -614,7 +623,6 @@ ns.COMBAT_SHOW = {
 	} },
 	{ key = "extra", label = "Extra action and zone ability", default = true, retail = true,
 		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
-	{ key = "quests", label = "Quest tracker", default = false, frames = FRAME_GROUPS.quests },
 	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
 		frames = FRAME_GROUPS.cooldowns },
 }
@@ -952,6 +960,64 @@ local function HoverHoldKey(group)
 end
 local hoverHeldUntil = {}
 
+-- Accepting a quest brings the quest tracker up as a mouseover would: it
+-- fades in, then is gone the quest tracker's mouseover time later.
+local questRevealUntil = 0
+local questWatcher = CreateFrame("Frame")
+questWatcher:RegisterEvent("QUEST_ACCEPTED")
+questWatcher:SetScript("OnEvent", function()
+	if ns.db and ns.db.questRevealOnAccept then
+		local hold = ns.HoldTime(HoverHoldKey("quests")) - ns.db.fadeOutTime
+		questRevealUntil = GetTime() + ns.db.fadeInTime + math.max(0, hold)
+	end
+end)
+
+-- A quest timer running (Classic clients; retail has no quest timer box).
+-- Clients without GetQuestTimers go by the box: the game only shows it while
+-- a timer runs (the fade only changes its alpha).
+local function HasQuestTimer()
+	if ns.isRetail then
+		return false
+	end
+	if GetQuestTimers then
+		return select("#", GetQuestTimers()) > 0
+	end
+	local frame = _G.QuestTimerFrame
+	return frame ~= nil and frame:IsShown()
+end
+
+-- /cine debug questtimer: why the quest timer is or isn't kept up.
+function ns.ReportQuestTimer()
+	local frame = _G.QuestTimerFrame
+	local timers = {}
+	for i, seconds in ipairs(GetQuestTimers and { GetQuestTimers() } or {}) do
+		timers[i] = tostring(seconds)
+	end
+	ns.Print(("quest timer: running=%s option=%s retail=%s timers=%s"):format(tostring(HasQuestTimer()),
+		tostring(ns.db.questTimerShow), tostring(ns.isRetail),
+		GetQuestTimers and table.concat(timers, ",") or "no API"))
+	if not frame then
+		ns.Print("no QuestTimerFrame")
+		return
+	end
+	local parents = {}
+	local parent = frame:GetParent()
+	while parent do
+		parents[#parents + 1] = (parent:GetName() or "?") .. (seen[parent] and "(faded)" or "")
+		parent = parent:GetParent()
+	end
+	ns.Print("parents: " .. table.concat(parents, " > "))
+	for _, entry in ipairs(ns.managed) do
+		if entry.frame == frame then
+			ns.Print(("group=%s alpha=%.2f nested=%s shown=%s ignoreParentAlpha=%s"):format(entry.group,
+				entry.alpha, tostring(entry.nested or false), tostring(frame:IsShown()),
+				tostring(frame.IsIgnoringParentAlpha and frame:IsIgnoringParentAlpha())))
+			return
+		end
+	end
+	ns.Print("QuestTimerFrame isn't managed")
+end
+
 local DEATH_FADE_TIME = 0.5 -- seconds for the UI to go when you die (death camera)
 
 function ns.UpdateFrames(cinematic, elapsed)
@@ -977,6 +1043,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local place = ns.GetOptionPlace()
 	local fadeChat = not (place and ns.db[ns.CHAT_IN[place]])
 	local keepMinimapForTracking = ns.IsKeepingMinimapForTracking(now)
+	local questTimerUp = ns.db.questTimerShow and HasQuestTimer()
+	local questReveal = questRevealUntil > now
 	-- Work out which groups are hovered so the whole group reveals together.
 	local hovered = {}
 	if cinematic and ns.db.mouseover then
@@ -1024,6 +1092,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 				or (ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused))
 			and entry.group == "minimap")
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
+			or (questTimerUp and entry.group == "questtimer")
+			or (questReveal and entry.group == "quests")
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown["group:" .. entry.group])
 		local fightingShown = listShown

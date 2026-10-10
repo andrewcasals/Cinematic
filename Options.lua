@@ -344,7 +344,7 @@ local function CreatePanel()
 	local subtitle = Label(panel, "GameFontHighlightSmall",
 		"Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
-		"pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Nameplates, " ..
+		"pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, " ..
 		"Chat), visual effects and sound, the camera modes and triggers, and keybinds.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
@@ -460,7 +460,8 @@ local function CreateRevealPanel()
 		"How fast the UI fades, what brings it (or parts of it) back while CineMode " ..
 		"is on, and combat text. Fights and targeting are on the Standard Frames page, names and " ..
 		"nameplates on the Nameplates page, buffs on the " ..
-		"Buffs/debuffs page, the minimap on the Minimap page, chat on the Chat page.")
+		"Buffs/debuffs page, the minimap on the Minimap page, the quest tracker on the Quest tracker page, " ..
+		"chat on the Chat page.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -3248,6 +3249,40 @@ local function CreateMinimapPanel()
 	RegisterSubpage(canvas, "Minimap")
 end
 
+-- Sub-page: the quest tracker in CineMode: the quest timer, and a look at
+-- the tracker when you accept a quest.
+local function CreateQuestTrackerPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Quest tracker")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it " ..
+		"up all the time, or in fights, see the Standard Frames page.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local reveal = Check(content, "questRevealOnAccept", "Reveal on new quest",
+		"Accepting a quest shows the quest tracker as if you'd hovered it: it goes after the " ..
+		"quest tracker's mouseover time on the CineMode page (or \"Stays after mouseover\" " ..
+		"if it doesn't have its own).")
+	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+
+	-- Classic's quest timer box (retail shows timers in the tracker itself).
+	if ns.OptionAvailable({ retail = false }) then
+		local timer = Check(content, "questTimerShow", "Show the quest timer while one is running",
+			"Keeps the quest timer box up in CineMode, and in fights, while a timed quest " ..
+			"counts down. Just the timer: the quest tracker stays faded.")
+		timer:SetPoint("TOPLEFT", reveal, "BOTTOMLEFT", 0, -2)
+	end
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Quest tracker")
+end
+
 -- Sub-page: world tooltips (units and objects under the cursor) in cinematic mode.
 local function CreateTooltipPanel()
 	local canvas, content = CreateScrollPage()
@@ -3652,6 +3687,7 @@ CreateRevealPanel()
 CreateCombatPanel()
 CreateExtrasPanel()
 CreateMinimapPanel()
+CreateQuestTrackerPanel()
 -- World tooltips always show for now (see ns.WORLD_TOOLTIP_HIDING): no page.
 if ns.WORLD_TOOLTIP_HIDING then
 	CreateTooltipPanel()
