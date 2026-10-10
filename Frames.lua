@@ -690,7 +690,7 @@ ns.COMBAT_SHOW = {
 	{ key = "tot", label = "Target of target", default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = "Focus", default = true, frames = { "FocusFrame" } },
 	-- morePage: the options page with more settings for it, which can keep it up besides.
-	{ key = "minimap", label = "Minimap", default = false, groups = { "minimap" }, morePage = "Minimap" },
+	{ key = "minimap", label = "Minimap", default = true, groups = { "minimap" }, morePage = "Minimap" },
 	{ key = "quests", label = "Quest tracker", default = false, frames = FRAME_GROUPS.quests,
 		morePage = "Quest tracker" },
 	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs",

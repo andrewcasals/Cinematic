@@ -116,10 +116,8 @@ local function AddCameraMenu(root, db)
 		zoom:CreateCheckbox(mode[1], function() return db[mode[2]] end,
 			function() db[mode[2]] = not db[mode[2]] end)
 	end
-	root:CreateCheckbox("Pause music when you move on", function() return db.musicPauseWhenMoving end,
+	root:CreateCheckbox("Pause music when leaving a camera mode", function() return db.musicPauseWhenMoving end,
 		function() db.musicPauseWhenMoving = not db.musicPauseWhenMoving end)
-	root:CreateCheckbox("Pause music when a flight lands", function() return db.musicPauseOnLanding end,
-		function() db.musicPauseOnLanding = not db.musicPauseOnLanding end)
 end
 
 local MENU_MARGIN = 12 -- pixels between the menu and the screen edges

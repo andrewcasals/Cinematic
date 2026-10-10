@@ -42,11 +42,11 @@ Each situation has its own camera, and they hand over seamlessly:
 
 ## Music and atmosphere
 
-* Music fades in with CineMode and out when the UI returns.
-* **Choose which cameras play music:** flights, AFK, cozy, vista, fishing, RP walks and auto-runs can each start a fresh track.
+* Music fades in as a camera starts and out when the UI returns.
+* **Choose which cameras start music:** flights, AFK, cozy, vista, fishing, RP walks, auto-runs and the quest cam.
 * **No music while you're away:** standing still or going AFK doesn't start music, unless you'd rather it did.
-* **Pause the music** as you move on or when a flight lands. Mute it in combat, on flights, or in cities, inns, dungeons, raids and battlegrounds.
-* **Music fatigue** stops music restarting too often, with exceptions for the moments that matter.
+* **Pause the music** when you leave the camera modes. Mute it in combat, or in cities, inns, dungeons, raids and battlegrounds.
+* **Music fatigue** keeps music from starting again too soon after the last time.
 * **Your own sound and game settings are always restored**, even after a crash.
 
 ## Easy to tweak

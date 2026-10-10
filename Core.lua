@@ -127,7 +127,7 @@ local DEFAULTS = {
 	nameKeepNPCs = false,
 	nameKeepCritters = false,
 	nameKeepFriends = false,
-	nameKeepFriendlyMinions = true,
+	nameKeepFriendlyMinions = false,
 	nameKeepEnemies = false,
 	nameKeepEnemyMinions = false,
 	fadeTooltip = true,       -- hide tooltips for units/objects in the world
@@ -139,17 +139,14 @@ local DEFAULTS = {
 	tooltipFriendlyAtOnce = false, -- ...or a unit you can't
 	tooltipWarmTime = 5,     -- once one's shown, the rest show at once until none has been up this long (0: off)
 	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
-	musicFadeTime = 5,        -- seconds for music to fade in or out
-	musicFatigue = 5,         -- minutes: don't start music again within this long of the last start
-	-- Play music with each camera: a fresh song as it starts, even within the fatigue time.
+	musicFadeTime = 3,        -- seconds for music to fade in or out
+	musicFatigue = 2,         -- minutes: don't start music again within this long of the last start
+	-- Which cameras can start music as they start (when music fatigue allows).
 	musicCamFlight = true,
 	musicCamWalk = false,     -- RP walk
-	musicCamRun = true,       -- auto-run
-	musicPauseWhenMoving = false, -- music fades out once you move on from flying, RP walking or standing still
-	musicPauseOnLanding = false,  -- ...and as soon as a flight lands, without waiting for you to move
-	musicPauseFadeTime = 3,      -- seconds that pause takes to fade out (and the music to come back)
+	musicCamRun = false,      -- auto-run
+	musicPauseWhenMoving = true,  -- music fades out once you leave the camera modes and move on
 	musicOffInCombat = false, -- fade game music out while in combat
-	musicOffOnFlights = false, -- ...and while on a flight path
 	musicOffInCities = false, -- ...and in these places
 	musicOffInDungeons = false,
 	musicOffInRaids = false,
@@ -448,6 +445,7 @@ for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions",
 		DEFAULTS["nameIn" .. suffix .. key] = false
 	end
 end
+DEFAULTS.nameInPvPEnemies = true
 DEFAULTS.nameInPvPEnemyMinions = true
 -- Both grids' Always column: the row stays up everywhere, whatever its other boxes say.
 for _, kind in ipairs(ns.PLATE_KINDS) do
@@ -1764,6 +1762,11 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.vistaOrbitPitchDown == 5 then ns.db.vistaOrbitPitchDown = nil end
 			ns.db.vistaSettingsV2 = true
 		end
+		-- Auto-run's "Play music" was on by default; it's off now, unless changed.
+		if not ns.db.runMusicV2 then
+			if ns.db.musicCamRun == true then ns.db.musicCamRun = nil end
+			ns.db.runMusicV2 = true
+		end
 		-- "Start a fresh song when" and "Start music anyway" became one "Play
 		-- music" choice per camera: one switched off in both stays off.
 		for new, old in pairs({ Flight = { "musicNewSongOnFlights", "fatigueIgnoreOnFlights" },
@@ -1906,6 +1909,8 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"flyByDistance", "flyByMinDistance", "flyByMaxDistance", "flyByTrace", "flyByLower",
 			"cameraInputPause", "questCamRandomSide", "questCamLeft", "lastMusicStartedAt",
 			"musicCamIdle", "musicWhenAFK", "noMusicWhenAFK", -- (now eventAFKMusic)
+			"musicPauseOnLanding", "musicPauseFadeTime", -- (leaving the flight camera; the music fade time)
+			"musicOffOnFlights", -- (the flight camera's Music switch, Camera Triggers page)
 			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
 			"plateAlwaysTarget", -- (now plateAlwaysTargetEnemy, plateAlwaysTargetFriendly)
 			"plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut", "plateTargetFriendlyFadeIn",

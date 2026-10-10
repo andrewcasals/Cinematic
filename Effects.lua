@@ -164,7 +164,8 @@ ns.music = { managing = false, level = 0, volume = 1 }
 -- their change wins over any fade or mute.
 local MUSIC_VOLUME_EPSILON = 0.005
 local musicWritten
--- When the addon last started music this session (for music fatigue).
+-- When a camera last started the addon's music this session (for music
+-- fatigue). Not saved: nil after a login or /reload, so the first camera plays.
 local musicStartedAt
 
 -- Music trace (for tracking down the music volume left at 0): every write to
@@ -287,8 +288,8 @@ end
 
 -- Standing still or AFK, as far as music goes: the AFK camera, the wait for it
 -- (standing still with the UI faded) or being flagged AFK. With Go AFK's
--- music off (Camera Triggers page), none of these starts music, brings it back
--- from the move-on pause or swaps in a fresh song; music already playing carries on.
+-- music off (Camera Triggers page), none of these brings music back from the
+-- move-on pause; music already playing carries on.
 local function QuietForAFK()
 	if ns.db.eventAFKMusic then
 		return false
@@ -301,49 +302,18 @@ end
 -- up afterwards. Music the addon plays applies it directly; the player's own
 -- music gets its volume saved (crash-safe) and ducked, then restored.
 local COMBAT_MUSIC_FADE = 1
+-- Leaving the camera modes: none running for this long while you move. A
+-- shorter gap is one camera handing over to another (vista to cozy...).
+local CAM_HANDOVER = 2
 -- musicOff: the player's own music switched off by the mute; managedOff: the
 -- addon's cinematic music switched off by it. Kept apart so one never undoes
 -- the other.
 local combatMusic = { level = 1, ducking = false, original = 1, musicOff = false, managedOff = false,
 	lastFightAt = -math.huge }
 
--- New song swap: rather than cutting the current track dead, it fades out,
--- music is switched off for a moment (so the game picks a fresh track), then
--- the new one fades in. phase is nil, "out", "gap" or "in".
-local SONG_SWAP_FADE_OUT = 1.5
-local NEW_SONG_GAP = 0.2
-local songSwap = { level = 1, phase = nil, gapUntil = 0 }
-
-local function UpdateSongSwap(elapsed)
-	if songSwap.phase == "out" then
-		songSwap.level = ns.Approach(songSwap.level, 0, elapsed, SONG_SWAP_FADE_OUT)
-		if songSwap.level <= 0 then
-			SetCVar("Sound_EnableMusic", 0)
-			songSwap.phase = "gap"
-			songSwap.gapUntil = GetTime() + NEW_SONG_GAP
-		end
-	elseif songSwap.phase == "gap" then
-		if GetTime() >= songSwap.gapUntil then
-			-- Switch back on unless a mute has since taken over (it brings a fresh
-			-- track itself when it ends), the addon's music stopped and put the
-			-- player's setting back, or something else already did.
-			if combatMusic.level > 0 and songSwap.managed == ns.music.managing
-				and GetCVar("Sound_EnableMusic") == "0" then
-				SetCVar("Sound_EnableMusic", 1)
-			end
-			songSwap.phase = "in"
-		end
-	elseif songSwap.phase == "in" then
-		songSwap.level = ns.Approach(songSwap.level, 1, elapsed, ns.db.musicFadeTime)
-		if songSwap.level >= 1 then
-			songSwap.phase = nil
-		end
-	end
-end
-
--- The volume share left after the combat/place mutes and any song swap.
+-- The volume share left after the combat/place mutes.
 local function MusicDuck()
-	return combatMusic.level * songSwap.level
+	return combatMusic.level
 end
 
 -- Once fully faded out, music is switched off rather than left playing at
@@ -372,51 +342,52 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	-- fight ended, so back-to-back fights don't bring the music in and out.
 	local fighting = handlesMusic and ns.db.musicOffInCombat
 		and now - combatMusic.lastFightAt < ns.db.calmTime
-	local flying = handlesMusic and ns.db.musicOffOnFlights and UnitOnTaxi("player")
 	-- Music belongs to the camera modes (flying, RP walking, standing still,
-	-- vista, cozy, fishing...): once you move on from one, it fades out, and a
-	-- fresh track comes in when the next one starts. With pause on landing, a
-	-- flight's music fades out as you touch down, without waiting for you to move.
+	-- vista, cozy, fishing, the quest cam...): once you leave them all and move
+	-- on, it fades out, and comes back when the next one starts. Going from one
+	-- camera straight to another (vista to cozy) isn't leaving, nor is standing
+	-- still (the wait for the AFK camera). It fades at the music fade time.
 	-- (Any camera mode lifts the pause: vista, cozy and fish start straight away
 	-- from their emote, before standing still would count. Not the AFK camera
 	-- with Go AFK's music off: the music stays paused while you're away.)
-	local onTaxi = UnitOnTaxi("player")
-	local landed = combatMusic.wasOnTaxi and not onTaxi
-	combatMusic.wasOnTaxi = onTaxi
-	if not (handlesMusic and (ns.db.musicPauseWhenMoving or ns.db.musicPauseOnLanding))
-		or (ns.CameraMode and ns.CameraMode() and not QuietForAFK()) then
+	local inCam = (ns.CameraMode and ns.CameraMode() and not QuietForAFK())
+		or (ns.QuestCamActive and ns.QuestCamActive())
+	if inCam then
+		combatMusic.camSeenAt = now
+	end
+	local leftCams = now - (combatMusic.camSeenAt or -math.huge) >= CAM_HANDOVER
+	if not (handlesMusic and ns.db.musicPauseWhenMoving) or inCam then
 		combatMusic.movingPaused = false
-	elseif (ns.db.musicPauseWhenMoving and ns.playerMoving) or (ns.db.musicPauseOnLanding and landed) then
+	elseif ns.playerMoving and leftCams then
 		combatMusic.movingPaused = true
 		combatMusic.pauseFade = true
 	end
 	local blocked = handlesMusic and ns.IsMusicBlocked()
 	local moving = combatMusic.movingPaused
 	if playerOverride then
-		combatMusic.override = { fighting = fighting, flying = flying, blocked = blocked, moving = moving }
+		combatMusic.override = { fighting = fighting, blocked = blocked, moving = moving }
 		combatMusic.level = 1
 	end
 	local o = combatMusic.override
-	if o and (not (fighting or flying or blocked or moving) or (fighting and not o.fighting)
-		or (flying and not o.flying) or (blocked and not o.blocked) or (moving and not o.moving)) then
+	if o and (not (fighting or blocked or moving) or (fighting and not o.fighting)
+		or (blocked and not o.blocked) or (moving and not o.moving)) then
 		combatMusic.override = nil
 	end
 	if combatMusic.override then
-		fighting, flying, blocked, moving = false, false, false, false
+		fighting, blocked, moving = false, false, false
 	end
-	local otherMute = fighting or flying or blocked
+	local otherMute = fighting or blocked
 	local target = (otherMute or moving) and 0 or 1
 	-- The move-on pause fades at its own speed, out and back in again; the
 	-- other mutes use the quick fade.
 	if otherMute or combatMusic.level >= 1 then
 		combatMusic.pauseFade = false
 	end
-	local fade = combatMusic.pauseFade and ns.db.musicPauseFadeTime or COMBAT_MUSIC_FADE
+	local fade = combatMusic.pauseFade and ns.db.musicFadeTime or COMBAT_MUSIC_FADE
 	if combatMusic.level ~= target then
 		combatMusic.level = ns.Approach(combatMusic.level, target, elapsed, fade)
 	end
 	local silent = combatMusic.level <= 0
-	UpdateSongSwap(elapsed)
 	local duck = MusicDuck()
 
 	if ns.music.managing then
@@ -428,8 +399,6 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	combatMusic.managedOff = false -- the addon's music has stopped; its on/off was restored
 
 	-- The player's own music: save its volume and on/off, then duck it.
-	-- (A song swap ducks it the same way; during the swap's gap music is off, so
-	-- the volume just holds until the new track comes in.)
 	if duck < 1 and (GetCVar("Sound_EnableMusic") == "1" or combatMusic.musicOff) then
 		-- (Saved again if the addon's own music put the volume back meanwhile:
 		-- ducking on without a saved copy would leave it turned down for good.)
@@ -460,19 +429,20 @@ function ns.StopCombatMusicNow()
 	end
 	combatMusic.musicOff, combatMusic.managedOff, combatMusic.override = false, false, nil
 	combatMusic.level = 1
-	songSwap.level, songSwap.phase = 1, nil
 end
 
 -- The death song picked for this death (a music file ID), or nil; see SetDeathSong.
 local deathSong = { file = nil, playing = false }
 
--- "Play music": as a camera starts, a fresh song, even if music played
--- recently (music fatigue). The flight, RP walk and auto-run cameras each have
--- a switch; the cozy, vista and fish cameras follow the event that started
--- them (the Camera Triggers page's Music column, event<key>Music). The AFK
--- camera's is Go AFK's (eventAFKMusic), and the quest camera's its own event's
--- (eventQuestMusic).
-local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "musicCamRun" }
+-- Music starts with a camera: as one starts with its music switch on, and
+-- music fatigue allows. The flight, RP walk and auto-run cameras each have a
+-- switch; the cozy, vista and fish cameras follow the event that started them
+-- (the Camera Triggers page's Music column, event<key>Music). The AFK camera's
+-- is Go AFK's (eventAFKMusic), and the quest camera's its own event's
+-- (eventQuestMusic). Music already playing just carries on: no camera swaps
+-- in a new song.
+local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "musicCamRun",
+	idle = "eventAFKMusic", quest = "eventQuestMusic" }
 local EVENT_MUSIC_CAMS = { cozy = true, vista = true, fish = true }
 
 local function CameraMusicOn(mode)
@@ -483,82 +453,13 @@ local function CameraMusicOn(mode)
 	return MUSIC_CAM[mode] ~= nil and ns.db[MUSIC_CAM[mode]] or false
 end
 
--- Times music starts despite music fatigue: in a camera mode set to play music.
-local function FatigueOverridden()
-	local mode = ns.CameraMode and ns.CameraMode()
-	if (mode == "idle" and ns.db.eventAFKMusic)
-		or (mode and CameraMusicOn(mode))
-		or (ns.db.eventQuestMusic and ns.QuestCamActive and ns.QuestCamActive()) then
-		return true
-	end
-	return false
-end
+-- The camera running ("flight", "walk"... or "quest"), and whether its start
+-- is still waiting to start music (held until CineMode is in, then used up).
+local musicCam, musicCamPending = nil, false
 
--- New song: the current track fades out, music is switched off and back on,
--- which makes the game start a fresh track, and that fades in (see songSwap).
--- Happens as the flight rotation starts (or at takeoff with flight rotation
--- off) and as the standing-still camera starts, once per flight / per spell of
--- standing still. Skipped if music isn't playing, or on flights while muted
--- there (a fresh track comes on landing).
-local wasOnTaxiForMusic = false
-local songFlight = false -- this flight already got its new song
-local songStillSince     -- the standing-still spell that already got one
--- RP walking: a new song when you set off, but not for every pause. Stopping
--- for less than this long and walking on counts as the same walk.
-local WALK_SONG_GAP = 20
-local lastModeAt = {} -- camera mode -> when it was last running (walk, run, cozy, vista, fish)
-
--- Switching straight from one camera mode to another (vista to cozy, idle to
--- walking...) keeps the song that's playing: only a mode started from none
--- brings a new one. A gap of up to MODE_HANDOVER seconds between the two
--- still counts as switching.
-local MODE_HANDOVER = 2
-local modeNow, modeSeenAt, modeHandover = nil, -math.huge, false
-
-local function NoteCameraMode()
-	local mode = ns.CameraMode and ns.CameraMode()
-	if not mode then
-		return
-	end
-	local now = GetTime()
-	if now - modeSeenAt >= MODE_HANDOVER then
-		modeHandover = false -- started from no camera mode
-	elseif mode ~= modeNow then
-		modeHandover = true
-	end
-	modeNow = mode
-	modeSeenAt = now
-end
-
--- (anyway: for the quest cam, not a camera mode, so never carrying on from one.)
-local function RestartMusic(anyway)
-	if not ns.db.musicInCinematic or GetCVar("Sound_EnableMusic") ~= "1" then
-		return
-	end
-	-- Carrying on from another camera mode: the song already playing stays.
-	NoteCameraMode()
-	if modeHandover and not anyway then
-		return
-	end
-	-- Already swapping, or the addon's music is still fading in (it's a fresh
-	-- track already) or out: cutting it now would only make it skip.
-	if songSwap.phase or (ns.music.managing and ns.music.level < 1) then
-		return
-	end
-	-- Muted or mid-mute: the mute brings a fresh track in when it ends.
-	if combatMusic.level < 1 then
-		return
-	end
-	songSwap.phase = "out"
-	songSwap.managed = ns.music.managing
-end
-
-local function NewSongForFlight()
-	if songFlight or not ns.db.musicCamFlight or ns.db.musicOffOnFlights then
-		return
-	end
-	songFlight = true
-	RestartMusic()
+local function MusicFatigued()
+	return ns.db.musicFatigue > 0 and musicStartedAt ~= nil
+		and GetTime() - musicStartedAt < ns.db.musicFatigue * 60
 end
 
 -- Death song: while the death camera runs, a song of its own plays in place of
@@ -624,19 +525,6 @@ local function UpdateDeathSong()
 	end
 end
 
--- Called by the camera when a rotation starts ("taxiOrbit", "idleOrbit"...).
--- It also restarts after you move the camera; only the first start counts.
--- (The other cameras get their fresh song in UpdateMusic, as they start.)
-function ns.OnRotationStart(prefix)
-	if prefix == "taxiOrbit" then
-		NewSongForFlight()
-	elseif prefix == "idleOrbit" and ns.db.eventAFKMusic and ns.stillSince
-		and songStillSince ~= ns.stillSince then
-		songStillSince = ns.stillSince
-		RestartMusic()
-	end
-end
-
 -- /cine debug music: a chat line whenever the music state changes. Levels are
 -- shown as 0, "part" or 1 so a fade doesn't print every step.
 local lastMusicReport
@@ -649,12 +537,12 @@ local function ReportMusic(cinematic)
 		return
 	end
 	local volume = tonumber(GetCVar("Sound_MusicVolume")) or -1
-	local report = ("music: cine %s mode %s | managing %s level %s vol %.2f | mute %s%s%s | swap %s | duck %s | saved %s | game: music %s volume %s"):format(
+	local report = ("music: cine %s mode %s | managing %s level %s vol %.2f | mute %s%s%s | cam %s | duck %s | saved %s | game: music %s volume %s"):format(
 		tostring(cinematic), tostring(ns.CameraMode and ns.CameraMode()),
 		tostring(ns.music.managing), Bucket(ns.music.level), ns.music.volume,
 		Bucket(combatMusic.level), combatMusic.movingPaused and " (moved)" or "",
 		combatMusic.override and " (overridden)" or "",
-		tostring(songSwap.phase), tostring(combatMusic.ducking),
+		tostring(musicCam), tostring(combatMusic.ducking),
 		tostring(ns.db.savedCVars.Sound_MusicVolume), GetCVar("Sound_EnableMusic"),
 		volume <= 0 and "0" or volume >= (ns.music.managing and ns.music.volume or combatMusic.original) - 0.01
 			and ("%.2f"):format(volume) or "fading")
@@ -664,49 +552,20 @@ local function ReportMusic(cinematic)
 	end
 end
 
--- Music kept off for being AFK (QuietForAFK) this cinematic spell: it stays
--- off as you come back and set off running, until another camera mode starts
--- (a flight, a walk, sitting down...) or the UI comes back. (Starting it then
--- would only bring a swell of music as the move-on pause fades it out.)
-local afkKeptQuiet = false
-
 function ns.UpdateMusic(cinematic, elapsed)
 	ReportMusic(cinematic)
-	local now = GetTime()
-	NoteCameraMode()
-	-- RP walk, auto-run, cozy, vista and fish: a new song as the camera starts,
-	-- but not for a short break in the same walk, run or spell (nor when
-	-- carrying straight on from another camera mode; see RestartMusic).
-	local mode = ns.CameraMode and ns.CameraMode()
-	if mode and mode ~= "flight" and (MUSIC_CAM[mode] or EVENT_MUSIC_CAMS[mode]) then
-		if now - (lastModeAt[mode] or -math.huge) > WALK_SONG_GAP and CameraMusicOn(mode) then
-			RestartMusic()
-		end
-		lastModeAt[mode] = now
-	end
-	-- The quest cam likewise (eventQuestMusic), not for each quest giver in a row.
-	if ns.QuestCamActive and ns.QuestCamActive() then
-		if now - (lastModeAt.quest or -math.huge) > WALK_SONG_GAP and ns.db.eventQuestMusic then
-			RestartMusic(true)
-		end
-		lastModeAt.quest = now
-	end
-	local onTaxi = UnitOnTaxi("player")
-	if onTaxi ~= wasOnTaxiForMusic then
-		wasOnTaxiForMusic = onTaxi
-		songFlight = false
-		if onTaxi and not ns.db.taxiOrbit then
-			NewSongForFlight() -- no rotation to wait for: new song at takeoff
-		end
+	-- A camera starting (or the quest cam) may start music; switching from one
+	-- camera to another counts as a start too.
+	local cam = (ns.CameraMode and ns.CameraMode()) or (ns.QuestCamActive and ns.QuestCamActive() and "quest") or nil
+	if cam ~= musicCam then
+		musicCam = cam
+		musicCamPending = cam ~= nil and CameraMusicOn(cam)
 	end
 	UpdateDeathSong()
 	if deathSong.file then
 		return -- the death song has the music for now
 	end
 	local want = cinematic and ns.db.musicInCinematic
-	if not want or ns.db.eventAFKMusic or (mode and not QuietForAFK()) then
-		afkKeptQuiet = false
-	end
 	-- The player changed the music volume while the addon was fading or muting
 	-- it: that's their new volume, to play at now and come back to afterwards.
 	local playerVolume = PlayerMusicVolume()
@@ -727,22 +586,13 @@ function ns.UpdateMusic(cinematic, elapsed)
 	end
 	local switchedOn = (combatMusic.musicOff or combatMusic.managedOff) and GetCVar("Sound_EnableMusic") == "1"
 	UpdateCombatMusic(elapsed, playerVolume ~= nil or switchedOn)
-	if want and not ns.music.managing then
-		if GetCVar("Sound_EnableMusic") == "1" then
-			return
-		end
-		-- Standing still or AFK, with Go AFK's music off: no music
-		-- until another camera mode starts it.
-		if afkKeptQuiet or QuietForAFK() then
-			afkKeptQuiet = true
-			return
-		end
-		-- Music fatigue: started music recently? Stay quiet this time. (Not
-		-- saved, so it starts over on each login and /reload.)
-		if ns.db.musicFatigue > 0 and musicStartedAt and GetTime() - musicStartedAt < ns.db.musicFatigue * 60
-			and not FatigueOverridden() then
-			return
-		end
+	-- Only a camera starts music, and not again within the fatigue time of the
+	-- last time one did. Your own music already on is left alone.
+	local start = want and musicCamPending and not ns.music.managing
+	if want and musicCamPending then
+		musicCamPending = false
+	end
+	if start and GetCVar("Sound_EnableMusic") == "0" and not MusicFatigued() then
 		musicStartedAt = GetTime()
 		ns.SaveCVar("Sound_EnableMusic")
 		ns.SaveCVar("Sound_MusicVolume")
@@ -769,7 +619,7 @@ function ns.UpdateMusic(cinematic, elapsed)
 		ns.music.level = ns.Approach(ns.music.level, target, elapsed, ns.db.musicFadeTime)
 		-- (Switched off while muted: the slider shows your own volume meanwhile.)
 		SetMusicVolume(combatMusic.managedOff and ns.music.volume or ns.music.volume * ns.music.level * duck)
-		-- Keep writing until the mute / song swap level is back to full.
+		-- Keep writing until the mute level is back to full.
 		ns.music.combatApplied = duck < 1
 	end
 	if ns.music.level == 0 and not want then

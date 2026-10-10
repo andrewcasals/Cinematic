@@ -1059,17 +1059,6 @@ local PLACES = {
 	{ "Raids", "Raids" }, { "PvP", "Battlegrounds and arenas" },
 }
 
--- A "Turn ... off in" list of place checkboxes (keys prefix .. "Cities" etc.),
--- added to a Stack. Returns the checkboxes.
-local function PlaceList(parent, stack, title, prefix, tip)
-	stack:Header(parent, title)
-	local checks = {}
-	for _, place in ipairs(PLACES) do
-		checks[#checks + 1] = stack:Add(Check(parent, prefix .. place[1], place[2], tip), "check")
-	end
-	return checks
-end
-
 -- Every camera mode's page is laid out the same way:
 --   Starting (full width): opts.top's own section first if any (the fish
 --     camera's casting), then starting cinematic mode straight away, the
@@ -1274,17 +1263,12 @@ local function CreateEventsPanel()
 	cameraHeader:SetPoint("LEFT", header, "LEFT", CAMERA_X, 0)
 	local musicHeader = Label(content, "GameFontNormal", "Music")
 	musicHeader:SetPoint("LEFT", header, "LEFT", MUSIC_X, 0)
-	local MUSIC_TIP = "A fresh song starts as this event's camera starts, even if music played " ..
-		"recently (see Fatigue on the Audio page). Not when you switch straight over from another " ..
-		"camera mode: the song playing carries on, as it does after a break of under 20 seconds. " ..
-		"Off: the music is left as it is. Needs \"Play music in CineMode\" on the Audio page."
+	local MUSIC_TIP = "Music starts as this event's camera starts, unless the addon started music " ..
+		"within the fatigue time (Audio page). Music already playing just carries on. Off: this " ..
+		"camera never starts music. Needs \"Play music in CineMode\" on the Audio page."
 	local MUSIC_EXTRA_TIPS = {
-		Flight = " Once per flight, as the camera starts rotating (at takeoff if flight rotation is " ..
-			"off); not while music is muted on flights.",
-		AFK = " This covers the AFK camera however it starts, standing still included. Off goes " ..
-			"further: standing still with the UI faded and being AFK don't start any music, nor " ..
-			"bring it back after a pause, so it doesn't come on while you're away.",
-		Quest = " Once for a run of quest givers, not for each one.",
+		AFK = " This covers the AFK camera however it starts, standing still included. Off also " ..
+			"keeps music from coming back after a pause while you're away.",
 	}
 
 	local previous, dx = header, 0
@@ -1325,8 +1309,8 @@ local function CreateEventsPanel()
 		end
 		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
 
-		-- Music: the event's own switch; a flight's is the flight camera's (once
-		-- per flight, as it starts rotating). Going AFK's covers the AFK camera
+		-- Music: the event's own switch; a flight's is the flight camera's.
+		-- Going AFK's covers the AFK camera
 		-- however it starts, so it isn't greyed with the event set to none.
 		local musicKey = (event.key == "Flight" and "musicCamFlight")
 			or (ns.DEFAULTS["event" .. event.key .. "Music"] ~= nil and ("event" .. event.key .. "Music"))
@@ -2656,12 +2640,13 @@ local function CreateAudioPanel()
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	-- Left column: music, fresh songs, fatigue
+	-- Left column: music, fatigue
 	local musicHeader = Header(content, "Music", subtitle, -20)
 
 	local music = Check(content, "musicInCinematic", "Play music in CineMode",
-		"Fades game music in when the UI fades out and back out when it returns, " ..
-		"using your music volume. If music was already on, it's left alone.")
+		"Fades game music in as a camera starts (the ones ticked under Music on the Camera " ..
+		"Triggers page) and back out when the UI returns, using your music volume. If music " ..
+		"was already on, it's left alone.")
 	music:SetPoint("TOPLEFT", musicHeader, "BOTTOMLEFT", -2, -6)
 	music:HookScript("OnClick", Refresh) -- grey out / enable the options that depend on it
 
@@ -2678,61 +2663,35 @@ local function CreateAudioPanel()
 
 	local fatigue = Slider(content, "musicFatigue", "Music fatigue", 0, 30, 1, "%d min")
 	fatigue:SetPoint("TOPLEFT", fatigueHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(fatigue, "Once the addon has started music, it won't start it again for this " ..
-		"long, so short spells of CineMode don't keep restarting it. The events ticked under " ..
-		"Music on the Camera Triggers page start it anyway. Music coming back after a mute doesn't count. 0 turns this off.")
+	Tooltip(fatigue, "Once a camera has started music, no camera starts it again for this long, " ..
+		"counted from when it started. The first camera after a login or /reload always can. " ..
+		"Music coming back after a mute doesn't count. 0 turns this off.")
 	DependsOnMusic(fatigue)
 
-	-- Right column: muting
-	local muteHeader = Label(content, "GameFontNormal", "Muting")
+	-- Right column: muting, all in one list ("In combat", "In cities"...)
+	local muteHeader = Label(content, "GameFontNormal", "Mute music")
 	muteHeader:SetPoint("TOPLEFT", musicHeader, "TOPLEFT", 320, 0)
 
-	local combatMusic = Check(content, "musicOffInCombat", "Mute music in combat",
+	local combatMusic = Check(content, "musicOffInCombat", "In combat",
 		"Music fades out over about a second when a fight starts, and a fresh track fades back " ..
 		"in once the Calm Timer (on the CineMode page) has passed with no new fight. Works on " ..
 		"your own game music too; your volume is put back afterwards.")
 	combatMusic:SetPoint("TOPLEFT", muteHeader, "BOTTOMLEFT", -2, -6)
 	DependsOnMusic(combatMusic)
 
-	local flightMusic = Check(content, "musicOffOnFlights", "Mute music on flights",
-		"Music fades out and switches off when you take off, and a fresh track fades in " ..
-		"when you land.")
-	flightMusic:SetPoint("TOPLEFT", combatMusic, "BOTTOMLEFT", 0, -2)
-	DependsOnMusic(flightMusic)
-
-	local movingMusic = Check(content, "musicPauseWhenMoving", "Pause music when you move on",
-		"Music fades out once you start moving after a flight, RP walking or standing still " ..
-		"(running, riding). A fresh track fades in when you next fly, walk, or sit down (or stand " ..
-		"still for the AFK camera delay, with Go AFK's music on, Camera Triggers page).")
-	movingMusic:SetPoint("TOPLEFT", flightMusic, "BOTTOMLEFT", 0, -2)
+	local movingMusic = Check(content, "musicPauseWhenMoving", "Leaving a camera mode",
+		"Music fades out once you leave the camera modes and move on: walking off from the cozy " ..
+		"camera, say. Going from one camera straight to another (vista to cozy) keeps it playing, " ..
+		"as does standing still. A fresh track fades in when the next camera starts (standing " ..
+		"still counts once the AFK camera starts, with Go AFK's music on, Camera Triggers page). " ..
+		"Fades at the music fade time.")
+	movingMusic:SetPoint("TOPLEFT", combatMusic, "BOTTOMLEFT", 0, -2)
 	DependsOnMusic(movingMusic)
-	movingMusic:HookScript("OnClick", Refresh) -- grey out / enable the fade below
 
-	local landingMusic = Check(content, "musicPauseOnLanding", "Pause music when a flight lands",
-		"Music fades out as soon as you touch down, without waiting for you to move. A fresh " ..
-		"track fades in when you next fly, walk, or sit down (or stand still for the AFK camera " ..
-		"delay, with Go AFK's music on, Camera Triggers page).")
-	landingMusic:SetPoint("TOPLEFT", movingMusic, "BOTTOMLEFT", 0, -2)
-	DependsOnMusic(landingMusic)
-	landingMusic:HookScript("OnClick", Refresh)
-
-	local pauseFade = Slider(content, "musicPauseFadeTime", "Pause fade time", 0.5, 10, 0.5, "%.1f sec")
-	pauseFade:SetPoint("TOPLEFT", landingMusic, "BOTTOMLEFT", 24, -26)
-	Tooltip(pauseFade, "How long the music takes to fade out when you move on or land, and to " ..
-		"fade back in when the next flight, walk or other camera starts.")
-	GreyUnless(pauseFade, function(db)
-		return db.musicInCinematic and (db.musicPauseWhenMoving or db.musicPauseOnLanding)
-	end)
-
-	-- Back out to the checkboxes' edge for the next heading.
-	local pauseFadeEdge = CreateFrame("Frame", nil, content)
-	pauseFadeEdge:SetSize(1, 1)
-	pauseFadeEdge:SetPoint("TOPLEFT", pauseFade, "BOTTOMLEFT", -24, -4)
-
-	local placeChecks = PlaceList(content, Stack(pauseFadeEdge, "check"), "Mute music in", "musicOffIn",
-		"Music fades out here (your own game music too) and back in when you leave.")
-	for _, check in ipairs(placeChecks) do
-		DependsOnMusic(check)
+	local muteStack = Stack(movingMusic, "check")
+	for _, place in ipairs(PLACES) do
+		DependsOnMusic(muteStack:Add(Check(content, "musicOffIn" .. place[1], "In " .. place[2]:lower(),
+			"Music fades out here (your own game music too) and back in when you leave."), "check"))
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

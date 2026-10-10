@@ -85,10 +85,10 @@ ns.EVENTS = {
 	-- Nor this: the quest cam (QuestCam.lua) or none.
 	{ key = "Quest", label = "Talk to a quest giver", camera = "quest" },
 }
--- Each event's Music column (event<key>Music): a fresh song as its camera
--- starts. Flights use the flight camera's own switch (musicCamFlight). Going
--- AFK's (eventAFKMusic) covers the AFK camera however it starts: off, it
--- keeps music from starting while you're away.
+-- Each event's Music column (event<key>Music): its camera can start music
+-- (when music fatigue allows). Flights use the flight camera's own switch
+-- (musicCamFlight). Going AFK's (eventAFKMusic) covers the AFK camera however
+-- it starts.
 ns.EVENT_MUSIC_DEFAULT = { cozy = false, tele = false, vista = true, fish = false }
 for _, event in ipairs(ns.EVENTS) do
 	ns.DEFAULTS["event" .. event.key .. "Camera"] = event.camera
@@ -96,7 +96,6 @@ for _, event in ipairs(ns.EVENTS) do
 		ns.DEFAULTS["event" .. event.key .. "Music"] = ns.EVENT_MUSIC_DEFAULT[event.camera]
 	end
 end
-ns.DEFAULTS.eventSitMusic = false -- (/sit picks the vista camera, but quietly)
 ns.DEFAULTS.eventAFKMusic = false
 ns.DEFAULTS.eventQuestMusic = false
 
@@ -2568,8 +2567,6 @@ function ns.UpdateOrbit(cinematic, elapsed)
 				ns.orbit.randomRight = math.random() < 0.5 -- (used with deathOrbitRandomDir)
 				ns.orbit.continuous = false -- its own slow turn, eased in from a standstill
 				ns.DeathTestLog("turn started")
-			elseif ns.OnRotationStart then
-				ns.OnRotationStart(prefix)
 			end
 			-- Start moving straight away, except while the takeoff swing is
 			-- still bringing the camera round behind the character.
