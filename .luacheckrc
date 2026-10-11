@@ -149,6 +149,7 @@ read_globals = {
 	"TaxiNodeGetType",
 	"TaxiNodeName",
 	"ToggleRun",
+	"ToggleSheath",
 	"UIErrorsFrame",
 	"UIPanelWindows",
 	"UIParent",

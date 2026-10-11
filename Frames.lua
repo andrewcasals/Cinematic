@@ -700,6 +700,8 @@ ns.COMBAT_SHOW = {
 		morePage = "Quest tracker" },
 	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
+	{ key = "swing", label = "Swing timer", default = true, retail = false,
+		frames = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
 	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
 		frames = FRAME_GROUPS.cooldowns },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
@@ -726,8 +728,6 @@ ns.COMBAT_SHOW = {
 		"MultiCastSlotButton3", "MultiCastSlotButton4",
 		"MultiCastActionPage1", "MultiCastActionPage2", "MultiCastActionPage3", "TotemFrame",
 	} },
-	{ key = "swing", label = "Swing timer", default = true, retail = false,
-		frames = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
 	{ key = "micro", label = "Micro menu and bags", default = true,
 		frames = { "MicroButtonAndBagsBar", "MicroMenuContainer", "BagsBar" } },
 	-- (In gamepad mode the Gamepad page's row has them instead: notGamepad.)

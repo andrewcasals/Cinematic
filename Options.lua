@@ -1263,7 +1263,8 @@ local EVENT_TIPS = {
 	Kneel = "Doing the emote. Moving, jumping or another emote ends it.",
 	Chair = "Right-clicking a seat to sit on it; standing up ends it. Seats are recognised by name, " ..
 		"using the words below.",
-	Weapon = "Unsheathing your weapon out of combat, for a \"hero shot\". Putting it away, running or " ..
+	Weapon = "Unsheathing your weapon with your Sheathe/Unsheathe key out of combat, for a \"hero shot\" " ..
+		"(not when it comes out from attacking or casting). Putting it away, running or " ..
 		"combat ends it. With the cozy camera it carries on while you auto-walk (the camera " ..
 		"swings round in front as you walk, even with Stop on move).",
 	Hearth = "Casting your Hearthstone (or Astral Recall, or any spell with \"Hearthstone\" in its " ..

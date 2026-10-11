@@ -73,7 +73,7 @@ ns.EVENTS = {
 	{ key = "Dance", label = "/dance", camera = "cozy" },
 	{ key = "Kneel", label = "/kneel", camera = "cozy" },
 	{ key = "Chair", label = "Sitting in a chair or on a bench", camera = "cozy" },
-	{ key = "Weapon", label = "Unsheathe your weapon (Z)", camera = "cozy", stopsOnMove = true },
+	{ key = "Weapon", label = "Unsheathe your weapon (sheathe key)", camera = "cozy", stopsOnMove = true },
 	{ key = "Hearth", label = "Cast your Hearthstone", camera = "tele" },
 	{ key = "Teleport", label = "Cast a teleport", camera = "tele" },
 	{ key = "Logout", label = "Log out (the 20-second countdown)", camera = "cozy" },
@@ -969,11 +969,16 @@ local function WeaponDrawn()
 	return ok and type(state) == "number" and not (issecretvalue and issecretvalue(state)) and state >= 2
 end
 
--- The weapon trigger: only a weapon you drew yourself out of combat, and never
--- in combat. One drawn for a fight (and still out after it) doesn't count
--- until it's put away and drawn again. Nor does one already out as you log in
--- or reload (weaponWasDrawn is nil until the first look after loading in).
+-- The weapon trigger: only a weapon you drew with the sheathe key out of
+-- combat, and never in combat. One drawn any other way (right-clicking an
+-- enemy, casting, fishing), or for a fight and still out after it, doesn't
+-- count until it's put away and drawn again. Nor does one already out as you
+-- log in or reload (weaponWasDrawn is nil until the first look after loading in).
 local weaponWasDrawn, weaponDrawnCalmly = nil, false
+local sheathKeyAt -- when the sheathe key (whatever it's bound to) was last pressed
+if ToggleSheath then
+	hooksecurefunc("ToggleSheath", function() sheathKeyAt = GetTime() end)
+end
 campfireWatcher:HookScript("OnEvent", function(_, event)
 	if event == "PLAYER_ENTERING_WORLD" then
 		weaponWasDrawn, weaponDrawnCalmly = nil, false
@@ -986,8 +991,9 @@ local function WeaponCozy()
 		weaponWasDrawn = drawn -- loading in: whatever's out already doesn't count
 	end
 	if drawn and not weaponWasDrawn then
-		-- (Casting Fishing brings the pole out: that draw doesn't count.)
-		weaponDrawnCalmly = not inCombat and emoteEvent ~= "Fishing"
+		local byKey = sheathKeyAt and GetTime() - sheathKeyAt < 1.5
+		weaponDrawnCalmly = byKey and not inCombat or false
+		sheathKeyAt = nil
 		if weaponDrawnCalmly then
 			emoteEvent = nil -- drawn after an emote: the latest choice wins
 		end
