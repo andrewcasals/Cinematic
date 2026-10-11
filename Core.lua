@@ -110,14 +110,14 @@ local DEFAULTS = {
 	mouseover = true,      -- hovering a faded element reveals it
 	mouseoverHold = 3,     -- seconds a group stays after the mouse leaves it (per-group overrides below)
 	musicInCinematic = true,  -- turn game music on while cinematic, off after
-	plateCombatEnemies = true, -- in cinematic mode, show these during fights (Enemies: enemy players)
-	plateCombatEnemyMinions = true,
+	plateCombatEnemies = false, -- in cinematic mode, show these during fights (Enemies: enemy players)
+	plateCombatEnemyMinions = false,
 	plateCombatEnemyNPCs = true,
 	plateCombatEnemyMinor = true,
 	plateCombatFriends = false,
 	plateCombatFriendlyMinions = false,
 	plateCombatFriendlyNPCs = false,
-	plateCinematicEnemies = false, -- keep these up in cinematic mode in the open world (plateIn<place><kind> elsewhere)
+	plateCinematicEnemies = true, -- keep these up in cinematic mode in the open world (plateIn<place><kind> elsewhere)
 	plateCinematicEnemyMinions = false,
 	plateCinematicEnemyNPCs = false,
 	plateCinematicEnemyMinor = false,
@@ -411,6 +411,9 @@ end
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 	DEFAULTS[cam[1] .. "HideMinimap"] = false
 end
+-- No AFK camera in dungeons and raids.
+DEFAULTS.idleOffInDungeons = true
+DEFAULTS.idleOffInRaids = true
 DEFAULTS.flightHideMinimap = true
 DEFAULTS.idleHideMinimap = true
 DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
@@ -451,11 +454,14 @@ for _, kind in ipairs(ns.PLATE_KINDS) do
 	end
 end
 -- Kept up in dungeons and raids: friendly players and NPCs; in PvP (flagged,
--- and arenas) and battlegrounds: players on both sides and friendly minions.
+-- and arenas) and battlegrounds: enemy players and NPCs.
 for _, key in ipairs({ "plateInDungeonsFriends", "plateInDungeonsFriendlyNPCs", "plateInRaidsFriends",
-	"plateInRaidsFriendlyNPCs", "plateInPvPEnemies", "plateInPvPEnemyNPCs", "plateInPvPFriends",
-	"plateInPvPFriendlyMinions", "plateInBGsEnemies", "plateInBGsEnemyNPCs", "plateInBGsFriends",
-	"plateInBGsFriendlyMinions" }) do
+	"plateInRaidsFriendlyNPCs", "plateInPvPEnemies", "plateInPvPEnemyNPCs", "plateInBGsEnemies",
+	"plateInBGsEnemyNPCs" }) do
+	DEFAULTS[key] = true
+end
+-- Shown in fights with the other side's players: players on both sides and enemy minions.
+for _, key in ipairs({ "plateCombatPvPEnemies", "plateCombatPvPEnemyMinions", "plateCombatPvPFriends" }) do
 	DEFAULTS[key] = true
 end
 -- And its two rows for your target, shown whatever its own row says: your
