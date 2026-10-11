@@ -47,34 +47,29 @@ local function FormatTime(seconds)
 	return ("%d:%02d left"):format(math.floor(seconds / 60), math.floor(seconds % 60))
 end
 
-local STRENGTHS = { 0, 0.25, 0.5, 0.75, 1 }
-local VIGNETTE_STRENGTHS = { 0, 0.1, 0.15, 0.25, 0.5, 0.75, 1 }
+local STRENGTHS = { 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1 }
 
--- Strength choices: the same fixed steps everywhere (finer values are set with
--- the sliders in settings). Compared as whole percents (slider values aren't exact).
+-- Strength choices: fixed steps (finer values are set with the sliders in
+-- settings). Compared as whole percents (slider values aren't exact).
 local function Percent(value)
 	return value and math.floor(value * 100 + 0.5)
 end
 
-local function AddStrengthChoices(menu, get, set, defaultLabel, choices)
-	if defaultLabel then
-		menu:CreateRadio(defaultLabel, function() return get() == nil end, function() set(nil) end)
-	end
-	for _, value in ipairs(choices or STRENGTHS) do
+local function AddStrengthChoices(menu, get, set)
+	for _, value in ipairs(STRENGTHS) do
 		menu:CreateRadio(("%d%%"):format(Percent(value)),
 			function() return Percent(get()) == Percent(value) end, function() set(value) end)
 	end
 end
 
--- Screen tint section: tint and vignette strengths, 0% being off. Presets,
--- colours and the rest are in settings. A strength above 0% also brings back a
--- tint preset or vignette that was switched off in settings.
+-- VFX section: tint strength, 0% being off. Presets, colours, the
+-- vignette and the rest are in settings. A strength above 0% also brings back
+-- a tint preset that was switched off in settings.
 local function AddTintMenu(root, db)
-	local tint = root
-	tint:CreateDivider()
-	tint:CreateTitle("Screen tint")
+	root:CreateDivider()
+	root:CreateTitle("VFX")
 
-	local strength = tint:CreateButton("Tint strength")
+	local strength = root:CreateButton("Tint")
 	AddStrengthChoices(strength, function()
 		return db.tintPreset == "none" and 0 or db.tintStrength
 	end, function(value)
@@ -85,39 +80,14 @@ local function AddTintMenu(root, db)
 		end
 		ns.RefreshTint()
 	end)
-
-	local vignetteStrength = tint:CreateButton("Vignette strength")
-	AddStrengthChoices(vignetteStrength, function()
-		return db.vignette and db.vignetteStrength or 0
-	end, function(value)
-		db.vignetteStrength = value
-		db.vignette = true
-		ns.RefreshTint()
-	end, nil, VIGNETTE_STRENGTHS)
 end
 
--- Camera section: a submenu to switch each camera mode's zoom on or off.
-local CAMERA_ZOOMS = {
-	{ "Flight camera", "taxiZoom" },
-	{ "AFK camera", "idleZoom" },
-	{ "Cozy camera", "cozyZoom" },
-	{ "Tele camera", "teleZoom" },
-	{ "Vista camera", "vistaZoom" },
-	{ "Fish camera", "fishZoom" },
-	{ "RP walk camera", "walkZoom" },
-	{ "Auto-run camera", "runZoom" },
-}
-
-local function AddCameraMenu(root, db)
+-- Audio section: the Audio page's master music switch.
+local function AddAudioMenu(root, db)
 	root:CreateDivider()
-	root:CreateTitle("Camera")
-	local zoom = root:CreateButton("Zoom")
-	for _, mode in ipairs(CAMERA_ZOOMS) do
-		zoom:CreateCheckbox(mode[1], function() return db[mode[2]] end,
-			function() db[mode[2]] = not db[mode[2]] end)
-	end
-	root:CreateCheckbox("Pause music when leaving a camera mode", function() return db.musicPauseWhenMoving end,
-		function() db.musicPauseWhenMoving = not db.musicPauseWhenMoving end)
+	root:CreateTitle("Audio")
+	root:CreateCheckbox("Allow CineMode to queue Music", function() return db.musicInCinematic end,
+		function() db.musicInCinematic = not db.musicInCinematic end)
 end
 
 local MENU_MARGIN = 12 -- pixels between the menu and the screen edges
@@ -154,48 +124,24 @@ local function ShowMenu(owner)
 	local menu = MenuUtil.CreateContextMenu(owner, function(_, root)
 		local db = ns.GetDB()
 		root:CreateTitle("Cinematic")
-		root:CreateCheckbox("Enabled", function() return db.enabled end, function()
+		root:CreateCheckbox("Enable Cinematic", function() return db.enabled end, function()
 			ns.SetEnabled(not db.enabled)
 			UpdateIcon()
 		end)
-
-		local left = ns.GetSnoozeLeft()
-		if left then
-			root:CreateButton("Turn back on now (" .. FormatTime(left) .. ")", function()
-				ns.Unsnooze()
-				UpdateIcon()
-			end)
-		else
-			root:CreateButton("Turn off for 10 minutes", function()
-				ns.Snooze(600)
-				UpdateIcon()
-			end)
-			root:CreateButton("Turn off until logout", function()
-				ns.Snooze(math.huge)
-				UpdateIcon()
-			end)
-		end
-
-		root:CreateDivider()
-		root:CreateCheckbox("Stay in CineMode in combat",
-			function() return db.stayInCombat end,
-			function() db.stayInCombat = not db.stayInCombat end)
-		root:CreateCheckbox("Always show the minimap",
-			function() return db.alwaysShowMinimap end,
-			function() db.alwaysShowMinimap = not db.alwaysShowMinimap end)
-		root:CreateCheckbox("Keep minimap open while tracking",
-			function() return db.minimapForTracking end,
-			function() db.minimapForTracking = not db.minimapForTracking end)
-		AddCameraMenu(root, db)
-		AddTintMenu(root, db)
-		root:CreateDivider()
-		root:CreateButton("Open settings", ns.OpenOptions)
-		root:CreateButton("Hide this button", function()
+		-- (Ticked whenever the menu is open: unticking hides the button.)
+		root:CreateCheckbox("Show minimap button", function() return db.minimapButton end, function()
 			db.minimapButton = false
 			UpdateIcon()
 			Print("minimap button hidden. Bring it back with /cine button or the " ..
 				"\"Show minimap button\" option.")
 		end)
+		root:CreateCheckbox("Stay in CineMode in combat",
+			function() return db.stayInCombat end,
+			function() db.stayInCombat = not db.stayInCombat end)
+		AddAudioMenu(root, db)
+		AddTintMenu(root, db)
+		root:CreateDivider()
+		root:CreateButton("Open settings", ns.OpenOptions)
 	end)
 	-- The menu opens at the cursor and is only kept on screen; keep it a little
 	-- way off the edges too. (Once it has its size, a frame later.)

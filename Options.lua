@@ -375,7 +375,7 @@ local function CreatePanel()
 	enabled:SetPoint("TOPLEFT", general, "BOTTOMLEFT", -2, -6)
 
 	local minimapButton = Check(panel, "minimapButton", "Show minimap button",
-		"Left-click it for quick options (turn off for a while, combat, tint), right-click for " ..
+		"Left-click it for quick options (combat, music, tint), right-click for " ..
 		"these settings, drag to move it.", function(value)
 			ns.GetDB().minimapButton = value
 			if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
@@ -3489,12 +3489,17 @@ local function CreateQuestTrackerPanel()
 		"if it doesn't have its own).")
 	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 
+	local revealProgress = Check(content, "questRevealOnProgress", "Reveal on receiving quest objective",
+		"Progress on a quest's objectives (a kill or item counted towards it) shows the quest " ..
+		"tracker the same way.")
+	revealProgress:SetPoint("TOPLEFT", reveal, "BOTTOMLEFT", 0, -2)
+
 	-- Classic's quest timer box (retail shows timers in the tracker itself).
 	if ns.OptionAvailable({ retail = false }) then
 		local timer = Check(content, "questTimerShow", "Show the quest timer while one is running",
 			"Keeps the quest timer box up in CineMode, and in fights, while a timed quest " ..
 			"counts down. Just the timer: the quest tracker stays faded.")
-		timer:SetPoint("TOPLEFT", reveal, "BOTTOMLEFT", 0, -2)
+		timer:SetPoint("TOPLEFT", revealProgress, "BOTTOMLEFT", 0, -2)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

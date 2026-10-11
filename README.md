@@ -11,7 +11,7 @@ Immerse yourself in the World of Warcraft. Cinematic quietly fades your UI away 
 * **Hide the UI, keep the look:** a keybind that works like Alt+Z but leaves the tint, letterbox and other effects on screen. It's made for screenshots.
 * **The minimap stays up while tracking** herbs, minerals, treasure or fish.
 * **Your call on every frame:** keep any frame always visible, or fade extra ones from other addons. The Cooldown Manager and Forever Enhanced Cooldown Manager fade out of the box, and show again in fights.
-* **Turns itself off where you'd rather have the full UI:** the open world, inns, cities, dungeons, raids, PvP (flagged, or in battlegrounds and arenas), parties or raid groups. Each camera mode can be turned off in those places too (all but the open world), from one grid on the Camera Modes page. You can also snooze it for 10 minutes or until logout from the minimap button.
+* **Turns itself off where you'd rather have the full UI:** the open world, inns, cities, dungeons, raids, PvP (flagged, or in battlegrounds and arenas), parties or raid groups. Each camera mode can be turned off in those places too (all but the open world), from one grid on the Camera Modes page.
 
 ## A camera with a mind of its own
 
@@ -51,7 +51,7 @@ Each situation has its own camera, and they hand over seamlessly:
 
 ## Easy to tweak
 
-* **A minimap button** with quick switches for tints, zoom, music, combat and the minimap, plus a snooze.
+* **A minimap button** with quick switches for tint strength, music and combat.
 * **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus CineMode, Minimap, Buffs/debuffs, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Nameplates, Chat, Fishing, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds.
 * **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, or start any camera on demand.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.

@@ -1111,13 +1111,17 @@ local function HoverHoldKey(group)
 end
 local hoverHeldUntil = {}
 
--- Accepting a quest brings the quest tracker up as a mouseover would: it
--- fades in, then is gone the quest tracker's mouseover time later.
+-- Accepting a quest, or progress on one's objectives, brings the quest
+-- tracker up as a mouseover would: it fades in, then is gone the quest
+-- tracker's mouseover time later.
 local questRevealUntil = 0
+local QUEST_REVEAL_EVENTS = { QUEST_ACCEPTED = "questRevealOnAccept", QUEST_WATCH_UPDATE = "questRevealOnProgress" }
 local questWatcher = CreateFrame("Frame")
-questWatcher:RegisterEvent("QUEST_ACCEPTED")
-questWatcher:SetScript("OnEvent", function()
-	if ns.db and ns.db.questRevealOnAccept then
+for event in pairs(QUEST_REVEAL_EVENTS) do
+	pcall(questWatcher.RegisterEvent, questWatcher, event)
+end
+questWatcher:SetScript("OnEvent", function(_, event)
+	if ns.db and ns.db[QUEST_REVEAL_EVENTS[event]] then
 		local hold = ns.HoldTime(HoverHoldKey("quests")) - ns.db.fadeOutTime
 		questRevealUntil = GetTime() + ns.db.fadeInTime + math.max(0, hold)
 	end
