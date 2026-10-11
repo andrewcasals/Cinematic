@@ -43,6 +43,11 @@ local FRAME_GROUPS = {
 	-- Retail's quest waypoint: the marker in the world, with its distance,
 	-- that shows where a tracked quest or map pin is.
 	waypoint = { "SuperTrackedFrame" },
+	-- WoW Forever's gamepad mode: its action bars, the button hints top left
+	-- and the aiming dot in the middle of the screen.
+	gamepadbars = { "GamepadMainActionBarFrame" },
+	gamepadlegend = { "GamepadPersistentInputLegend" },
+	gamepadreticle = { "GamepadReticle" },
 	chat = {
 		"GeneralDockManager", "ChatFrameMenuButton", "ChatFrameChannelButton",
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
@@ -695,6 +700,8 @@ ns.COMBAT_SHOW = {
 		morePage = "Quest tracker" },
 	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
+	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
+		frames = FRAME_GROUPS.cooldowns },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
 	{ key = "mainbar", label = "Action bar 1", default = true,
@@ -723,14 +730,27 @@ ns.COMBAT_SHOW = {
 		frames = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
 	{ key = "micro", label = "Micro menu and bags", default = true,
 		frames = { "MicroButtonAndBagsBar", "MicroMenuContainer", "BagsBar" } },
-	{ key = "xp", label = "Experience and reputation bars", default = true, frames = {
+	-- (In gamepad mode the Gamepad page's row has them instead: notGamepad.)
+	{ key = "xp", label = "Experience and reputation bars", default = true, notGamepad = true, frames = {
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
 		"StatusTrackingBarManager",
 	} },
 	{ key = "extra", label = "Extra action and zone ability", default = true, retail = true,
 		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
-	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
-		frames = FRAME_GROUPS.cooldowns },
+	-- WoW Forever's gamepad mode, on the Gamepad page (page = "gamepad") rather
+	-- than the Standard Frames page.
+	{ key = "gamepadbars", label = "Gamepad action bars", default = true, retail = false, page = "gamepad",
+		frames = FRAME_GROUPS.gamepadbars },
+	{ key = "gamepadlegend", label = "Button hints (top left)", default = false, retail = false, page = "gamepad",
+		frames = FRAME_GROUPS.gamepadlegend },
+	{ key = "gamepadreticle", label = "Reticle (center dot)", default = true, retail = false, page = "gamepad",
+		frames = FRAME_GROUPS.gamepadreticle },
+	-- The game's experience bars again, used only in gamepad mode (gamepadOnly).
+	{ key = "gamepadxp", label = "Experience and reputation bars", default = false, retail = false,
+		page = "gamepad", gamepadOnly = true, frames = {
+		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
+		"StatusTrackingBarManager",
+	} },
 }
 -- Then the Other addons, by group (their frames may have no names).
 for _, known in ipairs(ns.ADDON_FRAMES) do
@@ -771,10 +791,23 @@ local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 local ENEMY_SHOW_DEFAULT = {
 	player = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
+	gamepadbars = true, gamepadreticle = true,
 }
 -- Other addons' frames too.
 for _, known in ipairs(ns.ADDON_FRAMES) do
 	ENEMY_SHOW_DEFAULT["addon:" .. known.key] = true
+end
+
+-- Gamepad mode on. On WoW Forever: its gamepad bars are showing (the game
+-- shows and hides them; the fade only sets their alpha). GamePadEnable stays
+-- on there with the gamepad UI off, so it can't tell. Retail has no gamepad
+-- UI of its own: the setting it is.
+function ns.IsGamePadOn()
+	if not ns.isRetail then
+		local bar = _G.GamepadMainActionBarFrame
+		return bar ~= nil and bar:IsShown() and true or false
+	end
+	return C_GamePad ~= nil and GetCVarBool("GamePadEnable")
 end
 
 function ns.IsCombatShowOn(key)
@@ -829,15 +862,18 @@ local function GetCombatShownFrames()
 			isOn = ns.IsCombatShowOn
 		end
 	elseif HasAnyTarget() then
-		if ns.Flag(UnitCanAttack("player", "target")) and not ns.Flag(UnitIsDeadOrGhost("target")) then
+		if ns.IsEnemyUnit("target") and not ns.Flag(UnitIsDeadOrGhost("target")) then
 			isOn = ns.IsEnemyShowOn
 		else
 			isOn = ns.IsFriendlyShowOn
 		end
 	end
 	local shown = {}
+	-- Rows for gamepad mode only, and the ones they stand in for then.
+	local gamepad = ns.IsGamePadOn()
 	for _, item in ipairs(ns.COMBAT_SHOW) do
-		if ns.IsCineShowOn(item.key) or (isOn and isOn(item.key)) then
+		local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
+		if applies and (ns.IsCineShowOn(item.key) or (isOn and isOn(item.key))) then
 			for _, name in ipairs(item.frames or {}) do
 				shown[name] = true
 			end
@@ -891,6 +927,7 @@ local buffPeekUntil = 0
 
 -- When the player was last in combat (for "only after combat").
 local lastCombatAt = -math.huge
+local COMBAT_END_AURA_GRACE = 1 -- seconds after a fight its aura changes don't bring the buffs up
 
 -- In combat the update details are secret: lists can't be looked into and the
 -- flag can't be tested. A secret list is still present (so something was
@@ -1000,6 +1037,14 @@ auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
 	if ns.db.buffPeekAfterCombat and GetTime() - lastCombatAt > ns.db.calmTime then
 		return
 	end
+	-- In a fight the buffs follow the fight's own frames, and a peek started
+	-- then would hold them up past its end: leaving combat, they fade with the
+	-- rest of the UI at the usual fade out time. (Nor auras the fight's end
+	-- itself changes, in the moment after it.)
+	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+		or GetTime() - lastCombatAt < COMBAT_END_AURA_GRACE then
+		return
+	end
 	-- (wasOnTaxi: landed this instant, before the flight code has noticed.)
 	if UnitOnTaxi("player") or ns.wasOnTaxi or GetTime() < landedQuietUntil then
 		return
@@ -1078,6 +1123,172 @@ questWatcher:SetScript("OnEvent", function()
 	end
 end)
 
+-- Gamepad mode: pressing a gamepad button brings its action bars up, as
+-- hovering does with the mouse (gamepadPressReveal): they fade in, then are
+-- gone the bars' mouseover time later. The pad's buttons are read each
+-- frame (C_GamePad), which leaves the presses to the game; the button event,
+-- where the client has one, counts too.
+-- Which buttons count is the player's choice (the Gamepad page's list).
+-- Besides that,
+-- not while fishing (the fish camera on, a cast going, or looting), nor
+-- buttons bound to moving, turning or the camera, nor the fishing button
+-- while it casts: going by what the button does now (override bindings too).
+-- (Not by watching whether you moved or turned after a press: in gamepad mode
+-- you turn with the camera all the time, so presses on the move never counted.)
+local NO_REVEAL = {
+	MOVEFORWARD = true, MOVEBACKWARD = true, TURNLEFT = true, TURNRIGHT = true,
+	STRAFELEFT = true, STRAFERIGHT = true, TOGGLEAUTORUN = true, SITORSTAND = true,
+	CAMERAZOOMIN = true, CAMERAZOOMOUT = true,
+}
+-- The buttons a press can come from, for the Gamepad page's list (each
+-- ticked or not: db.gamepadPressButtons[key], missing = the default here).
+-- Off by default: the right stick (the camera), clicking a stick in (ping
+-- and auto-run) and the menu buttons. (Jumping is seen as it happens, so the
+-- jump button can stay ticked.) Face buttons go by where they sit: pads print different
+-- letters there (a Nintendo-style pad's A is on the right, Xbox's B). The left stick's directions are left to
+-- the moving check: they don't always walk you.
+ns.GAMEPAD_BUTTONS = {
+	{ key = "PAD1", label = "Bottom face button", default = true },
+	{ key = "PAD2", label = "Right face button", default = true },
+	{ key = "PAD3", label = "Left face button", default = true },
+	{ key = "PAD4", label = "Top face button", default = true },
+	{ key = "PADDUP", label = "D-pad up", default = true },
+	{ key = "PADDDOWN", label = "D-pad down", default = true },
+	{ key = "PADDLEFT", label = "D-pad left", default = true },
+	{ key = "PADDRIGHT", label = "D-pad right", default = true },
+	{ key = "PADLSHOULDER", label = "Left bumper (LB)", default = true },
+	{ key = "PADRSHOULDER", label = "Right bumper (RB)", default = true },
+	{ key = "PADLTRIGGER", label = "Left trigger (LT)", default = true },
+	{ key = "PADRTRIGGER", label = "Right trigger (RT)", default = true },
+	{ key = "PADLSTICKUP", label = "Left stick up", default = true },
+	{ key = "PADLSTICKDOWN", label = "Left stick down", default = true },
+	{ key = "PADLSTICKLEFT", label = "Left stick left", default = true },
+	{ key = "PADLSTICKRIGHT", label = "Left stick right", default = true },
+	{ key = "PADRSTICKUP", label = "Right stick up", default = false },
+	{ key = "PADRSTICKDOWN", label = "Right stick down", default = false },
+	{ key = "PADRSTICKLEFT", label = "Right stick left", default = false },
+	{ key = "PADRSTICKRIGHT", label = "Right stick right", default = false },
+	{ key = "PADLSTICK", label = "Left stick click", default = false },
+	{ key = "PADRSTICK", label = "Right stick click", default = false },
+	{ key = "PADFORWARD", label = "Start / Menu", default = false },
+	{ key = "PADBACK", label = "Back / View", default = false },
+}
+local PAD_BUTTON_DEFAULT = {}
+for _, item in ipairs(ns.GAMEPAD_BUTTONS) do
+	PAD_BUTTON_DEFAULT[item.key] = item.default
+end
+
+-- The game's own name for a button, as your pad labels it ("" if none).
+function ns.PadButtonText(button)
+	local ok, text = pcall(GetBindingText, button)
+	if ok and type(text) == "string" and text ~= button then
+		return text
+	end
+	return ""
+end
+
+-- Whether presses of this button reveal the bars (buttons not listed do).
+function ns.IsPadButtonOn(button)
+	local on = ns.db.gamepadPressButtons[button]
+	if on == nil then
+		on = PAD_BUTTON_DEFAULT[button]
+	end
+	return on ~= false
+end
+
+local function RevealsBars(button)
+	if not ns.IsPadButtonOn(button) then
+		return false
+	end
+	local ok, action = pcall(GetBindingAction, button, true)
+	if not ok or type(action) ~= "string" then
+		return true
+	end
+	return not (NO_REVEAL[action] or action:find("^CLICK CinematicFishingCastButton"))
+end
+local padRevealUntil = 0
+-- A press that starts a cast is seen just before the cast begins, so presses
+-- wait CAST_WAIT seconds and don't count if you're fishing by then. Nor if
+-- you're in the air by then: that press jumped, whichever button jumps on
+-- your pad.
+local CAST_WAIT = 0.25
+local pendingPress -- { at, button } while a press waits
+local function Fishing()
+	return (ns.IsFishingNow and ns.IsFishingNow()) or (LootFrame and LootFrame:IsShown()) or false
+end
+local function DebugPress(button, text)
+	if ns.padDebug then
+		ns.Print(("pad %s: %s"):format(tostring(button), text))
+	end
+end
+local function OnPadButton(button, via)
+	local ok, action = pcall(GetBindingAction, button, true)
+	DebugPress(button, ("%s (the game calls it %s), bound to \"%s\""):format(via, ns.PadButtonText(button),
+		ok and tostring(action) or "?"))
+	-- Fishing (casting, catching, looting): presses are for that.
+	if Fishing() then
+		DebugPress(button, "not revealing (fishing)")
+		return
+	end
+	if not RevealsBars(button) then
+		DebugPress(button, ("not revealing (%s)"):format(not ns.IsPadButtonOn(button)
+			and "unticked on the Gamepad page" or "what it's bound to"))
+		return
+	end
+	if ns.db and ns.db.gamepadPressReveal and not pendingPress then
+		pendingPress = { at = GetTime(), button = button }
+	end
+end
+-- A waiting press: dropped if it started fishing, else the bars come up.
+local function CheckPendingPress()
+	local press = pendingPress
+	if not press then
+		return
+	end
+	if Fishing() then
+		pendingPress = nil
+		DebugPress(press.button, "not revealing (started fishing)")
+	elseif ns.Flag(IsFalling()) then
+		pendingPress = nil
+		DebugPress(press.button, "not revealing (jumped)")
+	elseif GetTime() - press.at >= CAST_WAIT then
+		pendingPress = nil
+		DebugPress(press.button, "reveals")
+		-- (The bars' own times, Gamepad page: see GroupFadeTime.)
+		local hold = ns.db.gamepadPressHold - ns.db.gamepadBarsFadeOut
+		padRevealUntil = GetTime() + ns.db.gamepadBarsFadeIn + math.max(0, hold)
+	end
+end
+local padWatcher = CreateFrame("Frame")
+ns.padEventOK = pcall(padWatcher.RegisterEvent, padWatcher, "GAME_PAD_BUTTON_DOWN")
+padWatcher:SetScript("OnEvent", function(_, _, button)
+	OnPadButton(button, "event")
+end)
+-- Buttons held last frame (index -> true), to see new presses.
+local padHeld = {}
+local function ButtonName(index)
+	local ok, name = pcall(C_GamePad.ButtonIndexToBinding, index)
+	return ok and name or ("button" .. index)
+end
+padWatcher:SetScript("OnUpdate", function()
+	CheckPendingPress()
+	if not (ns.db and (ns.db.gamepadPressReveal or ns.padDebug))
+		or not (C_GamePad and C_GamePad.GetDeviceMappedState and ns.IsGamePadOn()) then
+		return
+	end
+	local ok, state = pcall(C_GamePad.GetDeviceMappedState, C_GamePad.GetActiveDeviceID
+		and C_GamePad.GetActiveDeviceID() or nil)
+	if not ok or type(state) ~= "table" or type(state.buttons) ~= "table" then
+		return
+	end
+	for index, down in ipairs(state.buttons) do
+		if down and not padHeld[index] then
+			OnPadButton(ButtonName(index), "read")
+		end
+		padHeld[index] = down or nil
+	end
+end)
+
 -- A quest timer running (Classic clients; retail has no quest timer box).
 -- Clients without GetQuestTimers go by the box: the game only shows it while
 -- a timer runs (the fade only changes its alpha).
@@ -1125,6 +1336,112 @@ function ns.ReportFrames(text)
 	end
 end
 
+-- /cine debug frames: the shown top-level frames not faded, and every global
+-- frame with GamePad in its name, to the log (and chat), for finding frames
+-- a client feature adds (WoW Forever's gamepad mode).
+function ns.ReportUnfadedFrames()
+	local function Report(text)
+		ns.Print(text)
+		ns.Log("frames", text)
+	end
+	local cvar = C_CVar and C_CVar.GetCVar or GetCVar
+	Report(("GamePadEnable=%s C_GamePad=%s"):format(tostring(cvar and cvar("GamePadEnable")),
+		tostring(C_GamePad ~= nil)))
+	local function Describe(frame)
+		local measured, left, bottom, width, height = pcall(frame.GetRect, frame)
+		if not measured then
+			left, bottom, width, height = nil, nil, nil, nil
+		end
+		local parent = frame:GetParent()
+		return ("%s %s %s strata=%s rect=%d,%d %dx%d parent=%s"):format(frame:GetName() or "(unnamed)",
+			frame:GetDebugName(), frame:GetObjectType(), frame.GetFrameStrata and frame:GetFrameStrata() or "-",
+			left or -1, bottom or -1,
+			width or 0, height or 0, parent and (parent:GetName() or parent:GetDebugName()) or "none")
+	end
+	for _, frame in ipairs({ UIParent:GetChildren() }) do
+		if not IsForbidden(frame) and not seen[frame] and frame:IsVisible() and frame ~= ns.letterbox then
+			Report("unfaded: " .. Describe(frame))
+		end
+	end
+	-- Small things at the middle of the screen (gamepad mode's dot), a few
+	-- levels down, with what they draw.
+	local centerX, centerY = UIParent:GetCenter()
+	local function Textures(frame)
+		local list = {}
+		for _, region in ipairs(ReadParts(frame, "GetRegions") or {}) do
+			if not IsForbidden(region) and region.GetTexture and region:IsVisible() then
+				list[#list + 1] = tostring(region.GetAtlas and region:GetAtlas() or region:GetTexture())
+			end
+		end
+		return table.concat(list, ",")
+	end
+	local function AtCenter(frame, depth)
+		if IsForbidden(frame) or not frame:IsVisible() then
+			return
+		end
+		-- (Nameplates can't be measured: they error. They're reported below.)
+		local measured, left, bottom, width, height = pcall(frame.GetRect, frame)
+		if not measured then
+			return
+		end
+		if left and width < 100 and height < 100 and left <= centerX and left + width >= centerX
+			and bottom <= centerY and bottom + height >= centerY then
+			Report(("center: %s alpha=%.2f textures=%s"):format(Describe(frame), frame:GetEffectiveAlpha(),
+				Textures(frame)))
+		end
+		if depth > 0 then
+			for _, child in ipairs(ReadParts(frame, "GetChildren") or {}) do
+				AtCenter(child, depth - 1)
+			end
+		end
+	end
+	AtCenter(UIParent, 5)
+	AtCenter(WorldFrame, 2)
+	-- The soft targets' plates (gamepad mode's interact prompt sits on one),
+	-- with what's shown inside them.
+	local function Inside(frame, depth, indent)
+		for _, child in ipairs(ReadParts(frame, "GetChildren") or {}) do
+			if not IsForbidden(child) and child:IsShown() then
+				Report(("%s%s %s textures=%s"):format(indent, child:GetDebugName(), child:GetObjectType(),
+					Textures(child)))
+				if depth > 0 then
+					Inside(child, depth - 1, indent .. "  ")
+				end
+			end
+		end
+	end
+	for _, unit in ipairs({ "softinteract", "softenemy", "softfriend", "target" }) do
+		local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit
+			and C_NamePlate.GetNamePlateForUnit(unit)
+		Report(("unit %s: exists=%s plate=%s"):format(unit, tostring(UnitExists(unit)),
+			plate and (IsForbidden(plate) and "forbidden" or plate:GetDebugName()) or "none"))
+		if plate and not IsForbidden(plate) then
+			Inside(plate, 4, "  ")
+		end
+	end
+	-- Settings that may draw it (C_Console lists every setting the game has).
+	if C_Console and C_Console.GetAllCommands then
+		local cvar = C_CVar and C_CVar.GetCVar or GetCVar
+		for _, command in ipairs(C_Console.GetAllCommands()) do
+			local name = command.command
+			if type(name) == "string" then
+				local lower = name:lower()
+				if lower:find("reticle") or lower:find("crosshair") or lower:find("cursor")
+					or lower:find("gamepad") or lower:find("softtarget") then
+					Report(("cvar %s = %s"):format(name, tostring(cvar(name))))
+				end
+			end
+		end
+	end
+	for name, value in pairs(_G) do
+		if type(name) == "string" and name:lower():find("gamepad") and IsFrame(value)
+			and value.GetRect and not IsForbidden(value) then
+			Report(("gamepad global: %s shown=%s faded=%s"):format(Describe(value), tostring(value:IsVisible()),
+				tostring(seen[value] or false)))
+		end
+	end
+end
+
 -- /cine debug questtimer: why the quest timer is or isn't kept up.
 function ns.ReportQuestTimer()
 	local frame = _G.QuestTimerFrame
@@ -1158,6 +1475,16 @@ function ns.ReportQuestTimer()
 end
 
 local DEATH_FADE_TIME = 0.5 -- seconds for the UI to go when you die (death camera)
+
+-- How long a group takes to fade in or out: the shared fade times, but for
+-- gamepad mode's action bars, which have their own (Gamepad page) so they
+-- come and go quickly with button presses.
+local function GroupFadeTime(group, fadeIn)
+	if group == "gamepadbars" then
+		return fadeIn and ns.db.gamepadBarsFadeIn or ns.db.gamepadBarsFadeOut
+	end
+	return fadeIn and ns.db.fadeInTime or ns.db.fadeOutTime
+end
 -- The portrait shown while health or power recovers (addons' can stand in
 -- for the game's: see ns.AddPortraitFrame).
 local PORTRAIT_FRAMES = { PlayerFrame = true }
@@ -1170,6 +1497,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	end
 	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
 		lastCombatAt = now
+		buffPeekUntil = 0 -- (a peek from just before the fight doesn't outlast it)
 	end
 	if ns.Flag(IsFalling()) then
 		lastFallingAt = now
@@ -1187,6 +1515,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local keepMinimapForTracking = ns.IsKeepingMinimapForTracking(now)
 	local questTimerUp = ns.db.questTimerShow and HasQuestTimer()
 	local questReveal = questRevealUntil > now
+	local padReveal = padRevealUntil > now
 	-- Work out which groups are hovered so the whole group reveals together.
 	local hovered = {}
 	if cinematic and ns.db.mouseover then
@@ -1209,19 +1538,16 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 	end
 
-	-- "Except when standing still or flying": tracking doesn't hold the minimap
-	-- open on flights or once you've stood still for the standing-still delay.
-	-- Nor in the places ticked under "Except in" (cities and the like).
+	-- Tracking doesn't hold the minimap open in the places ticked under
+	-- "Except in" (cities and the like).
 	-- Dead, with the death camera watching: everything goes, quickly, whatever
 	-- would normally keep it up (the release button is a popup: it stays).
 	local deathFade = cinematic and ns.IsDeathCinematic and ns.IsDeathCinematic()
 
 	local trackingPaused = ns.IsTrackingOffHere()
-	if not trackingPaused and ns.db.trackingHideWhenIdle then
-		local stillSince = ns.GetStillSince()
-		trackingPaused = UnitOnTaxi("player")
-			or (stillSince ~= nil and now - stillSince >= ns.db.idleOrbitDelay)
-	end
+	-- Hide in camera modes (Minimap page): the camera running now fades the
+	-- minimap, whatever would keep it up. Hovering still shows it.
+	local camHidesMinimap = ns.activeCam and ns.db[ns.activeCam .. "HideMinimap"]
 
 	for _, entry in ipairs(ns.managed) do
 		if entry.ownAlpha then
@@ -1236,6 +1562,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
 			or (questTimerUp and entry.group == "questtimer")
 			or (questReveal and entry.group == "quests")
+			or (padReveal and entry.group == "gamepadbars")
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown["group:" .. entry.group])
 		local fightingShown = listShown
@@ -1253,6 +1580,19 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if deathFade and not (typing and entry.group == "chat") then
 			target = 0
 		end
+		-- (/cine debug pad: why the gamepad bars come up, as they start to.)
+		if ns.padDebug and entry.group == "gamepadbars" then
+			local up = target > 0 and cinematic
+			if up and not entry.debugUp then
+				ns.Print(("gamepad bars up: %s%s%s%s"):format(hovered.gamepadbars and "hovered " or "",
+					padReveal and "button press " or "", listShown and "fight/target column " or "",
+					tracking and not padReveal and "kept up " or ""))
+			end
+			entry.debugUp = up
+		end
+		if camHidesMinimap and entry.group == "minimap" and not hovered.minimap then
+			target = 0
+		end
 		if typing and entry.group == "chat" and entry.alpha < 1 then
 			-- Pressing Enter shows the chat input (and its window) at once.
 			ns.SetEntryAlpha(entry, 1)
@@ -1261,9 +1601,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 		elseif entry.alpha ~= target or target == 0 or entry.shrunk then
 			local duration
 			if target > entry.alpha then
-				duration = ns.db.fadeInTime
+				duration = GroupFadeTime(entry.group, true)
 			else
-				duration = deathFade and DEATH_FADE_TIME or ns.db.fadeOutTime
+				duration = deathFade and DEATH_FADE_TIME or GroupFadeTime(entry.group, false)
 			end
 			ns.SetEntryAlpha(entry, ns.Approach(entry.alpha, target, elapsed, duration))
 		end

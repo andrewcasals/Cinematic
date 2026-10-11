@@ -63,27 +63,41 @@ local function OwnValue(cvar)
 	return GetCVar(cvar)
 end
 
--- Switches a game setting on for good: straight away, or, while cinematic
--- mode has it put away, in the value it comes back to.
-local function SwitchOn(cvar)
+-- Sets a game setting for good: straight away, or, while cinematic mode has
+-- it put away, in the value it comes back to.
+local function SetOwnValue(cvar, value)
 	if GetCVar(cvar) == nil then
 		return
 	end
 	if ns.IsCVarHeld(cvar) then
-		ns.db.savedCVars[cvar] = "1"
+		ns.db.savedCVars[cvar] = value
 		return
 	end
 	-- (A value left over from a fight or a crash isn't holding it off.)
 	ns.db.savedCVars[cvar] = nil
-	if GetCVar(cvar) ~= "1" then
-		SetCVar(cvar, "1")
+	if GetCVar(cvar) ~= value then
+		SetCVar(cvar, value)
 	end
 end
 
--- Ticking anything in a names row switches the game's own option for it on
--- (only names the game shows can stay up). Unticking leaves it alone.
-function ns.EnableNameRow(group)
-	if group.anyOn then
+-- Whether any box in a names row is ticked.
+local NAME_ROW_PREFIXES = { "nameAlways", "nameCombat", "nameKeep", "nameInCities", "nameInDungeons",
+	"nameInRaids", "nameInPvP" }
+local function NameRowTicked(group)
+	for _, prefix in ipairs(NAME_ROW_PREFIXES) do
+		if ns.db[prefix .. group.key] then
+			return true
+		end
+	end
+	return false
+end
+
+-- A names row and the game's own option for it go together: anything ticked
+-- in the row switches the game's names on (only names the game shows can stay
+-- up), nothing ticked switches them off.
+function ns.SyncNameRow(group)
+	local on = NameRowTicked(group)
+	if on and group.anyOn then
 		for _, cvar in ipairs(group.cvars) do
 			local value = OwnValue(cvar)
 			if value ~= nil and value ~= "0" then
@@ -92,7 +106,7 @@ function ns.EnableNameRow(group)
 		end
 	end
 	for _, cvar in ipairs(group.cvars) do
-		SwitchOn(cvar)
+		SetOwnValue(cvar, on and "1" or "0")
 	end
 end
 
@@ -330,7 +344,7 @@ end
 -- on) during a mute. That lifts the mute until it clears by itself or a new
 -- reason to mute comes up (a fight starting while you walk on, say).
 local function UpdateCombatMusic(elapsed, playerOverride)
-	-- Muted while fighting (if chosen) or in a place chosen under "Mute music in".
+	-- Muted while fighting (if chosen) or in a place chosen under "Stop Music".
 	-- Only when the addon handles music at all: with "Play music in cinematic
 	-- mode" off, the player's volumes are left alone (any ducking eases back).
 	local handlesMusic = ns.db.musicInCinematic
@@ -525,6 +539,15 @@ local function UpdateDeathSong()
 	end
 end
 
+-- Logging out (or /reload) mid-song: your music settings go back first, so
+-- they're saved as you had them.
+function ns.StopDeathSongNow()
+	deathSong.file = nil
+	if deathSong.playing then
+		UpdateDeathSong()
+	end
+end
+
 -- /cine debug music: a chat line whenever the music state changes. Levels are
 -- shown as 0, "part" or 1 so a fade doesn't print every step.
 local lastMusicReport
@@ -655,9 +678,25 @@ plateKeeper:SetScript("OnUpdate", function(self)
 	end
 end)
 
+-- The interact prompt on a plate (gamepad mode's button, over a bobber or
+-- someone you can talk to: the plate's SoftTargetFrame) stays up while the
+-- plate fades, with showInteractPrompt (Gamepad page).
+local function KeepInteractPrompt(frame)
+	local prompt = frame.SoftTargetFrame
+	if not (prompt and prompt.SetIgnoreParentAlpha) or (prompt.IsForbidden and prompt:IsForbidden()) then
+		return
+	end
+	local keep = ns.db and ns.db.showInteractPrompt and true or false
+	if prompt.cinematicKept ~= keep then
+		prompt:SetIgnoreParentAlpha(keep)
+		prompt.cinematicKept = keep
+	end
+end
+
 function ns.SetPlateAlpha(plate, alpha)
 	if plate and plate.UnitFrame and not (plate.IsForbidden and plate:IsForbidden()) then
 		local frame = plate.UnitFrame
+		KeepInteractPrompt(frame)
 		frame.cinematicAlpha = alpha < 1 and alpha or nil
 		if frame.cinematicAlpha then
 			fadedPlates[frame] = true
@@ -750,9 +789,10 @@ local function AnyPlatesKeptCinematic()
 end
 
 -- Whether your target's plate always shows here, from the Nameplates grid's
--- Enemy Target row (units you can attack, neutral mobs too) or Friendly
--- Target row (the rest): its In combat column in fights and for the Calm
--- Timer after, else the column for where you are.
+-- Enemy Target row (units you can attack, neutral mobs too, and the other
+-- faction's players, flagged or not) or Friendly Target row (the rest): its
+-- In combat column in fights and for the Calm Timer after, else the column
+-- for where you are.
 local function TargetRowKept(row)
 	local combat = ShownInFights(row)
 	if InCombatLockdown() or (combat and ns.FightLingering and ns.FightLingering()) then
@@ -762,11 +802,11 @@ local function TargetRowKept(row)
 end
 
 local function AlwaysShownTarget(unit)
-	local ok, attackable = pcall(UnitCanAttack, "player", unit)
-	if not ok or not Known(attackable) then
+	local enemy = ns.IsEnemyUnit(unit)
+	if enemy == nil then
 		return false
 	end
-	return TargetRowKept(attackable and "EnemyTarget" or "FriendlyTarget")
+	return TargetRowKept(enemy and "EnemyTarget" or "FriendlyTarget")
 end
 
 local function TargetKeptUp()
@@ -804,8 +844,7 @@ local function UpdateTargetFade(elapsed)
 	end
 	local moving = false
 	if plate then
-		local ok, attackable = pcall(UnitCanAttack, "player", "target")
-		targetFade.enemy = ok and Known(attackable) and attackable or false
+		targetFade.enemy = ns.IsEnemyUnit("target") or false
 		if targetFade.level < 1 then
 			targetFade.level = ns.Approach(targetFade.level, 1, elapsed, TargetFadeTime(true))
 			moving = true
@@ -998,7 +1037,27 @@ function ns.PrintPlatesDebug()
 	if UnitExists("target") then
 		local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit("target")
 		ns.Print("target " .. describe("target") .. (plate and ", has a plate" or ", NO plate"))
+		local okFriend, friend = pcall(UnitIsFriend, "player", "target")
+		local okReaction, reaction = pcall(UnitReaction, "player", "target")
+		ns.Print(("  enemy=%s, friend=%s, reaction=%s, kept up=%s"):format(
+			tostring(ns.IsEnemyUnit("target")), okFriend and tostring(friend) or "?",
+			okReaction and tostring(reaction) or "?", tostring(TargetKeptUp())))
+		local frame = plate and plate.UnitFrame
+		if frame then
+			ns.Print(("  plate shown=%s alpha=%.2f, frame shown=%s alpha=%.2f, health bar shown=%s"):format(
+				tostring(plate:IsShown()), plate:GetAlpha(), tostring(frame:IsShown()), frame:GetAlpha(),
+				tostring(frame.healthBar and frame.healthBar:IsShown())))
+		end
 	end
+	-- Every nameplate setting this client has, for comparing.
+	local names = {}
+	for _, name in ipairs({ "nameplateShowFriends", "nameplateShowFriendlyPlayers", "nameplateShowEnemies",
+		"nameplateShowEnemyPlayers", "nameplateShowOnlyNames", "nameplateShowAll" }) do
+		if GetCVar(name) ~= nil then
+			names[#names + 1] = cvar(name)
+		end
+	end
+	ns.Print(table.concat(names, ", "))
 end
 
 function ns.ShowPlatesNow()
@@ -1006,6 +1065,14 @@ function ns.ShowPlatesNow()
 		ns.ApplyCVarSet(PLATE_CVARS, false)
 		ns.plates.off = false
 		ns.plates.level = 0
+		-- (Settings it shared with the locked friendly plates' switches went
+		-- back with it: those go on again afresh.)
+		for _, set in pairs(ns.LOCKED_PLATE_SETS or {}) do
+			if set.active then
+				ns.ApplyCVarSet(set, false)
+				ns.ApplyCVarSet(set, true)
+			end
+		end
 	end
 end
 
@@ -1054,7 +1121,7 @@ function ns.EnablePlateRow(kind)
 	pendingPlateRows[kind] = nil
 	for _, row in ipairs({ kind, PLATE_ROW_PARENT[kind] }) do
 		for _, cvar in ipairs(PLATE_KIND_CVARS[row]) do
-			SwitchOn(cvar)
+			SetOwnValue(cvar, "1")
 		end
 	end
 end
@@ -1074,11 +1141,52 @@ function ns.EnsurePlateRows()
 	end
 end
 
+-- In dungeons and raids the game locks friendly plates away from addons, so
+-- they can't be faded. There, in cinematic mode, a friendly row hidden both in
+-- and out of fights has its game settings switched off instead (put back on
+-- the way out). Friendly players' setting covers their minions too, so it
+-- only goes off with the Minions row hidden as well. Not in fights: the game
+-- won't change plate settings then, so they're set before.
+local LOCKED_PLATE_KINDS = { "Friends", "FriendlyMinions", "FriendlyNPCs" }
+local LOCKED_PLATE_SETS = {}
+for _, kind in ipairs(LOCKED_PLATE_KINDS) do
+	local values = {}
+	for _, cvar in ipairs(PLATE_KIND_CVARS[kind]) do
+		values[cvar] = "0"
+	end
+	LOCKED_PLATE_SETS[kind] = { secure = true, playerWins = true, values = values }
+end
+ns.LOCKED_PLATE_SETS = LOCKED_PLATE_SETS -- (ns.ShowPlatesNow, above)
+
+local function UpdateLockedPlates()
+	local locked = platesActive and (placeSuffix == "Dungeons" or placeSuffix == "Raids")
+	local hidden = {}
+	for _, kind in ipairs(LOCKED_PLATE_KINDS) do
+		hidden[kind] = locked and not KeptHere(kind) and not ShownInFights(kind)
+	end
+	hidden.Friends = hidden.Friends and hidden.FriendlyMinions
+	local changed = false
+	for _, kind in ipairs(LOCKED_PLATE_KINDS) do
+		local set = LOCKED_PLATE_SETS[kind]
+		local was = set.active
+		ns.ApplyCVarSet(set, hidden[kind] or false)
+		changed = changed or (set.active ~= was)
+	end
+	-- These share settings with the switch that turns every plate off, and
+	-- the first to let go puts a shared setting back from under the other:
+	-- with plates switched off, that switch goes on again afresh.
+	if changed and PLATE_CVARS.active and not InCombatLockdown() then
+		ns.ApplyCVarSet(PLATE_CVARS, false)
+		ns.ApplyCVarSet(PLATE_CVARS, true)
+	end
+end
+
 local platesWereFiltered = false
 
 function ns.UpdatePlates(cinematic, elapsed)
 	platesActive = cinematic and true or false
 	placeSuffix = ns.PlaceSuffix()
+	UpdateLockedPlates()
 	-- Plates show for every fight (bar kinds cinematic mode hides in fights)
 	-- and hide again afterwards. Just after a fight, kinds ticked for fights
 	-- stay up through their linger; the rest go as cinematic mode comes back.

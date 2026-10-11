@@ -315,14 +315,20 @@ do
 			bar:SetAlpha(1)
 		end
 	end
+	-- (Gamepad mode has its own bar. Looked for again as casts start, in
+	-- case a bar is made after login.)
+	local hookedBars = {}
 	local castBarWatcher = CreateFrame("Frame")
 	castBarWatcher:RegisterEvent("PLAYER_LOGIN")
+	castBarWatcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player")
 	castBarWatcher:SetScript("OnEvent", function()
-		for _, name in ipairs({ "PlayerCastingBarFrame", "CastingBarFrame" }) do
+		for _, name in ipairs({ "PlayerCastingBarFrame", "CastingBarFrame", "GamepadPlayerCastingBarFrame" }) do
 			local bar = _G[name]
-			if bar and bar.HookScript then
+			if bar and bar.HookScript and not hookedBars[bar] then
+				hookedBars[bar] = true
 				bar:HookScript("OnEvent", UpdateCastBar)
 				bar:HookScript("OnShow", UpdateCastBar)
+				UpdateCastBar(bar)
 			end
 		end
 	end)
@@ -344,18 +350,46 @@ do
 			leftDownAt = GetTime()
 		end
 	end)
-	local bound = false
+	-- Fishing now: the fish camera on, or a Fishing cast going (gamepad
+	-- presses don't bring the bars up then: see Frames.lua).
+	function ns.IsFishingNow()
+		if ns.IsFish and ns.IsFish() then
+			return true
+		end
+		local channel = select(8, UnitChannelInfo("player"))
+		return channel ~= nil and IsFishingSpell(channel)
+	end
+
+	-- In gamepad mode a gamepad button does the same (fishGamepadCast, the
+	-- button: fishGamepadKey, X by default).
+	local bound = {} -- key -> true while it casts
 	local channelEndedAt = -math.huge
-	local function SetRecast(on)
-		if on == bound or InCombatLockdown() then
+	local function SetRecast(key, on)
+		if (bound[key] or false) == on or InCombatLockdown() then
 			return -- (bindings can't change in combat)
 		end
-		bound = on
+		bound[key] = on or nil
 		if on then
-			SetOverrideBindingClick(castButton, true, "BUTTON2", castButton:GetName())
+			SetOverrideBindingClick(castButton, true, key, castButton:GetName())
 		else
-			ClearOverrideBindings(castButton)
+			SetOverrideBinding(castButton, true, key, nil)
 		end
+	end
+	local function ClearRecast()
+		if InCombatLockdown() then
+			return
+		end
+		ClearOverrideBindings(castButton)
+		for key in pairs(bound) do bound[key] = nil end
+	end
+	-- A key (gamepad button) held: as with the right button, its binding stays
+	-- as it was pressed.
+	local function IsKeyHeld(key)
+		if not IsKeyDown then
+			return false
+		end
+		local ok, down = pcall(IsKeyDown, key)
+		return ok and down and true or false
 	end
 	local recastWatcher = CreateFrame("Frame")
 	recastWatcher:RegisterEvent("PLAYER_LOGIN")
@@ -379,7 +413,7 @@ do
 			end)
 		elseif event == "PLAYER_REGEN_DISABLED" then
 			combatSeenAt = GetTime()
-			SetRecast(false) -- a fight: right-click attacks as usual (cleared just before lockdown)
+			ClearRecast() -- a fight: right-click attacks as usual (cleared just before lockdown)
 		else
 			channelEndedAt = GetTime()
 		end
@@ -503,22 +537,33 @@ do
 			combatSeenAt = GetTime()
 		end
 		local fishCam = ns.IsFish and ns.IsFish()
-		local pole = ns.db and ns.db.fishPoleRightClickCast and poleEquipped and not fishCam
+		local poleReady = ns.db and ns.db.fishPoleRightClickCast and poleEquipped and not fishCam
 			and not ns.playerMoving and not IsMounted() and not UnitOnTaxi("player")
-			and not ns.Flag(UnitIsDeadOrGhost("player")) and not MouseOnSomething()
-		-- (In the fish camera only units count: the spot you just looted the
-		-- bobber at would otherwise keep right-click from casting again there.)
-		-- (Left button held: right-click is the game's, so both together run you forward.)
-		local want = ns.db and ns.db.fishRightClickCast and not IsMouseButtonDown("LeftButton")
-			and ((fishCam and not UnitExists("mouseover")) or pole)
-			and not UnitChannelInfo("player") and not UnitCastingInfo("player")
+			and not ns.Flag(UnitIsDeadOrGhost("player"))
+		local ready = ns.db and not UnitChannelInfo("player") and not UnitCastingInfo("player")
 			and GetTime() - channelEndedAt >= (tonumber(ns.db.fishRecastDelay) or 0.5)
 			and GetTime() - missedAt >= (tonumber(ns.db.fishMissPause) or 30)
 			and GetTime() >= skillBlockedUntil
 			and not (LootFrame and LootFrame:IsShown())
 			and not inCombat and GetTime() - combatSeenAt >= AFTER_COMBAT
+		-- (In the fish camera only units count: the spot you just looted the
+		-- bobber at would otherwise keep right-click from casting again there.)
+		-- (Left button held: right-click is the game's, so both together run you forward.)
+		local want = ready and ns.db.fishRightClickCast and not IsMouseButtonDown("LeftButton")
+			and ((fishCam and not UnitExists("mouseover")) or (poleReady and not MouseOnSomething()))
 		if not rightHeld then
-			SetRecast(want and true or false)
+			SetRecast("BUTTON2", want and true or false)
+		end
+		-- The gamepad button: no mouse to be on things, so just the camera or the pole.
+		local padKey = ns.db and ns.db.fishGamepadKey
+		for key in pairs(bound) do
+			if key ~= "BUTTON2" and key ~= padKey and not IsKeyHeld(key) then
+				SetRecast(key, false) -- (another button chosen)
+			end
+		end
+		if padKey and not IsKeyHeld(padKey) then
+			local padWant = ready and ns.db.fishGamepadCast and ns.IsGamePadOn() and (fishCam or poleReady)
+			SetRecast(padKey, padWant and true or false)
 		end
 	end)
 end
@@ -1183,18 +1228,16 @@ local CALM_CENTER_RAMP = 0.8
 local CALM_CENTER_YAW = 70
 local CALM_CENTER_PITCH = 40
 local lastCombatAt = -math.huge
--- The cameras you'd settle into after a fight (walking, auto-running, cozy)
--- hold off until the Calm Timer (calmTime) has run out after one. The rest
--- start straight away: flights, the AFK camera, vista, fishing, hearthing out
--- (common right after a fight) and the death camera. Looked up by mode ("run")
--- or orbit prefix ("runOrbit").
-local WAITS_FOR_CALM = {}
-for _, mode in ipairs({ "walk", "run", "cozy" }) do
-	WAITS_FOR_CALM[mode], WAITS_FOR_CALM[mode .. "Orbit"] = true, true
-end
+-- Cameras ticked under Calm Timer (Camera Modes page, <cam>CalmWait) hold
+-- off until the Calm Timer (calmTime) has run out after a fight; the rest
+-- start straight away. Looked up by mode ("run"), orbit prefix ("runOrbit")
+-- or camera ("quest"); the flight camera's mode is "taxi".
+local CALM_CAM = { taxi = "flight" }
 -- (On ns, not a local: UpdateOrbit is close to Lua's upvalue limit.)
 function ns.CombatWaitOver(mode, now)
-	return not WAITS_FOR_CALM[mode] or now - lastCombatAt >= (ns.db.calmTime or 0)
+	local cam = (mode:gsub("Orbit$", ""))
+	cam = CALM_CAM[cam] or cam
+	return not ns.db[cam .. "CalmWait"] or now - lastCombatAt >= (ns.db.calmTime or 0)
 end
 local lastAnyTurnAt = -math.huge
 local followArmed = false -- turn hold-and-glide ready (not armed mid-turn)
@@ -2335,6 +2378,7 @@ end
 -- The "Print the camera mode to chat" option: one line each time the mode
 -- changes (nil: none of them).
 local reportedMode = false -- (false: nothing printed yet)
+local CAMERA_REPORT_NAMES = { walk = "RP walk", run = "auto-run", idle = "AFK" }
 function ns.ReportCameraMode(mode)
 	if mode == reportedMode then
 		return
@@ -2436,13 +2480,15 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		travel = nil -- weapon drawn while walking: the cozy camera in front instead
 	end
 	local T = travel and TRAVEL[travel]
-	do -- (logged always; printed with /cine debug modes)
-		ns.ReportCameraMode((deathCam and "death") or (cinematic and ((onTaxi and ns.FlightCameraOn() and "flight")
-			or (travel == "walk" and "RP walk") or (travel == "run" and "auto-run")
-			or (vista and "vista") or (fish and "fish") or (tele and "tele") or (cozy and "cozy")
-			or (ns.stillSince and now - ns.stillSince >= ns.db.idleOrbitDelay
-				and not ns.IsCameraOffHere("idle") and "AFK"))) or nil)
-	end
+	-- The camera running now, by its key in ns.CAMERA_OFF_CAMS (the Minimap
+	-- page hides the minimap by it).
+	ns.activeCam = (deathCam and "death") or (cinematic and ((onTaxi and ns.FlightCameraOn() and "flight")
+		or travel or (vista and "vista") or (fish and "fish") or (tele and "tele") or (cozy and "cozy")
+		or (ns.stillSince and now - ns.stillSince >= ns.db.idleOrbitDelay
+			and not ns.IsCameraOffHere("idle") and "idle")))
+		or (ns.QuestCamActive and ns.QuestCamActive() and "quest") or nil -- (in or out of cinematic mode)
+	-- (logged always; printed with /cine debug modes)
+	ns.ReportCameraMode(ns.activeCam and (CAMERA_REPORT_NAMES[ns.activeCam] or ns.activeCam))
 	if travel and cinematic then
 		walkHandoff = true
 	elseif onTaxi or (active and not travel and ns.playerMoving) then

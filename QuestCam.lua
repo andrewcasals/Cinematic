@@ -652,6 +652,7 @@ local function Wanted()
 	local db = ns.db
 	return db and db.enabled and db.eventQuestCamera ~= "none" and not InCombatLockdown()
 		and not UnitOnTaxi("player") and not ns.IsCameraOffHere("quest")
+		and ns.CombatWaitOver("quest", GetTime())
 end
 
 -- The last click on the world (not on a window): when, and which half of the

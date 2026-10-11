@@ -55,7 +55,9 @@ local function PrintDebugHelp()
 	print("  /cine log - copy the log for a bug report: what's printed below goes in it too")
 	print("  /cine debug record - also log game setting changes and music in detail (again to stop)")
 	print("  /cine debug frame <name> - how faded frames with <name> in their name stand")
-	print("  /cine debug alpha - print frames setting their own alpha (again to stop)")
+	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
+	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
+	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
@@ -232,6 +234,14 @@ function ns.HandleSlash(msg)
 	elseif cmd == "debug" and arg == "alpha" then
 		ns.alphaWatch = not ns.alphaWatch
 		ns.Print("print frames setting their own alpha: " .. OnOff(ns.alphaWatch) .. " (until you /reload)")
+	elseif cmd == "debug" and arg == "pad" then
+		ns.padDebug = not ns.padDebug
+		local hasState = C_GamePad and C_GamePad.GetDeviceMappedState and true or false
+		ns.Print(("print gamepad presses: %s (until you /reload). button event: %s, button reading: %s, " ..
+			"gamepad mode: %s"):format(OnOff(ns.padDebug), tostring(ns.padEventOK), tostring(hasState),
+			tostring(ns.IsGamePadOn())))
+	elseif cmd == "debug" and arg == "frames" then
+		ns.ReportUnfadedFrames()
 	elseif cmd == "debug" and arg == "questtimer" then
 		ns.ReportQuestTimer()
 	elseif cmd == "debug" and arg == "death" then

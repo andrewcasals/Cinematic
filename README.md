@@ -7,11 +7,11 @@ Immerse yourself in the World of Warcraft. Cinematic quietly fades your UI away 
 * Fades the UI between fights, with letterbox bars sliding in. Combat, targeting an enemy or opening a window brings it straight back.
 * **Smart reveals:** hover over anything to see it. Chat pops up when a message arrives (you choose which message types and channels), your portrait shows while you're recovering, and buffs flash up when you gain one.
 * **Stay cinematic in combat** if you like, showing only the frames you choose for fights, enemy targets and friendly targets. The letterbox and tint can each stay or step aside during fights.
-* **Names and nameplates:** hide unit names and nameplates in CineMode. You decide per kind (mobs, NPCs, your faction, the other faction, pets, totems) what shows in fights, what stays up in the open world, cities, inns, dungeons, raids and battlegrounds, and which names stay. Outside CineMode, nameplates are left to the game.
+* **Names and nameplates:** hide unit names and nameplates in CineMode. You decide per kind (mobs, NPCs, your faction, the other faction, pets, totems) what shows in fights, what stays up in the open world, cities, inns, dungeons, raids and PvP (flagged, or in battlegrounds and arenas), and which names stay. Outside CineMode, nameplates are left to the game.
 * **Hide the UI, keep the look:** a keybind that works like Alt+Z but leaves the tint, letterbox and other effects on screen. It's made for screenshots.
 * **The minimap stays up while tracking** herbs, minerals, treasure or fish.
 * **Your call on every frame:** keep any frame always visible, or fade extra ones from other addons. The Cooldown Manager and Forever Enhanced Cooldown Manager fade out of the box, and show again in fights.
-* **Turns itself off where you'd rather have the full UI:** dungeons, raids, battlegrounds, cities, inns, the open world, parties or raid groups. Each camera mode can be turned off in those places too (all but the open world), from one grid on the Camera Modes page. You can also snooze it for 10 minutes or until logout from the minimap button.
+* **Turns itself off where you'd rather have the full UI:** the open world, inns, cities, dungeons, raids, PvP (flagged, or in battlegrounds and arenas), parties or raid groups. Each camera mode can be turned off in those places too (all but the open world), from one grid on the Camera Modes page. You can also snooze it for 10 minutes or until logout from the minimap button.
 
 ## A camera with a mind of its own
 
@@ -24,7 +24,7 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Cozy Cam:** rest by a campfire, `/sit`, `/sleep`, `/dance`, `/kneel`, sit in a chair, draw your weapon for a hero shot, or log out away from an inn or city (during the 20-second countdown). The camera swings round to face you, comes in close, and sways softly.
 * **Tele Cam:** cast your Hearthstone or a teleport and the camera swings round in front of you, spinning faster and faster as it zooms in until you're gone, then swings round behind you where you arrive. Cancel the cast and it turns back and zooms back out.
 * **Vista Cam:** `/stare` out at the view and the camera lines up behind you, lowers, and takes it in.
-* **Fish Cam:** cast Fishing and the camera settles behind you with the bobber in view. Right-click to cast again.
+* **Fish Cam:** cast Fishing and the camera settles behind you with the bobber in view. Right-click (or a gamepad button) to cast again.
 * **Quest Cam:** talk to a quest giver and the camera eases in close and comes round to a dialogue shot past your shoulder. It goes back when you close the window.
 * **Death Cam:** when you die, the camera rises and circles slowly round your body over a cold, dimmed screen, with a song of its own.
 * **Camera Triggers page:** pick which camera each event starts (or none). It starts right away, and moving ends it.
@@ -45,14 +45,14 @@ Each situation has its own camera, and they hand over seamlessly:
 * Music fades in as a camera starts and out when the UI returns.
 * **Choose which cameras start music:** flights, AFK, cozy, vista, fishing, RP walks, auto-runs and the quest cam.
 * **No music while you're away:** standing still or going AFK doesn't start music, unless you'd rather it did.
-* **Pause the music** when you leave the camera modes. Mute it in combat, or in cities, inns, dungeons, raids and battlegrounds.
+* **Pause the music** when you leave the camera modes. Mute it in combat, or in cities, inns, dungeons, raids and PvP.
 * **Music fatigue** keeps music from starting again too soon after the last time.
 * **Your own sound and game settings are always restored**, even after a crash.
 
 ## Easy to tweak
 
 * **A minimap button** with quick switches for tints, zoom, music, combat and the minimap, plus a snooze.
-* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus CineMode, Minimap, Buffs/debuffs, Standard Frames, 3rd Party Frames, Nameplates, Chat, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds.
+* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus CineMode, Minimap, Buffs/debuffs, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Nameplates, Chat, Fishing, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds.
 * **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, or start any camera on demand.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.
 

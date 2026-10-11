@@ -16,6 +16,14 @@ local function RecordKey(parent, key)
 		pageKeys[parent][key] = true
 	end
 end
+-- Pages sharing a list (the Standard Frames columns: Standard Frames, Gamepad,
+-- 3rd Party Frames) reset only their own rows of it (page -> list -> row -> true).
+local pageRows = {}
+local function RecordRow(parent, key, row)
+	pageRows[parent] = pageRows[parent] or {}
+	pageRows[parent][key] = pageRows[parent][key] or {}
+	pageRows[parent][key][row] = true
+end
 local extraRows = {}
 local sliderCount = 0
 
@@ -35,6 +43,10 @@ local function Tooltip(widget, tip)
 	end)
 	widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
+
+-- What the PvP column or box covers, wherever it appears.
+local PVP_TIP = "While you're flagged for PvP (not in dungeons or raids, nor on flights), and in " ..
+	"battlegrounds and arenas."
 
 local function Label(parent, font, text)
 	local fs = parent:CreateFontString(nil, "OVERLAY", font)
@@ -249,8 +261,13 @@ local function ResetPage(content)
 	local db = ns.GetDB()
 	for key in pairs(pageKeys[content] or {}) do
 		local default = ns.DEFAULTS[key]
+		local rows = pageRows[content] and pageRows[content][key]
 		if type(db[key]) == "table" and default == nil then
-			for k in pairs(db[key]) do db[key][k] = nil end
+			for k in pairs(db[key]) do
+				if not rows or rows[k] then
+					db[key][k] = nil
+				end
+			end
 		else
 			db[key] = default
 		end
@@ -391,7 +408,7 @@ local function CreatePanel()
 
 	-- Places in the same order as every other place list (PlaceList).
 	local world = Check(panel, "offInWorld", "Open world",
-		"Anywhere outside cities, dungeons, raids, battlegrounds and arenas (inns too). " ..
+		"Anywhere outside cities, dungeons and raids (inns too), while you're not PvP flagged. " ..
 		"Flights still go cinematic.")
 	world:SetPoint("TOPLEFT", combat, "BOTTOMLEFT", 0, -2)
 
@@ -406,14 +423,14 @@ local function CreatePanel()
 	local raids = Check(panel, "offInRaids", "Raids")
 	raids:SetPoint("TOPLEFT", dungeons, "BOTTOMLEFT", 0, -2)
 
-	local pvp = Check(panel, "offInPvP", "Battlegrounds and arenas")
+	local pvp = Check(panel, "offInPvP", "PvP", PVP_TIP)
 	pvp:SetPoint("TOPLEFT", raids, "BOTTOMLEFT", 0, -2)
 
-	local party = Check(panel, "offInParty", "A party",
+	local party = Check(panel, "offInParty", "Party",
 		"Keep the normal UI while you're in a party (but not a raid group).")
 	party:SetPoint("TOPLEFT", pvp, "BOTTOMLEFT", 0, -2)
 
-	local raidGroup = Check(panel, "offInRaidGroup", "A raid group",
+	local raidGroup = Check(panel, "offInRaidGroup", "Raid group",
 		"Keep the normal UI while you're in a raid group, wherever you are.")
 	raidGroup:SetPoint("TOPLEFT", party, "BOTTOMLEFT", 0, -2)
 
@@ -841,7 +858,9 @@ local function CreateCameraPanel()
 		"Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
 		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back " ..
 		"as usual. To keep the normal UI somewhere instead, use Turn off in on the main page. " ..
-		"Always turns that camera off everywhere. For flights, Cities means taking off from one.")
+		"Always turns that camera off everywhere. For flights, Cities means taking off from one. " ..
+		"Calm Timer, on the right: ticked, that camera waits until the Calm Timer (CineMode page) " ..
+		"has run out after a fight before it starts.")
 	offNote:SetPoint("TOPLEFT", offHeader, "BOTTOMLEFT", 0, -6)
 	offNote:SetWidth(520)
 	offNote:SetJustifyV("TOP")
@@ -851,12 +870,14 @@ local function CreateCameraPanel()
 	local WHERE = {
 		Cities = { "Cities", "in capital cities" },
 		Dungeons = { "Dungeons", "in dungeons and scenarios" }, Raids = { "Raids", "in raids" },
-		PvP = { "BGs", "in battlegrounds and arenas" },
+		PvP = { "PvP", "while you're PvP flagged, and in battlegrounds and arenas" },
 		Party = { "Party", "while you're in a party (not a raid group)" },
 		RaidGroup = { "Raid group", "while you're in a raid group" },
 	}
+	-- Calm Timer last, set apart too: it isn't a place.
+	local GRID_CALM = GRID_PLACES + GRID_COLUMN * #ns.CAMERA_OFF_WHERE + GRID_GAP
 	local gridTop = CreateFrame("Frame", nil, cameraPanel)
-	gridTop:SetSize(GRID_PLACES + GRID_COLUMN * #ns.CAMERA_OFF_WHERE, 16)
+	gridTop:SetSize(GRID_CALM + GRID_COLUMN, 16)
 	gridTop:SetPoint("TOPLEFT", offNote, "BOTTOMLEFT", 0, -10)
 	local function ColumnHeader(x, label, tip)
 		local cell = CreateFrame("Frame", nil, gridTop)
@@ -872,6 +893,8 @@ local function CreateCameraPanel()
 		ColumnHeader(GRID_PLACES + GRID_COLUMN * (i - 1), WHERE[where][1],
 			"Tick a camera here to turn it off " .. WHERE[where][2] .. ".")
 	end
+	ColumnHeader(GRID_CALM, "Calm Timer", "Tick a camera here to have it wait until the Calm " ..
+		"Timer (CineMode page) has run out after a fight before it starts.")
 	local lastRow = gridTop
 	for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 		local row = CreateFrame("Frame", nil, cameraPanel)
@@ -893,7 +916,8 @@ local function CreateCameraPanel()
 				cell:SetPoint("CENTER", row, "LEFT", x, 0)
 				local cross = Label(cell, "GameFontDisable", "x")
 				cross:SetPoint("CENTER")
-				Tooltip(cell, "Flights don't start " .. WHERE[where][2] .. ".")
+				Tooltip(cell, where == "PvP" and "Flights don't count as PvP, flagged or not."
+					or ("Flights don't start " .. WHERE[where][2] .. "."))
 			else
 				local tip = (cam[1] == "flight" and where == "Cities")
 					and "No Flight Cam on flights taking off from a capital city."
@@ -903,36 +927,54 @@ local function CreateCameraPanel()
 				GreyUnless(cb, IfNotAlways)
 			end
 		end
+		local calmX = GRID_CALM + GRID_COLUMN * 0.5
+		if ns.CALM_WAIT_NEVER[cam[1]] then
+			local cell = CreateFrame("Frame", nil, row)
+			cell:SetSize(26, 26)
+			cell:SetPoint("CENTER", row, "LEFT", calmX, 0)
+			local cross = Label(cell, "GameFontDisable", "x")
+			cross:SetPoint("CENTER")
+			Tooltip(cell, "You die in a fight: the Death Cam can't wait for one to be over.")
+		else
+			local calm = Check(row, cam[1] .. "CalmWait", "", "The " .. cam[2] .. " Cam waits until the " ..
+				"Calm Timer has run out after a fight.")
+			calm:SetPoint("CENTER", row, "LEFT", calmX, 0)
+			GreyUnless(calm, IfNotAlways)
+		end
 		lastRow = row
 	end
 
-	-- Indoors
-	local indoorHeader = Header(cameraPanel, "Indoors", lastRow, -24)
-	local indoorLimits = Check(cameraPanel, "indoorLimits", "Limit the camera indoors",
-		"Inside buildings and caves, the camera modes zoom out less and swing less, so the " ..
-		"camera doesn't keep pushing into walls and ceilings. Uses the game's own indoor check.")
-	indoorLimits:SetPoint("TOPLEFT", indoorHeader, "BOTTOMLEFT", -2, -6)
-	indoorLimits:HookScript("OnClick", Refresh) -- grey out / enable the options below
-	local function IfIndoorLimits(db) return db.indoorLimits end
+	-- Indoors: hidden for now (true brings it back); the settings keep working
+	-- at their values.
+	local SHOW_INDOOR_SETTINGS = false
+	if SHOW_INDOOR_SETTINGS then
+		local indoorHeader = Header(cameraPanel, "Indoors", lastRow, -24)
+		local indoorLimits = Check(cameraPanel, "indoorLimits", "Limit the camera indoors",
+			"Inside buildings and caves, the camera modes zoom out less and swing less, so the " ..
+			"camera doesn't keep pushing into walls and ceilings. Uses the game's own indoor check.")
+		indoorLimits:SetPoint("TOPLEFT", indoorHeader, "BOTTOMLEFT", -2, -6)
+		indoorLimits:HookScript("OnClick", Refresh) -- grey out / enable the options below
+		local function IfIndoorLimits(db) return db.indoorLimits end
 
-	local indoorZoom = Slider(cameraPanel, "indoorZoomOut", "Zoom out indoors up to", 0, 10, 0.5, "%.1f yards")
-	indoorZoom:SetPoint("TOPLEFT", indoorLimits, "BOTTOMLEFT", 4, -26)
-	Tooltip(indoorZoom, "How far past your own distance the slow zoom may pull back indoors. It " ..
-		"also never raises the max zoom distance indoors. Walking in pulled back, the camera " ..
-		"glides in to this.")
-	GreyUnless(indoorZoom, IfIndoorLimits)
+		local indoorZoom = Slider(cameraPanel, "indoorZoomOut", "Zoom out indoors up to", 0, 10, 0.5, "%.1f yards")
+		indoorZoom:SetPoint("TOPLEFT", indoorLimits, "BOTTOMLEFT", 4, -26)
+		Tooltip(indoorZoom, "How far past your own distance the slow zoom may pull back indoors. It " ..
+			"also never raises the max zoom distance indoors. Walking in pulled back, the camera " ..
+			"glides in to this.")
+		GreyUnless(indoorZoom, IfIndoorLimits)
 
-	local indoorSwing = Slider(cameraPanel, "indoorSwing", "Swing indoors up to", 0, 90, 5, "%d°")
-	indoorSwing:SetPoint("TOPLEFT", indoorZoom, "BOTTOMLEFT", 0, -34)
-	Tooltip(indoorSwing, "How far either side of behind the flight, RP walk and auto-run cameras " ..
-		"may swing indoors.")
-	GreyUnless(indoorSwing, IfIndoorLimits)
+		local indoorSwing = Slider(cameraPanel, "indoorSwing", "Swing indoors up to", 0, 90, 5, "%d°")
+		indoorSwing:SetPoint("TOPLEFT", indoorZoom, "BOTTOMLEFT", 0, -34)
+		Tooltip(indoorSwing, "How far either side of behind the flight, RP walk and auto-run cameras " ..
+			"may swing indoors.")
+		GreyUnless(indoorSwing, IfIndoorLimits)
 
-	local indoorSweep = Check(cameraPanel, "indoorNoSweep", "No AFK camera sweep indoors",
-		"The AFK camera sweeps right round your character, which can bump into walls " ..
-		"in tight rooms. Its zoom still runs (within the limit above).")
-	indoorSweep:SetPoint("TOPLEFT", indoorSwing, "BOTTOMLEFT", -4, -14)
-	GreyUnless(indoorSweep, IfIndoorLimits)
+		local indoorSweep = Check(cameraPanel, "indoorNoSweep", "No AFK camera sweep indoors",
+			"The AFK camera sweeps right round your character, which can bump into walls " ..
+			"in tight rooms. Its zoom still runs (within the limit above).")
+		indoorSweep:SetPoint("TOPLEFT", indoorSwing, "BOTTOMLEFT", -4, -14)
+		GreyUnless(indoorSweep, IfIndoorLimits)
+	end
 
 	cameraCanvas:SetScript("OnShow", PageShown(Refresh, cameraPanel))
 	cameraCanvas:Hide()
@@ -1053,15 +1095,17 @@ local function BuildRotationControls(container, prefix, style)
 end
 
 
--- The places a "Turn ... off in" list covers, in the same order everywhere.
+-- The places a "Turn ... off in" list covers, in the same order and with the
+-- same names everywhere: Open world (where a list has it), Cities, Dungeons,
+-- Raids, PvP, then the groups (Party, Raid group).
 local PLACES = {
 	{ "Cities", "Cities" }, { "Dungeons", "Dungeons" },
-	{ "Raids", "Raids" }, { "PvP", "Battlegrounds and arenas" },
+	{ "Raids", "Raids" }, { "PvP", "PvP" },
 }
 
 -- Every camera mode's page is laid out the same way:
---   Starting (full width): opts.top's own section first if any (the fish
---     camera's casting), then starting cinematic mode straight away, the
+--   Starting (full width): opts.top's own section first if any, then
+--     starting cinematic mode straight away, the
 --     mode's own starting options (opts.start), the wait after combat and the
 --     pause after you move the camera.
 --   Left column: Rotation (and opts.rotationExtras), then the mode's own
@@ -1265,7 +1309,7 @@ local function CreateEventsPanel()
 	musicHeader:SetPoint("LEFT", header, "LEFT", MUSIC_X, 0)
 	local MUSIC_TIP = "Music starts as this event's camera starts, unless the addon started music " ..
 		"within the fatigue time (Audio page). Music already playing just carries on. Off: this " ..
-		"camera never starts music. Needs \"Play music in CineMode\" on the Audio page."
+		"camera never starts music. Needs \"Allow CineMode to queue Music\" on the Audio page."
 	local MUSIC_EXTRA_TIPS = {
 		AFK = " This covers the AFK camera however it starts, standing still included. Off also " ..
 			"keeps music from coming back after a pause while you're away.",
@@ -1518,38 +1562,6 @@ local function CreateFishPanel()
 		description = "Cast Fishing (or any event set to it on the Camera Triggers page): the vista camera, " ..
 			"made for fishing. The camera glides round behind you and sways only a little either " ..
 			"side, so your bobber stays in view. It carries on after the cast until you move or jump.",
-		top = function(content, stack)
-			stack:Header(content, "Casting")
-			stack:Add(Check(content, "hideFishingCastBar", "Hide the Fishing cast bar",
-				"Your cast bar stays hidden while it shows Fishing. Every other spell shows it as usual."),
-				"check")
-			local recast = stack:Add(Check(content, "fishRightClickCast", "Right-click to cast again",
-				"While the fish camera is on and no bobber is out, right-clicking in the world casts " ..
-				"Fishing again. Each cast still comes from your own click. While the bobber is out, " ..
-				"right-click clicks it as usual; in combat, with the loot window open or with your " ..
-				"mouse on a player or NPC, right-click is left alone. (Meanwhile right-drag doesn't " ..
-				"turn the camera: left-drag still does.)"), "check")
-			recast:HookScript("OnClick", Refresh) -- grey out / enable the options below
-			local function IfRecast(db) return db.fishRightClickCast end
-			local pole = stack:Add(Check(content, "fishPoleRightClickCast", "Also the first cast, with a pole equipped",
-				"With a fishing pole in your main hand, standing still, right-clicking in the world " ..
-				"casts Fishing, so you don't have to start the first cast yourself. Not while your " ..
-				"mouse is on a player, NPC or object (mailbox, corpse...): right-click works on them " ..
-				"as usual. Swap the pole out to have right-click back everywhere."), "check", 24)
-			GreyUnless(pole, IfRecast)
-			local delay = stack:Add(Slider(content, "fishRecastDelay", "Wait after a cast ends", 0, 3, 0.1,
-				"%.1f sec"), "slider")
-			Tooltip(delay, "How long after a cast ends (a catch looted, or the bobber gone) before " ..
-				"right-click casts again, so the click that loots the fish doesn't cast straight away.")
-			GreyUnless(delay, IfRecast)
-			local missPause = stack:Add(Slider(content, "fishMissPause", "Pause after a missed cast", 0, 30, 1,
-				function(value) return value == 0 and "Off" or ("%d sec"):format(value) end), "slider")
-			Tooltip(missPause, "When a cast doesn't land in fishable water (say, a pole left equipped " ..
-				"away from water), right-click goes back to normal for this long before it casts again. " ..
-				"Moving and then standing still for 1 sec ends it early: you're likely at a new spot to fish from. " ..
-				"Off doesn't pause. (\"Skill not high enough\" always pauses it for 30 sec, moving or not.)")
-			GreyUnless(missPause, IfRecast)
-		end,
 		inputPauseKey = "fishInputPause",
 		inputPauseTip = "It glides back behind you first.",
 		orbitPrefix = "fishOrbit", style = "back",
@@ -2643,19 +2655,16 @@ local function CreateAudioPanel()
 	-- Left column: music, fatigue
 	local musicHeader = Header(content, "Music", subtitle, -20)
 
-	local music = Check(content, "musicInCinematic", "Play music in CineMode",
-		"Fades game music in as a camera starts (the ones ticked under Music on the Camera " ..
-		"Triggers page) and back out when the UI returns, using your music volume. If music " ..
-		"was already on, it's left alone.")
+	local music = Check(content, "musicInCinematic", "Allow CineMode to queue Music",
+		"With your game music off, a camera starting (the ones ticked under Music on the Camera " ..
+		"Triggers page) switches it on and fades it in, at your music volume; it fades out when " ..
+		"the UI returns and your music is switched off again (logging out too). With your game " ..
+		"music on, it's left alone. Unticked, music is never switched on.")
 	music:SetPoint("TOPLEFT", musicHeader, "BOTTOMLEFT", -2, -6)
 	music:HookScript("OnClick", Refresh) -- grey out / enable the options that depend on it
 
-	local logoutMusic = Check(content, "musicOffOnLogout", "Turn music off on logout",
-		"Switches game music off when you log out or exit, so it starts off next time.")
-	logoutMusic:SetPoint("TOPLEFT", music, "BOTTOMLEFT", 0, -2)
-
 	local musicFade = Slider(content, "musicFadeTime", "Music fade time", 0.5, 10, 0.5, "%.1f sec")
-	musicFade:SetPoint("TOPLEFT", logoutMusic, "BOTTOMLEFT", 4, -26)
+	musicFade:SetPoint("TOPLEFT", music, "BOTTOMLEFT", 4, -26)
 	Tooltip(musicFade, "How long music takes to fade in or out with CineMode.")
 
 	local fatigueHeader = Header(content, "Fatigue", musicFade, -24)
@@ -2669,7 +2678,7 @@ local function CreateAudioPanel()
 	DependsOnMusic(fatigue)
 
 	-- Right column: muting, all in one list ("In combat", "In cities"...)
-	local muteHeader = Label(content, "GameFontNormal", "Mute music")
+	local muteHeader = Label(content, "GameFontNormal", "Stop Music")
 	muteHeader:SetPoint("TOPLEFT", musicHeader, "TOPLEFT", 320, 0)
 
 	local combatMusic = Check(content, "musicOffInCombat", "In combat",
@@ -2690,7 +2699,9 @@ local function CreateAudioPanel()
 
 	local muteStack = Stack(movingMusic, "check")
 	for _, place in ipairs(PLACES) do
-		DependsOnMusic(muteStack:Add(Check(content, "musicOffIn" .. place[1], "In " .. place[2]:lower(),
+		DependsOnMusic(muteStack:Add(Check(content, "musicOffIn" .. place[1],
+			"In " .. (place[1] == "PvP" and "PvP" or place[2]:lower()),
+			(place[1] == "PvP" and (PVP_TIP .. " ") or "") ..
 			"Music fades out here (your own game music too) and back in when you leave."), "check"))
 	end
 
@@ -2699,22 +2710,9 @@ local function CreateAudioPanel()
 	RegisterSubpage(canvas, "Audio")
 end
 
--- Sub-page for combat: staying cinematic in fights, and what to show then.
-local function CreateCombatPanel()
-	local canvas, content = CreateScrollPage()
-
-	local title = Label(content, "GameFontNormalLarge", "Standard Frames")
-	title:SetPoint("TOPLEFT", 16, -16)
-
-	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
-		"CineMode shows it the whole time, the others only while you fight or have something " ..
-		"targeted. Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
-		"frames are on the 3rd Party Frames page.")
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
-
+-- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
+-- items), a column per situation. Used by the Gamepad page too.
+local function ShowTable(content, anchor, rows)
 	-- One table: a row per frame, a column per situation.
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 100, 24
 	local COLUMNS = {
@@ -2725,7 +2723,7 @@ local function CreateCombatPanel()
 	}
 	local columnTop = CreateFrame("Frame", nil, content)
 	columnTop:SetSize(1, 1)
-	columnTop:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -20)
+	columnTop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -20)
 	for c, column in ipairs(COLUMNS) do
 		local heading = Label(content, "GameFontNormalSmall", column[1])
 		heading:SetWidth(COLUMN_WIDTH)
@@ -2733,14 +2731,7 @@ local function CreateCombatPanel()
 		heading:SetPoint("TOPLEFT", columnTop, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
 	end
 
-	-- The game's frames this client has. Other addons' frames have the same
-	-- columns on the 3rd Party Frames page.
-	local rows = {}
-	for _, item in ipairs(ns.COMBAT_SHOW) do
-		if ns.OptionAvailable(item) and not item.key:find("^addon:") then
-			rows[#rows + 1] = item
-		end
-	end
+	local lastLabel = columnTop
 	for r, item in ipairs(rows) do
 		local y = -16 - (r - 1) * ROW_HEIGHT
 		local rowLabel = Label(content, "GameFontHighlight", item.label)
@@ -2769,6 +2760,7 @@ local function CreateCombatPanel()
 				end
 				if c == 1 then Refresh() end -- (greys the other columns)
 			end)
+			RecordRow(content, tableKey, item.key)
 			check:SetPoint("TOPLEFT", columnTop, "TOPLEFT",
 				LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
 			check.Refresh = function(self)
@@ -2777,11 +2769,236 @@ local function CreateCombatPanel()
 					and (not needsStay or ns.GetDB().stayInCombat)))
 			end
 		end
+		lastLabel = rowLabel
 	end
+	return lastLabel -- (the last row's label, to place what comes below)
+end
+
+-- Sub-page for combat: staying cinematic in fights, and what to show then.
+local function CreateCombatPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Standard Frames")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
+		"CineMode shows it the whole time, the others only while you fight or have something " ..
+		"targeted. Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
+		"frames are on the 3rd Party Frames page.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	-- The game's frames this client has, but for those with a page of their
+	-- own (gamepad). Other addons' frames have the same columns on the 3rd
+	-- Party Frames page.
+	local rows = {}
+	for _, item in ipairs(ns.COMBAT_SHOW) do
+		if ns.OptionAvailable(item) and not item.page and not item.key:find("^addon:") then
+			rows[#rows + 1] = item
+		end
+	end
+	ShowTable(content, subtitle, rows)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Standard Frames")
+end
+
+-- Sub-page: fishing (casting with right-click or a gamepad button, the cast bar).
+local function CreateFishingPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Fishing")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"Casting and catching, with the mouse or a gamepad, CineMode or not.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local stack = Stack(subtitle, "label")
+	stack:Header(content, "Casting")
+	stack:Add(Check(content, "hideFishingCastBar", "Hide the Fishing cast bar",
+		"Your cast bar stays hidden while it shows Fishing. Every other spell shows it as usual."),
+		"check")
+	local recast = stack:Add(Check(content, "fishRightClickCast", "Right-click to cast again",
+		"While the fish camera is on and no bobber is out, right-clicking in the world casts " ..
+		"Fishing again. Each cast still comes from your own click. While the bobber is out, " ..
+		"right-click clicks it as usual; in combat, with the loot window open or with your " ..
+		"mouse on a player or NPC, right-click is left alone. (Meanwhile right-drag doesn't " ..
+		"turn the camera: left-drag still does.)"), "check")
+	recast:HookScript("OnClick", Refresh) -- grey out / enable the options below
+	-- (They apply to the gamepad button too.)
+	local function IfRecast(db) return db.fishRightClickCast or (C_GamePad ~= nil and db.fishGamepadCast) end
+	local pole = stack:Add(Check(content, "fishPoleRightClickCast", "Also the first cast, with a pole equipped",
+		"With a fishing pole in your main hand, standing still, right-clicking in the world " ..
+		"casts Fishing, so you don't have to start the first cast yourself. Not while your " ..
+		"mouse is on a player, NPC or object (mailbox, corpse...): right-click works on them " ..
+		"as usual. Swap the pole out to have right-click back everywhere."), "check", 24)
+	GreyUnless(pole, IfRecast)
+	local delay = stack:Add(Slider(content, "fishRecastDelay", "Wait after a cast ends", 0, 3, 0.1,
+		"%.1f sec"), "slider")
+	Tooltip(delay, "How long after a cast ends (a catch looted, or the bobber gone) before " ..
+		"right-click casts again, so the click that loots the fish doesn't cast straight away.")
+	GreyUnless(delay, IfRecast)
+	local missPause = stack:Add(Slider(content, "fishMissPause", "Pause after a missed cast", 0, 30, 1,
+		function(value) return value == 0 and "Off" or ("%d sec"):format(value) end), "slider")
+	Tooltip(missPause, "When a cast doesn't land in fishable water (say, a pole left equipped " ..
+		"away from water), right-click goes back to normal for this long before it casts again. " ..
+		"Moving and then standing still for 1 sec ends it early: you're likely at a new spot to fish from. " ..
+		"Off doesn't pause. (\"Skill not high enough\" always pauses it for 30 sec, moving or not.)")
+	GreyUnless(missPause, IfRecast)
+
+	-- Gamepad mode: a gamepad button does what right-click does.
+	if C_GamePad then
+		local padCast = stack:Add(Check(content, "fishGamepadCast", "Gamepad: a button casts too",
+			"In gamepad mode, the button below casts Fishing whenever right-click would: in the " ..
+			"fish camera with no bobber out, and (if ticked above) with a pole equipped, standing " ..
+			"still. The rest of the time it does what it usually does. Each cast still comes from " ..
+			"your own press."), "check")
+		padCast:HookScript("OnClick", Refresh) -- grey out / enable the button choice (and the options above)
+		local function IfPadCast(db) return db.fishGamepadCast end
+		local PAD_BUTTONS = {
+			-- (By where the button sits: pads print different letters there.)
+			{ value = "PAD3", text = "Left face button (Xbox X)" },
+			{ value = "PAD4", text = "Top face button (Xbox Y)" },
+			{ value = "PAD1", text = "Bottom face button (Xbox A)" },
+			{ value = "PAD2", text = "Right face button (Xbox B)" },
+		}
+		local BUTTON_TIP = "The gamepad button that casts Fishing."
+		local button = Dropdown(content, "fishGamepadKey", PAD_BUTTONS, 200)
+		if button then
+			stack:Add(button, "dropdown", 24)
+			Tooltip(button, BUTTON_TIP)
+			GreyUnless(button, IfPadCast)
+		else
+			for _, choice in ipairs(PAD_BUTTONS) do
+				GreyUnless(stack:Add(Choice(content, "fishGamepadKey", choice.value, choice.text, BUTTON_TIP),
+					"check", 24), IfPadCast)
+			end
+		end
+	end
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Fishing")
+end
+
+-- Sub-page for WoW Forever's gamepad mode: its action bars and button hints,
+-- with the Standard Frames page's columns.
+local function CreateGamepadPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Gamepad")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"The frames gamepad mode adds (Options, Controls, Gamepad): its action bars, the button hints " ..
+		"and the reticle (the dot you aim with). As on the Standard Frames page, " ..
+		"each is hidden in CineMode unless ticked: CineMode shows it the whole time, the others only " ..
+		"while you fight or have something targeted. Rows also on the Standard Frames page (the " ..
+		"experience bars) follow this page in gamepad mode, and that one otherwise.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local rows = {}
+	for _, item in ipairs(ns.COMBAT_SHOW) do
+		if item.page == "gamepad" then
+			rows[#rows + 1] = item
+		end
+	end
+	local lastRow = ShowTable(content, subtitle, rows)
+
+	-- The prompt sits on a nameplate, not a frame of its own: a setting for
+	-- the plates' fade rather than a row.
+	local prompt = Check(content, "showInteractPrompt", "Show the interact prompt (X)",
+		"The button prompt over things you can use or talk to (your bobber, an NPC) stays up in " ..
+		"CineMode while the nameplates fade, so you can see what the gamepad can reach: a bobber " ..
+		"showing it can be caught. Unticked, it fades with them.")
+	prompt:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", -2, -16)
+	local press = Check(content, "gamepadPressReveal", "Show the action bars when you press a button",
+		"Gamepad mode's mouseover: pressing any gamepad button brings the action bars up, and " ..
+		"they fade out again your \"stays after mouseover\" time later (CineMode page). " ..
+		"Each press starts that time again. Choose the buttons in the list below. Presses that " ..
+		"make you jump don't count (whichever button jumps), nor presses while you fish (the " ..
+		"fish camera on, a cast going, or looting).")
+	press:SetPoint("TOPLEFT", prompt, "BOTTOMLEFT", 0, -2)
+	press:HookScript("OnClick", Refresh) -- grey out / enable the options below
+
+	-- Which buttons count: a list that opens and closes (+ / -), closed at first.
+	local IfPress = function(db) return db.gamepadPressReveal end
+	local listToggle = CreateFrame("Button", nil, content)
+	listToggle:SetSize(260, 20)
+	listToggle:SetPoint("TOPLEFT", press, "BOTTOMLEFT", 28, -4)
+	listToggle.icon = listToggle:CreateTexture(nil, "ARTWORK")
+	listToggle.icon:SetSize(14, 14)
+	listToggle.icon:SetPoint("LEFT", 0, 0)
+	listToggle.text = listToggle:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	listToggle.text:SetPoint("LEFT", listToggle.icon, "RIGHT", 4, 0)
+	listToggle.text:SetText("Buttons that show them")
+	listToggle:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight", "ADD")
+	listToggle:GetHighlightTexture():SetAllPoints(listToggle.icon)
+	Tooltip(listToggle, "Click to show or hide the list of buttons: untick one and pressing it " ..
+		"doesn't bring the action bars up.")
+	-- The list sits in a box that's empty and flat while closed, so what
+	-- comes below moves up.
+	local BUTTON_COLUMN, BUTTON_ROW = 200, 24
+	local list = CreateFrame("Frame", nil, content)
+	list:SetPoint("TOPLEFT", listToggle, "BOTTOMLEFT", 0, -2)
+	list:SetSize(BUTTON_COLUMN * 2, 1)
+	local rowsPerColumn = math.ceil(#ns.GAMEPAD_BUTTONS / 2)
+	for i, item in ipairs(ns.GAMEPAD_BUTTONS) do
+		-- (With the game's own name for it alongside, as your pad labels it.)
+		local gameText = ns.PadButtonText(item.key)
+		local label = gameText ~= "" and ("%s  |cff808080%s|r"):format(item.label, gameText) or item.label
+		local check = Check(list, "gamepadPressButtons", label, nil, function(value)
+			ns.GetDB().gamepadPressButtons[item.key] = value
+		end)
+		local column, row = math.floor((i - 1) / rowsPerColumn), (i - 1) % rowsPerColumn
+		check:SetPoint("TOPLEFT", list, "TOPLEFT", column * BUTTON_COLUMN, -row * BUTTON_ROW)
+		check.Refresh = function(self) self:SetChecked(ns.IsPadButtonOn(item.key)) end
+		GreyUnless(check, IfPress)
+	end
+	RecordKey(content, "gamepadPressButtons") -- (for the page's Reset)
+	local listOpen = false
+	local function ShowList()
+		listToggle.icon:SetTexture(listOpen and "Interface\\Buttons\\UI-MinusButton-Up"
+			or "Interface\\Buttons\\UI-PlusButton-Up")
+		list:SetShown(listOpen)
+		list:SetHeight(listOpen and rowsPerColumn * BUTTON_ROW or 1)
+	end
+	ShowList()
+	listToggle:SetScript("OnClick", function()
+		listOpen = not listOpen
+		ShowList()
+		FitContentHeight(content)
+	end)
+
+	-- The action bars' own fade times (every time they show, not just for presses).
+	-- (From the list, which sits 26 right of the column edge: the press
+	-- check's 2 left and the toggle's 28.)
+	local stack = Stack(list, "label")
+	stack.indent = 26
+	stack:Header(content, "Action bar fading")
+	local stay = stack:Add(Slider(content, "gamepadPressHold", "Stay after a press", 0, 10, 0.5, "%.1f sec"),
+		"slider")
+	Tooltip(stay, "How long the action bars stay after your last button press, counting their fade out.")
+	GreyUnless(stay, function(db) return db.gamepadPressReveal end)
+	local fadeIn = stack:Add(Slider(content, "gamepadBarsFadeIn", "Fade in time", 0, 3, 0.1, "%.1f sec"),
+		"slider")
+	Tooltip(fadeIn, "How long the gamepad action bars take to fade in: for button presses, fights and " ..
+		"targets alike. The rest of the UI uses the fade times on the CineMode page.")
+	local fadeOut = stack:Add(Slider(content, "gamepadBarsFadeOut", "Fade out time", 0, 3, 0.1, "%.1f sec"),
+		"slider")
+	Tooltip(fadeOut, "How long the gamepad action bars take to fade out.")
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Gamepad")
 end
 
 -- Sub-page: which nameplates show (mobs, your faction, the other faction),
@@ -2829,14 +3046,18 @@ local function CreatePlatesPanel()
 	-- shows ticked while they all are. enable: switches the row's game options on.
 	-- The Always column: keeps its row up everywhere, whatever the other
 	-- boxes say. They're greyed out meanwhile and kept as they were, for when
-	-- it's unticked. enable: switches the row's game options on.
+	-- it's unticked. enable: switches the row's game options on (sync: brings
+	-- them in line with the row, on or off).
 	local ALWAYS_TIP = "Keep these up everywhere in CineMode, in fights and out, whatever the " ..
 		"rest of this row says. The other boxes keep their ticks for when you untick it."
-	local function AlwaysCheck(alwaysKey, enable)
+	local function AlwaysCheck(alwaysKey, enable, sync)
 		return Check(content, alwaysKey, "", ALWAYS_TIP, function(value)
 			ns.GetDB()[alwaysKey] = value
 			if value and enable then
 				enable()
+			end
+			if sync then
+				sync()
 			end
 			Refresh()
 		end)
@@ -2855,7 +3076,7 @@ local function CreatePlatesPanel()
 	local PLACE_COLUMNS = {
 		{ "", "Open world", "anywhere else (inns too)" }, { "Cities", "Cities", "in capital cities" },
 		{ "Dungeons", "Dungeons", "in dungeons and scenarios" }, { "Raids", "Raids", "in raids" },
-		{ "PvP", "BGs", "in battlegrounds and arenas" },
+		{ "PvP", "PvP", "while you're PvP flagged, and in battlegrounds and arenas" },
 	}
 	-- Always first, set apart: it stands for the rest of its row.
 	local headings = { "Always", "In combat" }
@@ -2875,7 +3096,8 @@ local function CreatePlatesPanel()
 		{ "FriendlyMinions", "Minions", true },
 		{ "FriendlyNPCs", "Friendly NPCs" },
 		-- Your target, whatever its own row says (not a game option of its own).
-		{ "EnemyTarget", "Enemy Target", false, "a target you can attack (neutral mobs too)" },
+		{ "EnemyTarget", "Enemy Target", false,
+			"a target you can attack (neutral mobs too), or the other faction's player even unflagged" },
 		{ "FriendlyTarget", "Friendly Target", false, "a target you can't attack" },
 	}
 	local rowTip = " Ticking it switches this kind of nameplate on in the game's own options."
@@ -2927,14 +3149,13 @@ local function CreatePlatesPanel()
 	-- name options decide.
 	local namesHeader = Header(content, "Names", lastLabel, -24)
 	local namesTop = TableTop(namesHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
-	local nameTip = " Ticking it switches these names on in the game's own options."
+	local nameTip = " Anything ticked in this row switches these names on in the game's own options; " ..
+		"nothing ticked switches them off."
 	for r, group in ipairs(ns.NAME_GROUPS) do
 		local function Ticked(key)
 			return function(value)
 				ns.GetDB()[key] = value
-				if value then
-					ns.EnableNameRow(group)
-				end
+				ns.SyncNameRow(group)
 				Refresh()
 			end
 		end
@@ -2955,7 +3176,7 @@ local function CreatePlatesPanel()
 		for _, check in ipairs(checks) do
 			GreyUnless(check, function(db) return ns.HasNameSettings(group) and not db[alwaysKey] end)
 		end
-		local always = AlwaysCheck(alwaysKey, function() ns.EnableNameRow(group) end)
+		local always = AlwaysCheck(alwaysKey, nil, function() ns.SyncNameRow(group) end)
 		GreyUnless(always, function() return ns.HasNameSettings(group) end)
 		table.insert(checks, 1, always)
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
@@ -3067,7 +3288,7 @@ local function CreateChatPanel()
 		{ "chatInCities", "Cities", "Capital cities. " },
 		{ "chatInDungeons", "Dungeons", "" },
 		{ "chatInRaids", "Raids", "" },
-		{ "chatInPvP", "Battlegrounds and arenas", "" },
+		{ "chatInPvP", "PvP", PVP_TIP .. " " },
 	}) do
 		local check = Check(chatPanel, place[1], place[2], place[3] .. CHAT_TIP)
 		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
@@ -3207,9 +3428,6 @@ local function CreateMinimapPanel()
 		{ "minimapForTreasure", "Treasure (Find Treasure)" },
 		{ "minimapForFish", "Fish (Find Fish)" },
 		{ "minimapForCreatures", "Creatures (hunter, druid, warlock)" },
-		{ "trackingHideWhenIdle", "Except when standing still or flying",
-			"Tracking doesn't keep the minimap up on flight paths, or once you've stood " ..
-			"still for the AFK camera delay. It comes back when you move." },
 	}) do
 		local check = Check(content, kind[1], kind[2], kind[3] or TRACKING_TIP)
 		check:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", i == 1 and 16 or 0, -2)
@@ -3221,7 +3439,7 @@ local function CreateMinimapPanel()
 	exceptIn:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", 4, -4)
 	local PLACE_TIPS = {
 		Cities = "Capital cities. ",
-		PvP = "Alterac Valley's mines do have ore, so untick this if you mine there. ",
+		PvP = PVP_TIP .. " Alterac Valley's mines do have ore, so untick this if you mine there. ",
 	}
 	for i, place in ipairs(PLACES) do
 		local check = Check(content, "trackingOffIn" .. place[1], place[2], (PLACE_TIPS[place[1]] or "") ..
@@ -3230,6 +3448,19 @@ local function CreateMinimapPanel()
 			i == 1 and 12 or 0, i == 1 and -4 or -2)
 		GreyUnless(check, function(db) return db.minimapForTracking end)
 		previousTracking = check
+	end
+
+	-- Hide in camera modes: one box per camera (keys <cam>HideMinimap).
+	local hideInCams = Label(content, "GameFontHighlight", "Hide in camera modes")
+	hideInCams:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", -30, -14)
+	local previousCam
+	for i, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+		local check = Check(content, cam[1] .. "HideMinimap", cam[2],
+			"While the " .. cam[2] .. " camera runs, the minimap fades, even if it's set to " ..
+			"always show or tracking would keep it up. Hovering it still shows it.")
+		check:SetPoint("TOPLEFT", i == 1 and hideInCams or previousCam, "BOTTOMLEFT",
+			i == 1 and -2 or 0, i == 1 and -4 or -2)
+		previousCam = check
 	end
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -3443,6 +3674,7 @@ local function CreateExtrasPanel()
 				check = Check(content, tableKey, "", nil, function(value)
 					ns.GetDB()[tableKey][item] = value
 				end)
+				RecordRow(content, tableKey, item)
 				check.Refresh = function(self)
 					self:SetChecked(isOn(item))
 					self:SetEnabled(ns.IsAddonFramesOn(known.key) and (not needsStay or ns.GetDB().stayInCombat))
@@ -3819,6 +4051,10 @@ CreatePanel()
 -- keybinds. (Standard Frames and 3rd Party Frames come right after CineMode.)
 CreateRevealPanel()
 CreateCombatPanel()
+-- WoW Forever's gamepad mode (retail's has no frames of its own).
+if C_GamePad and not ns.isRetail then
+	CreateGamepadPanel()
+end
 CreateExtrasPanel()
 CreateMinimapPanel()
 CreateQuestTrackerPanel()
@@ -3829,6 +4065,7 @@ end
 CreateBuffsPanel()
 CreatePlatesPanel()
 CreateChatPanel()
+CreateFishingPanel()
 CreateTintPanel()
 CreateAudioPanel()
 CreateCameraPanel()

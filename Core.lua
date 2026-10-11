@@ -43,7 +43,7 @@ local DEFAULTS = {
 	                          -- changes, with a fitting sound (rooster, bells, frogs, owl, wolf)
 	offInDungeons = false,    -- no cinematic mode in dungeons (and scenarios)
 	offInRaids = false,
-	offInPvP = false,         -- battlegrounds and arenas
+	offInPvP = false,         -- PvP flagged, battlegrounds and arenas
 	offInCities = false,      -- capital cities
 	offInWorld = false,       -- the open world: anywhere outside instances, cities and inns
 	offInParty = false,       -- while in a party (not a raid group)
@@ -85,7 +85,6 @@ local DEFAULTS = {
 	minimapForTreasure = true,
 	minimapForFish = true,
 	minimapForCreatures = false,
-	trackingHideWhenIdle = true, -- ...except once the standing-still timer has run, or on flights
 	trackingOffInCities = true,  -- ...and in these places (no nodes there; dungeons have some)
 	trackingOffInDungeons = true,
 	trackingOffInRaids = true,
@@ -108,7 +107,6 @@ local DEFAULTS = {
 	mouseover = true,      -- hovering a faded element reveals it
 	mouseoverHold = 3,     -- seconds a group stays after the mouse leaves it (per-group overrides below)
 	musicInCinematic = true,  -- turn game music on while cinematic, off after
-	musicOffOnLogout = false, -- turn game music off when logging out
 	plateCombatEnemies = true, -- in cinematic mode, show these during fights (Enemies: enemy players)
 	plateCombatEnemyMinions = true,
 	plateCombatEnemyNPCs = true,
@@ -157,7 +155,7 @@ local DEFAULTS = {
 	chatInCities = false,     -- keep chat visible in capital cities
 	chatInDungeons = false,   -- ...in dungeons and scenarios
 	chatInRaids = false,
-	chatInPvP = false,        -- ...in battlegrounds and arenas
+	chatInPvP = false,        -- ...while PvP flagged (battlegrounds and arenas too)
 	dropTargetOnFlights = true, -- ignore your target from takeoff (its frames fade) until you pick another
 	taxiInstant = true,       -- go cinematic as soon as a flight starts (no fade delay)
 	taxiCenter = true,        -- swing the camera behind the character when a flight starts
@@ -324,6 +322,13 @@ DEFAULTS.fishRecastDelay = 0.3     --...seconds after a cast ends before it does
 DEFAULTS.fishPoleRightClickCast = true -- ...and for the first cast, with a fishing pole equipped
 DEFAULTS.fishMissPause = 30        -- ...seconds it stands aside after a cast misses the water
 DEFAULTS.hideFishingCastBar = true -- no cast bar while it shows Fishing (other spells still show it)
+DEFAULTS.fishGamepadCast = true    -- in gamepad mode, a gamepad button casts as right-click does...
+DEFAULTS.fishGamepadKey = "PAD3"   -- ...this one (the left face button: X on an Xbox pad, square on a PlayStation one)
+DEFAULTS.gamepadPressReveal = true -- a gamepad button press shows its action bars for the mouseover time
+DEFAULTS.gamepadPressHold = 3       -- ...for this long after the last press (counting the fade out)
+DEFAULTS.gamepadBarsFadeIn = 0.2    -- gamepad mode's action bars fade quicker than the rest of the UI
+DEFAULTS.gamepadBarsFadeOut = 0.5
+DEFAULTS.showInteractPrompt = true -- the interact prompt on a plate (gamepad's X) stays as plates fade
 for _, key in ipairs({ "Mode", "Right", "Step", "Speed", "MinChange", "PitchUp", "PitchDown", "BackArc",
 	"MoveTime", "Ease", "Pause", "Drift", "DriftSpeed" }) do
 	DEFAULTS["fishOrbit" .. key] = DEFAULTS["vistaOrbit" .. key]
@@ -379,7 +384,16 @@ ns.CAMERA_OFF_CAMS = {
 }
 ns.CAMERA_OFF_WHERE = { "Cities", "Dungeons", "Raids", "PvP", "Party", "RaidGroup" }
 ns.CAMERA_OFF_NEVER = { flight = { Dungeons = true, Raids = true, PvP = true } }
+-- The same grid's Calm Timer column: <cam>CalmWait, that camera holds off
+-- until the Calm Timer (calmTime) has run out after a fight. By default the
+-- ones you'd walk or run off into after one (RP walking, auto-running); the
+-- rest start straight away. Not the death camera: you die in a fight.
+ns.CALM_WAIT_NEVER = { death = true }
+local CALM_WAIT_DEFAULT = { walk = true, run = true }
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+	if not ns.CALM_WAIT_NEVER[cam[1]] then
+		DEFAULTS[cam[1] .. "CalmWait"] = CALM_WAIT_DEFAULT[cam[1]] or false
+	end
 	DEFAULTS[cam[1] .. "OffAlways"] = false
 	for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
 		if not (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
@@ -387,6 +401,14 @@ for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 		end
 	end
 end
+-- The Minimap page's "Hide in camera modes": <cam>HideMinimap fades the
+-- minimap while that camera runs, whatever would keep it up (hovering still
+-- shows it).
+for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+	DEFAULTS[cam[1] .. "HideMinimap"] = false
+end
+DEFAULTS.flightHideMinimap = true
+DEFAULTS.idleHideMinimap = true
 DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
 DEFAULTS.deathScreenStrength = 1
 DEFAULTS.deathZoom = 4             -- yards it pulls back meanwhile
@@ -422,8 +444,8 @@ for _, kind in ipairs(ns.PLATE_KINDS) do
 		DEFAULTS["plateIn" .. suffix .. kind] = false
 	end
 end
--- Kept up in dungeons and raids: friendly players and NPCs; in battlegrounds
--- and arenas: players on both sides and friendly minions.
+-- Kept up in dungeons and raids: friendly players and NPCs; in PvP (flagged,
+-- battlegrounds and arenas): players on both sides and friendly minions.
 for _, key in ipairs({ "plateInDungeonsFriends", "plateInDungeonsFriendlyNPCs", "plateInRaidsFriends",
 	"plateInRaidsFriendlyNPCs", "plateInPvPEnemies", "plateInPvPEnemyNPCs", "plateInPvPFriends",
 	"plateInPvPFriendlyMinions" }) do
@@ -451,8 +473,9 @@ DEFAULTS.nameInPvPEnemyMinions = true
 for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateAlways" .. kind] = false
 end
+-- (Your target's plate, enemy or friendly, is kept up everywhere by default.)
 for row in pairs(ns.PLATE_TARGET_ROWS) do
-	DEFAULTS["plateAlways" .. row] = false
+	DEFAULTS["plateAlways" .. row] = true
 end
 for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
 	DEFAULTS["nameAlways" .. key] = false
@@ -566,6 +589,25 @@ local function Flag(value)
 		return false
 	end
 	return value and true or false
+end
+
+-- Whether a unit counts as an enemy for the enemy target choices: one you can
+-- attack (neutral mobs too), or the other faction's player even while they
+-- aren't flagged for PvP. nil when the game won't say (secret values).
+function ns.IsEnemyUnit(unit)
+	local ok, attackable = pcall(UnitCanAttack, "player", unit)
+	if not ok or (issecretvalue and issecretvalue(attackable)) then
+		return nil
+	end
+	if attackable then
+		return true
+	end
+	local okPlayer, isPlayer = pcall(UnitIsPlayer, unit)
+	local okFriend, friend = pcall(UnitIsFriend, "player", unit)
+	if okPlayer and okFriend and Flag(isPlayer) and not (issecretvalue and issecretvalue(friend)) then
+		return not friend
+	end
+	return false
 end
 
 -- Flights "drop" the target: addons can't clear it (ClearTarget is protected),
@@ -694,10 +736,23 @@ function ns.GetPlaceType()
 	end
 end
 
+-- Flagged for PvP (or free-for-all PvP).
+local function IsPvPFlagged()
+	return Flag(UnitIsPVP("player")) or (UnitIsPVPFreeForAll and Flag(UnitIsPVPFreeForAll("player")))
+end
+
 -- The place for the per-place options: as ns.GetPlaceType, except that an
--- inn counts as the open world (nil). (The inn glow still tells inns apart.)
+-- inn counts as the open world (nil), and being flagged for PvP counts as
+-- PvP (battlegrounds and arenas too) anywhere but dungeons and raids, and
+-- not on flights. (The inn glow still tells inns apart.)
 function ns.GetOptionPlace()
 	local place = ns.GetPlaceType()
+	if place == "pvp" or place == "dungeon" or place == "raid" then
+		return place
+	end
+	if IsPvPFlagged() and not UnitOnTaxi("player") then
+		return "pvp"
+	end
 	return place ~= "inn" and place or nil
 end
 
@@ -1275,6 +1330,7 @@ local function EnsureTables()
 	ns.db.timePhaseColors = ns.db.timePhaseColors or {} -- "Night", "Dawn"... -> { r, g, b } of your own
 	ns.db.timePhaseStrength = ns.db.timePhaseStrength or {} -- "Night", "Dawn"... -> strength (0-1) of your own
 	ns.db.combatShow = ns.db.combatShow or {}
+	ns.db.gamepadPressButtons = ns.db.gamepadPressButtons or {} -- Gamepad page: button -> reveals the bars
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode
 	ns.db.targetShow = ns.db.targetShow or {}
@@ -1489,20 +1545,29 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.plateCombatOther = true
 			ns.db.plateCombatV2 = true
 		end
-		-- "Turn music off on logout" was first on by default, leaving game music
-		-- switched off outside cinematic mode (and after removing the addon).
-		-- Turn it off once, and switch game music back on at login if it left it off.
+		-- "Turn music off on logout" (since removed) was first on by default,
+		-- leaving game music switched off outside cinematic mode (and after
+		-- removing the addon). Switch game music back on once at login if it did.
 		if not ns.db.musicLogoutV1 then
 			if ns.db.musicOffOnLogout then
 				ns.musicBackOn = true
 			end
-			ns.db.musicOffOnLogout = false
 			ns.db.musicLogoutV1 = true
 		end
+		ns.db.musicOffOnLogout = nil
 		-- "No music while AFK" (Audio page) is now Go AFK's Music column on the
 		-- Camera Triggers page, the other way round.
 		if ns.db.noMusicWhenAFK == false and ns.db.eventAFKMusic == nil then
 			ns.db.eventAFKMusic = true
+		end
+		-- Tracking's "Except when standing still or flying" (Minimap page) is now
+		-- Hide in camera modes, the Flight and AFK boxes.
+		if ns.db.trackingHideWhenIdle == false then
+			for _, key in ipairs({ "flightHideMinimap", "idleHideMinimap" }) do
+				if ns.db[key] == nil then
+					ns.db[key] = false
+				end
+			end
 		end
 		-- (The migrations below up to the rows' renaming use the old rows.)
 		local OLD_PLATE_KINDS = { "Mobs", "NPCs", "Own", "Other", "Pets", "Totems" }
@@ -1911,6 +1976,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"musicCamIdle", "musicWhenAFK", "noMusicWhenAFK", -- (now eventAFKMusic)
 			"musicPauseOnLanding", "musicPauseFadeTime", -- (leaving the flight camera; the music fade time)
 			"musicOffOnFlights", -- (the flight camera's Music switch, Camera Triggers page)
+			"trackingHideWhenIdle", -- (now flightHideMinimap, idleHideMinimap)
 			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
 			"plateAlwaysTarget", -- (now plateAlwaysTargetEnemy, plateAlwaysTargetFriendly)
 			"plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut", "plateTargetFriendlyFadeIn",
@@ -2068,15 +2134,13 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		-- Put the player's music/name/nameplate settings back before they're saved.
 		ns.UpdateCVars(false)
 		ns.StopIdleZoomNow()
+		ns.StopDeathSongNow()
 		ns.StopMusicNow()
 		ns.StopCombatMusicNow()
 		ns.ShowPlatesNow()
 		ns.StopOrbitNow()
 		ns.ApplyCVarSet(ns.FLIGHT_CVARS, false)
 		ns.ApplyCVarSet(ns.RECENTER_CVARS, false)
-		if ns.db.musicOffOnLogout then
-			SetCVar("Sound_EnableMusic", 0)
-		end
 		ns.MusicTrace(("LOGOUT done volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 	elseif event == "PLAYER_LEVEL_UP" then
 		ns.levelUpUntil = GetTime() + ns.LEVEL_UP_WINDOW
