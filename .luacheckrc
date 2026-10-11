@@ -19,6 +19,10 @@ globals = {
 
 -- The WoW API the addon uses (add new ones here as they come up)
 read_globals = {
+	"bit",
+	"COMBATLOG_OBJECT_CONTROL_PLAYER",
+	"COMBATLOG_OBJECT_REACTION_HOSTILE",
+	"CombatLogGetCurrentEventInfo",
 	"AuraUtil",
 	"BackdropTemplateMixin",
 	"CANCEL",
@@ -196,6 +200,9 @@ read_globals = {
 	"debugstack",
 	"geterrorhandler",
 	"hooksecurefunc",
+	"DEFAULT_CHAT_FRAME",
+	"FCF_StartAlertFlash",
+	"FCF_StopAlertFlash",
 	"issecretvalue",
 	"seterrorhandler",
 	"tinsert",

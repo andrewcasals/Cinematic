@@ -81,8 +81,8 @@ local function SetOwnValue(cvar, value)
 end
 
 -- Whether any box in a names row is ticked.
-local NAME_ROW_PREFIXES = { "nameAlways", "nameCombat", "nameKeep", "nameInCities", "nameInDungeons",
-	"nameInRaids", "nameInPvP" }
+local NAME_ROW_PREFIXES = { "nameAlways", "nameCombat", "nameCombatPvP", "nameKeep", "nameInDungeons",
+	"nameInRaids", "nameInPvP", "nameInBGs" }
 local function NameRowTicked(group)
 	for _, prefix in ipairs(NAME_ROW_PREFIXES) do
 		if ns.db[prefix .. group.key] then
@@ -137,17 +137,22 @@ local COMBAT_TEXT_CVARS = {
 	},
 }
 
--- Names ticked In combat stay up through the fight and for the Calm Timer (calmTime)
--- after it, like the plates.
+-- Whether the fight now under way was with the other side's players as it
+-- started: names can't change mid-fight, so In PvP combat names go by that.
+local pvpNamesFight = false
+
+-- Names ticked In combat (or In PvP combat, in such fights) stay up through
+-- the fight and for the Calm Timer (calmTime) after it, like the plates.
 -- (Always on the Nameplates page keeps a row up whatever its other boxes say.)
 local function NameKeptHere(key, inCombat)
 	if ns.db["nameAlways" .. key] then
 		return true
 	end
-	if inCombat or (ns.FightLingering() and ns.db["nameCombat" .. key]) then
-		return ns.db["nameCombat" .. key]
+	local fightKept = ns.db["nameCombat" .. key] or (pvpNamesFight and ns.db["nameCombatPvP" .. key])
+	if inCombat or (ns.FightLingering() and fightKept) then
+		return fightKept
 	end
-	local place = ns.PlaceSuffix()
+	local place = ns.PlateSuffix()
 	return ns.db[place and ("nameIn" .. place .. key) or ("nameKeep" .. key)]
 end
 
@@ -166,6 +171,8 @@ end
 
 -- The last chance to switch names to the "In combat" choices before lockdown.
 function ns.UpdateCVarsForFight()
+	ns.NotePvPFightStart()
+	pvpNamesFight = ns.InPvPFight()
 	ns.UpdateCVars(lastCinematic, true)
 end
 
@@ -757,14 +764,71 @@ end
 -- game's own options decide. Set each frame.
 local platesActive = false
 
--- Where you are, for the Nameplates page's place columns: "Cities", "Dungeons"...
+-- Where you are, for the Nameplates page's place columns: "PvP", "BGs", "Dungeons"...
 -- or nil for the open world. Set each frame.
 local placeSuffix
 
--- Whether a kind shows in fights in cinematic mode (plateCombat<kind>, or
--- Always on the Nameplates page, which keeps a row up whatever its other boxes say).
+-- Whether this fight (or the last one, through its Calm Timer) is with the
+-- other side's players, for the Nameplates page's In PvP combat column (not
+-- on retail, whose combat log is closed to addons). Any fight in a
+-- battleground or arena counts; elsewhere it's a hit in the combat log
+-- between you or your pet and a hostile player or their minion.
+local pvpSeenAt, fightStartedAt = -math.huge, 0
+local PVP_START_SLACK = 1 -- the hit that starts a fight is logged just before it does
+
+local function HostilePlayerControlled(flags)
+	return type(flags) == "number"
+		and bit.band(flags, COMBATLOG_OBJECT_REACTION_HOSTILE) ~= 0
+		and bit.band(flags, COMBATLOG_OBJECT_CONTROL_PLAYER) ~= 0
+end
+
+local function IsMine(guid)
+	return guid ~= nil and (guid == UnitGUID("player") or guid == UnitGUID("pet"))
+end
+
+-- (Also called before the fight's names are set, which can come first.)
+function ns.NotePvPFightStart()
+	local now = GetTime()
+	if now - fightStartedAt > PVP_START_SLACK then
+		fightStartedAt = now
+	end
+end
+
+if not ns.isRetail and CombatLogGetCurrentEventInfo then
+	local pvpWatcher = CreateFrame("Frame")
+	pvpWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+	pvpWatcher:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+	pvpWatcher:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_REGEN_DISABLED" then
+			ns.NotePvPFightStart()
+			return
+		end
+		local _, _, _, srcGUID, _, srcFlags, _, dstGUID, _, dstFlags = CombatLogGetCurrentEventInfo()
+		if (IsMine(srcGUID) and HostilePlayerControlled(dstFlags))
+			or (IsMine(dstGUID) and HostilePlayerControlled(srcFlags)) then
+			pvpSeenAt = GetTime()
+		end
+	end)
+end
+
+local function InPvPFight()
+	if ns.isRetail then
+		return false
+	end
+	local _, instanceType = IsInInstance()
+	if instanceType == "pvp" or instanceType == "arena" then
+		return true
+	end
+	return pvpSeenAt >= fightStartedAt - PVP_START_SLACK
+end
+ns.InPvPFight = InPvPFight
+
+-- Whether a kind shows in fights in cinematic mode (plateCombat<kind>,
+-- plateCombatPvP<kind> in fights with players, or Always on the Nameplates
+-- page, which keeps a row up whatever its other boxes say).
 local function ShownInFights(kind)
-	return (ns.db["plateCombat" .. kind] or ns.db["plateAlways" .. kind]) and true or false
+	return (ns.db["plateCombat" .. kind] or ns.db["plateAlways" .. kind]
+		or (ns.db["plateCombatPvP" .. kind] and InPvPFight())) and true or false
 end
 
 -- Whether a kind stays up in cinematic mode out of combat where you are:
@@ -822,7 +886,7 @@ local targetFade = { plate = nil, level = 0, enemy = false }
 local leavingTargets = {}
 
 local function TargetFadeTime(fadeIn)
-	return fadeIn and ns.db.fadeInTime or ns.db.fadeOutTime
+	return fadeIn and ns.FadeInTime() or ns.FadeOutTime()
 end
 
 -- Moves the target fades on by `elapsed`; true while any of them is moving.
@@ -1007,6 +1071,8 @@ function ns.PrintPlatesDebug()
 			keptHere[#keptHere + 1] = kind
 		end
 	end
+	ns.Print(("pvp fight=%s (player seen %s)"):format(tostring(InPvPFight()),
+		pvpSeenAt > -math.huge and ("%.0f sec ago"):format(GetTime() - pvpSeenAt) or "never"))
 	ns.Print(("place=%s, kept up here=%s"):format(placeSuffix or "open world",
 		#keptHere > 0 and table.concat(keptHere, ", ") or "none"))
 	local function describe(unit)
@@ -1131,8 +1197,8 @@ end
 -- nothing ticked are left alone.
 function ns.EnsurePlateRows()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCinematic", "plateInCities",
-			"plateInDungeons", "plateInRaids", "plateInPvP" }) do
+		for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic",
+			"plateInDungeons", "plateInRaids", "plateInPvP", "plateInBGs" }) do
 			if ns.db[prefix .. kind] then
 				ns.EnablePlateRow(kind)
 				break
@@ -1185,7 +1251,7 @@ local platesWereFiltered = false
 
 function ns.UpdatePlates(cinematic, elapsed)
 	platesActive = cinematic and true or false
-	placeSuffix = ns.PlaceSuffix()
+	placeSuffix = ns.PlateSuffix()
 	UpdateLockedPlates()
 	-- Plates show for every fight (bar kinds cinematic mode hides in fights)
 	-- and hide again afterwards. Just after a fight, kinds ticked for fights
@@ -1208,7 +1274,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 	local changed = UpdateTargetFade(elapsed)
 	changed = ns.plates.level ~= target or changed
 	if changed then
-		local duration = target > ns.plates.level and ns.db.fadeInTime or ns.db.fadeOutTime
+		local duration = target > ns.plates.level and ns.FadeInTime() or ns.FadeOutTime()
 		ns.plates.level = ns.Approach(ns.plates.level, target, elapsed, duration)
 	end
 	-- Kinds hidden in cinematic fights: held at 0 in combat, then let back up
@@ -1224,7 +1290,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 			keptLevel[kind] = keptTarget -- logging in: no fade
 		elseif keptLevel[kind] ~= keptTarget then
 			keptLevel[kind] = ns.Approach(keptLevel[kind], keptTarget, elapsed,
-				keptTarget > keptLevel[kind] and ns.db.fadeInTime or ns.db.fadeOutTime)
+				keptTarget > keptLevel[kind] and ns.FadeInTime() or ns.FadeOutTime())
 			changed = true
 		end
 		if inCombat and platesActive and not combat then
@@ -1234,14 +1300,14 @@ function ns.UpdatePlates(cinematic, elapsed)
 			if from > 0 then
 				changed = true
 			end
-			combatCap[kind] = ns.Approach(from, 0, elapsed, ns.db.fadeOutTime)
+			combatCap[kind] = ns.Approach(from, 0, elapsed, ns.FadeOutTime())
 		elseif combatCap[kind] then
 			if hide and not cinematicKept then
 				if ns.plates.level <= combatCap[kind] then
 					combatCap[kind] = nil -- the fade is below the limit now: it takes over
 				end
 			else
-				combatCap[kind] = ns.Approach(combatCap[kind], 1, elapsed, ns.db.fadeInTime)
+				combatCap[kind] = ns.Approach(combatCap[kind], 1, elapsed, ns.FadeInTime())
 				if combatCap[kind] >= 1 then
 					combatCap[kind] = nil
 				end
@@ -1857,7 +1923,7 @@ function ns.UpdateLetterbox(cinematic, elapsed)
 		return
 	end
 	ns.letterboxDirty = false
-	local duration = target > letterboxProgress and ns.db.fadeOutTime or ns.db.fadeInTime
+	local duration = target > letterboxProgress and ns.FadeOutTime() or ns.FadeInTime()
 	letterboxProgress = ns.Approach(letterboxProgress, target, elapsed, duration)
 
 	-- Smoothstep so the bars ease in and out.

@@ -496,8 +496,19 @@ local function CreateRevealPanel()
 	Tooltip(fadeOut, "How long the UI takes to fade out. The mouseover times below include it: " ..
 		"a time shorter than the fade just fades straight away.")
 
+	local combatFadeIn = Slider(content, "combatFadeInTime", "Combat fade in time", 0, 10, 0.1, "%.1f sec")
+	combatFadeIn:SetPoint("TOPLEFT", fadeOut, "BOTTOMLEFT", 0, -34)
+	Tooltip(combatFadeIn, "How long things take to fade in during a fight: the UI coming back as " ..
+		"one starts, and anything else that shows mid-fight. Other times use the Fade in time.")
+
+	local combatFadeOut = Slider(content, "combatFadeOutTime", "Combat fade out time", 0, 10, 0.1, "%.1f sec")
+	combatFadeOut:SetPoint("TOPLEFT", combatFadeIn, "BOTTOMLEFT", 0, -34)
+	Tooltip(combatFadeOut, "How long things take to fade out after a fight: whatever starts fading " ..
+		"within the Calm Timer below (the UI going back to CineMode, nameplates and names letting " ..
+		"go). Other times use the Fade out time.")
+
 	local calm = Slider(content, "calmTime", "Calm Timer", 0, 120, 5, "%d sec after a fight")
-	calm:SetPoint("TOPLEFT", fadeOut, "BOTTOMLEFT", 0, -34)
+	calm:SetPoint("TOPLEFT", combatFadeOut, "BOTTOMLEFT", 0, -34)
 	Tooltip(calm, "How long things take to settle back into CineMode after a fight. " ..
 		"Nameplates and names ticked In combat stay up this long (so they don't drop away " ..
 		"between pulls), and the letterbox and tint, if they step aside for fights, wait this " ..
@@ -1200,8 +1211,8 @@ local function TurningExtras(swingKey, delayKey)
 		local swing = stack:Add(Check(content, swingKey, "Glide round gently when you turn",
 			"When you turn left or right, the camera doesn't snap round with you: it carries on " ..
 			"as it was (sway and all) until you stop turning, then glides gently round to your " ..
-			"new facing, easing in and out. Steering with the right mouse button keeps the camera " ..
-			"going behind you; dragging with the left button hands it straight back to you."), "check")
+			"new facing, easing in and out. Dragging with either mouse button hands the camera " ..
+			"straight back to you."), "check")
 		swing:HookScript("OnClick", Refresh) -- grey out / enable the wait below
 		local glideDelay = stack:Add(Slider(content, delayKey, "Wait before gliding", 0, 5, 0.5, "%.1f sec"),
 			"slider")
@@ -3074,17 +3085,24 @@ local function CreatePlatesPanel()
 		self:SetShown(GetCVar("nameplateShowAll") == "0")
 	end
 	controls[#controls + 1] = showAllWarning
+	-- PvP and BGs first, beside the In PvP combat column.
 	local PLACE_COLUMNS = {
-		{ "", "Open world", "anywhere else (inns too)" }, { "Cities", "Cities", "in capital cities" },
+		{ "PvP", "PvP", "while you're PvP flagged out in the world, and in arenas" },
+		{ "BGs", "BGs", "in battlegrounds" },
+		{ "", "Open world", "anywhere else (cities and inns too)" },
 		{ "Dungeons", "Dungeons", "in dungeons and scenarios" }, { "Raids", "Raids", "in raids" },
-		{ "PvP", "PvP", "while you're PvP flagged, and in battlegrounds and arenas" },
 	}
 	-- Always first, set apart: it stands for the rest of its row.
+	-- In PvP combat: not on retail, whose combat log is closed to addons.
+	local pvpColumn = not ns.isRetail
 	local headings = { "Always", "In combat" }
+	if pvpColumn then
+		headings[#headings + 1] = "In PvP combat"
+	end
 	for _, place in ipairs(PLACE_COLUMNS) do
 		headings[#headings + 1] = place[2]
 	end
-	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 160, 60, 10
+	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 10
 	local columnTop = TableTop(showHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 
 	-- The game's own nameplate options, with enemy players and NPCs apart.
@@ -3124,6 +3142,14 @@ local function CreatePlatesPanel()
 				"CineMode page) after. The game won't let nameplates be switched off mid-fight, so " ..
 				"hidden ones can still be clicked." .. tip, Ticked(combatKey)),
 		}
+		local pvpCheck
+		if pvpColumn then
+			pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "",
+				"Show these nameplates during fights with the other side's players (or their pets " ..
+				"and totems), and for the Calm Timer after, even if In combat is unticked. Every " ..
+				"fight in a battleground or arena counts." .. tip, Ticked("plateCombatPvP" .. kind[1]))
+			checks[2] = pvpCheck
+		end
 		for _, place in ipairs(PLACE_COLUMNS) do
 			-- The open world keeps the original "keep up in CineMode" key.
 			local key = place[1] == "" and ("plateCinematic" .. kind[1]) or ("plateIn" .. place[1] .. kind[1])
@@ -3136,8 +3162,11 @@ local function CreatePlatesPanel()
 		local function Available()
 			return target ~= nil or ns.HasPlateSettings(kind[1])
 		end
+		-- (In PvP combat also under In combat, which covers every fight.)
 		for _, check in ipairs(checks) do
-			GreyUnless(check, function(db) return Available() and not db[alwaysKey] end)
+			GreyUnless(check, function(db)
+				return Available() and not db[alwaysKey] and not (check == pvpCheck and db[combatKey])
+			end)
 		end
 		local always = AlwaysCheck(alwaysKey, not target and function() ns.EnablePlateRow(kind[1]) end)
 		GreyUnless(always, Available)
@@ -3165,6 +3194,16 @@ local function CreatePlatesPanel()
 			Check(content, combatKey, "", "Keep these names up during fights in CineMode." .. nameTip,
 				Ticked(combatKey)),
 		}
+		local pvpCheck
+		if pvpColumn then
+			-- Names can't change mid-fight: they go by how the fight started.
+			pvpCheck = Check(content, "nameCombatPvP" .. group.key, "",
+				"Keep these names up during fights with the other side's players, and for the Calm " ..
+				"Timer after, even if In combat is unticked. The game won't change names mid-fight, " ..
+				"so it has to be one from the start: a player attacked first, or you're in a " ..
+				"battleground or arena." .. nameTip, Ticked("nameCombatPvP" .. group.key))
+			checks[2] = pvpCheck
+		end
 		for _, place in ipairs(PLACE_COLUMNS) do
 			-- The open world keeps the original Keep column's key.
 			local key = place[1] == "" and ("nameKeep" .. group.key) or ("nameIn" .. place[1] .. group.key)
@@ -3175,7 +3214,9 @@ local function CreatePlatesPanel()
 		local alwaysKey = "nameAlways" .. group.key
 		-- Greyed out where this client has no such setting, and under Always.
 		for _, check in ipairs(checks) do
-			GreyUnless(check, function(db) return ns.HasNameSettings(group) and not db[alwaysKey] end)
+			GreyUnless(check, function(db)
+				return ns.HasNameSettings(group) and not db[alwaysKey] and not (check == pvpCheck and db[combatKey])
+			end)
 		end
 		local always = AlwaysCheck(alwaysKey, nil, function() ns.SyncNameRow(group) end)
 		GreyUnless(always, function() return ns.HasNameSettings(group) end)
@@ -3250,7 +3291,7 @@ local function CreateChatPanel()
 
 	local chatPeek = Check(chatPanel, "chatPeek", "Show chat when a message arrives",
 		"While the UI is faded, a new message briefly shows just the chat window it " ..
-		"arrived in. Choose which messages below.", function(value)
+		"arrived in, with its tabs. Choose which messages below.", function(value)
 			ns.GetDB().chatPeek = value
 			Refresh() -- grey out / enable the time and the messages below
 		end)
@@ -3262,7 +3303,14 @@ local function CreateChatPanel()
 	Tooltip(peekTime, "How long chat stays up after a message arrives or after you finish typing.")
 	GreyUnless(peekTime, IfPeek)
 
-	local typesHeader = Header(chatPanel, "Show chat for these messages", peekTime, -24)
+	local untilRead = Check(chatPanel, "chatUntilWhisperRead", "Keep chat up until whispers are read",
+		"When a whisper arrives in its own tab, the whole chat window stays up in CineMode " ..
+		"while that tab flashes, until you click it. Whispers that land in the tab you're " ..
+		"looking at don't flash, so they just show as above.")
+	untilRead:SetPoint("TOPLEFT", peekTime, "BOTTOMLEFT", -4, -18)
+
+	local typesHeader = Header(chatPanel, "Show chat for these messages", untilRead, -24)
+	typesHeader:SetPoint("TOPLEFT", untilRead, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
 	local previous, previousIsHeader, section = typesHeader, true, nil
 	for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 		if peekType.section == "game" and section ~= "game" then
@@ -3440,10 +3488,13 @@ local function CreateMinimapPanel()
 	exceptIn:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", 4, -4)
 	local PLACE_TIPS = {
 		Cities = "Capital cities. ",
-		PvP = PVP_TIP .. " Alterac Valley's mines do have ore, so untick this if you mine there. ",
+		PvP = "Battlegrounds and arenas (being flagged for PvP out in the world doesn't count). " ..
+			"Alterac Valley's mines do have ore, so untick this if you mine there. ",
 	}
 	for i, place in ipairs(PLACES) do
-		local check = Check(content, "trackingOffIn" .. place[1], place[2], (PLACE_TIPS[place[1]] or "") ..
+		-- (PvP here is battlegrounds and arenas only, so it's named for them.)
+		local label = place[1] == "PvP" and "BGs" or place[2]
+		local check = Check(content, "trackingOffIn" .. place[1], label, (PLACE_TIPS[place[1]] or "") ..
 			"Tracking doesn't keep the minimap up here. Hovering it still shows it.")
 		check:SetPoint("TOPLEFT", i == 1 and exceptIn or previousTracking, "BOTTOMLEFT",
 			i == 1 and 12 or 0, i == 1 and -4 or -2)

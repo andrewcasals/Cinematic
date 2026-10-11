@@ -884,7 +884,7 @@ local function UpdateTint(cinematic, elapsed)
 		return
 	end
 	tintDirty = false
-	local duration = target > tintLevel and db.fadeOutTime or db.fadeInTime
+	local duration = target > tintLevel and ns.FadeOutTime() or ns.FadeInTime()
 	tintLevel = Previewing() and target or Approach(tintLevel, target, elapsed, duration)
 	ApplyTint(tintLevel)
 end

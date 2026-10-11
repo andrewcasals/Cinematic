@@ -792,10 +792,11 @@ function ns.HookCameraInput()
 end
 
 -- Mouse steering: turning with the right mouse button while auto-running or
--- auto-walking (RP walk) is steering, not taking the camera. The sway, zoom
--- and tilt carry on; only the yaw holds off (under mouselook your character
--- faces the camera, so turning it would turn you). Left-drag still takes the
--- camera. Set every frame from UpdateOrbit, read as ns.mouseSteering.
+-- auto-walking (RP walk). It takes the camera like a left-drag (the camera
+-- pauses, then waits its input pause after you let go), and the yaw holds off
+-- meanwhile (under mouselook your character faces the camera, so turning it
+-- would turn you). Picks up again from behind you. Set every frame from
+-- UpdateOrbit, read as ns.mouseSteering.
 function ns.UpdateMouseSteer()
 	local was = ns.mouseSteering
 	local walking = ns.IsRPWalking and ns.IsRPWalking()
@@ -812,7 +813,6 @@ function ns.UpdateMouseSteer()
 end
 
 local function IsMouseOnCamera()
-	if ns.mouseSteering then return false end -- (steering with the mouse while traveling)
 	-- Fishing: a quick click (right-clicking the bobber) isn't moving the camera;
 	-- only holding the button down a moment is.
 	if mouseCameraHeld and ns.IsFishingEvent and ns.IsFishingEvent() then
@@ -2250,8 +2250,8 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 			PlanPath(idleZoom.saved + ZoomSetting("Distance"), ZoomSetting("Time"), ZoomSetting("Ease"), "move")
 		end
 	end
-	if idleZoom.active or idleZoom.restoring then
-		StepIdleZoom(elapsed)
+	if (idleZoom.active or idleZoom.restoring) and not ns.travelHeld then
+		StepIdleZoom(elapsed) -- (held where it is while a window holds the travel cameras)
 	end
 end
 
@@ -2486,6 +2486,10 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		travel = nil -- weapon drawn while walking: the cozy camera in front instead
 	end
 	local T = travel and TRAVEL[travel]
+	-- A menu or game window open (options, spellbook, map...) holds the travel
+	-- cameras still (sway, zoom and turn glide), as it does the others, until
+	-- it closes. (On ns: UpdateOrbit is close to Lua's upvalue limit.)
+	ns.travelHeld = (travel and (inMenu or atNPC)) or false
 	-- The camera running now, by its key in ns.CAMERA_OFF_CAMS (the Minimap
 	-- page hides the minimap by it).
 	ns.activeCam = (deathCam and "death") or (cinematic and ((onTaxi and ns.FlightCameraOn() and "flight")
@@ -2515,7 +2519,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	if not travel and cozy and ns.playerMoving then
 		followTravel, followT = "run", TRAVEL.run
 	end
-	UpdateTurnFollow(now, elapsed, followTravel, followT, cinematic, turning, turned)
+	UpdateTurnFollow(now, elapsed, followTravel, followT, cinematic and not ns.travelHeld, turning, turned)
 	-- Started steering a lot while auto-running: lower the camera promptly
 	-- (don't wait out a pause between sway moves).
 	if steeringNow and not steerLowered and (orbitPrefix == "runOrbit" or orbitPrefix == "walkOrbit")
@@ -2554,7 +2558,8 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	local turnBlocksStart = travel and ns.orbit.level == 0 and now - lastAnyTurnAt < TRAVEL_START_AFTER_TURN
 	local want = (deathCam and ns.orbit.deathRisen and not adjusting)
 		or (cinematic and not adjusting and not InCombatLockdown() and not turnBlocksStart
-		and ((onTaxi and ns.db.taxiOrbit and ns.FlightCameraOn() and not ns.orbit.settling) or (travel and ns.db[T.orbit])
+		and ((onTaxi and ns.db.taxiOrbit and ns.FlightCameraOn() and not ns.orbit.settling)
+			or (travel and ns.db[T.orbit] and not ns.travelHeld)
 			or (vista and ns.db.vistaOrbit)
 			or (fish and ns.db.fishOrbit)
 			or (cozy and (ns.db.cozyOrbit or tele))

@@ -7,7 +7,7 @@ function ns.IsChatActive()
 end
 
 -- Chat messages that briefly reveal the chat window they land in (only that
--- window: not its tabs, the input bar or the rest of the UI).
+-- window and its tabs: not the input bar or the rest of the UI).
 -- Message types the player can switch on or off individually (db.chatPeekTypes,
 -- missing = the type's default, on unless it says otherwise). Numbered channels
 -- are chosen one by one instead (db.chatPeekChannelList by channel name,
@@ -237,6 +237,41 @@ local function WatchServerMessages()
 			CheckServerLines(chatFrame, watch, peekOn)
 		end
 	end)
+end
+
+-- Whisper tabs (the ones the game opens for each conversation) with a whisper
+-- you haven't read: the game flashes such a tab until you click it, so its
+-- flash starting and stopping says when. (The tab's own "alerting" field
+-- isn't set on every client.) [chat frame] = true.
+local unreadWhispers = {}
+
+local function IsWhisperTab(chatFrame)
+	return chatFrame ~= nil and chatFrame.isTemporary
+		and (chatFrame.chatType == "WHISPER" or chatFrame.chatType == "BN_WHISPER")
+end
+
+if FCF_StartAlertFlash and FCF_StopAlertFlash then
+	hooksecurefunc("FCF_StartAlertFlash", function(chatFrame)
+		if IsWhisperTab(chatFrame) then
+			unreadWhispers[chatFrame] = true
+		end
+	end)
+	-- (Also called for any tab you click, flashing or not.)
+	hooksecurefunc("FCF_StopAlertFlash", function(chatFrame)
+		unreadWhispers[chatFrame] = nil
+	end)
+end
+
+-- Whether a whisper tab is waiting to be read. Closed tabs drop out.
+function ns.HasUnreadWhisper()
+	for chatFrame in pairs(unreadWhispers) do
+		local tab = _G[chatFrame:GetName() .. "Tab"]
+		if IsWhisperTab(chatFrame) and tab and tab:IsShown() then
+			return true
+		end
+		unreadWhispers[chatFrame] = nil
+	end
+	return false
 end
 
 function ns.RegisterChatPeek()

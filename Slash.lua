@@ -747,7 +747,8 @@ function ns.HandleSlash(msg)
 		table.sort(ids)
 		ns.Print("active buff/tracking spell IDs: " .. (#ids > 0 and table.concat(ids, ", ") or "none"))
 		ns.Print("tracking icon: " .. tostring(ns.GetActiveTrackingIcon()))
-		ns.Print("keeping minimap for tracking: " .. tostring(ns.IsTrackingSomethingWanted()))
+		ns.Print("keeping minimap for tracking: " .. tostring(ns.IsTrackingSomethingWanted())
+			.. (ns.IsTrackingOffHere() and " (but not here: Except in, Minimap page)" or ""))
 	elseif cmd == "debug" and arg == "place" then
 		-- Shows how the addon classifies where you are (cities vs inns etc.).
 		local inInstance, instanceType = IsInInstance()

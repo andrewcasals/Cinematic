@@ -49,7 +49,9 @@ local DEFAULTS = {
 	offInParty = false,       -- while in a party (not a raid group)
 	offInRaidGroup = false,   -- while in a raid group
 	fadeOutTime = 1.5,
+	combatFadeOutTime = 1.5,  -- ...for fades that start within the Calm Timer after a fight
 	fadeInTime = 1.5,
+	combatFadeInTime = 1.5,   -- ...for fades in during a fight (the UI coming back as it starts)
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
@@ -153,6 +155,7 @@ local DEFAULTS = {
 	chatPeek = true,          -- briefly show a chat window when a message arrives
 	chatPeekChannels = false, -- old "include public channels"; now the default for channels not yet set
 	chatPeekTime = 8,         -- seconds the chat window stays up
+	chatUntilWhisperRead = true, -- keep chat up while a whisper tab is flashing (until it's clicked)
 	chatInCities = false,     -- keep chat visible in capital cities
 	chatInDungeons = false,   -- ...in dungeons and scenarios
 	chatInRaids = false,
@@ -437,19 +440,22 @@ for key, value in pairs({
 end
 -- The Nameplates page's kinds of unit (see Effects), and its columns per
 -- place: keep these up in cinematic mode out of combat there.
+ns.PLATE_PLACES = { "PvP", "BGs", "Dungeons", "Raids" }
 ns.PLATE_KINDS = {
 	"Enemies", "EnemyMinions", "EnemyNPCs", "EnemyMinor", "Friends", "FriendlyMinions", "FriendlyNPCs",
 }
 for _, kind in ipairs(ns.PLATE_KINDS) do
-	for _, suffix in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do -- (inns go with the open world)
+	DEFAULTS["plateCombatPvP" .. kind] = false -- shown in fights with the other side's players
+	for _, suffix in ipairs(ns.PLATE_PLACES) do -- (cities and inns go with the open world)
 		DEFAULTS["plateIn" .. suffix .. kind] = false
 	end
 end
 -- Kept up in dungeons and raids: friendly players and NPCs; in PvP (flagged,
--- battlegrounds and arenas): players on both sides and friendly minions.
+-- and arenas) and battlegrounds: players on both sides and friendly minions.
 for _, key in ipairs({ "plateInDungeonsFriends", "plateInDungeonsFriendlyNPCs", "plateInRaidsFriends",
 	"plateInRaidsFriendlyNPCs", "plateInPvPEnemies", "plateInPvPEnemyNPCs", "plateInPvPFriends",
-	"plateInPvPFriendlyMinions" }) do
+	"plateInPvPFriendlyMinions", "plateInBGsEnemies", "plateInBGsEnemyNPCs", "plateInBGsFriends",
+	"plateInBGsFriendlyMinions" }) do
 	DEFAULTS[key] = true
 end
 -- And its two rows for your target, shown whatever its own row says: your
@@ -457,19 +463,22 @@ end
 ns.PLATE_TARGET_ROWS = { EnemyTarget = true, FriendlyTarget = true }
 for row, on in pairs(ns.PLATE_TARGET_ROWS) do
 	DEFAULTS["plateCombat" .. row], DEFAULTS["plateCinematic" .. row] = on, on
-	for _, suffix in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do
+	DEFAULTS["plateCombatPvP" .. row] = false
+	for _, suffix in ipairs(ns.PLATE_PLACES) do
 		DEFAULTS["plateIn" .. suffix .. row] = on
 	end
 end
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
 for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
-	DEFAULTS["nameCombat" .. key] = false
-	for _, suffix in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do
+	DEFAULTS["nameCombat" .. key], DEFAULTS["nameCombatPvP" .. key] = false, false
+	for _, suffix in ipairs(ns.PLATE_PLACES) do
 		DEFAULTS["nameIn" .. suffix .. key] = false
 	end
 end
 DEFAULTS.nameInPvPEnemies = true
 DEFAULTS.nameInPvPEnemyMinions = true
+DEFAULTS.nameInBGsEnemies = true
+DEFAULTS.nameInBGsEnemyMinions = true
 -- Both grids' Always column: the row stays up everywhere, whatever its other boxes say.
 for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateAlways" .. kind] = false
@@ -581,6 +590,34 @@ end
 local function AnyRevealFrameShown()
 	return (not ns.db.stayWithWindows and AnyShown(REVEAL_WHILE_SHOWN))
 		or (ns.db.revealAtNPCs and AnyShown(REVEAL_AT_NPCS))
+end
+
+-- How long things take to fade out: the Combat fade out time for fades that
+-- start within the Calm Timer (calmTime) after a fight, the Fade out time for
+-- the rest. The window runs on past the Calm Timer long enough for either
+-- fade to finish, so one doesn't change speed halfway.
+local fightEndedAt = -math.huge
+local fightEndWatcher = CreateFrame("Frame")
+fightEndWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+fightEndWatcher:SetScript("OnEvent", function() fightEndedAt = GetTime() end)
+
+function ns.FadeOutTime()
+	local db = ns.db
+	if InCombatLockdown() then
+		return db.combatFadeOutTime -- (hidden in fights: the combat speed too)
+	end
+	local window = (db.calmTime or 0) + math.max(db.fadeOutTime, db.combatFadeOutTime)
+	return GetTime() - fightEndedAt < window and db.combatFadeOutTime or db.fadeOutTime
+end
+
+-- How long things take to fade in: the Combat fade in time during a fight
+-- (the UI coming back as one starts), the Fade in time otherwise.
+function ns.FadeInTime()
+	local db = ns.db
+	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
+		return db.combatFadeInTime
+	end
+	return db.fadeInTime
 end
 
 -- Unit queries can return "secret" values during combat, which can't even be
@@ -773,6 +810,20 @@ function ns.PlaceSuffix()
 	return place and PLACE_SUFFIX[place]
 end
 
+-- The same for the Nameplates page, whose columns are its own: cities go with
+-- the open world, and battlegrounds ("BGs") are apart from PvP (flagged, and
+-- arenas).
+function ns.PlateSuffix()
+	local place = ns.GetOptionPlace()
+	if place == "city" then
+		return nil
+	end
+	if place == "pvp" and select(2, IsInInstance()) == "pvp" then
+		return "BGs"
+	end
+	return place and PLACE_SUFFIX[place]
+end
+
 -- A camera mode ("flight", "idle", "cozy"... see ns.CAMERA_OFF_CAMS) turned
 -- off where you are, or for the group you're in. A flight doesn't count as
 -- being in a city (see ns.GetPlaceType): for the flight camera, Cities means
@@ -800,8 +851,11 @@ function ns.IsMusicBlocked()
 end
 
 -- Tracking doesn't keep the minimap up here (Minimap page, "Except in").
+-- Going by where you are, not your PvP flag: PvP here means battlegrounds and
+-- arenas, since flagged out in the world (always, on a PvP realm) is still
+-- gathering country.
 function ns.IsTrackingOffHere()
-	local place = ns.PlaceSuffix()
+	local place = PLACE_SUFFIX[ns.GetPlaceType() or ""]
 	return place ~= nil and ns.db["trackingOffIn" .. place] or false
 end
 
@@ -1947,6 +2001,27 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 					ns.db["plateIn" .. suffix .. row] = on
 				end
 				ns.db[old] = nil
+			end
+		end
+		-- The Nameplates page's Cities column joined Open world (ticked there
+		-- wherever either was), and Battlegrounds got a column of their own,
+		-- starting from PvP's ticks.
+		local plateRows = {}
+		for _, kind in ipairs(ns.PLATE_KINDS) do
+			plateRows[#plateRows + 1] = { "plateCinematic", "plateIn", kind }
+		end
+		for row in pairs(ns.PLATE_TARGET_ROWS) do
+			plateRows[#plateRows + 1] = { "plateCinematic", "plateIn", row }
+		end
+		for _, group in ipairs(ns.NAME_GROUPS) do
+			plateRows[#plateRows + 1] = { "nameKeep", "nameIn", group.key }
+		end
+		for _, row in ipairs(plateRows) do
+			local open, head, key = row[1], row[2], row[3]
+			if ns.db[head .. "Cities" .. key] then ns.db[open .. key] = true end
+			ns.db[head .. "Cities" .. key] = nil
+			if ns.db[head .. "BGs" .. key] == nil and ns.db[head .. "PvP" .. key] ~= nil then
+				ns.db[head .. "BGs" .. key] = ns.db[head .. "PvP" .. key]
 			end
 		end
 		-- Settings from removed or renamed features, now that the migrations

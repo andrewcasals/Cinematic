@@ -27,7 +27,12 @@ local FRAME_GROUPS = {
 		"MultiCastActionPage1", "MultiCastActionPage2", "MultiCastActionPage3",
 	},
 	target = { "TargetFrame", "TargetFrameToT", "FocusFrame" },
-	minimap = { "MinimapCluster", "Minimap", "GameTimeFrame", "CinematicMinimapButton" },
+	-- (With the queue eyes for the dungeon finder and battlegrounds, which can
+	-- sit outside the minimap: named differently by client.)
+	minimap = {
+		"MinimapCluster", "Minimap", "GameTimeFrame", "CinematicMinimapButton",
+		"LFGMinimapFrame", "MiniMapLFGFrame", "QueueStatusMinimapButton", "MiniMapBattlefieldFrame",
+	},
 	buffs = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" },
 	quests = { "QuestWatchFrame", "WatchFrame", "ObjectiveTrackerFrame" },
 	-- Classic's quest timer box: its own group, so it can stay up without the tracker.
@@ -53,6 +58,10 @@ local FRAME_GROUPS = {
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
 	},
 }
+
+-- The queue eye (dungeon finder, battlegrounds): Forever pins it to the
+-- minimap, retail puts it beside the micro menu, so it goes with either.
+table.insert(FRAME_GROUPS[ns.isRetail and "bars" or "minimap"], "QueueStatusButton")
 
 local function AddName(list, name)
 	for _, existing in ipairs(list) do
@@ -1122,8 +1131,8 @@ for event in pairs(QUEST_REVEAL_EVENTS) do
 end
 questWatcher:SetScript("OnEvent", function(_, event)
 	if ns.db and ns.db[QUEST_REVEAL_EVENTS[event]] then
-		local hold = ns.HoldTime(HoverHoldKey("quests")) - ns.db.fadeOutTime
-		questRevealUntil = GetTime() + ns.db.fadeInTime + math.max(0, hold)
+		local hold = ns.HoldTime(HoverHoldKey("quests")) - ns.FadeOutTime()
+		questRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
 	end
 end)
 
@@ -1487,7 +1496,7 @@ local function GroupFadeTime(group, fadeIn)
 	if group == "gamepadbars" then
 		return fadeIn and ns.db.gamepadBarsFadeIn or ns.db.gamepadBarsFadeOut
 	end
-	return fadeIn and ns.db.fadeInTime or ns.db.fadeOutTime
+	return fadeIn and ns.FadeInTime() or ns.FadeOutTime()
 end
 -- The portrait shown while health or power recovers (addons' can stand in
 -- for the game's: see ns.AddPortraitFrame).
@@ -1512,6 +1521,17 @@ function ns.UpdateFrames(cinematic, elapsed)
 		ns.chatTypingUntil = now + ns.HoldTime("chatPeekTime")
 	end
 	local typing = ns.chatTypingUntil > now
+	-- A whisper tab waiting to be read keeps the whole chat window up, tabs
+	-- and all, so it can be clicked (Chat page).
+	local whisperUnread = cinematic and ns.db.chatUntilWhisperRead and ns.HasUnreadWhisper()
+	-- A docked chat window peeking brings its tabs up with it.
+	local dockPeek = false
+	for chatFrame, untilTime in pairs(ns.chatPeekUntil) do
+		if untilTime > now and (chatFrame.isDocked or chatFrame == DEFAULT_CHAT_FRAME) then
+			dockPeek = true
+			break
+		end
+	end
 	-- Chat stays put when it isn't faded at all, or in a place chosen under
 	-- "Always show in" (Chat page).
 	local place = ns.GetOptionPlace()
@@ -1532,7 +1552,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		-- out, so a group is gone that long after the mouse leaves; a hold
 		-- shorter than the fade just starts the fade straight away.
 		for group in pairs(hovered) do
-			local hold = ns.HoldTime(HoverHoldKey(group)) - ns.db.fadeOutTime
+			local hold = ns.HoldTime(HoverHoldKey(group)) - ns.FadeOutTime()
 			hoverHeldUntil[group] = now + math.max(0, hold)
 		end
 		for group, untilTime in pairs(hoverHeldUntil) do
@@ -1559,7 +1579,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		local target = 1
 		local chatShowing = (ns.chatPeekUntil[entry.frame] or 0) > now
-			or (typing and entry.group == "chat")
+			or ((typing or whisperUnread) and entry.group == "chat")
+			or (dockPeek and entry.name == "GeneralDockManager")
 		local tracking = ((ns.db.alwaysShowMinimap
 				or (ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused))
 			and entry.group == "minimap")
