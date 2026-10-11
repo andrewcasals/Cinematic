@@ -3022,7 +3022,7 @@ local function CreatePlatesPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Which nameplates and names stay up in CineMode, in fights and in each kind of place.")
+		"Which nameplates and names stay up in CineMode: in groups, in fights and in each kind of place.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -3054,26 +3054,10 @@ local function CreatePlatesPanel()
 		end
 		return rowLabel
 	end
-	-- The Always column: ticks (or clears) every other box in its row, and
-	-- shows ticked while they all are. enable: switches the row's game options on.
-	-- The Always column: keeps its row up everywhere, whatever the other
-	-- boxes say. They're greyed out meanwhile and kept as they were, for when
-	-- it's unticked. enable: switches the row's game options on (sync: brings
-	-- them in line with the row, on or off).
-	local ALWAYS_TIP = "Keep these up everywhere in CineMode, in fights and out, whatever the " ..
-		"rest of this row says. The other boxes keep their ticks for when you untick it."
-	local function AlwaysCheck(alwaysKey, enable, sync)
-		return Check(content, alwaysKey, "", ALWAYS_TIP, function(value)
-			ns.GetDB()[alwaysKey] = value
-			if value and enable then
-				enable()
-			end
-			if sync then
-				sync()
-			end
-			Refresh()
-		end)
-	end
+	-- The In group column: keeps its row up while you're in a party or raid,
+	-- in fights and out, whatever the rest of the row says.
+	local GROUP_TIP = "Keep these up in CineMode while you're in a party or raid, in fights and " ..
+		"out, whatever the rest of this row says."
 
 	local showHeader = Header(content, "Nameplates", subtitle, -18)
 	-- The grid can't keep plates up out of fights while the game's own
@@ -3085,24 +3069,25 @@ local function CreatePlatesPanel()
 		self:SetShown(GetCVar("nameplateShowAll") == "0")
 	end
 	controls[#controls + 1] = showAllWarning
-	-- PvP and BGs first, beside the In PvP combat column.
+	-- PvP and BGs first, beside the In PvP combat column; In group (not a
+	-- place) beside Dungeons & Raids.
 	local PLACE_COLUMNS = {
 		{ "PvP", "PvP", "while you're PvP flagged out in the world, and in arenas" },
 		{ "BGs", "BGs", "in battlegrounds" },
 		{ "", "Open world", "anywhere else (cities and inns too)" },
-		{ "Dungeons", "Dungeons", "in dungeons and scenarios" }, { "Raids", "Raids", "in raids" },
+		{ group = true },
+		{ "Instances", "Dungeons & Raids", "in dungeons, scenarios and raids" },
 	}
-	-- Always first, set apart: it stands for the rest of its row.
 	-- In PvP combat: not on retail, whose combat log is closed to addons.
 	local pvpColumn = not ns.isRetail
-	local headings = { "Always", "In combat" }
+	local headings = { "In combat" }
 	if pvpColumn then
 		headings[#headings + 1] = "In PvP combat"
 	end
 	for _, place in ipairs(PLACE_COLUMNS) do
-		headings[#headings + 1] = place[2]
+		headings[#headings + 1] = place.group and "In group" or place[2]
 	end
-	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 10
+	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 0
 	local columnTop = TableTop(showHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 
 	-- The game's own nameplate options, with enemy players and NPCs apart.
@@ -3151,26 +3136,27 @@ local function CreatePlatesPanel()
 			checks[2] = pvpCheck
 		end
 		for _, place in ipairs(PLACE_COLUMNS) do
-			-- The open world keeps the original "keep up in CineMode" key.
-			local key = place[1] == "" and ("plateCinematic" .. kind[1]) or ("plateIn" .. place[1] .. kind[1])
-			checks[#checks + 1] = Check(content, key, "",
-				("Keep these nameplates up in CineMode %s when you're not in a fight."):format(place[3])
-				.. tip, Ticked(key))
+			if place.group then
+				local groupKey = "plateGroup" .. kind[1]
+				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. tip, Ticked(groupKey))
+			else
+				-- The open world keeps the original "keep up in CineMode" key.
+				local key = place[1] == "" and ("plateCinematic" .. kind[1]) or ("plateIn" .. place[1] .. kind[1])
+				checks[#checks + 1] = Check(content, key, "",
+					("Keep these nameplates up in CineMode %s when you're not in a fight."):format(place[3])
+					.. tip, Ticked(key))
+			end
 		end
-		local alwaysKey = "plateAlways" .. kind[1]
-		-- Greyed out where this client has no such setting, and under Always.
+		-- Greyed out where this client has no such setting.
 		local function Available()
 			return target ~= nil or ns.HasPlateSettings(kind[1])
 		end
 		-- (In PvP combat also under In combat, which covers every fight.)
 		for _, check in ipairs(checks) do
 			GreyUnless(check, function(db)
-				return Available() and not db[alwaysKey] and not (check == pvpCheck and db[combatKey])
+				return Available() and not (check == pvpCheck and db[combatKey])
 			end)
 		end
-		local always = AlwaysCheck(alwaysKey, not target and function() ns.EnablePlateRow(kind[1]) end)
-		GreyUnless(always, Available)
-		table.insert(checks, 1, always)
 		lastLabel = PlaceRow(columnTop, r, kind[2], kind[3], unpack(checks))
 	end
 	local lastPlateRow = lastLabel
@@ -3205,22 +3191,23 @@ local function CreatePlatesPanel()
 			checks[2] = pvpCheck
 		end
 		for _, place in ipairs(PLACE_COLUMNS) do
-			-- The open world keeps the original Keep column's key.
-			local key = place[1] == "" and ("nameKeep" .. group.key) or ("nameIn" .. place[1] .. group.key)
-			checks[#checks + 1] = Check(content, key, "",
-				("Keep these names up in CineMode %s when you're not in a fight."):format(place[3])
-				.. nameTip, Ticked(key))
+			if place.group then
+				local groupKey = "nameGroup" .. group.key
+				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. nameTip, Ticked(groupKey))
+			else
+				-- The open world keeps the original Keep column's key.
+				local key = place[1] == "" and ("nameKeep" .. group.key) or ("nameIn" .. place[1] .. group.key)
+				checks[#checks + 1] = Check(content, key, "",
+					("Keep these names up in CineMode %s when you're not in a fight."):format(place[3])
+					.. nameTip, Ticked(key))
+			end
 		end
-		local alwaysKey = "nameAlways" .. group.key
-		-- Greyed out where this client has no such setting, and under Always.
+		-- Greyed out where this client has no such setting.
 		for _, check in ipairs(checks) do
 			GreyUnless(check, function(db)
-				return ns.HasNameSettings(group) and not db[alwaysKey] and not (check == pvpCheck and db[combatKey])
+				return ns.HasNameSettings(group) and not (check == pvpCheck and db[combatKey])
 			end)
 		end
-		local always = AlwaysCheck(alwaysKey, nil, function() ns.SyncNameRow(group) end)
-		GreyUnless(always, function() return ns.HasNameSettings(group) end)
-		table.insert(checks, 1, always)
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 

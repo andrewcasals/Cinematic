@@ -443,7 +443,7 @@ for key, value in pairs({
 end
 -- The Nameplates page's kinds of unit (see Effects), and its columns per
 -- place: keep these up in cinematic mode out of combat there.
-ns.PLATE_PLACES = { "PvP", "BGs", "Dungeons", "Raids" }
+ns.PLATE_PLACES = { "PvP", "BGs", "Instances" } -- (Instances: dungeons and raids)
 ns.PLATE_KINDS = {
 	"Enemies", "EnemyMinions", "EnemyNPCs", "EnemyMinor", "Friends", "FriendlyMinions", "FriendlyNPCs",
 }
@@ -455,9 +455,8 @@ for _, kind in ipairs(ns.PLATE_KINDS) do
 end
 -- Kept up in dungeons and raids: friendly players and NPCs; in PvP (flagged,
 -- and arenas) and battlegrounds: enemy players and NPCs.
-for _, key in ipairs({ "plateInDungeonsFriends", "plateInDungeonsFriendlyNPCs", "plateInRaidsFriends",
-	"plateInRaidsFriendlyNPCs", "plateInPvPEnemies", "plateInPvPEnemyNPCs", "plateInBGsEnemies",
-	"plateInBGsEnemyNPCs" }) do
+for _, key in ipairs({ "plateInInstancesFriends", "plateInInstancesFriendlyNPCs", "plateInPvPEnemies",
+	"plateInPvPEnemyNPCs", "plateInBGsEnemies", "plateInBGsEnemyNPCs" }) do
 	DEFAULTS[key] = true
 end
 -- Shown in fights with the other side's players: players on both sides and enemy minions.
@@ -485,16 +484,16 @@ DEFAULTS.nameInPvPEnemies = true
 DEFAULTS.nameInPvPEnemyMinions = true
 DEFAULTS.nameInBGsEnemies = true
 DEFAULTS.nameInBGsEnemyMinions = true
--- Both grids' Always column: the row stays up everywhere, whatever its other boxes say.
+-- Both grids' In group column: the row stays up in a party or raid, in fights
+-- and out, whatever its other boxes say.
 for _, kind in ipairs(ns.PLATE_KINDS) do
-	DEFAULTS["plateAlways" .. kind] = false
+	DEFAULTS["plateGroup" .. kind] = false
 end
--- (Your target's plate, enemy or friendly, is kept up everywhere by default.)
 for row in pairs(ns.PLATE_TARGET_ROWS) do
-	DEFAULTS["plateAlways" .. row] = true
+	DEFAULTS["plateGroup" .. row] = false
 end
 for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
-	DEFAULTS["nameAlways" .. key] = false
+	DEFAULTS["nameGroup" .. key] = false
 end
 -- Slow zoom settings likewise: idleZoom* for standing still, taxiZoom* for
 -- flights, with the flight defaults copying the standing-still ones.
@@ -817,8 +816,8 @@ function ns.PlaceSuffix()
 end
 
 -- The same for the Nameplates page, whose columns are its own: cities go with
--- the open world, and battlegrounds ("BGs") are apart from PvP (flagged, and
--- arenas).
+-- the open world, battlegrounds ("BGs") are apart from PvP (flagged, and
+-- arenas), and dungeons and raids are one ("Instances").
 function ns.PlateSuffix()
 	local place = ns.GetOptionPlace()
 	if place == "city" then
@@ -826,6 +825,9 @@ function ns.PlateSuffix()
 	end
 	if place == "pvp" and select(2, IsInInstance()) == "pvp" then
 		return "BGs"
+	end
+	if place == "dungeon" or place == "raid" then
+		return "Instances"
 	end
 	return place and PLACE_SUFFIX[place]
 end
@@ -2011,24 +2013,39 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		end
 		-- The Nameplates page's Cities column joined Open world (ticked there
 		-- wherever either was), and Battlegrounds got a column of their own,
-		-- starting from PvP's ticks.
+		-- starting from PvP's ticks. Dungeons and Raids became one column
+		-- (ticked wherever either was). Its Always column is gone: a row it
+		-- kept up is now ticked In combat and everywhere.
 		local plateRows = {}
 		for _, kind in ipairs(ns.PLATE_KINDS) do
-			plateRows[#plateRows + 1] = { "plateCinematic", "plateIn", kind }
+			plateRows[#plateRows + 1] = { "plate", "plateCinematic", kind }
 		end
 		for row in pairs(ns.PLATE_TARGET_ROWS) do
-			plateRows[#plateRows + 1] = { "plateCinematic", "plateIn", row }
+			plateRows[#plateRows + 1] = { "plate", "plateCinematic", row }
 		end
 		for _, group in ipairs(ns.NAME_GROUPS) do
-			plateRows[#plateRows + 1] = { "nameKeep", "nameIn", group.key }
+			plateRows[#plateRows + 1] = { "name", "nameKeep", group.key }
 		end
 		for _, row in ipairs(plateRows) do
-			local open, head, key = row[1], row[2], row[3]
+			local prefix, open, key = row[1], row[2], row[3]
+			local head = prefix .. "In"
 			if ns.db[head .. "Cities" .. key] then ns.db[open .. key] = true end
 			ns.db[head .. "Cities" .. key] = nil
 			if ns.db[head .. "BGs" .. key] == nil and ns.db[head .. "PvP" .. key] ~= nil then
 				ns.db[head .. "BGs" .. key] = ns.db[head .. "PvP" .. key]
 			end
+			local dungeons, raids = ns.db[head .. "Dungeons" .. key], ns.db[head .. "Raids" .. key]
+			if dungeons ~= nil or raids ~= nil then
+				ns.db[head .. "Instances" .. key] = (dungeons or raids) and true or false
+			end
+			ns.db[head .. "Dungeons" .. key], ns.db[head .. "Raids" .. key] = nil, nil
+			if ns.db[prefix .. "Always" .. key] then
+				ns.db[prefix .. "Combat" .. key], ns.db[open .. key] = true, true
+				for _, suffix in ipairs(ns.PLATE_PLACES) do
+					ns.db[head .. suffix .. key] = true
+				end
+			end
+			ns.db[prefix .. "Always" .. key] = nil
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
@@ -2063,8 +2080,9 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			"plateAlwaysTarget", -- (now plateAlwaysTargetEnemy, plateAlwaysTargetFriendly)
 			"plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut", "plateTargetFriendlyFadeIn",
 			"plateTargetFriendlyFadeOut", -- (the target's plate fades at the UI's fade times now)
-			"combatFadeInTime", "combatFadeOutTime", "enemyFadeInTime", "enemyFadeOutTime",
+			"enemyFadeInTime", "enemyFadeOutTime",
 			"friendlyFadeInTime", "friendlyFadeOutTime", -- (combat frames likewise)
+			-- (combatFadeInTime and combatFadeOutTime were too: they're back, for fights.)
 			"plateShowMobs", "plateShowNPCs", "plateShowOwn", "plateShowOther", "plateShowPets",
 			"plateShowTotems", -- (nameplates outside cinematic mode are the game's own now)
 			"nameIconMobs", "nameIconNPCs", "nameIconOwn", "nameIconOther", "nameIconPets", "nameIconTotems",
