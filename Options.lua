@@ -1282,6 +1282,18 @@ local FLIGHT_CAMERAS = {
 	{ value = "flight", text = "Flight camera" },
 	{ value = "none", text = "No camera" },
 }
+local WALK_CAMERAS = {
+	{ value = "walk", text = "RP walk camera" },
+	{ value = "none", text = "No camera" },
+}
+local RUN_CAMERAS = {
+	{ value = "run", text = "Auto-run camera" },
+	{ value = "none", text = "No camera" },
+}
+local DEATH_CAMERAS = {
+	{ value = true, text = "Death camera" },
+	{ value = false, text = "No camera" },
+}
 local QUEST_CAMERAS = {
 	{ value = "quest", text = "Quest camera" },
 	{ value = "none", text = "No camera" },
@@ -1333,8 +1345,8 @@ local function CreateEventsPanel()
 		"What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; a " ..
 		"Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a " ..
 		"drawn weapon, a campfire, and standing still last. Taking a flight has the flight " ..
-		"camera, and talking to a quest giver the quest camera. RP walk, auto-run and death start " ..
-		"by themselves.")
+		"camera, talking to a quest giver the quest camera, and auto-walking, auto-running and " ..
+		"dying their own.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -1354,6 +1366,34 @@ local function CreateEventsPanel()
 		Still = " Off also keeps music from coming back after a pause while you stand still.",
 	}
 
+	-- A camera choice: a dropdown, or on a client without the modern one a
+	-- button that steps through them.
+	local function CameraChoice(key, choices)
+		local camera = Dropdown(content, key, choices, 150)
+		if camera then
+			return camera
+		end
+		camera = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+		camera:SetSize(150, 22)
+		camera:SetScript("OnClick", function()
+			local db = ns.GetDB()
+			for i, choice in ipairs(choices) do
+				if db[key] == choice.value then
+					db[key] = choices[i % #choices + 1].value
+					break
+				end
+			end
+			Refresh()
+		end)
+		camera.Refresh = function(self)
+			for _, choice in ipairs(choices) do
+				if ns.GetDB()[key] == choice.value then self:SetText(choice.text) end
+			end
+		end
+		controls[#controls + 1] = camera
+		return camera
+	end
+
 	local previous, dx = header, 0
 	for _, event in ipairs(ns.EVENTS) do
 		local key = "event" .. event.key
@@ -1368,28 +1408,7 @@ local function CreateEventsPanel()
 
 		local choices = (event.key == "Flight" and FLIGHT_CAMERAS) or (event.key == "Quest" and QUEST_CAMERAS)
 			or ((event.key == "Hearth" or event.key == "Teleport") and TELE_CAMERAS) or EVENT_CAMERAS
-		local camera = Dropdown(content, key .. "Camera", choices, 150)
-		if not camera then
-			-- No modern dropdown on this client: a button that steps through them.
-			camera = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-			camera:SetSize(150, 22)
-			camera:SetScript("OnClick", function(self)
-				local db = ns.GetDB()
-				for i, choice in ipairs(choices) do
-					if db[key .. "Camera"] == choice.value then
-						db[key .. "Camera"] = choices[i % #choices + 1].value
-						break
-					end
-				end
-				Refresh()
-			end)
-			camera.Refresh = function(self)
-				for _, choice in ipairs(choices) do
-					if ns.GetDB()[key .. "Camera"] == choice.value then self:SetText(choice.text) end
-				end
-			end
-			controls[#controls + 1] = camera
-		end
+		local camera = CameraChoice(key .. "Camera", choices)
 		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
 
 		-- Music: the event's own switch; a flight's is the flight camera's.
@@ -1430,6 +1449,42 @@ local function CreateEventsPanel()
 				"mention standing still (tint, tracking, music, tooltips).")
 			previous, dx = delay, -30
 		end
+	end
+
+	-- Auto-walking, auto-running and dying: their cameras, or none (off: the
+	-- "No camera" value), and Music. (Dying's is the death song, which needs
+	-- only game music.)
+	for _, cam in ipairs({
+		{ label = "Auto-walk (RP walk)", cameraKey = "walkCamera", choices = WALK_CAMERAS, off = "none",
+			key = "musicCamWalk",
+			tip = "Auto-walking (auto-run in walk mode). The camera's settings are on the RP Walk Cam " ..
+				"page; Camera Modes turns it off in some places." },
+		{ label = "Auto-run", cameraKey = "runCamera", choices = RUN_CAMERAS, off = "none", key = "musicCamRun",
+			tip = "Auto-running. The camera's settings are on the Auto-run Cam page; Camera Modes turns " ..
+				"it off in some places." },
+		{ label = "Die", cameraKey = "deathOrbit", choices = DEATH_CAMERAS, off = false, key = "deathSong",
+			deathSong = true,
+			tip = "Dying, until you release or are resurrected. The camera's settings are on the Death " ..
+				"Cam page; Camera Modes turns it off in some places.",
+			musicTip = "A song of its own plays while the death camera runs, in place of the zone music " ..
+				"(pick the songs on the Death Cam page). Needs game music on, not CineMode's music." },
+	}) do
+		local label = Label(content, "GameFontHighlight", cam.label)
+		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -20)
+		label:SetWidth(CAMERA_X - 10)
+		label:SetWordWrap(false)
+		local hover = CreateFrame("Frame", nil, content)
+		hover:SetAllPoints(label)
+		hover:EnableMouse(true)
+		Tooltip(hover, cam.tip)
+		local camera = CameraChoice(cam.cameraKey, cam.choices)
+		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
+		local music = Check(content, cam.key, "", cam.musicTip or MUSIC_TIP)
+		music:SetPoint("LEFT", label, "LEFT", MUSIC_X + 8, 0)
+		GreyUnless(music, function(db)
+			return (cam.deathSong or db.musicInCinematic) and db[cam.cameraKey] ~= cam.off
+		end)
+		previous, dx = label, 0
 	end
 
 	local note = Label(content, "GameFontHighlightSmall",
@@ -4462,7 +4517,15 @@ local function CreateProfilesPanel()
 			ns.SetCharacterProfile(value)
 			Refresh()
 		end)
-	perChar.Refresh = function(self) self:SetChecked(ns.IsCharacterProfile()) end
+	-- (With the profile your other characters use: the account's.)
+	perChar.Refresh = function(self)
+		self:SetChecked(ns.IsCharacterProfile())
+		local text = self.Text or self.text
+		if text and ns.GetDB() then
+			text:SetText(("Use a profile just for this character |cff808080(other characters use %s)|r")
+				:format(ns.GetDB().profile or ns.ActiveProfile()))
+		end
+	end
 	perChar:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 
 	local header = Header(content, "Profiles", perChar, -12)

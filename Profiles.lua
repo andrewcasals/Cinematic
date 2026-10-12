@@ -74,7 +74,11 @@ ns.BUILTIN_PROFILES = {
 		name = DEFAULT_PROFILE,
 		tip = "Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
 			"and how the developer plays every day.",
-		apply = function() end,
+		apply = function(set)
+			-- Auto-walking and auto-running can start music.
+			set("musicCamWalk", true)
+			set("musicCamRun", true)
+		end,
 	},
 	{
 		name = "Immersive (CDM)",
@@ -90,6 +94,9 @@ ns.BUILTIN_PROFILES = {
 			set("friendlyShow", Column({ "target", "tot" }))
 			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
 			set("cooldownWhileRecharging", true)
+			-- Auto-walking and auto-running can start music, as in Immersive.
+			set("musicCamWalk", true)
+			set("musicCamRun", true)
 		end,
 	},
 	{

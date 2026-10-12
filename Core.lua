@@ -407,6 +407,10 @@ for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 	DEFAULTS[cam[1] .. "HideMinimap"] = false
 end
 -- No RP walk or auto-run camera in capital cities or instances.
+-- RP walk and auto-run start their cameras by themselves: "none" turns one
+-- off everywhere (Camera Triggers page), as the events' "No camera" does.
+DEFAULTS.walkCamera = "walk"
+DEFAULTS.runCamera = "run"
 DEFAULTS.walkOffInCities, DEFAULTS.walkOffInInstances = true, true
 DEFAULTS.runOffInCities, DEFAULTS.runOffInInstances = true, true
 DEFAULTS.flightHideMinimap = true
@@ -829,9 +833,13 @@ end
 -- city (see ns.GetPlaceType): for it, Cities means taking off from one
 -- (db.takeoffInCity, noted at takeoff), and the open world anywhere else.
 local CAMERA_OFF_PLACE = { city = "Cities", dungeon = "Instances", raid = "Instances", pvp = "Instances" }
+local SWITCHED_CAMS = { walk = "walkCamera", run = "runCamera" }
 function ns.IsCameraOffHere(cam)
 	local db = ns.db
 	if not db then return false end
+	if SWITCHED_CAMS[cam] and db[SWITCHED_CAMS[cam]] == "none" then
+		return true
+	end
 	local place
 	if cam == "flight" and UnitOnTaxi("player") then
 		place = db.takeoffInCity and "Cities" or "World"

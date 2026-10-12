@@ -350,13 +350,24 @@ local function MusicDuck()
 	return combatMusic.level
 end
 
+-- Music started within the fatigue time (Audio page) of the last start: a
+-- camera starting music, or music coming back as a fresh track after a mute.
+local function MusicFatigued()
+	return ns.db.musicFatigue > 0 and musicStartedAt ~= nil
+		and GetTime() - musicStartedAt < ns.db.musicFatigue * 60
+end
+
 -- Once fully faded out, music is switched off rather than left playing at
 -- zero volume; switching it back on when the mute ends makes the game start a
 -- fresh track (instead of resuming one halfway through) as it fades back in.
+-- That's a start like any other, for music fatigue.
 local function SetMuteMusicOff(flag, off)
 	if off ~= combatMusic[flag] then
 		combatMusic[flag] = off
 		SetCVar("Sound_EnableMusic", off and 0 or 1)
+		if not off then
+			musicStartedAt = GetTime()
+		end
 	end
 end
 
@@ -378,7 +389,8 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 		and now - combatMusic.lastFightAt < ns.db.calmTime
 	-- Music belongs to the camera modes (flying, RP walking, standing still,
 	-- vista, cozy, fishing, the quest cam...): once you leave them all and move
-	-- on, it fades out, and comes back when the next one starts. Going from one
+	-- on, it fades out, and the next one starts it again (music fatigue
+	-- allowing; back before it's faded right out, it fades back in). Going from one
 	-- camera straight to another (vista to cozy) isn't leaving, nor is standing
 	-- still (the wait for the AFK camera). It fades at the music fade time.
 	-- (Any camera mode lifts the pause: vista, cozy and fish start straight away
@@ -398,6 +410,16 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	end
 	local blocked = handlesMusic and ns.IsMusicBlocked()
 	local moving = combatMusic.movingPaused
+	-- Music the move-on pause faded right out rests until the fatigue time
+	-- (Audio page) since it last started is up: a camera starting meanwhile
+	-- doesn't bring it back. Then it comes back as a fresh track.
+	if combatMusic.rested and not moving then
+		if MusicFatigued() then
+			moving = true
+		else
+			combatMusic.rested = false
+		end
+	end
 	if playerOverride then
 		combatMusic.override = { fighting = fighting, blocked = blocked, moving = moving }
 		combatMusic.level = 1
@@ -423,8 +445,21 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	end
 	local silent = combatMusic.level <= 0
 	local duck = MusicDuck()
+	if silent and moving then
+		combatMusic.rested = true
+	end
 
 	if ns.music.managing then
+		if silent and moving and not otherMute then
+			-- Moved on and faded right out: that's the end of it. Coming back
+			-- would be a fresh track, so the next camera starts it anew, if
+			-- music fatigue allows (a pause that hasn't faded out just fades
+			-- back in). Your music settings go back meanwhile.
+			MusicTrace("END managed music: moved on")
+			ns.StopMusicNow()
+			combatMusic.managedOff = false
+			return
+		end
 		-- The addon's own music: UpdateMusic applies the level to the volume; here
 		-- it's just switched off while silent (its on/off is already saved).
 		SetMuteMusicOff("managedOff", silent)
@@ -441,11 +476,14 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 			ns.SaveCVar("Sound_EnableMusic")
 			combatMusic.original = tonumber(ns.db.savedCVars.Sound_MusicVolume) or 1
 			combatMusic.ducking = true
+			-- (Your music was already playing: it counts as started, so the
+			-- fatigue time covers it too.)
+			musicStartedAt = musicStartedAt or GetTime()
 		end
 		-- Fully faded out, music is switched off and the slider goes back to
 		-- your own volume (it only reads lower while actually fading).
 		SetMuteMusicOff("musicOff", silent)
-		SetMusicVolume(silent and combatMusic.original or combatMusic.original * duck)
+		SetMusicVolume(combatMusic.musicOff and combatMusic.original or combatMusic.original * duck)
 	elseif combatMusic.ducking and duck >= 1 then
 		ns.RestoreCVar("Sound_MusicVolume")
 		ns.RestoreCVar("Sound_EnableMusic")
@@ -462,6 +500,7 @@ function ns.StopCombatMusicNow()
 		musicWritten = nil
 	end
 	combatMusic.musicOff, combatMusic.managedOff, combatMusic.override = false, false, nil
+	combatMusic.rested = false
 	combatMusic.level = 1
 end
 
@@ -497,11 +536,6 @@ end
 -- The camera running ("flight", "walk"... or "quest"), and whether its start
 -- is still waiting to start music (held until CineMode is in, then used up).
 local musicCam, musicCamPending = nil, false
-
-local function MusicFatigued()
-	return ns.db.musicFatigue > 0 and musicStartedAt ~= nil
-		and GetTime() - musicStartedAt < ns.db.musicFatigue * 60
-end
 
 -- Death song: while the death camera runs, a song of its own plays in place of
 -- the zone music, picked at random from deathSongFiles (music file IDs,
