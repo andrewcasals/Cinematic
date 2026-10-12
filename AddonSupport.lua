@@ -17,6 +17,11 @@ local ADDON_NAME, ns = ...
 -- (see HookOwnAlpha in Frames.lua). loaded: set once its addon has loaded.
 ns.ADDON_FRAMES = {}
 
+-- Addons supported with no frames to list: on the 3rd Party Frames page all
+-- the same, with what's done for them (works) in place of the columns. about:
+-- the same said at more length, for its tooltip.
+ns.ADDON_NOTES = {}
+
 local setups = {} -- addon name -> setup functions still to run
 local started = false -- (Cinematic itself loaded: the setups can run)
 

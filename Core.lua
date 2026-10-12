@@ -921,12 +921,21 @@ local function SameValue(a, b)
 	return a == b or (tonumber(a) ~= nil and tonumber(a) == tonumber(b))
 end
 
+-- Held settings another addon changed in a pass of its own (see
+-- ns.RunOthersCVarPass), to be written back after it: [lowercased cvar] = true.
+local othersPass = 0
+local overridden = {}
+
 local function CheckHeldCVar(name)
 	if writingCVar or type(name) ~= "string" then
 		return
 	end
 	local held = heldCVars[name:lower()]
 	if not held then
+		return
+	end
+	if othersPass > 0 then
+		overridden[name:lower()] = true
 		return
 	end
 	local now = GetCVar(held.name)
@@ -943,20 +952,65 @@ end
 hooksecurefunc("SetCVar", CheckHeldCVar)
 -- Changes made outside Lua (console commands) only show up as this event.
 local heldWatcher = CreateFrame("Frame")
-heldWatcher:RegisterEvent("CVAR_UPDATE")
-heldWatcher:SetScript("OnEvent", function(_, _, name)
-	CheckHeldCVar(name)
-end)
+heldWatcher:RegisterEvent("CVAR_UPDATE") -- (its script is below)
 
 -- Whether a set has this setting switched off for now (and will put it back).
 function ns.IsCVarHeld(cvar)
 	return heldCVars[cvar:lower()] ~= nil
 end
 
+-- Called after each setting the addon writes, with its name: for addons that
+-- keep their own copy of settings (see Support/Plater.lua).
+ns.cvarWrittenHooks = {}
+
 local function WriteCVar(cvar, value)
 	writingCVar = true
 	SetCVar(cvar, value)
 	writingCVar = false
+	for _, hook in ipairs(ns.cvarWrittenHooks) do
+		hook(cvar)
+	end
+end
+
+-- Held settings changed in another addon's pass written back. Plate and name
+-- settings wait for the end of a fight.
+local function WriteBackOverridden()
+	for key in pairs(overridden) do
+		local held = heldCVars[key]
+		if not held then
+			overridden[key] = nil
+		elseif not ((held.name:find("^nameplate") or held.name:find("^UnitName")) and InCombatLockdown()) then
+			overridden[key] = nil
+			if not SameValue(GetCVar(held.name), held.value) then
+				ns.Log("cvar", ("%s changed by another addon: put back to %s"):format(held.name, tostring(held.value)))
+				WriteCVar(held.name, held.value)
+			end
+		end
+	end
+end
+heldWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+heldWatcher:SetScript("OnEvent", function(_, event, name)
+	if event == "PLAYER_REGEN_ENABLED" then
+		WriteBackOverridden()
+	else
+		CheckHeldCVar(name)
+	end
+end)
+
+-- Runs fn(...), an addon setting the game's settings of its own accord (not
+-- the player's doing): settings held meanwhile stay held and are written back
+-- after it, rather than let go.
+function ns.RunOthersCVarPass(fn, ...)
+	othersPass = othersPass + 1
+	local results = { pcall(fn, ...) }
+	othersPass = othersPass - 1
+	if othersPass == 0 then
+		WriteBackOverridden()
+	end
+	if not results[1] then
+		error(results[2], 0)
+	end
+	return unpack(results, 2)
 end
 
 function ns.ApplyCVarSet(set, want)

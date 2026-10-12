@@ -754,7 +754,14 @@ local function KeepInteractPrompt(frame)
 	end
 end
 
+-- A nameplate addon drawing plates of its own sets this (see Support/Plater.lua):
+-- fn(plate, alpha), alpha nil to let go of the plate.
+ns.addonPlateAlpha = nil
+
 function ns.SetPlateAlpha(plate, alpha)
+	if ns.addonPlateAlpha and plate and not (plate.IsForbidden and plate:IsForbidden()) then
+		ns.addonPlateAlpha(plate, alpha)
+	end
 	if plate and plate.UnitFrame and not (plate.IsForbidden and plate:IsForbidden()) then
 		local frame = plate.UnitFrame
 		KeepInteractPrompt(frame)
@@ -1042,14 +1049,22 @@ local function PlateAlpha(unit, plate)
 	return math.max(alpha, TargetPlateLevel(plate))
 end
 
+-- Leaves a plate's alpha to the game (or its nameplate addon) again.
+local function LetGoOfPlate(plate)
+	if plate.UnitFrame then
+		plate.UnitFrame.cinematicAlpha = nil
+	end
+	if ns.addonPlateAlpha and not (plate.IsForbidden and plate:IsForbidden()) then
+		ns.addonPlateAlpha(plate, nil)
+	end
+end
+
 function ns.RefreshPlate(plate, unit)
 	if not plate then
 		return
 	end
 	if not ns.db.handlePlates then
-		if plate.UnitFrame then
-			plate.UnitFrame.cinematicAlpha = nil -- (left to the game: Nameplates page's switch off)
-		end
+		LetGoOfPlate(plate) -- (left to the game: Nameplates page's switch off)
 		return
 	end
 	unit = unit or plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
@@ -1057,8 +1072,8 @@ function ns.RefreshPlate(plate, unit)
 	local alpha = PlateAlpha(unit, plate)
 	if alpha < 1 or PlatesFiltered() then
 		ns.SetPlateAlpha(plate, alpha)
-	elseif plate.UnitFrame then
-		plate.UnitFrame.cinematicAlpha = nil -- a reused plate: let go of its last unit's alpha
+	else
+		LetGoOfPlate(plate) -- a reused plate: let go of its last unit's alpha
 	end
 end
 
