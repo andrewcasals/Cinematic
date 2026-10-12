@@ -3450,7 +3450,12 @@ local function CreateMinimapPanel()
 	else
 		ping:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 	end
-	trackingMaster:SetPoint("TOPLEFT", ping, "BOTTOMLEFT", 0, -2)
+	local indoors = Check(content, "minimapIndoors", "Keep minimap open indoors",
+		"Inside buildings, caves and cities like Ironforge, the minimap stays up during CineMode. " ..
+		"The game stops updating the indoor map while the minimap is hidden, so after walking " ..
+		"around it can come back blank or out of date for a moment. Off, it's redrawn as it comes back.")
+	indoors:SetPoint("TOPLEFT", ping, "BOTTOMLEFT", 0, -2)
+	trackingMaster:SetPoint("TOPLEFT", indoors, "BOTTOMLEFT", 0, -2)
 	local TRACKING_TIP = "While this tracking is active, the minimap stays up during cinematic " ..
 		"mode so you can spot nodes or creatures."
 	local previousTracking = trackingMaster

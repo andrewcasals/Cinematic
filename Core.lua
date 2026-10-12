@@ -83,6 +83,7 @@ local DEFAULTS = {
 	questRevealOnAccept = true, -- accepting a quest shows the quest tracker as a mouseover would
 	questRevealOnProgress = true, -- quest objective progress shows the quest tracker the same way
 	minimapRevealOnPing = true, -- a group member pinging the minimap shows it as a mouseover would
+	minimapIndoors = false,    -- keep the minimap up indoors (hidden there, its map goes stale)
 	minimapForTracking = true, -- master switch for the minimapFor* tracking options below
 	minimapForHerbs = true,    -- keep the minimap visible while this tracking is active
 	minimapForMinerals = true,

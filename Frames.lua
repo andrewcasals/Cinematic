@@ -588,9 +588,39 @@ end
 -- laying it out while shrunk can leave its parts out of place.
 local restoredHandlers = {}
 
+-- Indoors (buildings, caves, Ironforge) the game stops updating the minimap's
+-- indoor map while it's hidden (shrunk, or at any alpha below full), so after
+-- walking around it comes back blank, black or half drawn. Outdoors it keeps
+-- up. A zoom step and back on the next frame makes it draw the map again with
+-- no visible flicker, but only once it's fully shown: so each time it grows
+-- back indoors, that's done at the end of its fade-in. (Or the minimap can
+-- stay up indoors: minimapIndoors, Minimap page.)
+local minimapNeedsRedraw = false
+
+local function RedrawMinimapWhenShown()
+	if not minimapNeedsRedraw or not Minimap:IsVisible() or Minimap:GetEffectiveAlpha() < 0.99 then
+		return
+	end
+	minimapNeedsRedraw = false
+	local zoom = Minimap:GetZoom()
+	local other = zoom > 0 and zoom - 1 or zoom + 1
+	if other > Minimap:GetZoomLevels() - 1 then
+		return
+	end
+	Minimap:SetZoom(other)
+	C_Timer.After(0, function()
+		if Minimap:GetZoom() == other then -- (unless you zoomed meanwhile)
+			Minimap:SetZoom(zoom)
+		end
+	end)
+end
+
 local function UnshrinkEntry(entry)
 	entry.frame:SetScale(entry.savedScale or 1)
 	entry.shrunk = false
+	if entry.frame == Minimap and Minimap.GetZoomLevels and IsIndoors and ns.Flag(IsIndoors()) then
+		minimapNeedsRedraw = true
+	end
 	for _, handler in ipairs(restoredHandlers) do
 		pcall(handler)
 	end
@@ -1763,6 +1793,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- Hide in camera modes (Minimap page): the camera running now fades the
 	-- minimap, whatever would keep it up. Hovering still shows it.
 	local camHidesMinimap = ns.activeCam and ns.db[ns.activeCam .. "HideMinimap"]
+	-- Keep minimap open indoors (Minimap page): see RedrawMinimapWhenShown.
+	local keepIndoors = ns.db.minimapIndoors and IsIndoors and ns.Flag(IsIndoors())
 
 	for _, entry in ipairs(ns.managed) do
 		if entry.ownAlpha then
@@ -1776,7 +1808,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			or (dockPeek and entry.name == "GeneralDockManager")
 		entry.row = entry.row or ns.HoverRowFor(entry)
 		-- (Kept up by a setting, or brought up by an event ticked for one of its Mouseover groups.)
-		local tracking = (ns.db.alwaysShowMinimap and entry.group == "minimap")
+		local tracking = ((ns.db.alwaysShowMinimap or keepIndoors) and entry.group == "minimap")
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
 			or (questTimerUp and entry.group == "questtimer")
 			or triggered[entry.row]
@@ -1806,6 +1838,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		if camHidesMinimap and entry.group == "minimap" and not hovered[entry.row] and not pinged[entry.row] then
 			target = 0
+		end
+		if entry.frame == Minimap then
+			RedrawMinimapWhenShown()
 		end
 		if typing and entry.group == "chat" and entry.alpha < 1 then
 			-- Pressing Enter shows the chat input (and its window) at once.
