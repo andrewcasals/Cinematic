@@ -80,6 +80,10 @@ ns.EVENTS = {
 	{ key = "Stare", label = "/stare", camera = "vista" },
 	{ key = "Fishing", label = "Cast Fishing", camera = "fish" },
 	{ key = "AFK", label = "Go AFK", camera = "afk", stopsOnMove = true },
+	-- Standing still for the standing-still delay (idleOrbitDelay, its slider
+	-- on this row), with nothing else on: no camera by default (going AFK
+	-- starts the AFK camera).
+	{ key = "Still", label = "Stand still", camera = "none" },
 	-- Not a standing-still camera: its choices are the flight camera or none.
 	{ key = "Flight", label = "Take a flight", camera = "flight" },
 	-- Nor this: the quest cam (QuestCam.lua) or none.
@@ -98,6 +102,7 @@ for _, event in ipairs(ns.EVENTS) do
 end
 ns.DEFAULTS.eventAFKMusic = false
 ns.DEFAULTS.eventQuestMusic = false
+ns.DEFAULTS.eventStillMusic = false -- (for the cozy, vista or fish camera; the AFK camera's is Go AFK's)
 
 -- Taking a flight: the flight camera runs, unless the event is set to no camera.
 local flightSince -- when this flight took off, or nil on the ground
@@ -1162,10 +1167,12 @@ do
 		end
 		-- A Hearthstone or teleport cast first (it calls a logout off anyway),
 		-- then logging out, then going AFK (it comes after whatever you were
-		-- doing: AFK while sitting is the AFK camera), then the rest.
+		-- doing: AFK while sitting is the AFK camera), then the rest, and
+		-- standing still last.
 		local departing = (emoteEvent == "Hearth" or emoteEvent == "Teleport") and emoteEvent
+		local stoodStill = ns.stillSince ~= nil and GetTime() - ns.stillSince >= ns.db.idleOrbitDelay
 		for _, key in ipairs({ departing, LoggingOut() and "Logout", afk and "AFK", byFire and "Campfire",
-			emoteEvent or false, weapon and "Weapon", campfire and "Campfire" }) do
+			emoteEvent or false, weapon and "Weapon", campfire and "Campfire", stoodStill and "Still" }) do
 			local camera = key and EventCamera(key)
 			if camera then
 				return key, camera
@@ -1220,6 +1227,14 @@ end
 -- An event set to the AFK camera: it starts without waiting out its delay.
 function ns.IsEventAFK()
 	return select(2, ns.ActiveEvent()) == "afk"
+end
+
+-- Whether standing still past the delay can run the AFK camera: Stand still
+-- (Camera Triggers page) set to it, or another event on (one set to the AFK
+-- camera, or whose own camera takes over). With Stand still set to another
+-- camera or none, just standing there doesn't start it.
+function ns.StillRunsAFK()
+	return EventCamera("Still") == "afk" or ns.ActiveEvent() ~= nil
 end
 local RECENTER_TIME = 5 -- seconds a swing back behind you lasts
 local recenterUntil = 0
@@ -2171,7 +2186,7 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 			idleZoom.done = false
 		end
 	else
-		allowed = ns.db.idleZoom and still and not ns.IsCameraOffHere("idle")
+		allowed = ns.db.idleZoom and still and not ns.IsCameraOffHere("idle") and ns.StillRunsAFK()
 	end
 	local want = cinematic and allowed and not InCombatLockdown() and ns.CombatWaitOver(context, now)
 		and not (ns.QuestCamZoomingBack and ns.QuestCamZoomingBack()) -- (then from your own distance)
@@ -2454,7 +2469,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		ns.stillSince = now - ns.db.idleOrbitDelay
 	end
 	local idle = ns.db.idleOrbit and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
-		and not ns.IsCameraOffHere("idle")
+		and not ns.IsCameraOffHere("idle") and ns.StillRunsAFK()
 	-- Death camera: dead (not yet released), the camera turns slowly round your
 	-- body. Cinematic mode is off while you're dead (the UI comes back for the
 	-- release button), so this runs without it, and in combat too.
@@ -2495,7 +2510,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	ns.activeCam = (deathCam and "death") or (cinematic and ((onTaxi and ns.FlightCameraOn() and "flight")
 		or travel or (vista and "vista") or (fish and "fish") or (tele and "tele") or (cozy and "cozy")
 		or (ns.stillSince and now - ns.stillSince >= ns.db.idleOrbitDelay
-			and not ns.IsCameraOffHere("idle") and "idle")))
+			and not ns.IsCameraOffHere("idle") and ns.StillRunsAFK() and "idle")))
 		or (ns.QuestCamActive and ns.QuestCamActive() and "quest") or nil -- (in or out of cinematic mode)
 	-- (logged always; printed with /cine debug modes)
 	ns.ReportCameraMode(ns.activeCam and (CAMERA_REPORT_NAMES[ns.activeCam] or ns.activeCam))

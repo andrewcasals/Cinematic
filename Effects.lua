@@ -143,7 +143,7 @@ local pvpNamesFight = false
 
 -- Names ticked In combat (or In PvP combat, in such fights) stay up through
 -- the fight and for the Calm Timer (calmTime) after it, like the plates.
--- (In group on the Nameplates page keeps a row up in a party or raid, whatever
+-- (Grouped on the Nameplates page keeps a row up in a party or raid, whatever
 -- its other boxes say.)
 local function NameKeptHere(key, inCombat)
 	if ns.db["nameGroup" .. key] and IsInGroup() then
@@ -164,7 +164,8 @@ function ns.UpdateCVars(cinematic, fightStarting)
 	lastCinematic = cinematic
 	local inCombat = fightStarting or InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 	for _, set in ipairs(CVAR_SETS) do
-		local want = cinematic and not NameKeptHere(set.key, inCombat)
+		-- (Nameplates page's master switch off: names are left to the game.)
+		local want = cinematic and ns.db.handlePlates and not NameKeptHere(set.key, inCombat)
 		ns.ApplyCVarSet(set, want or false)
 	end
 	-- (Kept through the Calm Timer after a fight, like the plates.)
@@ -778,7 +779,7 @@ end
 ns.InPvPFight = InPvPFight
 
 -- Whether a kind shows in fights in cinematic mode (plateCombat<kind>,
--- plateCombatPvP<kind> while flagged for PvP, or In group on the Nameplates
+-- plateCombatPvP<kind> while flagged for PvP, or Grouped on the Nameplates
 -- page, which keeps a row up in a party or raid whatever its other boxes say).
 local function ShownInFights(kind)
 	return (ns.db["plateCombat" .. kind] or (ns.db["plateGroup" .. kind] and IsInGroup())
@@ -994,6 +995,12 @@ function ns.RefreshPlate(plate, unit)
 	if not plate then
 		return
 	end
+	if not ns.db.handlePlates then
+		if plate.UnitFrame then
+			plate.UnitFrame.cinematicAlpha = nil -- (left to the game: Nameplates page's switch off)
+		end
+		return
+	end
 	unit = unit or plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 	ForgetTargetFade(plate) -- only called for a plate given a new unit
 	local alpha = PlateAlpha(unit, plate)
@@ -1168,6 +1175,9 @@ end
 -- (in case they were turned off in the game's options since). Rows with
 -- nothing ticked are left alone.
 function ns.EnsurePlateRows()
+	if not ns.db.handlePlates then
+		return -- (the game's own options decide: Nameplates page's switch off)
+	end
 	for _, kind in ipairs(ns.PLATE_KINDS) do
 		local groupKept = kind == "Friends" and ns.db.plateGroupMembers
 			or kind == "FriendlyMinions" and ns.db.plateGroupMembers and ns.db.plateGroupMemberMinions
@@ -1226,7 +1236,39 @@ end
 
 local platesWereFiltered = false
 
+-- The Nameplates page's master switch off (handlePlates): every plate back to
+-- full, the game's plate settings put back, then nothing more until it's on
+-- again. Tried each tick until done (settings can't change in a fight).
+local platesReleased = false
+local function ReleasePlates()
+	platesActive = false
+	UpdateLockedPlates()
+	ns.ShowPlatesNow()
+	ns.plates.level = 1
+	for kind in pairs(combatCap) do
+		combatCap[kind] = nil
+	end
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+			ns.SetPlateAlpha(plate, 1)
+		end
+	end
+	platesWereFiltered = false
+	local locked = false
+	for _, set in pairs(LOCKED_PLATE_SETS) do
+		locked = locked or set.active or false
+	end
+	platesReleased = not ns.plates.off and not locked
+end
+
 function ns.UpdatePlates(cinematic, elapsed)
+	if not ns.db.handlePlates then
+		if not platesReleased then
+			ReleasePlates()
+		end
+		return
+	end
+	platesReleased = false
 	platesActive = cinematic and true or false
 	placeSuffix = ns.PlateSuffix()
 	UpdateLockedPlates()

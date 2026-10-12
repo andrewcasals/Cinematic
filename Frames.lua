@@ -1134,6 +1134,25 @@ local function IsIgnoredAura(aura)
 	return ids[id] or (type(name) == "string" and names[name:lower()]) or false
 end
 
+-- A buff you cast on yourself (buffPeekIgnoreSelf passes these over): its
+-- caster is you or your pet. (False when unsure: no data, or a secret caster.)
+local function IsSelfCast(aura)
+	if type(aura) ~= "table" then
+		return false
+	end
+	local source = aura.sourceUnit
+	if source == nil or (issecretvalue and issecretvalue(source)) then
+		return false
+	end
+	for _, unit in ipairs({ "player", "pet" }) do
+		local ok, mine = pcall(UnitIsUnit, source, unit)
+		if ok and mine == true then
+			return true
+		end
+	end
+	return false
+end
+
 -- Buffs and debuffs each bring the buffs up on their own switch (buffPeek,
 -- debuffPeek), each with its own "Only after combat" (within the Calm Timer).
 local function PeekAllowed(harmful)
@@ -1162,8 +1181,9 @@ local function EitherHold()
 end
 
 -- One aura gained or refreshed: how long it brings the buffs up, or nil. Not
--- at all if it's on the ignore list; otherwise as its kind allows. When unsure
--- (no data, secret values), either kind will do.
+-- at all if it's on the ignore list, or a buff you cast on yourself with
+-- buffPeekIgnoreSelf; otherwise as its kind allows. When unsure (no data,
+-- secret values), either kind will do.
 local function AuraHold(aura)
 	if IsIgnoredAura(aura) then
 		return nil
@@ -1171,6 +1191,9 @@ local function AuraHold(aura)
 	local harmful = type(aura) == "table" and aura.isHarmful
 	if harmful == nil or (issecretvalue and issecretvalue(harmful)) then
 		return EitherHold()
+	end
+	if not harmful and ns.db.buffPeekIgnoreSelf and IsSelfCast(aura) then
+		return nil
 	end
 	return PeekHold(harmful and true or false)
 end
@@ -1462,23 +1485,46 @@ local function ButtonName(index)
 	local ok, name = pcall(C_GamePad.ButtonIndexToBinding, index)
 	return ok and name or ("button" .. index)
 end
+-- Moving and auto-run in gamepad mode: the left stick walks you and clicking
+-- it toggles auto-run, all handled by the gamepad UI itself (no bindings, so
+-- none of the Move*/ToggleAutoRun functions Core.lua hooks are called). So
+-- the stick's directions held count as movement keys (ns.PadMovementHeld),
+-- up or down ends auto-run as forward and back do, and the click toggles it.
+local PAD_MOVE = { PADLSTICKUP = true, PADLSTICKDOWN = true, PADLSTICKLEFT = true, PADLSTICKRIGHT = true }
+local PAD_ENDS_AUTORUN = { PADLSTICKUP = true, PADLSTICKDOWN = true }
+local padMoveHeld = false
+function ns.PadMovementHeld()
+	return padMoveHeld
+end
 padWatcher:SetScript("OnUpdate", function()
 	CheckPendingPress()
-	if not (ns.db and (ns.db.gamepadPressReveal or ns.padDebug))
-		or not (C_GamePad and C_GamePad.GetDeviceMappedState and ns.IsGamePadOn()) then
+	if not (ns.db and C_GamePad and C_GamePad.GetDeviceMappedState and ns.IsGamePadOn()) then
+		padMoveHeld = false
 		return
 	end
 	local ok, state = pcall(C_GamePad.GetDeviceMappedState, C_GamePad.GetActiveDeviceID
 		and C_GamePad.GetActiveDeviceID() or nil)
 	if not ok or type(state) ~= "table" or type(state.buttons) ~= "table" then
+		padMoveHeld = false
 		return
 	end
+	local moving = false
 	for index, down in ipairs(state.buttons) do
+		local name = (down or padHeld[index]) and ButtonName(index)
+		if down and PAD_MOVE[name] then
+			moving = true
+		end
 		if down and not padHeld[index] then
-			OnPadButton(ButtonName(index), "read")
+			if name == "PADLSTICK" and ns.OnAutoRunToggle then
+				ns.OnAutoRunToggle()
+			elseif PAD_ENDS_AUTORUN[name] then
+				ns.autoRunning = false
+			end
+			OnPadButton(name, "read")
 		end
 		padHeld[index] = down or nil
 	end
+	padMoveHeld = moving
 end)
 
 -- A quest timer running (Classic clients; retail has no quest timer box).

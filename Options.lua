@@ -635,9 +635,15 @@ local function CreateBuffsPanel()
 	buffAfterCombat:SetPoint("TOPLEFT", buffPeek, "BOTTOMLEFT", BUFF_INDENT, -2)
 	GreyUnless(buffAfterCombat, IfBuffPeek)
 
+	local buffIgnoreSelf = Check(content, "buffPeekIgnoreSelf", "Not ones you cast on yourself",
+		"Your own buffs on yourself (Power Word: Fortitude, Arcane Intellect, a self-cast shield...) " ..
+		"and your pet's don't bring them up; ones from other players and the world still do.")
+	buffIgnoreSelf:SetPoint("TOPLEFT", buffAfterCombat, "BOTTOMLEFT", 0, -2)
+	GreyUnless(buffIgnoreSelf, IfBuffPeek)
+
 	local debuffPeek = Check(content, "debuffPeek", "Show debuffs when you gain or refresh one",
 		"Gaining or refreshing a debuff briefly shows your buffs and debuffs. Not on flights.")
-	debuffPeek:SetPoint("TOPLEFT", buffAfterCombat, "BOTTOMLEFT", -BUFF_INDENT, -2)
+	debuffPeek:SetPoint("TOPLEFT", buffIgnoreSelf, "BOTTOMLEFT", -BUFF_INDENT, -2)
 	debuffPeek:HookScript("OnClick", Refresh)
 
 	local debuffAfterCombat = Check(content, "debuffPeekAfterCombat", "Only after combat",
@@ -856,21 +862,19 @@ local function CreateCameraPanel()
 		"Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
 		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back " ..
 		"as usual. To keep the normal UI somewhere instead, use Turn off in on the main page. " ..
-		"Always turns that camera off everywhere. For flights, Cities means taking off from one. " ..
+		"For flights, Cities means taking off from one, " ..
+		"and Open World taking off anywhere else. " ..
 		"Calm Timer, on the right: ticked, that camera waits until the Calm Timer (CineMode page) " ..
 		"has run out after a fight before it starts.")
 	offNote:SetPoint("TOPLEFT", offHeader, "BOTTOMLEFT", 0, -6)
 	offNote:SetWidth(520)
 	offNote:SetJustifyV("TOP")
-	-- Always first, set a little apart from the places and groups after it.
-	local GRID_NAME_WIDTH, GRID_COLUMN, GRID_GAP = 90, 62, 10
-	local GRID_PLACES = GRID_NAME_WIDTH + GRID_COLUMN + GRID_GAP
+	local GRID_NAME_WIDTH, GRID_COLUMN, GRID_GAP = 90, 72, 10
+	local GRID_PLACES = GRID_NAME_WIDTH
 	local WHERE = {
 		Cities = { "Cities", "in capital cities" },
-		Dungeons = { "Dungeons", "in dungeons and scenarios" }, Raids = { "Raids", "in raids" },
-		PvP = { "PvP", "while you're PvP flagged, and in battlegrounds and arenas" },
-		Party = { "Party", "while you're in a party (not a raid group)" },
-		RaidGroup = { "Raid group", "while you're in a raid group" },
+		Instances = { "Instances", "in dungeons, scenarios, raids, battlegrounds and arenas" },
+		World = { "Open World", "out in the world (not in a capital city or an instance), inns included" },
 	}
 	-- Calm Timer last, set apart too: it isn't a place.
 	local GRID_CALM = GRID_PLACES + GRID_COLUMN * #ns.CAMERA_OFF_WHERE + GRID_GAP
@@ -886,7 +890,6 @@ local function CreateCameraPanel()
 		text:SetJustifyH("CENTER")
 		Tooltip(cell, tip)
 	end
-	ColumnHeader(GRID_NAME_WIDTH, "Always", "Tick a camera here to turn it off everywhere.")
 	for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
 		ColumnHeader(GRID_PLACES + GRID_COLUMN * (i - 1), WHERE[where][1],
 			"Tick a camera here to turn it off " .. WHERE[where][2] .. ".")
@@ -900,11 +903,6 @@ local function CreateCameraPanel()
 		row:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -2)
 		local name = Label(row, "GameFontHighlight", cam[2])
 		name:SetPoint("LEFT", row, "LEFT", 0, 0)
-		local alwaysKey = cam[1] .. "OffAlways"
-		local always = Check(row, alwaysKey, "", "No " .. cam[2] .. " Cam anywhere.")
-		always:SetPoint("CENTER", row, "LEFT", GRID_NAME_WIDTH + GRID_COLUMN * 0.5, 0)
-		always:HookScript("OnClick", Refresh) -- grey out / enable the rest of the row
-		local function IfNotAlways(db) return not db[alwaysKey] end
 		for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
 			local x = GRID_PLACES + GRID_COLUMN * (i - 0.5)
 			if (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
@@ -914,15 +912,15 @@ local function CreateCameraPanel()
 				cell:SetPoint("CENTER", row, "LEFT", x, 0)
 				local cross = Label(cell, "GameFontDisable", "x")
 				cross:SetPoint("CENTER")
-				Tooltip(cell, where == "PvP" and "Flights don't count as PvP, flagged or not."
-					or ("Flights don't start " .. WHERE[where][2] .. "."))
+				Tooltip(cell, "Flights don't start " .. WHERE[where][2] .. ".")
 			else
 				local tip = (cam[1] == "flight" and where == "Cities")
 					and "No Flight Cam on flights taking off from a capital city."
+					or (cam[1] == "flight" and where == "World")
+					and "No Flight Cam on flights taking off anywhere but a capital city."
 					or ("No " .. cam[2] .. " Cam " .. WHERE[where][2] .. ".")
 				local cb = Check(row, cam[1] .. "OffIn" .. where, "", tip)
 				cb:SetPoint("CENTER", row, "LEFT", x, 0)
-				GreyUnless(cb, IfNotAlways)
 			end
 		end
 		local calmX = GRID_CALM + GRID_COLUMN * 0.5
@@ -937,7 +935,6 @@ local function CreateCameraPanel()
 			local calm = Check(row, cam[1] .. "CalmWait", "", "The " .. cam[2] .. " Cam waits until the " ..
 				"Calm Timer has run out after a fight.")
 			calm:SetPoint("CENTER", row, "LEFT", calmX, 0)
-			GreyUnless(calm, IfNotAlways)
 		end
 		lastRow = row
 	end
@@ -1278,8 +1275,10 @@ local EVENT_TIPS = {
 	Stare = "Doing the emote while standing still. Moving, jumping or another emote ends it.",
 	Fishing = "Casting Fishing. It carries on after the cast ends (looting, casting again) until " ..
 		"you move or jump. The cast doesn't bring the UI back or pause the camera.",
-	AFK = "Being flagged AFK (/afk, or away long enough). With \"No camera\", the AFK camera still " ..
-		"starts once you've stood still for its delay.",
+	AFK = "Being flagged AFK (/afk, or away long enough). With \"No camera\", Stand still below " ..
+		"still applies once you've stood still for its time.",
+	Still = "Standing still for the time below with nothing else going on (no emote, no other event). " ..
+		"\"No camera\": standing still starts nothing, though going AFK and the other events still do.",
 	Flight = "Taking off on a flight path. With \"No camera\", the camera is left to you for " ..
 		"the whole flight.",
 	Quest = "Talking to a quest giver (a quest to pick up or hand in). Works whether or not " ..
@@ -1293,7 +1292,7 @@ local function CreateEventsPanel()
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		"What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; a " ..
 		"Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a " ..
-		"drawn weapon and a campfire. Taking a flight has the flight " ..
+		"drawn weapon, a campfire, and standing still last. Taking a flight has the flight " ..
 		"camera, and talking to a quest giver the quest camera. RP walk, auto-run and death start " ..
 		"by themselves.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
@@ -1312,6 +1311,7 @@ local function CreateEventsPanel()
 	local MUSIC_EXTRA_TIPS = {
 		AFK = " This covers the AFK camera however it starts, standing still included. Off also " ..
 			"keeps music from coming back after a pause while you're away.",
+		Still = " For the cozy, vista or fish camera; with the AFK camera, Go AFK's box above decides.",
 	}
 
 	local previous, dx = header, 0
@@ -1361,7 +1361,8 @@ local function CreateEventsPanel()
 			local music = Check(content, musicKey, "", MUSIC_TIP .. (MUSIC_EXTRA_TIPS[event.key] or ""))
 			music:SetPoint("LEFT", label, "LEFT", MUSIC_X + 8, 0)
 			GreyUnless(music, function(db)
-				return db.musicInCinematic and (event.key == "AFK" or db[key .. "Camera"] ~= "none")
+				return db.musicInCinematic and (event.key == "AFK" or (db[key .. "Camera"] ~= "none"
+					and not (event.key == "Still" and db[key .. "Camera"] == "afk")))
 			end)
 		end
 		previous, dx = label, 0
@@ -1382,11 +1383,18 @@ local function CreateEventsPanel()
 			local note = Label(content, "GameFontHighlightSmall", "Seat words, separated by commas.")
 			note:SetPoint("TOPLEFT", seatBox, "BOTTOMLEFT", -4, -4)
 			previous, dx = note, -22
+		elseif event.key == "Still" then
+			local delay = Slider(content, "idleOrbitDelay", "After standing still for", 5, 120, 5, "%d sec")
+			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
+			Tooltip(delay, "How long you stand still before this row's camera starts (an event set to " ..
+				"the AFK camera, like going AFK, skips the wait). Also used by the other options that " ..
+				"mention standing still (tint, tracking, music, tooltips).")
+			previous, dx = delay, -30
 		end
 	end
 
 	local note = Label(content, "GameFontHighlightSmall",
-		"An event set to the AFK camera starts it without waiting out the AFK camera's own delay.")
+		"An event set to the AFK camera starts it without waiting out Stand still's time.")
 	note:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -28)
 	note:SetWidth(520)
 	note:SetJustifyV("TOP")
@@ -1464,15 +1472,8 @@ local function CreateStandingPanel()
 	CreateCameraModePanel({
 		name = "AFK Cam",
 		description = "Once you've stood still for a while with the UI faded, or as soon as you " ..
-			"go AFK, the camera slowly sweeps around your character. Moving stops it.",
-		start = function(content, stack)
-			local idleDelay = stack:Add(Slider(content, "idleOrbitDelay", "Start after standing still for",
-				5, 120, 5, "%d sec"), "slider")
-			Tooltip(idleDelay, "How long you stand still before the rotation and zoom begin (an event " ..
-				"set to the AFK camera on the Camera Triggers page, like going AFK, skips the wait). Also " ..
-				"used by the other options that mention standing still (tint, tracking, music, " ..
-				"tooltips).")
-		end,
+			"go AFK, the camera slowly sweeps around your character. Moving stops it. What starts it, " ..
+			"and how long you stand still first, is on the Camera Triggers page.",
 		inputPauseKey = "idleInputPause",
 		orbitPrefix = "idleOrbit", style = "sweep",
 		rotateLabel = "Sweep round you",
@@ -3014,6 +3015,21 @@ local function CreatePlatesPanel()
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
+	-- The page's master switch: off, CineMode leaves nameplates and names to
+	-- the game's own options (everything below greys out).
+	local handleCheck = Check(content, "handlePlates", "Let CineMode handle nameplates and names",
+		"On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, " ..
+		"and the game's own options decide, in CineMode and out.",
+		function(value)
+			ns.GetDB().handlePlates = value
+			if value and ns.EnsurePlateRows then
+				ns.EnsurePlateRows()
+			end
+			Refresh()
+		end)
+	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
+	local firstControl = #controls + 1
+
 	-- Nameplates and names each get a table: a row per kind of unit, a column
 	-- per situation. A narrower table can set its first column apart (gap).
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 120, 24
@@ -3041,7 +3057,7 @@ local function CreatePlatesPanel()
 		end
 		return rowLabel
 	end
-	-- Both grids' column tooltips (each box adds its row's note). In group keeps
+	-- Both grids' column tooltips (each box adds its row's note). Grouped keeps
 	-- its row up in a party or raid, in fights and out, whatever the rest says.
 	local COMBAT_TIP = "Show in fights, and for the Calm Timer after."
 	local PVP_COMBAT_TIP = "Show in fights while you're PvP flagged, and for the Calm Timer after."
@@ -3089,18 +3105,21 @@ local function CreatePlatesPanel()
 		end)
 	minionsCheck:SetPoint("TOPLEFT", membersCheck, "BOTTOMLEFT", 16, -2)
 	GreyUnless(minionsCheck, function(db) return db.plateGroupMembers end)
-	-- PvP first, beside the In PvP combat column; In group (not a place)
-	-- beside Dungeons & Raids.
+	-- The columns: In Combat, In PvP Combat, PvP and BGs & Arenas, the other
+	-- places, and Grouped (not a place) beside Instances.
 	local PLACE_COLUMNS = {
+		{ combat = true },
+		{ pvpCombat = true },
 		{ "PvP", "PvP", "Show while PvP flagged, outside battlegrounds and arenas." },
 		{ "BGs", "BGs & Arenas", "Show in battlegrounds and arenas." },
-		{ "", "Open world", "Show everywhere else, cities and inns included." },
+		{ "", "Open World", "Show everywhere else, cities and inns included." },
 		{ group = true },
-		{ "Instances", "Dungeons & Raids", "Show in dungeons, scenarios and raids." },
+		{ "Instances", "Instances", "Show in dungeons, scenarios and raids." },
 	}
-	local headings = { "In combat", "In PvP combat" }
+	local headings = {}
 	for _, place in ipairs(PLACE_COLUMNS) do
-		headings[#headings + 1] = place.group and "In group" or place[2]
+		headings[#headings + 1] = (place.combat and "In Combat") or (place.pvpCombat and "In PvP Combat")
+			or (place.group and "Grouped") or place[2]
 	end
 	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 0
 	local columnTop = TableTop(minionsCheck, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
@@ -3131,14 +3150,16 @@ local function CreatePlatesPanel()
 			end
 		end
 		local combatKey = "plateCombat" .. kind[1]
-		local checks = {
-			Check(content, combatKey, "", COMBAT_TIP .. tip, Ticked(combatKey)),
-		}
-		local pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "", PVP_COMBAT_TIP .. tip,
-			Ticked("plateCombatPvP" .. kind[1]))
-		checks[2] = pvpCheck
+		local checks = {}
+		local pvpCheck
 		for _, place in ipairs(PLACE_COLUMNS) do
-			if place.group then
+			if place.combat then
+				checks[#checks + 1] = Check(content, combatKey, "", COMBAT_TIP .. tip, Ticked(combatKey))
+			elseif place.pvpCombat then
+				pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "", PVP_COMBAT_TIP .. tip,
+					Ticked("plateCombatPvP" .. kind[1]))
+				checks[#checks + 1] = pvpCheck
+			elseif place.group then
 				local groupKey = "plateGroup" .. kind[1]
 				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. tip, Ticked(groupKey))
 			else
@@ -3151,11 +3172,8 @@ local function CreatePlatesPanel()
 		local function Available()
 			return ns.HasPlateSettings(kind[1])
 		end
-		-- (In PvP combat also under In combat, which covers every fight.)
 		for _, check in ipairs(checks) do
-			GreyUnless(check, function(db)
-				return Available() and not (check == pvpCheck and db[combatKey])
-			end)
+			GreyUnless(check, Available)
 		end
 		lastLabel = PlaceRow(columnTop, r, kind[2], kind[3], unpack(checks))
 	end
@@ -3175,16 +3193,18 @@ local function CreatePlatesPanel()
 			end
 		end
 		local combatKey = "nameCombat" .. group.key
-		local checks = {
-			Check(content, combatKey, "", COMBAT_TIP .. nameTip, Ticked(combatKey)),
-		}
-		-- Names can't change mid-fight: they go by how the fight started.
-		local pvpCheck = Check(content, "nameCombatPvP" .. group.key, "",
-			PVP_COMBAT_TIP .. " The game only allows this to be set as the fight starts." .. nameTip,
-			Ticked("nameCombatPvP" .. group.key))
-		checks[2] = pvpCheck
+		local checks = {}
+		local pvpCheck
 		for _, place in ipairs(PLACE_COLUMNS) do
-			if place.group then
+			if place.combat then
+				checks[#checks + 1] = Check(content, combatKey, "", COMBAT_TIP .. nameTip, Ticked(combatKey))
+			elseif place.pvpCombat then
+				-- Names can't change mid-fight: they go by how the fight started.
+				pvpCheck = Check(content, "nameCombatPvP" .. group.key, "",
+					PVP_COMBAT_TIP .. " The game only allows this to be set as the fight starts." .. nameTip,
+					Ticked("nameCombatPvP" .. group.key))
+				checks[#checks + 1] = pvpCheck
+			elseif place.group then
 				local groupKey = "nameGroup" .. group.key
 				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. nameTip, Ticked(groupKey))
 			else
@@ -3195,16 +3215,33 @@ local function CreatePlatesPanel()
 		end
 		-- Greyed out where this client has no such setting.
 		for _, check in ipairs(checks) do
-			GreyUnless(check, function(db)
-				return ns.HasNameSettings(group) and not (check == pvpCheck and db[combatKey])
-			end)
+			GreyUnless(check, function() return ns.HasNameSettings(group) end)
 		end
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 
-	-- Laid out top to bottom: the target and group switches, then the two grids
-	-- (nameplates, then names).
-	showHeader:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -18)
+	-- Everything below the master switch greys out with it off (on top of
+	-- each control's own greying).
+	for i = firstControl, #controls do
+		local control = controls[i]
+		if control.SetEnabled then
+			local refresh = control.Refresh
+			control.Refresh = function(self)
+				refresh(self)
+				if not ns.GetDB().handlePlates then
+					self:SetEnabled(false)
+					local label = self.Text or self.text
+					if label and self:GetObjectType() == "CheckButton" then
+						label:SetFontObject("GameFontDisable")
+					end
+				end
+			end
+		end
+	end
+
+	-- Laid out top to bottom: the master switch, the target and group
+	-- switches, then the two grids (nameplates, then names).
+	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
 	-- (Lined up with the nameplate grid, so both grids' columns match.)
 	namesHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
 

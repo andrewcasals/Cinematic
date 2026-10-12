@@ -104,7 +104,8 @@ local DEFAULTS = {
 	portraitAfterCombat = true,  -- ...but only within the Calm Timer (calmTime) of combat
 	portraitAfterResurrect = true, -- ...or after coming back to life, until health and power are full
 	buffPeek = true,          -- briefly show buffs/debuffs when a buff is gained or refreshed
-	buffPeekAfterCombat = true,  -- ...but only within the Calm Timer of a fight
+	buffPeekAfterCombat = false, -- ...or only within the Calm Timer of a fight
+	buffPeekIgnoreSelf = true,   -- ...and not for buffs you cast on yourself (or your pet does)
 	debuffPeek = true,        -- ...and when a debuff is
 	debuffPeekAfterCombat = false, -- (any time: Hunter's Mark and the like matter out of fights too)
 	buffPeekTime = 3,           -- seconds they stay up for a buff
@@ -367,17 +368,18 @@ DEFAULTS.deathSong = true          -- play a song of its own meanwhile
 -- GhostMusic03 (the ghost world's music), Gloomy02, Haunted02, Haunted01,
 -- Mystery01, Undercity01, KelThuzad1A.
 DEFAULTS.deathSongFiles = "53519, 53232, 53235, 53234, 53240, 53216, 53602"
--- Each camera mode's "Turn off in" grid (Camera Modes page): <cam>OffAlways
--- (off everywhere), then <cam>OffIn<where>, for the cameras in
--- ns.CAMERA_OFF_CAMS and the places and groups in ns.CAMERA_OFF_WHERE, but not
--- those in ns.CAMERA_OFF_NEVER (no flight from there). All off.
+-- Each camera mode's "Turn off in" grid (Camera Modes page): <cam>OffIn<where>,
+-- for the cameras in ns.CAMERA_OFF_CAMS and the places in ns.CAMERA_OFF_WHERE
+-- (capital cities; instances: dungeons, raids, battlegrounds and arenas; the
+-- open world), but not those in ns.CAMERA_OFF_NEVER (no flight from there).
+-- All off.
 ns.CAMERA_OFF_CAMS = {
 	{ "flight", "Flight" }, { "idle", "AFK" }, { "cozy", "Cozy" }, { "tele", "Tele" },
 	{ "vista", "Vista" }, { "fish", "Fish" }, { "walk", "RP Walk" }, { "run", "Auto-run" },
 	{ "death", "Death" }, { "quest", "Quest" },
 }
-ns.CAMERA_OFF_WHERE = { "Cities", "Dungeons", "Raids", "PvP", "Party", "RaidGroup" }
-ns.CAMERA_OFF_NEVER = { flight = { Dungeons = true, Raids = true, PvP = true } }
+ns.CAMERA_OFF_WHERE = { "Cities", "Instances", "World" }
+ns.CAMERA_OFF_NEVER = { flight = { Instances = true } }
 -- The same grid's Calm Timer column: <cam>CalmWait, that camera holds off
 -- until the Calm Timer (calmTime) has run out after a fight. By default the
 -- ones you'd walk or run off into after one (RP walking, auto-running), the
@@ -388,7 +390,6 @@ for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 	if not ns.CALM_WAIT_NEVER[cam[1]] then
 		DEFAULTS[cam[1] .. "CalmWait"] = CALM_WAIT_DEFAULT[cam[1]] or false
 	end
-	DEFAULTS[cam[1] .. "OffAlways"] = false
 	for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
 		if not (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
 			DEFAULTS[cam[1] .. "OffIn" .. where] = false
@@ -401,9 +402,9 @@ end
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 	DEFAULTS[cam[1] .. "HideMinimap"] = false
 end
--- No AFK camera in dungeons and raids.
-DEFAULTS.idleOffInDungeons = true
-DEFAULTS.idleOffInRaids = true
+-- No RP walk or auto-run camera in capital cities or instances.
+DEFAULTS.walkOffInCities, DEFAULTS.walkOffInInstances = true, true
+DEFAULTS.runOffInCities, DEFAULTS.runOffInInstances = true, true
 DEFAULTS.flightHideMinimap = true
 DEFAULTS.idleHideMinimap = true
 DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
@@ -454,6 +455,7 @@ for _, key in ipairs({ "plateCombatPvPEnemies", "plateCombatPvPFriends", "plateC
 	DEFAULTS[key] = true
 end
 -- And your target's plate, shown everywhere whatever its own row says.
+DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
 DEFAULTS.plateTarget = true
 -- And your party or raid members' plates (their pets' too), likewise.
 DEFAULTS.plateGroupMembers = true
@@ -469,7 +471,7 @@ DEFAULTS.nameInPvPEnemies = true
 DEFAULTS.nameInPvPEnemyMinions = true
 DEFAULTS.nameInBGsEnemies = true
 DEFAULTS.nameInBGsEnemyMinions = true
--- Both grids' In group column: the row stays up in a party or raid, in fights
+-- Both grids' Grouped column: the row stays up in a party or raid, in fights
 -- and out, whatever its other boxes say. Friendly players and their minions by default.
 for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateGroup" .. kind] = kind == "Friends" or kind == "FriendlyMinions"
@@ -817,24 +819,22 @@ function ns.PlateSuffix()
 end
 
 -- A camera mode ("flight", "idle", "cozy"... see ns.CAMERA_OFF_CAMS) turned
--- off where you are, or for the group you're in. A flight doesn't count as
--- being in a city (see ns.GetPlaceType): for the flight camera, Cities means
--- taking off from one (db.takeoffInCity, noted at takeoff).
+-- off where you are. Where: a capital city, an
+-- instance (dungeons, scenarios, raids, battlegrounds and arenas) or the open
+-- world (inns too, PvP flagged or not). A flight doesn't count as being in a
+-- city (see ns.GetPlaceType): for it, Cities means taking off from one
+-- (db.takeoffInCity, noted at takeoff), and the open world anywhere else.
+local CAMERA_OFF_PLACE = { city = "Cities", dungeon = "Instances", raid = "Instances", pvp = "Instances" }
 function ns.IsCameraOffHere(cam)
 	local db = ns.db
 	if not db then return false end
-	if db[cam .. "OffAlways"] then return true end
-	if cam == "flight" and db.flightOffInCities and db.takeoffInCity and UnitOnTaxi("player") then
-		return true
+	local place
+	if cam == "flight" and UnitOnTaxi("player") then
+		place = db.takeoffInCity and "Cities" or "World"
+	else
+		place = CAMERA_OFF_PLACE[ns.GetPlaceType()] or "World"
 	end
-	local place = ns.PlaceSuffix()
-	if place ~= nil and db[cam .. "OffIn" .. place] then
-		return true
-	end
-	if IsInRaid() then
-		return db[cam .. "OffInRaidGroup"] or false
-	end
-	return (IsInGroup() and db[cam .. "OffInParty"]) or false
+	return db[cam .. "OffIn" .. place] or false
 end
 
 function ns.IsMusicBlocked()
@@ -1326,7 +1326,10 @@ function Cinematic_StartCam(camera)
 	end
 	local idleOn = camera == "idle" and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
 		and not ns.manualCam
-	if ns.manualCam == camera or idleOn then
+	-- (The AFK camera's key runs it as an event set to it, so it starts even
+	-- with Stand still set to another camera or none.)
+	local manual = camera == "idle" and "afk" or camera
+	if ns.manualCam == manual or idleOn then
 		ns.manualCam = nil
 		ns.stillSince = now -- the standing-still timer starts afresh
 		ns.Print(CAM_NAMES[camera] .. " camera stopped")
@@ -1336,7 +1339,7 @@ function Cinematic_StartCam(camera)
 		ns.Print("the AFK camera's rotation is off on its options page")
 		return
 	end
-	ns.manualCam = camera ~= "idle" and camera or nil
+	ns.manualCam = manual
 	ns.stillSince = now - ns.db.idleOrbitDelay -- counts as stood still long enough
 	lastBusy = 0 -- fade the UI now
 	ns.Print(CAM_NAMES[camera] .. " camera on: move, jump or press the key again to stop it")
@@ -1471,7 +1474,8 @@ function ns.CameraMode()
 		return "cozy"
 	end
 	local still = ns.GetStillSince()
-	if still ~= nil and GetTime() - still >= ns.db.idleOrbitDelay and not ns.IsCameraOffHere("idle") then
+	if still ~= nil and GetTime() - still >= ns.db.idleOrbitDelay and not ns.IsCameraOffHere("idle")
+		and ns.StillRunsAFK() then
 		return "idle"
 	end
 	return nil
@@ -1768,6 +1772,38 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		ns.db.offInInns, ns.db.chatInInns, ns.db.musicOffInInns, ns.db.trackingOffInInns = nil, nil, nil, nil
 		for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 			ns.db[cam[1] .. "OffInInns"] = nil
+		end
+		-- The "Turn off in" grid had Dungeons, Raids and PvP columns, and Party,
+		-- Raid group and In group (gone): now In instance (battlegrounds and
+		-- arenas too) and Open world. In instance is ticked if Dungeons or Raids
+		-- was (not PvP: that would turn a camera off in dungeons and raids too).
+		for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+			local prefix = cam[1] .. "OffIn"
+			local function Merge(new, olds)
+				local any, seen = false, false
+				for _, old in ipairs(olds) do
+					if ns.db[prefix .. old] ~= nil then
+						seen = true
+						any = any or ns.db[prefix .. old] == true
+					end
+					ns.db[prefix .. old] = nil
+				end
+				if seen and ns.db[prefix .. new] == nil then
+					ns.db[prefix .. new] = any
+				end
+			end
+			Merge("Instances", { "Dungeons", "Raids" })
+			ns.db[prefix .. "PvP"], ns.db[prefix .. "Party"], ns.db[prefix .. "RaidGroup"] = nil, nil, nil
+			ns.db[prefix .. "Group"] = nil
+			-- It had an Always column too (off everywhere): every place now.
+			if ns.db[cam[1] .. "OffAlways"] then
+				for _, where in ipairs({ "Cities", "Instances", "World" }) do
+					if not (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
+						ns.db[prefix .. where] = true
+					end
+				end
+			end
+			ns.db[cam[1] .. "OffAlways"] = nil
 		end
 		-- The cozy zoom first pulled back further and came in less; update it
 		-- once, unless changed.
@@ -2141,6 +2177,9 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			for _, held in pairs(movementKeys) do
 				if held then return true end
 			end
+			if ns.PadMovementHeld and ns.PadMovementHeld() then -- (gamepad mode's left stick)
+				return true
+			end
 			return IsMouseButtonDown("LeftButton") and IsMouseButtonDown("RightButton")
 		end
 		-- Moving by hand: a movement key held, or steering with both mouse
@@ -2170,10 +2209,17 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		end
 		-- The toggle: if it's on and you're moving, you're stopping it; any other
 		-- press starts it. (A plain flip could get out of step for good if an
-		-- auto-run ever ended unseen.)
-		Hook("ToggleAutoRun", function()
+		-- auto-run ever ended unseen.) Also called for gamepad mode's left stick
+		-- click (Frames.lua); one press seen both ways only counts once.
+		local lastToggle = 0
+		function ns.OnAutoRunToggle()
+			if GetTime() - lastToggle < 0.2 then
+				return
+			end
+			lastToggle = GetTime()
 			ns.autoRunning = not (ns.autoRunning and ns.playerMoving)
-		end)
+		end
+		Hook("ToggleAutoRun", ns.OnAutoRunToggle)
 		Hook("StartAutoRun", function() ns.autoRunning = true end)
 		Hook("StopAutoRun", function() ns.autoRunning = false end)
 		Hook("MoveForwardStart", function() ns.autoRunning = false end)
