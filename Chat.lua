@@ -31,6 +31,9 @@ ns.CHAT_PEEK_TYPES = {
 	{ key = "boss", label = "Boss emotes",
 		events = { "CHAT_MSG_RAID_BOSS_EMOTE", "CHAT_MSG_RAID_BOSS_WHISPER" } },
 
+	-- Guild members' comings and goings arrive as system messages; see IsGuildLine below.
+	{ key = "guildmembers", label = "Guild members (online, offline, joins, leaves)", section = "game",
+		events = {} },
 	-- Server announcements ("[SERVER] Shutdown in 9:00"); see the AddMessage hook below.
 	{ key = "server", label = "Server messages (shutdowns, restarts)", section = "game", events = {} },
 	-- Level ups arrive as a system message; see LEVEL_UP_WINDOW below.
@@ -122,6 +125,71 @@ local function IsLootRollLine(text)
 	return false
 end
 
+-- Guild members coming online, going offline, joining, leaving, removed,
+-- promoted or demoted: told apart from other system messages the same way.
+-- Coming online and going offline use the same lines as friends', so a name
+-- on your friends list only counts if it's in the guild roster too (the
+-- roster may leave out offline members, so a name not on it isn't enough).
+local GUILD_FORMATS = {
+	"ERR_FRIEND_ONLINE_SS", "ERR_FRIEND_OFFLINE_S", "ERR_GUILD_JOIN_S", "ERR_GUILD_LEAVE_S",
+	"ERR_GUILD_REMOVE_SS", "ERR_GUILD_PROMOTE_SSS", "ERR_GUILD_DEMOTE_SSS", "ERR_GUILD_LEADER_CHANGED_SS",
+}
+local FRIEND_LINES = { ERR_FRIEND_ONLINE_SS = true, ERR_FRIEND_OFFLINE_S = true }
+local guildPatterns
+
+-- "Name-Realm" (or a link's "Name:12") -> "Name".
+local function ShortName(name)
+	return name:match("^[^%-:]+") or name
+end
+
+local function IsFriend(name)
+	if not (C_FriendList and C_FriendList.GetFriendInfo) then
+		return false
+	end
+	local ok, info = pcall(C_FriendList.GetFriendInfo, name)
+	return ok and info ~= nil
+end
+
+local function InGuildRoster(name)
+	local ok, total = pcall(GetNumGuildMembers)
+	if not ok or type(total) ~= "number" then
+		return false
+	end
+	for i = 1, total do
+		local member = GetGuildRosterInfo(i)
+		if type(member) == "string" and ShortName(member) == name then
+			return true
+		end
+	end
+	return false
+end
+
+local function IsGuildLine(text)
+	if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) or not IsInGuild() then
+		return false
+	end
+	if not guildPatterns then
+		guildPatterns = {}
+		for _, name in ipairs(GUILD_FORMATS) do
+			local format = _G[name]
+			if type(format) == "string" and format:find("%", 1, true) then
+				guildPatterns[#guildPatterns + 1] = { pattern = FormatToPattern(format, true), friendLine = FRIEND_LINES[name] }
+			end
+		end
+	end
+	for _, line in ipairs(guildPatterns) do
+		local name = text:match(line.pattern)
+		if name then
+			if not line.friendLine then
+				return true
+			end
+			name = ShortName(name)
+			return not IsFriend(name) or InGuildRoster(name)
+		end
+	end
+	return false
+end
+
 function ns.IsChannelPeekOn(name)
 	local on = ns.db.chatPeekChannelList[name]
 	if on == nil then
@@ -170,6 +238,8 @@ local function ChatPeekFilter(chatFrame, event, text, _, _, channelString, _, _,
 	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < ns.levelUpUntil and IsPeekTypeOn("levelup") then
 		wanted = true
 	elseif event == "CHAT_MSG_LOOT" and IsPeekTypeOn("rolls") and IsLootRollLine(text) then
+		wanted = true
+	elseif event == "CHAT_MSG_SYSTEM" and IsPeekTypeOn("guildmembers") and IsGuildLine(text) then
 		wanted = true
 	else
 		wanted = IsPeekTypeOn(EVENT_PEEK_TYPE[event])

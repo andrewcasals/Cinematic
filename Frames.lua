@@ -769,6 +769,99 @@ for _, known in ipairs(ns.ADDON_FRAMES) do
 	}
 end
 
+-- Mouseover groups (Mouseover page): frames in the same group come up
+-- together when the mouse is on any of them, and with the events ticked for
+-- the group. A frame can be in several groups; one in none comes up alone.
+-- Groups are lists of rows: the Standard Frames rows above (with the
+-- supported addons; not the Gamepad page's copy of the XP bars), a few
+-- frames that have no row there, and the 3rd Party Frames additions
+-- ("extra:<name>"). These only decide what reveals together: the fade groups
+-- (FRAME_GROUPS) still drive everything else.
+local HOVER_EXTRA_ROWS = {
+	{ key = "totemtimers", label = "Totem timers (by the portrait)", frames = { "TotemFrame" } },
+	{ key = "durability", label = "Durability figure", frames = { "DurabilityFrame" } },
+	{ key = "chat", label = "Chat tabs and buttons", frames = FRAME_GROUPS.chat },
+	{ key = "questtimer", label = "Quest timer", frames = { "QuestTimerFrame" } },
+	{ key = "waypoint", label = "Quest waypoint", frames = { "SuperTrackedFrame" } },
+	{ key = "meters", label = "Damage meter (the game's)", frames = FRAME_GROUPS.meters },
+}
+ns.HOVER_ROWS = {}
+local HOVER_ROW_BY_NAME = {} -- frame name -> row key (the first row listing it)
+for _, list in ipairs({ HOVER_EXTRA_ROWS, ns.COMBAT_SHOW }) do
+	for _, item in ipairs(list) do
+		if item.key ~= "gamepadxp" then
+			ns.HOVER_ROWS[#ns.HOVER_ROWS + 1] = item
+			for _, name in ipairs(item.frames or {}) do
+				HOVER_ROW_BY_NAME[name] = HOVER_ROW_BY_NAME[name] or item.key
+			end
+		end
+	end
+end
+-- Frames no row lists by name go with their fade group's row (the possess
+-- bar with action bar 1, the minimap's clock with the minimap...); an
+-- addon's or added frame's row is its fade group ("addon:<key>", "extra:<name>").
+local HOVER_ROW_BY_GROUP = {
+	bars = "mainbar", sidebars = "right1", player = "player", totems = "totems", target = "target",
+	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
+	swing = "swing", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
+	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
+	chat = "chat",
+}
+function ns.HoverRowFor(entry)
+	return (entry.name and HOVER_ROW_BY_NAME[entry.name]) or HOVER_ROW_BY_GROUP[entry.group] or entry.group
+end
+
+-- The events that can bring a group up besides the mouse ("Also bring this
+-- group up for"). Each still needs its own setting on: the Chat page's peek,
+-- buff peeks on the Buffs/debuffs page, the Minimap and Quest tracker pages'
+-- options, the gamepad's press reveal.
+ns.HOVER_TRIGGERS = {
+	{ key = "chat", label = "Chat message", tip = "A chat window peeking for a new message (Chat page)." },
+	{ key = "whisper", label = "Unread whisper",
+		tip = "A whisper tab waiting to be read, while that keeps chat up (Chat page)." },
+	{ key = "typing", label = "Typing", tip = "Typing in chat." },
+	{ key = "aura", label = "New buff or debuff", tip = "A buff or debuff peek (Buffs/debuffs page)." },
+	{ key = "ping", label = "Minimap ping", tip = "A group member pinging the minimap (Minimap page)." },
+	{ key = "tracking", label = "Tracking",
+		tip = "While the minimap stays up for herb, mineral or other tracking (Minimap page)." },
+	{ key = "quest", label = "Quest progress", tip = "Accepting a quest or progress on one (Quest tracker page)." },
+	{ key = "gamepad", label = "Gamepad input", gamepad = true, tip = "Pressing a gamepad button (Gamepad page)." },
+}
+
+-- What it's like before you change anything: today's groups that do
+-- something (more than one frame, or brought up by more than the mouse).
+ns.HOVER_GROUPS_DEFAULT = {
+	{ name = "Action bars", members = { "mainbar", "bottomleft", "bottomright",
+		"pet", "stance", "totems", "micro", "xp", "extra" } },
+	{ name = "Action bars 6-8", members = { "bar6", "bar7", "bar8" } },
+	{ name = "Side bars", members = { "right1", "right2" } },
+	{ name = "Player", members = { "player", "totemtimers" } },
+	{ name = "Target and focus", members = { "target", "tot", "focus" } },
+	{ name = "Minimap", members = { "minimap" }, triggers = { ping = true, tracking = true } },
+	{ name = "Buffs", members = { "buffs" }, triggers = { aura = true } },
+	{ name = "Quest tracker", members = { "quests" }, triggers = { quest = true } },
+	{ name = "Gamepad action bars", members = { "gamepadbars" }, triggers = { gamepad = true } },
+	{ name = "Chat", members = { "chat" }, triggers = { whisper = true, typing = true } },
+}
+
+-- The groups in use: the player's (db.hoverGroups), or the defaults until
+-- they change them.
+function ns.GetHoverGroups()
+	return ns.db.hoverGroups or ns.HOVER_GROUPS_DEFAULT
+end
+
+-- A copy of the groups in use, to change (the Mouseover page's first edit).
+function ns.CopyHoverGroups()
+	local copy = {}
+	for _, group in ipairs(ns.GetHoverGroups()) do
+		local members, triggers = {}, {}
+		for i, key in ipairs(group.members or {}) do members[i] = key end
+		for key, on in pairs(group.triggers or {}) do triggers[key] = on end
+		copy[#copy + 1] = { name = group.name, members = members, triggers = triggers }
+	end
+	return copy
+end
+
 -- Whether an option belongs on this client, for the options pages to skip
 -- the rest: retail = true or false limits it to retail or to Classic clients.
 -- Otherwise an option about frames needs one of them to exist. (Frames made
@@ -1021,50 +1114,72 @@ local function PeekAllowed(harmful)
 	return not (ns.db[prefix .. "AfterCombat"] and GetTime() - lastCombatAt > ns.db.calmTime)
 end
 
--- One aura gained or refreshed: does it bring the buffs up? Not if it's on the
--- ignore list; otherwise as its kind allows. When unsure (no data, secret
--- values), either kind will do.
-local function AuraCounts(aura)
+-- How long a peek of this kind holds the buffs up (buffPeekTime,
+-- debuffPeekTime), or nil when its kind doesn't bring them up.
+local function PeekHold(harmful)
+	if PeekAllowed(harmful) then
+		return ns.HoldTime(harmful and "debuffPeekTime" or "buffPeekTime")
+	end
+end
+
+-- The longer of the two kinds' holds, for when it's unclear which kind it was.
+local function EitherHold()
+	local buff, debuff = PeekHold(false), PeekHold(true)
+	if buff and debuff then
+		return math.max(buff, debuff)
+	end
+	return buff or debuff
+end
+
+-- One aura gained or refreshed: how long it brings the buffs up, or nil. Not
+-- at all if it's on the ignore list; otherwise as its kind allows. When unsure
+-- (no data, secret values), either kind will do.
+local function AuraHold(aura)
 	if IsIgnoredAura(aura) then
-		return false
+		return nil
 	end
 	local harmful = type(aura) == "table" and aura.isHarmful
 	if harmful == nil or (issecretvalue and issecretvalue(harmful)) then
-		return PeekAllowed(false) or PeekAllowed(true)
+		return EitherHold()
 	end
-	return PeekAllowed(harmful and true or false)
+	return PeekHold(harmful and true or false)
 end
 
--- Any aura gained or refreshed that brings the buffs up. Updates (a stack
--- ticking up, say) only give instance IDs, so each is looked up. True when
--- unsure.
-local function AnyAuraCounts(updateInfo)
-	local ok, counts = pcall(function()
+-- The longest hold of any aura gained or refreshed, or nil. Updates (a stack
+-- ticking up, say) only give instance IDs, so each is looked up. Either kind
+-- when unsure.
+local function AnyAuraHold(updateInfo)
+	local ok, hold = pcall(function()
+		local longest
+		local function Consider(seconds)
+			if seconds and (not longest or seconds > longest) then
+				longest = seconds
+			end
+		end
 		local added, updated = updateInfo.addedAuras, updateInfo.updatedAuraInstanceIDs
 		if HasEntries(added) then
 			if issecretvalue and issecretvalue(added) then
-				return AuraCounts(nil)
+				return AuraHold(nil)
 			end
 			for _, aura in pairs(added) do
-				if AuraCounts(aura) then
-					return true
-				end
+				Consider(AuraHold(aura))
 			end
 		end
 		if HasEntries(updated) then
 			if (issecretvalue and issecretvalue(updated))
 				or not (C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID) then
-				return AuraCounts(nil)
+				return AuraHold(nil)
 			end
 			for _, instanceID in pairs(updated) do
-				if AuraCounts(C_UnitAuras.GetAuraDataByAuraInstanceID("player", instanceID)) then
-					return true
-				end
+				Consider(AuraHold(C_UnitAuras.GetAuraDataByAuraInstanceID("player", instanceID)))
 			end
 		end
-		return false
+		return longest
 	end)
-	return not ok or counts
+	if not ok then
+		return EitherHold()
+	end
+	return hold
 end
 
 local auraWatcher = CreateFrame("Frame")
@@ -1085,14 +1200,15 @@ auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
 	if UnitOnTaxi("player") or ns.wasOnTaxi or GetTime() < landedQuietUntil then
 		return
 	end
-	local changed
+	local hold
 	if type(updateInfo) == "table" then
-		changed = not IsFullUpdate(updateInfo.isFullUpdate) and AnyAuraCounts(updateInfo)
+		hold = not IsFullUpdate(updateInfo.isFullUpdate) and AnyAuraHold(updateInfo)
 	else
-		changed = true
+		hold = EitherHold()
 	end
-	if changed then
-		buffPeekUntil = GetTime() + ns.HoldTime("buffPeekTime")
+	if hold then
+		-- (a short buff peek doesn't cut a longer debuff one short)
+		buffPeekUntil = math.max(buffPeekUntil, GetTime() + hold)
 	end
 end)
 
@@ -1134,15 +1250,7 @@ end
 ns.IsPlayerRecovering = IsPlayerRecovering
 ns.GetSecondsSinceVitalsChange = function() return GetTime() - lastVitalsChange end
 
--- How long a group stays after the mouse leaves it: its own setting when it
--- overrides the shared one, otherwise the shared "stays after mouseover".
-local function HoverHoldKey(group)
-	if ns.db[group .. "HoverOverride"] then
-		return group .. "HoverHold"
-	end
-	return "mouseoverHold"
-end
-local hoverHeldUntil = {}
+local hoverHeldUntil = {} -- [row key] = when the mouse's hold on it ends (Mouseover groups)
 
 -- Accepting a quest, or progress on one's objectives, brings the quest
 -- tracker up as a mouseover would: it fades in, then is gone the quest
@@ -1155,7 +1263,7 @@ for event in pairs(QUEST_REVEAL_EVENTS) do
 end
 questWatcher:SetScript("OnEvent", function(_, event)
 	if ns.db and ns.db[QUEST_REVEAL_EVENTS[event]] then
-		local hold = ns.HoldTime(HoverHoldKey("quests")) - ns.FadeOutTime()
+		local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
 		questRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
 	end
 end)
@@ -1173,7 +1281,7 @@ pingWatcher:SetScript("OnEvent", function(_, _, unit)
 	if ok and ns.Flag(mine) then
 		return
 	end
-	local hold = ns.HoldTime(HoverHoldKey("minimap")) - ns.FadeOutTime()
+	local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
 	pingRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
 end)
 
@@ -1586,35 +1694,72 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local questReveal = questRevealUntil > now
 	local padReveal = padRevealUntil > now
 	local pingReveal = pingRevealUntil > now
-	-- Work out which groups are hovered so the whole group reveals together.
-	local hovered = {}
+	-- Tracking doesn't hold the minimap open in the places ticked under
+	-- "Except in" (cities and the like).
+	local trackingPaused = ns.IsTrackingOffHere()
+	-- Mouseover groups: the rows the mouse is on (each held a while after it
+	-- leaves), and the events going on now, bring up every row in their groups.
+	local hoverGroups = ns.GetHoverGroups()
+	local hovered, triggered, pinged = {}, {}, {}
 	if cinematic and ns.db.mouseover then
+		local mouseRows = {}
 		for _, entry in ipairs(ns.managed) do
+			entry.row = entry.row or ns.HoverRowFor(entry)
 			if ns.IsEntryHovered(entry) then
-				hovered[entry.group] = true
+				mouseRows[entry.row] = true
 			end
 		end
-		-- Groups linger after the mouse leaves. The hold time counts the fade
-		-- out, so a group is gone that long after the mouse leaves; a hold
+		-- Rows linger after the mouse leaves. The hold time counts the fade
+		-- out, so a row is gone that long after the mouse leaves; a hold
 		-- shorter than the fade just starts the fade straight away.
-		for group in pairs(hovered) do
-			local hold = ns.HoldTime(HoverHoldKey(group)) - ns.FadeOutTime()
-			hoverHeldUntil[group] = now + math.max(0, hold)
+		local heldUntil = now + math.max(0, ns.HoldTime("mouseoverHold") - ns.FadeOutTime())
+		-- (Under the mouse counts even with no hold: the camera modes' is 0.)
+		for row in pairs(mouseRows) do
+			hoverHeldUntil[row] = heldUntil
+			hovered[row] = true
 		end
-		for group, untilTime in pairs(hoverHeldUntil) do
+		for row, untilTime in pairs(hoverHeldUntil) do
 			if untilTime > now then
-				hovered[group] = true
+				hovered[row] = true
+			end
+		end
+		-- (Only groups a hovered row is in directly: groups sharing a row don't chain.)
+		local mouseGroups = {}
+		for _, group in ipairs(hoverGroups) do
+			for _, key in ipairs(group.members) do
+				if hovered[key] then
+					mouseGroups[#mouseGroups + 1] = group
+					break
+				end
+			end
+		end
+		for _, group in ipairs(mouseGroups) do
+			for _, member in ipairs(group.members) do
+				hovered[member] = true
+			end
+		end
+	end
+	local events = {
+		chat = dockPeek, whisper = whisperUnread, typing = typing,
+		aura = cinematic and buffPeekUntil > now, ping = pingReveal,
+		tracking = ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused,
+		quest = questReveal, gamepad = padReveal,
+	}
+	for _, group in ipairs(hoverGroups) do
+		for key, on in pairs(group.triggers or {}) do
+			if on and events[key] then
+				for _, member in ipairs(group.members) do
+					triggered[member] = true
+					if key == "ping" then pinged[member] = true end
+				end
 			end
 		end
 	end
 
-	-- Tracking doesn't hold the minimap open in the places ticked under
-	-- "Except in" (cities and the like).
 	-- Dead, with the death camera watching: everything goes, quickly, whatever
 	-- would normally keep it up (the release button is a popup: it stays).
 	local deathFade = cinematic and ns.IsDeathCinematic and ns.IsDeathCinematic()
 
-	local trackingPaused = ns.IsTrackingOffHere()
 	-- Hide in camera modes (Minimap page): the camera running now fades the
 	-- minimap, whatever would keep it up. Hovering still shows it.
 	local camHidesMinimap = ns.activeCam and ns.db[ns.activeCam .. "HideMinimap"]
@@ -1625,27 +1770,24 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		local target = 1
 		local chatShowing = (ns.chatPeekUntil[entry.frame] or 0) > now
-			or ((typing or whisperUnread) and entry.group == "chat")
+			-- (Typing always shows chat, to see what you type; an unread whisper
+			-- brings up the Mouseover groups with it ticked, chat by default.)
+			or (typing and entry.group == "chat")
 			or (dockPeek and entry.name == "GeneralDockManager")
-		local tracking = ((ns.db.alwaysShowMinimap
-				or (ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused))
-			and entry.group == "minimap")
+		entry.row = entry.row or ns.HoverRowFor(entry)
+		-- (Kept up by a setting, or brought up by an event ticked for one of its Mouseover groups.)
+		local tracking = (ns.db.alwaysShowMinimap and entry.group == "minimap")
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
 			or (questTimerUp and entry.group == "questtimer")
-			or (questReveal and entry.group == "quests")
-			or (padReveal and entry.group == "gamepadbars")
-			or (pingReveal and entry.group == "minimap")
+			or triggered[entry.row]
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown["group:" .. entry.group])
 		local fightingShown = listShown
-		if not fightingShown and entry.group == "buffs" and cinematic and buffPeekUntil > now then
-			fightingShown = true -- new or refreshed aura: show buffs briefly, normal fade speeds
-		end
 		if not fightingShown and PORTRAIT_FRAMES[entry.name] and cinematic
 			and portraitAllowed and IsPlayerRecovering() then
 			fightingShown = true -- shown like a combat frame, at the normal fade speeds
 		end
-		if cinematic and not hovered[entry.group] and not chatShowing and not tracking
+		if cinematic and not hovered[entry.row] and not chatShowing and not tracking
 			and not fightingShown and (fadeChat or entry.group ~= "chat") then
 			target = 0
 		end
@@ -1656,13 +1798,13 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if ns.padDebug and entry.group == "gamepadbars" then
 			local up = target > 0 and cinematic
 			if up and not entry.debugUp then
-				ns.Print(("gamepad bars up: %s%s%s%s"):format(hovered.gamepadbars and "hovered " or "",
+				ns.Print(("gamepad bars up: %s%s%s%s"):format(hovered[entry.row] and "hovered " or "",
 					padReveal and "button press " or "", listShown and "fight/target column " or "",
 					tracking and not padReveal and "kept up " or ""))
 			end
 			entry.debugUp = up
 		end
-		if camHidesMinimap and entry.group == "minimap" and not hovered.minimap and not pingReveal then
+		if camHidesMinimap and entry.group == "minimap" and not hovered[entry.row] and not pinged[entry.row] then
 			target = 0
 		end
 		if typing and entry.group == "chat" and entry.alpha < 1 then

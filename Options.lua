@@ -257,12 +257,17 @@ local SCROLLBAR_WIDTH = 26
 -- Puts a page's settings back to their defaults: each setting its controls
 -- show (a list kept as a table, like the Standard Frames columns, is emptied,
 -- which means its defaults).
+-- Lists whose defaults are in code and that are nil until changed (emptied,
+-- they'd be an empty list rather than the defaults).
+local RESET_TO_NIL = { hoverGroups = true }
 local function ResetPage(content)
 	local db = ns.GetDB()
 	for key in pairs(pageKeys[content] or {}) do
 		local default = ns.DEFAULTS[key]
 		local rows = pageRows[content] and pageRows[content][key]
-		if type(db[key]) == "table" and default == nil then
+		if RESET_TO_NIL[key] then
+			db[key] = nil
+		elseif type(db[key]) == "table" and default == nil then
 			for k in pairs(db[key]) do
 				if not rows or rows[k] then
 					db[key][k] = nil
@@ -483,8 +488,6 @@ local function CreateRevealPanel()
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	local OVERRIDE_COLUMN, OVERRIDE_ROW = 300, 28
-
 	-- Fading (full width): how fast the UI goes and comes back
 	local fadingHeader = Header(content, "Fading", subtitle, -20)
 
@@ -493,7 +496,7 @@ local function CreateRevealPanel()
 
 	local fadeOut = Slider(content, "fadeOutTime", "Fade out time", 0, 10, 0.1, "%.1f sec")
 	fadeOut:SetPoint("TOPLEFT", fadeIn, "BOTTOMLEFT", 0, -34)
-	Tooltip(fadeOut, "How long the UI takes to fade out. The mouseover times below include it: " ..
+	Tooltip(fadeOut, "How long the UI takes to fade out. The mouseover time (Mouseover page) includes it: " ..
 		"a time shorter than the fade just fades straight away.")
 
 	local combatFadeIn = Slider(content, "combatFadeInTime", "Combat fade in time", 0, 10, 0.1, "%.1f sec")
@@ -517,66 +520,14 @@ local function CreateRevealPanel()
 		"wait this long before starting, and music muted for fights comes back after it. 0 " ..
 		"settles at once.")
 
-	-- Mouseover (full width): the shared hold time, and per-group overrides
-	local mouseHeader = Header(content, "Mouseover", calm, -24)
-	mouseHeader:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", -2, -24)
-
-	local mouseover = Check(content, "mouseover", "Reveal on mouseover",
-		"Pointing at a faded element shows it (and the elements grouped with it).", function(value)
-			ns.GetDB().mouseover = value
-			Refresh() -- grey out / enable the hold times
-		end)
-	mouseover:SetPoint("TOPLEFT", mouseHeader, "BOTTOMLEFT", -2, -6)
-	local function IfMouseover(db) return db.mouseover end
-
-	local hold = Slider(content, "mouseoverHold", "Stays after mouseover", 0, 30, 1, "%d sec")
-	hold:SetPoint("TOPLEFT", mouseover, "BOTTOMLEFT", 4, -26)
-	Tooltip(hold, "How long until a group is gone after your mouse leaves it, fade included, " ..
-		"unless it has its own time below. In the camera modes the shorter default is used.")
-	GreyUnless(hold, IfMouseover)
-
-	-- Set aside for now (hidden, their settings kept as they are): each
-	-- group's own mouseover time, and the Exit CineMode section.
+	-- Set aside for now (hidden, their settings kept as they are): the Exit
+	-- CineMode section. (Mouseover has its own page.)
 	local setAside = {}
-
-	local overrideLabel = Label(content, "GameFontHighlightSmall",
-		"Tick a group to give it its own time instead:")
-	overrideLabel:SetPoint("TOPLEFT", hold, "BOTTOMLEFT", -2, -18)
-	setAside[#setAside + 1] = overrideLabel
-
-	local OVERRIDE_ROWS = math.ceil(#ns.HOVER_GROUPS / 2)
-	local lastOverride
-	for i, group in ipairs(ns.HOVER_GROUPS) do
-		local key, label = group[1], group[2]
-		local column, row = math.floor((i - 1) / OVERRIDE_ROWS), (i - 1) % OVERRIDE_ROWS
-		local override = Check(content, key .. "HoverOverride", label,
-			"Give this group its own time instead of \"Stays after mouseover\".",
-			function(value)
-				ns.GetDB()[key .. "HoverOverride"] = value
-				Refresh()
-			end)
-		override:SetPoint("TOPLEFT", overrideLabel, "BOTTOMLEFT",
-			column * OVERRIDE_COLUMN, -4 - row * OVERRIDE_ROW)
-		GreyUnless(override, IfMouseover)
-
-		local groupHold = Slider(content, key .. "HoverHold", "", 0, 30, 1, "%d sec")
-		groupHold:SetWidth(80)
-		groupHold:SetPoint("LEFT", override, "LEFT", 150, 0)
-		groupHold.title:ClearAllPoints()
-		groupHold.title:SetPoint("LEFT", groupHold, "RIGHT", 6, 0)
-		Tooltip(groupHold, "How long until this group is gone after your mouse leaves it, fade " ..
-			"included. In the camera modes the shorter default is used.")
-		GreyUnless(groupHold, function(db) return db.mouseover and db[key .. "HoverOverride"] end)
-		setAside[#setAside + 1], setAside[#setAside + 2] = override, groupHold
-		if row == OVERRIDE_ROWS - 1 and column == 0 then
-			lastOverride = override
-		end
-	end
 
 	-- One column of sections, each below the last: what brings the UI back,
 	-- combat text, your portrait.
-	local revealHeader = Header(content, "Exit CineMode", lastOverride, -18)
-	revealHeader:SetPoint("TOPLEFT", lastOverride, "BOTTOMLEFT", 2, -18)
+	local revealHeader = Header(content, "Exit CineMode", calm, -24)
+	revealHeader:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", -2, -24)
 
 	local cast = Check(content, "revealOnCast", "While casting",
 		"Includes mounting and hearthstone casts.")
@@ -616,8 +567,8 @@ local function CreateRevealPanel()
 		control:Hide()
 	end
 
-	local combatTextHeader = Header(content, "Combat text", hold, -24)
-	combatTextHeader:SetPoint("TOPLEFT", hold, "BOTTOMLEFT", -2, -24)
+	local combatTextHeader = Header(content, "Combat text", calm, -24)
+	combatTextHeader:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", -2, -24)
 
 	local combatText = Check(content, "hideCombatText", "Hide combat text out of combat",
 		"No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
@@ -696,12 +647,17 @@ local function CreateBuffsPanel()
 
 	local buffPeekTime = Slider(content, "buffPeekTime", "Show buffs for", 0.5, 30, 0.5, "%.1f sec")
 	buffPeekTime:SetPoint("TOPLEFT", debuffAfterCombat, "BOTTOMLEFT", 4 - BUFF_INDENT, -30)
+	GreyUnless(buffPeekTime, IfBuffPeek)
+
+	local debuffPeekTime = Slider(content, "debuffPeekTime", "Show debuffs for", 0.5, 30, 0.5, "%.1f sec")
+	debuffPeekTime:SetPoint("TOPLEFT", buffPeekTime, "BOTTOMLEFT", 0, -34)
+	GreyUnless(debuffPeekTime, IfDebuffPeek)
 
 	-- Buffs and debuffs that never bring the buffs up: a row each (icon, name,
 	-- Remove), then a box to add one. Still saved as one comma-separated list
 	-- (buffPeekIgnore), which is what Frames.lua reads.
 	local ignoreLabel = Label(content, "GameFontHighlightSmall", "Except for these buffs and debuffs:")
-	ignoreLabel:SetPoint("TOPLEFT", buffPeekTime, "BOTTOMLEFT", -2, -22)
+	ignoreLabel:SetPoint("TOPLEFT", debuffPeekTime, "BOTTOMLEFT", -2, -22)
 
 	local function IgnoreEntries()
 		local entries = {}
@@ -2965,7 +2921,7 @@ local function CreateGamepadPanel()
 	prompt:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", -2, -16)
 	local press = Check(content, "gamepadPressReveal", "Show the action bars when you press a button",
 		"Gamepad mode's mouseover: pressing any gamepad button brings the action bars up, and " ..
-		"they fade out again your \"stays after mouseover\" time later (CineMode page). " ..
+		"they fade out again your \"stays after mouseover\" time later (Mouseover page). " ..
 		"Each press starts that time again. Choose the buttons in the list below. Presses that " ..
 		"make you jump don't count (whichever button jumps), nor presses while you fish (the " ..
 		"fish camera on, a cast going, or looting).")
@@ -3487,8 +3443,8 @@ local function CreateMinimapPanel()
 		end)
 	local ping = Check(content, "minimapRevealOnPing", "Reveal when a group member pings it",
 		"Someone in your party or raid pinging the minimap shows it as if you'd hovered it, so " ..
-		"you can see where: it goes after \"Stays after mouseover\" on the CineMode page. Your " ..
-		"own pings don't count.")
+		"you can see where, with the rest of the Mouseover groups that have Minimap ping ticked: it " ..
+		"goes after \"Stays after mouseover\" (Mouseover page). Your own pings don't count.")
 	if aboveTracking then
 		ping:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
 	else
@@ -3568,9 +3524,9 @@ local function CreateQuestTrackerPanel()
 	subtitle:SetJustifyV("TOP")
 
 	local reveal = Check(content, "questRevealOnAccept", "Reveal on new quest",
-		"Accepting a quest shows the quest tracker as if you'd hovered it: it goes after the " ..
-		"quest tracker's mouseover time on the CineMode page (or \"Stays after mouseover\" " ..
-		"if it doesn't have its own).")
+		"Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the " ..
+		"Mouseover groups that have Quest progress ticked): it goes after \"Stays after " ..
+		"mouseover\" (Mouseover page).")
 	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 
 	local revealProgress = Check(content, "questRevealOnProgress", "Reveal on receiving quest objective",
@@ -4135,6 +4091,457 @@ function ns.OpenOptions()
 	end
 end
 
+-- Sub-page: mouseover. Groups of frames that come up together when you
+-- mouse over any of them (db.hoverGroups, Frames.lua's ns.GetHoverGroups),
+-- and the events that bring each group up besides.
+local function CreateMouseoverPanel()
+	local canvas, content = CreateScrollPage()
+	local LEFT, WIDTH, ROW = 16, 560, 22
+	local RESULTS_SHOWN = 8
+
+	local title = Label(content, "GameFontNormalLarge", "Mouseover")
+	title:SetPoint("TOPLEFT", LEFT, -16)
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"Frames in the same group come up together when you mouse over any of them. A frame can " ..
+		"be in more than one group; one in no group comes up on its own.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetWidth(WIDTH)
+	subtitle:SetJustifyV("TOP")
+
+	local mouseover = Check(content, "mouseover", "Reveal on mouseover",
+		"Pointing at a faded frame shows it, with the rest of its groups.", function(value)
+			ns.GetDB().mouseover = value
+			Refresh() -- grey out / enable the hold time
+		end)
+	mouseover:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+	local hold = Slider(content, "mouseoverHold", "Stays after mouseover", 0, 30, 1, "%d sec")
+	hold:SetPoint("TOPLEFT", mouseover, "BOTTOMLEFT", 4, -26)
+	Tooltip(hold, "How long until a frame is gone after your mouse leaves it (and its groups), fade " ..
+		"included. Events that bring a group up hold it this long too. In the camera modes the " ..
+		"shorter default is used.")
+	GreyUnless(hold, function(db) return db.mouseover end)
+	-- (The groups go back to the defaults with the rest of the page.)
+	RecordKey(content, "hoverGroups")
+
+	-- The frames you can add: the rows (Standard Frames, the supported
+	-- addons, a few more), your 3rd Party Frames additions, and any other
+	-- named frame on screen (adding one of those fades it too).
+	local catalog, byKey = {}, {}
+	local function AddToCatalog(key, label, tag)
+		if not byKey[key] then
+			local item = { key = key, label = label, tag = tag }
+			catalog[#catalog + 1], byKey[key] = item, item
+		end
+	end
+	for _, item in ipairs(ns.HOVER_ROWS) do
+		if ns.OptionAvailable(item) then
+			AddToCatalog(item.key, item.label, item.key:find("^addon:") and "addon")
+		end
+	end
+	local function ScanCatalog()
+		for name in pairs(ns.GetDB().extraFrames or {}) do
+			AddToCatalog("extra:" .. name, name, "custom")
+		end
+		local faded = {}
+		for _, entry in ipairs(ns.managed) do
+			if entry.name then faded[entry.name] = true end
+		end
+		for _, frame in ipairs({ UIParent:GetChildren() }) do
+			local name = not (frame.IsForbidden and frame:IsForbidden()) and frame:GetName()
+			if name and frame:IsShown() and not faded[name] and not name:find("^Cinematic") then
+				AddToCatalog("frame:" .. name, name, "not faded yet")
+			end
+		end
+	end
+
+	-- The groups shown are the ones in use; the first change makes them the
+	-- player's own copy (until then they're the defaults, and follow them).
+	local function Groups()
+		return ns.GetHoverGroups()
+	end
+	local function Writable()
+		local db = ns.GetDB()
+		if not db.hoverGroups then
+			db.hoverGroups = ns.CopyHoverGroups()
+		end
+		return db.hoverGroups
+	end
+
+	local function GroupsWith(key, exceptIndex)
+		local names = {}
+		for i, group in ipairs(Groups()) do
+			if i ~= exceptIndex then
+				for _, member in ipairs(group.members) do
+					if member == key then names[#names + 1] = group.name break end
+				end
+			end
+		end
+		return names
+	end
+
+	local triggers = {}
+	for _, trigger in ipairs(ns.HOVER_TRIGGERS) do
+		if not trigger.gamepad or (C_GamePad and not ns.isRetail) then
+			triggers[#triggers + 1] = trigger
+		end
+	end
+
+	-- Widgets are pooled and laid out top to bottom again on every change.
+	local pools = {}
+	local function Take(kind, make)
+		local pool = pools[kind] or { list = {}, used = 0 }
+		pools[kind] = pool
+		pool.used = pool.used + 1
+		local widget = pool.list[pool.used]
+		if not widget then
+			widget = make()
+			pool.list[pool.used] = widget
+		end
+		widget:ClearAllPoints()
+		widget:Show()
+		return widget
+	end
+	local Layout -- (below)
+
+	local function SmallCheck()
+		local cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+		cb:SetSize(26, 26)
+		local label = cb.Text or cb.text
+		if not label then
+			label = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			label:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+		end
+		label:SetFontObject("GameFontHighlightSmall")
+		cb.label = label
+		return cb
+	end
+
+	-- The search results list, shared by every group's add box.
+	-- (On the canvas, not the scrolling content, so the scroll frame doesn't clip it.)
+	local results = CreateFrame("Frame", nil, canvas)
+	results:SetFrameStrata("DIALOG")
+	results:SetSize(320, RESULTS_SHOWN * 20 + 8)
+	local resultsBg = results:CreateTexture(nil, "BACKGROUND")
+	resultsBg:SetAllPoints()
+	resultsBg:SetColorTexture(0.05, 0.05, 0.05, 0.95)
+	local resultsEdge = results:CreateTexture(nil, "BORDER")
+	resultsEdge:SetPoint("TOPLEFT", -1, 1)
+	resultsEdge:SetPoint("BOTTOMRIGHT", 1, -1)
+	resultsEdge:SetColorTexture(0.4, 0.4, 0.4, 1)
+	resultsEdge:SetDrawLayer("BACKGROUND", -1)
+	results:Hide()
+	local resultButtons = {}
+	for i = 1, RESULTS_SHOWN do
+		local button = CreateFrame("Button", nil, results)
+		button:SetSize(298, 20)
+		button:SetPoint("TOPLEFT", 4, -4 - (i - 1) * 20)
+		button:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+		button.text = Label(button, "GameFontHighlight")
+		button.text:SetPoint("LEFT", 4, 0)
+		button.tag = Label(button, "GameFontDisableSmall")
+		button.tag:SetPoint("RIGHT", -4, 0)
+		resultButtons[i] = button
+	end
+	local noMatch = Label(results, "GameFontDisable", "No frames match")
+	noMatch:SetPoint("TOPLEFT", 8, -8)
+
+	-- The scroll bar down the right edge: drag it, or scroll the wheel over the list.
+	local scrollBar = CreateFrame("Slider", nil, results)
+	scrollBar:SetOrientation("VERTICAL")
+	scrollBar:SetWidth(10)
+	scrollBar:SetPoint("TOPRIGHT", -3, -4)
+	scrollBar:SetPoint("BOTTOMRIGHT", -3, 4)
+	local track = scrollBar:CreateTexture(nil, "BACKGROUND")
+	track:SetAllPoints()
+	track:SetColorTexture(1, 1, 1, 0.08)
+	local thumb = scrollBar:CreateTexture(nil, "OVERLAY")
+	thumb:SetColorTexture(0.8, 0.7, 0.3, 0.8)
+	thumb:SetSize(10, 30)
+	scrollBar:SetThumbTexture(thumb)
+	scrollBar:SetValueStep(1)
+	if scrollBar.SetObeyStepOnDrag then scrollBar:SetObeyStepOnDrag(true) end
+
+	-- Adding a frame to group number index. A frame on screen that isn't
+	-- faded yet is added to the 3rd Party Frames list first (as /cine add
+	-- does; windows are turned down there).
+	local function AddMember(index, item)
+		local key = item.key
+		local name = key:match("^frame:(.+)$")
+		if name then
+			ns.AddUnderMouse(name)
+			if not ns.GetDB().extraFrames[name] then
+				return
+			end
+			key = "extra:" .. name
+			AddToCatalog(key, name, "custom")
+		end
+		local members = Writable()[index].members
+		for _, member in ipairs(members) do
+			if member == key then return end
+		end
+		members[#members + 1] = key
+	end
+
+	local list = { matches = {}, offset = 0 }
+	local function RenderResults()
+		local matches, index, box = list.matches, list.index, list.box
+		local maxOffset = math.max(0, #matches - RESULTS_SHOWN)
+		list.offset = math.max(0, math.min(list.offset, maxOffset))
+		local shown = math.min(#matches, RESULTS_SHOWN)
+		results:SetHeight(math.max(1, shown) * 20 + 8)
+		noMatch:SetShown(shown == 0)
+		scrollBar:SetShown(maxOffset > 0)
+		if maxOffset > 0 then
+			list.syncing = true
+			scrollBar:SetMinMaxValues(0, maxOffset)
+			scrollBar:SetValue(list.offset)
+			list.syncing = false
+			-- (The thumb's length shows how much of the list fits.)
+			thumb:SetHeight(math.max(16, (shown * 20) * RESULTS_SHOWN / #matches))
+		end
+		for i, button in ipairs(resultButtons) do
+			local item = matches[i + list.offset]
+			button:SetShown(item ~= nil)
+			if item then
+				local others = GroupsWith(item.key, index)
+				local here = #GroupsWith(item.key) > #others
+				button.text:SetText(item.label)
+				button.text:SetFontObject(here and "GameFontDisable" or "GameFontHighlight")
+				button.tag:SetText(here and "already here" or (#others > 0 and "in " .. table.concat(others, ", "))
+					or item.tag or "")
+				button:SetEnabled(not here)
+				button:SetScript("OnClick", function()
+					AddMember(index, item)
+					box:SetText("")
+					box:ClearFocus()
+					results:Hide()
+					Layout()
+				end)
+			end
+		end
+	end
+	scrollBar:SetScript("OnValueChanged", function(_, value)
+		if list.syncing then return end
+		list.offset = math.floor(value + 0.5)
+		RenderResults()
+	end)
+	results:EnableMouseWheel(true)
+	results:SetScript("OnMouseWheel", function(_, delta)
+		list.offset = list.offset - delta * 3
+		RenderResults()
+	end)
+	-- Clicking the scroll bar takes the focus from the search box, so the list
+	-- stays open while the mouse is on it and closes on a click anywhere else.
+	results:SetScript("OnUpdate", function(self)
+		if not (list.box and list.box:HasFocus()) and not self:IsMouseOver()
+			and (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) then
+			self:Hide()
+		end
+	end)
+
+	local function ShowResults(box, index)
+		local query = box:GetText():lower()
+		local matches = {}
+		for _, item in ipairs(catalog) do
+			if query == "" or item.label:lower():find(query, 1, true) then
+				matches[#matches + 1] = item
+			end
+		end
+		list.matches, list.index, list.box, list.offset = matches, index, box, 0
+		results:ClearAllPoints()
+		results:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -2)
+		RenderResults()
+		results:Show()
+	end
+
+	local newGroup = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	newGroup:SetSize(120, 22)
+	newGroup:SetText("New group")
+	newGroup:SetScript("OnClick", function()
+		local groups = Writable()
+		groups[#groups + 1] = { name = "Group " .. (#groups + 1), members = {}, triggers = {} }
+		Layout()
+	end)
+
+	function Layout()
+		for _, pool in pairs(pools) do
+			for _, widget in ipairs(pool.list) do widget:Hide() end
+			pool.used = 0
+		end
+		-- (Below the main switch and slider.)
+		local top, bottom = content:GetTop(), hold:GetBottom()
+		local y = (top and bottom) and (top - bottom + 22) or 180
+		local function At(widget, x, extraY)
+			widget:SetPoint("TOPLEFT", content, "TOPLEFT", x, -(y + (extraY or 0)))
+		end
+
+		for index, group in ipairs(Groups()) do
+			-- Divider and heading: name box, delete.
+			local line = Take("line", function()
+				local t = content:CreateTexture(nil, "ARTWORK")
+				t:SetColorTexture(1, 1, 1, 0.15)
+				t:SetHeight(1)
+				return t
+			end)
+			At(line, LEFT)
+			line:SetWidth(WIDTH)
+			y = y + 10
+
+			local nameBox = Take("name", function()
+				local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+				box:SetSize(170, 20)
+				box:SetAutoFocus(false)
+				box:SetFontObject("GameFontNormal")
+				box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+				box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+				Tooltip(box, "The group's name: click to change it.")
+				return box
+			end)
+			At(nameBox, LEFT + 6)
+			nameBox:SetText(group.name or "")
+			nameBox:SetScript("OnEditFocusLost", function(self)
+				local text = self:GetText()
+				if text ~= "" and text ~= group.name then
+					Writable()[index].name = text
+					Layout()
+				end
+			end)
+
+			local delete = Take("delete", function()
+				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+				button:SetSize(100, 22)
+				button:SetText("Delete group")
+				Tooltip(button, "Its frames come up on their own again (or with their other groups).")
+				return button
+			end)
+			At(delete, LEFT + WIDTH - 100, -1)
+			delete:SetScript("OnClick", function()
+				table.remove(Writable(), index)
+				Layout()
+			end)
+			y = y + 28
+
+			-- Members: label, other groups it's in, remove. (Frames this client
+			-- doesn't have stay in the group, unlisted.)
+			local listed = 0
+			for _, key in ipairs(group.members) do
+				local item = byKey[key]
+				if item or key:find("^extra:") then
+					listed = listed + 1
+					local row = Take("member", function()
+						local frame = CreateFrame("Frame", nil, content)
+						frame:SetSize(WIDTH - 10, ROW)
+						frame.remove = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+						frame.remove:SetSize(22, 22)
+						frame.remove:SetPoint("LEFT", 0, 0)
+						Tooltip(frame.remove, "Take it out of this group.")
+						frame.text = Label(frame, "GameFontHighlight")
+						frame.text:SetPoint("LEFT", frame.remove, "RIGHT", 4, 0)
+						frame.also = Label(frame, "GameFontDisableSmall")
+						frame.also:SetPoint("LEFT", frame.text, "RIGHT", 10, 0)
+						return frame
+					end)
+					At(row, LEFT + 4)
+					row.text:SetText(item and item.label or key:gsub("^extra:", ""))
+					local others = GroupsWith(key, index)
+					row.also:SetText(#others > 0 and "also in " .. table.concat(others, ", ")
+						or (item and item.tag) or (item and "" or "custom"))
+					row.remove:SetScript("OnClick", function()
+						local members = Writable()[index].members
+						for i, member in ipairs(members) do
+							if member == key then table.remove(members, i) break end
+						end
+						Layout()
+					end)
+					y = y + ROW
+				end
+			end
+			if listed == 0 then
+				local empty = Take("empty", function() return Label(content, "GameFontDisable", "No frames yet.") end)
+				At(empty, LEFT + 10, 4)
+				y = y + ROW
+			end
+
+			-- Add a frame: type to search the list.
+			local add = Take("add", function()
+				local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+				box:SetSize(260, 20)
+				box:SetAutoFocus(false)
+				box.hint = Label(box, "GameFontDisable", "Add a frame: type to search...")
+				box.hint:SetPoint("LEFT", 2, 0)
+				box:SetScript("OnEscapePressed", function(self) self:SetText("") self:ClearFocus() end)
+				box:SetScript("OnEditFocusLost", function(self)
+					self.hint:SetShown(self:GetText() == "")
+					C_Timer.After(0.2, function()
+						if not self:HasFocus() and not results:IsMouseOver() then results:Hide() end
+					end)
+				end)
+				return box
+			end)
+			At(add, LEFT + 34, 4)
+			add:SetText("")
+			add.hint:Show()
+			add:SetScript("OnEditFocusGained", function(self)
+				ScanCatalog()
+				self.hint:Hide()
+				ShowResults(self, index)
+			end)
+			add:SetScript("OnTextChanged", function(self)
+				if self:HasFocus() then ShowResults(self, index) end
+			end)
+			add:SetScript("OnEnterPressed", function(self)
+				local first = resultButtons[1]
+				if results:IsShown() and first:IsShown() and first:IsEnabled() then first:Click() end
+				self:ClearFocus()
+			end)
+			y = y + 30
+
+			-- The events that bring the group up besides the mouse.
+			local alsoLabel = Take("alsoLabel", function()
+				return Label(content, "GameFontNormalSmall", "Also bring this group up for:")
+			end)
+			At(alsoLabel, LEFT + 10, 2)
+			y = y + 16
+			local x = LEFT + 6
+			for _, trigger in ipairs(triggers) do
+				local cb = Take("trigger", SmallCheck)
+				cb.label:SetText(trigger.label)
+				Tooltip(cb, trigger.tip)
+				local width = 30 + cb.label:GetStringWidth() + 14
+				if x + width > LEFT + WIDTH then -- (wraps onto another line)
+					x, y = LEFT + 6, y + 24
+				end
+				At(cb, x)
+				cb:SetChecked(group.triggers and group.triggers[trigger.key] or false)
+				cb:SetScript("OnClick", function(self)
+					local editable = Writable()[index]
+					editable.triggers = editable.triggers or {}
+					editable.triggers[trigger.key] = self:GetChecked() or nil
+				end)
+				x = x + width
+			end
+			y = y + 36
+		end
+
+		newGroup:ClearAllPoints()
+		newGroup:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, -(y + 4))
+		FitContentHeight(content)
+	end
+	-- (Laid out again whenever the page refreshes, a Reset page included.)
+	controls[#controls + 1] = { Refresh = function()
+		if canvas:IsShown() then Layout() end
+	end }
+
+	canvas:SetScript("OnShow", function()
+		Refresh()
+		Layout()
+		C_Timer.After(0, function() FitContentHeight(content) end)
+	end)
+	canvas:SetScript("OnHide", function() results:Hide() end)
+	canvas:Hide()
+	RegisterSubpage(canvas, "Mouseover")
+end
+
 CreatePanel()
 -- Sub-pages in the order they're listed: what fades and shows, then the look
 -- and sound, then the camera modes (their shared page and events first),
@@ -4146,6 +4553,7 @@ if C_GamePad and not ns.isRetail then
 	CreateGamepadPanel()
 end
 CreateExtrasPanel()
+CreateMouseoverPanel()
 CreateMinimapPanel()
 CreateQuestTrackerPanel()
 -- World tooltips always show for now (see ns.WORLD_TOOLTIP_HIDING): no page.

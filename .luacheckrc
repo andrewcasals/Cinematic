@@ -66,7 +66,7 @@ read_globals = {
 	"GetCVar",
 	"GetCVarBool",
 	"GetCameraZoom",
-	"GetChannelList",
+	"GetChannelList", "C_FriendList", "IsInGuild", "GetNumGuildMembers", "GetGuildRosterInfo",
 	"GetCurrentBindingSet",
 	"GetCursorInfo",
 	"GetCursorPosition",

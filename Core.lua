@@ -106,7 +106,8 @@ local DEFAULTS = {
 	buffPeekAfterCombat = true,  -- ...but only within the Calm Timer of a fight
 	debuffPeek = true,        -- ...and when a debuff is
 	debuffPeekAfterCombat = false, -- (any time: Hunter's Mark and the like matter out of fights too)
-	buffPeekTime = 3,           -- seconds they stay up
+	buffPeekTime = 3,           -- seconds they stay up for a buff
+	debuffPeekTime = 3,         -- ...and for a debuff
 	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584", -- buffs or debuffs that never bring them up
 	                                                    -- (spell IDs or names; 8326/20584: Ghost)
 	buffHoverPadX = 40,         -- how far beside the buff icons hovering reveals them (UI units)
@@ -251,21 +252,6 @@ end
 -- The standing-still camera's own defaults where they differ from the flight ones.
 DEFAULTS.idleOrbitMode = "sweep"
 
--- The groups of faded frames, in the order the options list them. Each can
--- override the mouseover hold time: <group>HoverOverride and <group>HoverHold.
-ns.HOVER_GROUPS = {
-	{ "bars", "Action bars" }, { "sidebars", "Side action bars" }, { "player", "Player" },
-	{ "target", "Target and focus" }, { "buffs", "Buffs" }, { "minimap", "Minimap" },
-	{ "quests", "Quest tracker" }, { "chat", "Chat" }, { "totems", "Totems" },
-	{ "swing", "Swing timer" }, { "meters", "Damage meter" }, { "cooldowns", "Cooldown Manager" },
-	{ "misc", "Other" },
-}
--- By default every group follows mouseoverHold.
-for _, group in ipairs(ns.HOVER_GROUPS) do
-	local key = group[1]
-	DEFAULTS[key .. "HoverOverride"] = false
-	DEFAULTS[key .. "HoverHold"] = 5
-end
 DEFAULTS.idleOrbitBackArc = 45
 DEFAULTS.idleOrbitDrift = true
 DEFAULTS.idleOrbitDriftSpeed = 1
@@ -575,12 +561,13 @@ function ns.NPCWindowOpen()
 end
 
 -- Menus and game windows (the Escape menu, options, spellbook, character
--- sheet, map...). The camera modes wait while one is open.
+-- sheet, map...). The camera modes wait while one is open. The barbershop's
+-- chair counts too: it sets up its own camera.
 local MENU_WINDOWS = {
 	"GameMenuFrame", "WorldMapFrame", "QuestLogFrame", "FriendsFrame", "PVEFrame",
 	"CollectionsJournal", "EncounterJournal", "AchievementFrame", "CommunitiesFrame",
 	"ProfessionsFrame", "TradeSkillFrame", "CraftFrame", "AddonList", "ChatConfigFrame",
-	"VideoOptionsFrame",
+	"VideoOptionsFrame", "BarberShopFrame",
 }
 for _, name in ipairs(REVEAL_WHILE_SHOWN) do MENU_WINDOWS[#MENU_WINDOWS + 1] = name end
 function ns.MenuWindowOpen()
@@ -1448,8 +1435,7 @@ end
 -- (flying, RP walking, standing still past the standing-still delay) these use
 -- their default values instead of the player's, so a long hold set for normal
 -- play doesn't keep the quest tracker (or chat, or buffs) up over the view.
-local FLIGHT_USES_DEFAULT = { mouseoverHold = true, buffPeekTime = true, chatPeekTime = true }
-for _, group in ipairs(ns.HOVER_GROUPS) do FLIGHT_USES_DEFAULT[group[1] .. "HoverHold"] = true end
+local FLIGHT_USES_DEFAULT = { mouseoverHold = true, buffPeekTime = true, debuffPeekTime = true, chatPeekTime = true }
 -- ...except the general hold, which goes at once there (normal play holds it a while).
 local FLIGHT_HOLD = { mouseoverHold = 0 }
 
@@ -1853,6 +1839,10 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		-- have their own switch, on if it was.
 		if ns.db.debuffPeek == nil and ns.db.buffPeek ~= nil then
 			ns.db.debuffPeek = ns.db.buffPeek
+		end
+		-- "Show buffs for" covered debuffs too; now they have their own time.
+		if ns.db.debuffPeekTime == nil and ns.db.buffPeekTime ~= nil then
+			ns.db.debuffPeekTime = ns.db.buffPeekTime
 		end
 		if not ns.db.buffPeekIgnoreV2 then -- Ghost joins the list, unless it was changed
 			if ns.db.buffPeekIgnore == "2479, Plainsrunning" then ns.db.buffPeekIgnore = nil end
