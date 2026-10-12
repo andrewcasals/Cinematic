@@ -268,6 +268,15 @@ local function ResetPage(content)
 		local rows = pageRows[content] and pageRows[content][key]
 		if RESET_TO_NIL[key] then
 			db[key] = nil
+		elseif type(default) == "table" then
+			-- A built-in profile's own list (copied: the profile's base stays as it
+			-- is), just this page's rows of it when pages share it.
+			if rows and type(db[key]) == "table" then
+				for k in pairs(rows) do db[key][k] = default[k] end
+			else
+				db[key] = {}
+				for k, v in pairs(default) do db[key][k] = v end
+			end
 		elseif type(db[key]) == "table" and default == nil then
 			for k in pairs(db[key]) do
 				if not rows or rows[k] then
@@ -364,6 +373,12 @@ local function CreatePanel()
 
 	local title = Label(panel, "GameFontNormalLarge", "Cinematic")
 	title:SetPoint("TOPLEFT", 16, -16)
+	-- The version beside it ("dev" for the development copy, or run from the
+	-- source, where the packager hasn't filled it in).
+	local version = ns.Version()
+	if version:find("project%-version") then version = "dev" end
+	local versionLabel = Label(panel, "GameFontDisableSmall", version)
+	versionLabel:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 6, 1)
 
 	local subtitle = Label(panel, "GameFontHighlightSmall",
 		"Fades the UI and adds letterbox bars between fights. Combat, casting " ..
@@ -457,7 +472,7 @@ local function CreatePanel()
 	end)
 	-- The active profile, under the button (picked on the Profiles page).
 	local profileLabel = Label(panel, "GameFontHighlightSmall")
-	profileLabel:SetPoint("TOPRIGHT", defaults, "BOTTOMRIGHT", 0, -4)
+	profileLabel:SetPoint("RIGHT", defaults, "LEFT", -10, 0)
 	profileLabel:SetJustifyH("RIGHT")
 	controls[#controls + 1] = { Refresh = function()
 		if not ns.ProfileChosen() then
@@ -2767,7 +2782,7 @@ local function ShowTable(content, anchor, rows)
 			hover:SetAllPoints(rowLabel)
 			hover:EnableMouse(true)
 			Tooltip(hover, ("More settings on the %s page. They can keep it up beyond what's " ..
-				"ticked here (hovering, tracking, new auras and the like)."):format(item.morePage))
+				"ticked here (hovering, tracking, new auras, cooldowns recharging and the like)."):format(item.morePage))
 		end
 		if ns.CINE_SHOW_SETTING[item.key] then
 			RecordKey(content, ns.CINE_SHOW_SETTING[item.key]) -- (for the page's Reset)
@@ -3613,6 +3628,39 @@ local function CreateQuestTrackerPanel()
 	RegisterSubpage(canvas, "Quest tracker")
 end
 
+-- Sub-page: the Cooldown Manager (the game's, or Forever Enhanced Cooldown Manager).
+local function CreateCooldownPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", "Cooldown Manager")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"When the Cooldown Manager comes up in CineMode (Enhanced Cooldown Manager's bars too). Hovering " ..
+		"it always shows it. To keep it up all the time, or in fights, see the Standard Frames page; " ..
+		"what comes up with it is on the Mouseover page.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local recharging = Check(content, "cooldownWhileRecharging", "Stay up while a cooldown is recharging",
+		"Keeps the Cooldown Manager up until every cooldown in it is ready again, then it fades. Not " ..
+		"the global cooldown, nor its buff bars. (It brings up the Mouseover groups with Cooldown " ..
+		"recharging ticked: the Cooldowns group by default.)")
+	recharging:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+	recharging:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+	local afterCombat = Check(content, "cooldownAfterCombat", "Only after combat",
+		"Only within the Calm Timer after a fight (CineMode page): after that it fades even with a " ..
+		"long cooldown still going, and cooldowns used out of fights don't bring it up.")
+	afterCombat:SetPoint("TOPLEFT", recharging, "BOTTOMLEFT", 16, -2)
+	GreyUnless(afterCombat, function(db) return db.cooldownWhileRecharging end)
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Cooldown Manager")
+end
+
 -- Sub-page: world tooltips (units and objects under the cursor) in cinematic mode.
 local function CreateTooltipPanel()
 	local canvas, content = CreateScrollPage()
@@ -4170,36 +4218,73 @@ local function PopupText(popup)
 	return box and (box:GetText() or ""):match("^%s*(.-)%s*$") or "", box
 end
 
+-- The popup an edit box is in (on some clients it sits inside a holder frame).
+local function PopupOf(box)
+	local frame = box
+	while frame and not frame.which do
+		frame = frame:GetParent()
+	end
+	return frame
+end
+
 -- A popup asking for a profile name: Enter accepts, Escape cancels.
-local function NamePopup(text, accept)
+-- opts: initial(data) for the text it starts with (else data), maxLetters,
+-- and width for a wider box than usual (put back after: the box is shared).
+local function NamePopup(text, accept, opts)
+	opts = opts or {}
+	local usualWidth
 	return {
 		text = text, button1 = ACCEPT, button2 = CANCEL,
-		hasEditBox = true, maxLetters = 32,
+		hasEditBox = true, maxLetters = opts.maxLetters or 32,
 		OnShow = function(self, data)
 			local _, box = PopupText(self)
 			if box then
-				box:SetText(data or "")
+				if opts.width then
+					usualWidth = box:GetWidth()
+					box:SetWidth(opts.width)
+				end
+				box:SetText((opts.initial and opts.initial(data)) or data or "")
 				box:HighlightText()
 				box:SetFocus()
 			end
 		end,
-		OnAccept = function(self, data) accept(PopupText(self), data) end,
-		EditBoxOnEnterPressed = function(box)
-			local popup = box:GetParent()
-			accept(PopupText(popup), popup.data)
-			popup:Hide()
+		OnHide = function(self)
+			local _, box = PopupText(self)
+			if box and usualWidth then
+				box:SetWidth(usualWidth)
+				usualWidth = nil
+			end
 		end,
-		EditBoxOnEscapePressed = function(box) box:GetParent():Hide() end,
+		-- accept returns true to keep the popup open (a name that can't be used).
+		OnAccept = function(self, data) return accept(PopupText(self), data) end,
+		EditBoxOnEnterPressed = function(box)
+			local popup = PopupOf(box)
+			if popup and not accept(PopupText(popup), popup.data) then
+				popup:Hide()
+			end
+		end,
+		EditBoxOnEscapePressed = function(box)
+			local popup = PopupOf(box)
+			if popup then popup:Hide() end
+		end,
 		timeout = 0, whileDead = true, hideOnEscape = true,
 	}
 end
 
--- Checks a new profile name; prints why not if it can't be used.
-local function NameFree(name)
+-- Checks a new profile name (old: the one being renamed); says why not on
+-- screen if it can't be used. Names differing only in capitals count as the
+-- same (/cine profile ignores them).
+local function NameFree(name, old)
+	local taken = ns.FindProfile(name)
+	local why
 	if name == "" then
-		return false
-	elseif ns.ProfileExists(name) then
-		ns.Print("there's already a profile called " .. name)
+		why = "A profile needs a name."
+	elseif taken and taken ~= old then
+		why = "There's already a profile called " .. taken .. "."
+	end
+	if why then
+		UIErrorsFrame:AddMessage(why, 1, 0.1, 0.1)
+		ns.Print(why)
 		return false
 	end
 	return true
@@ -4207,17 +4292,20 @@ end
 
 StaticPopupDialogs.CINEMATIC_PROFILE_NEW = NamePopup("Name the new profile (it starts from your current settings):",
 	function(name)
-		if NameFree(name) then
-			ns.NewProfile(name)
-			Refresh()
-		end
+		if not NameFree(name) then return true end
+		ns.NewProfile(name)
+		Refresh()
 	end)
 StaticPopupDialogs.CINEMATIC_PROFILE_RENAME = NamePopup("Rename the profile:", function(name, old)
-	if name ~= old and NameFree(name) then
-		ns.RenameProfile(old, name)
-		Refresh()
-	end
+	if not old or name == old then return end
+	if not NameFree(name, old) then return true end
+	ns.RenameProfile(old, name)
+	Refresh()
 end)
+StaticPopupDialogs.CINEMATIC_PROFILE_NOTE = NamePopup("Describe the profile:", function(text, name)
+	ns.SetProfileNote(name, text)
+	Refresh()
+end, { initial = function(name) return ns.ProfileNote(name) or "" end, maxLetters = 200, width = 360 })
 StaticPopupDialogs.CINEMATIC_PROFILE_DELETE = {
 	text = "Delete the profile %s?",
 	button1 = YES, button2 = NO,
@@ -4312,12 +4400,18 @@ local function CreateProfilesPanel()
 		StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name)
 	end)
 	rename:SetPoint("LEFT", new, "RIGHT", 8, 0)
+	local note = Button("Description", 110, "Write what the active profile is for, shown beside it " ..
+		"(your own ones only).", function()
+		local name = ns.ActiveProfile()
+		StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name)
+	end)
+	note:SetPoint("LEFT", rename, "RIGHT", 8, 0)
 	local delete = Button("Delete", 100, "Delete the active profile (your own ones only), switching to " ..
 		ns.BUILTIN_PROFILES[1].name .. ".", function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
 	end)
-	delete:SetPoint("LEFT", rename, "RIGHT", 8, 0)
+	delete:SetPoint("LEFT", note, "RIGHT", 8, 0)
 	local reset = Button("Reset profile", 120, "Put the active profile back to how it started: a built-in " ..
 		"profile's own values, or the defaults for one of yours.", function()
 		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ActiveProfile())
@@ -4342,7 +4436,8 @@ local function CreateProfilesPanel()
 				text = text .. " |cff808080(changed)|r"
 			end
 			row.label:SetText(text)
-			row.tip:SetText(builtin and builtin.tip or "Your own profile.")
+			row.tip:SetText(builtin and builtin.tip or ns.ProfileNote(name)
+				or "Your own profile. Pick it, then Description to say what it's for.")
 			row.pick:SetChecked(name == active)
 			row:SetHeight(math.max(26, row.tip:GetStringHeight() + 10))
 			row:ClearAllPoints()
@@ -4355,6 +4450,7 @@ local function CreateProfilesPanel()
 		buttons:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 2, -16)
 		local own = active ~= nil and not ns.IsBuiltinProfile(active)
 		rename:SetEnabled(own)
+		note:SetEnabled(own)
 		delete:SetEnabled(own)
 		FitContentHeight(content)
 	end
@@ -4834,6 +4930,10 @@ CreateExtrasPanel()
 CreateMouseoverPanel()
 CreateMinimapPanel()
 CreateQuestTrackerPanel()
+-- (Only with a Cooldown Manager: the game's, on clients that have it, or the addon.)
+if ns.AddOnInstalled("Blizzard_CooldownViewer") or ns.AddOnInstalled("ForeverEnhancedCooldownManager") then
+	CreateCooldownPanel()
+end
 -- World tooltips always show for now (see ns.WORLD_TOOLTIP_HIDING): no page.
 if ns.WORLD_TOOLTIP_HIDING then
 	CreateTooltipPanel()

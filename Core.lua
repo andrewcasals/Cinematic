@@ -84,6 +84,9 @@ local DEFAULTS = {
 	questRevealOnAccept = true, -- accepting a quest shows the quest tracker as a mouseover would
 	questRevealOnProgress = true, -- quest objective progress shows the quest tracker the same way
 	minimapRevealOnPing = true, -- a group member pinging the minimap shows it as a mouseover would
+	cooldownWhileRecharging = false, -- the Cooldown Manager stays up while a cooldown recharges (Mouseover groups
+	                                 -- with Cooldown recharging ticked: the Cooldowns group by default)
+	cooldownAfterCombat = true,     -- ...only within the Calm Timer after a fight
 	minimapIndoors = false,    -- keep the minimap up indoors (hidden there, its map goes stale)
 	minimapForTracking = true, -- master switch for the minimapFor* tracking options below
 	minimapForHerbs = true,    -- keep the minimap visible while this tracking is active

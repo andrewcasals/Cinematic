@@ -54,8 +54,21 @@ local function CamsOff(set, cams)
 	end
 end
 
+-- A Standard Frames column as a list: every row given true (in on) or false.
+local STANDARD_ROWS = {
+	"player", "target", "tot", "focus", "minimap", "quests", "buffs", "swing", "cooldowns", "mainbar",
+	"bottomleft", "bottomright", "right1", "right2", "bar6", "bar7", "bar8", "pet", "stance", "totems",
+	"micro", "xp",
+}
+local function Column(on)
+	local list = {}
+	for _, key in ipairs(STANDARD_ROWS) do list[key] = false end
+	for _, key in ipairs(on) do list[key] = true end
+	return list
+end
+
 -- The built-in profiles, in the order they're listed. apply(set) makes its
--- changes to the defaults.
+-- changes to the defaults; a list (PROFILE_TABLES) is set whole.
 ns.BUILTIN_PROFILES = {
 	{
 		name = DEFAULT_PROFILE,
@@ -64,11 +77,30 @@ ns.BUILTIN_PROFILES = {
 		apply = function() end,
 	},
 	{
+		name = "Immersive (CDM)",
+		tip = "Immersive, with the Cooldown Manager in place of the action bars in fights: your " ..
+			"portrait, target, buffs, swing timer, pet, stance and totem bars and the Cooldown Manager " ..
+			"come up, the action bars don't. After a fight it stays up until its cooldowns are ready.",
+		apply = function(set)
+			-- The Standard Frames page's columns.
+			set("cineShow", Column({}))
+			set("combatShow", Column({ "player", "target", "tot", "focus", "minimap", "buffs", "swing",
+				"cooldowns", "pet", "stance", "totems" }))
+			set("enemyShow", Column({ "player", "target", "tot", "focus", "buffs", "pet", "stance", "totems" }))
+			set("friendlyShow", Column({ "target", "tot" }))
+			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
+			set("cooldownWhileRecharging", true)
+		end,
+	},
+	{
 		name = "Lite",
 		tip = "The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras.",
 		apply = function(set)
 			CamsOff(set, { "cozy", "vista", "fish", "walk", "run", "death", "quest" })
+			-- Chat shows for General, Trade and LocalDefense (others joined later stay off).
+			set("chatPeekChannelList", { General = true, Trade = true, LocalDefense = true,
+				Services = false, TradeLocal = false })
 		end,
 	},
 	{
@@ -212,7 +244,8 @@ local function Load(name)
 		end
 	end
 	for _, k in ipairs(PROFILE_TABLES) do
-		db[k] = CopyTable(saved[k])
+		-- (A built-in's own list when it has one; a copy, so the base isn't changed.)
+		db[k] = CopyTable(saved[k] or base[k])
 	end
 	ns.EnsureTables()
 end
@@ -272,6 +305,17 @@ function ns.SetProfile(name)
 	ns.Log("state", "profile: " .. name)
 end
 
+-- A profile of your own's description (db.profileNotes: kept apart from its
+-- settings, which are written over each time it's saved).
+function ns.ProfileNote(name)
+	return ns.db.profileNotes[name]
+end
+
+function ns.SetProfileNote(name, text)
+	if builtinByName[name] then return end
+	ns.db.profileNotes[name] = text ~= "" and text or nil
+end
+
 -- A new profile of your own from the current settings.
 function ns.NewProfile(name)
 	if ns.ProfileExists(name) then return false end
@@ -288,6 +332,7 @@ function ns.NewProfile(name)
 	end
 	ns.SaveProfile()
 	ns.db.profiles[name] = saved
+	ns.db.profileNotes[name] = "Started from " .. ns.ActiveProfile() .. "."
 	Choose(name)
 	ns.db.profileChosen = true
 	return true
@@ -297,6 +342,7 @@ function ns.RenameProfile(old, new)
 	if builtinByName[old] or ns.ProfileExists(new) then return false end
 	if old == ns.ActiveProfile() then ns.SaveProfile() end
 	ns.db.profiles[new], ns.db.profiles[old] = ns.db.profiles[old], nil
+	ns.db.profileNotes[new], ns.db.profileNotes[old] = ns.db.profileNotes[old], nil
 	-- (Other characters with it as their own go back to the account's next login.)
 	for _, holder in ipairs({ ns.db, ns.chardb }) do
 		if holder.profile == old then holder.profile = new end
@@ -311,6 +357,7 @@ function ns.DeleteProfile(name)
 	if name == ns.ActiveProfile() then ns.SetProfile(DEFAULT_PROFILE) end
 	if ns.db.profile == name then ns.db.profile = DEFAULT_PROFILE end
 	ns.db.profiles[name] = nil
+	ns.db.profileNotes[name] = nil
 	return true
 end
 
@@ -354,6 +401,7 @@ function ns.InitProfiles()
 	ns.chardb = CinematicCharDB
 	local db, chardb = ns.db, ns.chardb
 	db.profiles = db.profiles or {}
+	db.profileNotes = db.profileNotes or {}
 	-- The default profile was first called Cinematic Strong (test builds).
 	local old = "Cinematic Strong"
 	if db.profiles[old] and not db.profiles[DEFAULT_PROFILE] then

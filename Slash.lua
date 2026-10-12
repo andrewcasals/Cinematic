@@ -61,6 +61,7 @@ local function PrintDebugHelp()
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
 	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
 	print("  /cine debug mode - which camera mode it thinks you're in")
+	print("  /cine debug cooldowns - what the Cooldown Manager's \"stay up while recharging\" check sees")
 	print("  /cine debug newplayer - back to no profile picked, as on a fresh install (the welcome window)")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
@@ -775,6 +776,8 @@ function ns.HandleSlash(msg)
 			tostring(GetCVar("cameraSmoothStyle"))))
 		ns.Print(("orbitFrame running=%s, MoveViewUpStart=%s"):format(
 			tostring(ns.orbitFrame:GetScript("OnUpdate") ~= nil), tostring(MoveViewUpStart ~= nil)))
+	elseif cmd == "debug" and arg == "cooldowns" then
+		ns.ReportCooldowns()
 	elseif cmd == "debug" and arg == "newplayer" then
 		-- (Your profiles and their settings stay; picking one carries on from them.)
 		ns.SaveProfile()

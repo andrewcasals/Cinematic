@@ -62,6 +62,7 @@ end
 local function Version()
 	return GetMetadata and GetMetadata(ADDON_NAME, "Version") or "?"
 end
+ns.Version = Version -- (the main settings page shows it too)
 
 -- Called from Core.lua once the saved settings are loaded.
 function ns.InitLog()

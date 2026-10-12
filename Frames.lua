@@ -742,7 +742,7 @@ ns.COMBAT_SHOW = {
 	{ key = "swing", label = "Swing timer", default = true, retail = false,
 		frames = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
 	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
-		frames = FRAME_GROUPS.cooldowns },
+		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager" },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
 	{ key = "mainbar", label = "Action bar 1", default = true,
@@ -856,6 +856,9 @@ ns.HOVER_TRIGGERS = {
 		tip = "While the minimap stays up for herb, mineral or other tracking (Minimap page)." },
 	{ key = "quest", label = "Quest progress", tip = "Accepting a quest or progress on one (Quest tracker page)." },
 	{ key = "gamepad", label = "Gamepad input", gamepad = true, tip = "Pressing a gamepad button (Gamepad page)." },
+	{ key = "cooldown", label = "Cooldown recharging", tip = "While a spell in the Cooldown Manager (or " ..
+		"Enhanced Cooldown Manager's cooldown bars) is still recharging, until they're all ready. Not " ..
+		"the global cooldown (Cooldown Manager page)." },
 }
 
 -- What it's like before you change anything: today's groups that do
@@ -872,6 +875,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ name = "Quest tracker", members = { "quests" }, triggers = { quest = true } },
 	{ name = "Gamepad action bars", members = { "gamepadbars" }, triggers = { gamepad = true } },
 	{ name = "Chat", members = { "chat" }, triggers = { whisper = true, typing = true } },
+	{ name = "Cooldowns", members = { "cooldowns", "addon:fecm" }, triggers = { cooldown = true } },
 }
 
 -- The groups in use: the player's (db.hoverGroups), or the defaults until
@@ -1541,6 +1545,177 @@ local function HasQuestTimer()
 	return frame ~= nil and frame:IsShown()
 end
 
+-- A cooldown still recharging in the Cooldown Manager's spell bars (not its
+-- buff bars) or Enhanced Cooldown Manager's cooldown bars, longer than the
+-- global cooldown. Each icon's spell is asked about first; failing that, the
+-- cooldown swipe on it. Looked at a few times a second. The game keeps some
+-- of this secret (in fights, and on some clients whether the bars are shown):
+-- a secret time counts as ready, a secret "shown" as shown.
+local COOLDOWN_VIEWERS = { EssentialCooldownViewer = true, UtilityCooldownViewer = true }
+local GCD = 1.6
+local cooldownCheckedAt, cooldownRecharging = 0, false
+
+local function Secret(...)
+	if not issecretvalue then return false end
+	for i = 1, select("#", ...) do
+		if issecretvalue((select(i, ...))) then return true end
+	end
+	return false
+end
+
+-- Hidden for sure (a secret answer isn't).
+local function Hidden(frame)
+	local ok, shown = pcall(frame.IsShown, frame)
+	return ok and not Secret(shown) and not shown
+end
+
+-- The spell an icon shows, if it says.
+local function ItemSpell(item)
+	if item.GetSpellID then
+		local ok, id = pcall(item.GetSpellID, item)
+		if ok and not Secret(id) and type(id) == "number" and id > 0 then return id end
+	end
+	-- (Only type() and Secret() on values that may be secret: testing one errors.)
+	local cooldownID = item.cooldownID
+	if type(cooldownID) == "nil" and item.GetCooldownID then
+		local ok, id = pcall(item.GetCooldownID, item)
+		if ok then cooldownID = id end
+	end
+	if type(cooldownID) == "number" and not Secret(cooldownID)
+		and C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCooldownInfo then
+		local ok, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cooldownID)
+		if ok and type(info) == "table" then
+			for _, field in ipairs({ "overrideSpellID", "spellID" }) do
+				local id = info[field]
+				if type(id) == "number" and not Secret(id) and id > 0 then return id end
+			end
+		end
+	end
+end
+
+-- A spell's cooldown: start and duration in seconds, or nil if the game won't say.
+local function SpellCooldown(id)
+	local ok, start, duration
+	if C_Spell and C_Spell.GetSpellCooldown then
+		local info
+		ok, info = pcall(C_Spell.GetSpellCooldown, id)
+		if ok and type(info) == "table" then
+			start, duration = info.startTime, info.duration
+		end
+	elseif GetSpellCooldown then
+		ok, start, duration = pcall(GetSpellCooldown, id)
+	end
+	if not ok or Secret(start, duration) or type(start) ~= "number" or type(duration) ~= "number" then
+		return nil
+	end
+	return start, duration
+end
+
+-- A cooldown swipe's start and duration, in seconds, or nil.
+local function SwipeTimes(cooldown)
+	if not cooldown.GetCooldownTimes then return nil end
+	local ok, start, duration = pcall(cooldown.GetCooldownTimes, cooldown)
+	if not ok or Secret(start, duration) or type(start) ~= "number" or type(duration) ~= "number" then
+		return nil
+	end
+	return start / 1000, duration / 1000
+end
+
+-- Calls visit(frame, kind) for each icon ("item", one with a spell) and each
+-- cooldown swipe ("swipe") under frame.
+local function EachCooldownPart(frame, depth, visit)
+	for _, child in ipairs({ frame:GetChildren() }) do
+		if not Hidden(child) then
+			local isCooldown = child.GetObjectType and child:GetObjectType() == "Cooldown"
+			if isCooldown then
+				visit(child, "swipe")
+			elseif child.GetSpellID or child.GetCooldownID or type(child.cooldownID) ~= "nil" then
+				visit(child, "item")
+			end
+			if not isCooldown and depth > 0 then
+				EachCooldownPart(child, depth - 1, visit)
+			end
+		end
+	end
+end
+
+local function Recharging(start, duration, now)
+	return duration > GCD and start + duration > now
+end
+
+-- The Cooldown Manager frames to look in.
+local function EachCooldownFrame(visit)
+	for _, entry in ipairs(ns.managed) do
+		local frame = entry.frame
+		if COOLDOWN_VIEWERS[entry.name] or (entry.group == "addon:fecm" and frame.kind == "cooldown") then
+			visit(entry, frame)
+		end
+	end
+end
+
+local function AnyCooldownRecharging(now)
+	if now - cooldownCheckedAt < 0.25 then
+		return cooldownRecharging
+	end
+	cooldownCheckedAt = now
+	local found = false
+	EachCooldownFrame(function(_, frame)
+		if found or Hidden(frame) then return end
+		EachCooldownPart(frame, 3, function(part, kind)
+			if found then return end
+			local start, duration
+			if kind == "item" then
+				local id = ItemSpell(part)
+				if id then start, duration = SpellCooldown(id) end
+			else
+				start, duration = SwipeTimes(part)
+			end
+			if start and Recharging(start, duration, now) then found = true end
+		end)
+	end)
+	cooldownRecharging = found
+	return found
+end
+
+-- /cine debug cooldowns: what the Cooldown Manager check sees.
+function ns.ReportCooldowns()
+	local now = GetTime()
+	local any = false
+	local function Show(value)
+		if Secret(value) then return "secret" end
+		return type(value) == "number" and ("%.1f"):format(value) or tostring(value)
+	end
+	EachCooldownFrame(function(entry, frame)
+		any = true
+		local ok, shown = pcall(frame.IsShown, frame)
+		ns.Print(("%s: shown=%s"):format(entry.name or entry.group, ok and Show(shown) or "?"))
+		local count = 0
+		EachCooldownPart(frame, 3, function(part, kind)
+			count = count + 1
+			if count > 20 then return end
+			if kind == "item" then
+				local id = ItemSpell(part)
+				local start, duration
+				if id then start, duration = SpellCooldown(id) end
+				print(("  icon spell=%s cooldown %s"):format(tostring(id), start
+					and ("%.1fs left of %.1fs"):format(math.max(0, start + duration - now), duration)
+					or "unreadable"))
+			else
+				local start, duration = SwipeTimes(part)
+				print(("  swipe %s"):format(start
+					and ("%.1fs left of %.1fs"):format(math.max(0, start + duration - now), duration)
+					or "unreadable"))
+			end
+		end)
+		if count == 0 then print("  (no icons or swipes found)") end
+	end)
+	if not any then
+		ns.Print("no Cooldown Manager frames found among the faded frames")
+	end
+	cooldownCheckedAt = 0
+	ns.Print("recharging now: " .. tostring(AnyCooldownRecharging(now)))
+end
+
 -- /cine debug frame <text>: how the faded frames with <text> in their name
 -- stand (the name is matched ignoring case: slash commands come lowercased).
 function ns.ReportFrames(text)
@@ -1820,6 +1995,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 		aura = cinematic and buffPeekUntil > now, ping = pingReveal,
 		tracking = ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused,
 		quest = questReveal, gamepad = padReveal,
+		cooldown = cinematic and ns.db.cooldownWhileRecharging
+			and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
+			and AnyCooldownRecharging(now),
 	}
 	for _, group in ipairs(hoverGroups) do
 		for key, on in pairs(group.triggers or {}) do
