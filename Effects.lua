@@ -82,7 +82,7 @@ end
 
 -- Whether any box in a names row is ticked.
 local NAME_ROW_PREFIXES = { "nameGroup", "nameCombat", "nameCombatPvP", "nameKeep", "nameInInstances",
-	"nameInPvP" }
+	"nameInPvP", "nameInBGs" }
 local function NameRowTicked(group)
 	for _, prefix in ipairs(NAME_ROW_PREFIXES) do
 		if ns.db[prefix .. group.key] then
@@ -137,8 +137,8 @@ local COMBAT_TEXT_CVARS = {
 	},
 }
 
--- Whether the fight now under way was with the other side's players as it
--- started: names can't change mid-fight, so In PvP combat names go by that.
+-- Whether you were PvP flagged as the fight now under way started: names
+-- can't change mid-fight, so In PvP combat names go by that.
 local pvpNamesFight = false
 
 -- Names ticked In combat (or In PvP combat, in such fights) stay up through
@@ -167,12 +167,13 @@ function ns.UpdateCVars(cinematic, fightStarting)
 		local want = cinematic and not NameKeptHere(set.key, inCombat)
 		ns.ApplyCVarSet(set, want or false)
 	end
-	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not inCombat) or false)
+	-- (Kept through the Calm Timer after a fight, like the plates.)
+	local fighting = inCombat or (ns.FightLingering and ns.FightLingering())
+	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not fighting) or false)
 end
 
 -- The last chance to switch names to the "In combat" choices before lockdown.
 function ns.UpdateCVarsForFight()
-	ns.NotePvPFightStart()
 	pvpNamesFight = ns.InPvPFight()
 	ns.UpdateCVars(lastCinematic, true)
 end
@@ -765,67 +766,19 @@ end
 -- game's own options decide. Set each frame.
 local platesActive = false
 
--- Where you are, for the Nameplates page's place columns: "PvP" or "Instances"
--- or nil for the open world. Set each frame.
+-- Where you are, for the Nameplates page's place columns: "PvP", "BGs" or
+-- "Instances", or nil for the open world. Set each frame.
 local placeSuffix
 
--- Whether this fight (or the last one, through its Calm Timer) is with the
--- other side's players, for the Nameplates page's In PvP combat column (not
--- on retail, whose combat log is closed to addons). Any fight in a
--- battleground or arena counts; elsewhere it's a hit in the combat log
--- between you or your pet and a hostile player or their minion.
-local pvpSeenAt, fightStartedAt = -math.huge, 0
-local PVP_START_SLACK = 1 -- the hit that starts a fight is logged just before it does
-
-local function HostilePlayerControlled(flags)
-	return type(flags) == "number"
-		and bit.band(flags, COMBATLOG_OBJECT_REACTION_HOSTILE) ~= 0
-		and bit.band(flags, COMBATLOG_OBJECT_CONTROL_PLAYER) ~= 0
-end
-
-local function IsMine(guid)
-	return guid ~= nil and (guid == UnitGUID("player") or guid == UnitGUID("pet"))
-end
-
--- (Also called before the fight's names are set, which can come first.)
-function ns.NotePvPFightStart()
-	local now = GetTime()
-	if now - fightStartedAt > PVP_START_SLACK then
-		fightStartedAt = now
-	end
-end
-
-if not ns.isRetail and CombatLogGetCurrentEventInfo then
-	local pvpWatcher = CreateFrame("Frame")
-	pvpWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
-	pvpWatcher:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-	pvpWatcher:SetScript("OnEvent", function(_, event)
-		if event == "PLAYER_REGEN_DISABLED" then
-			ns.NotePvPFightStart()
-			return
-		end
-		local _, _, _, srcGUID, _, srcFlags, _, dstGUID, _, dstFlags = CombatLogGetCurrentEventInfo()
-		if (IsMine(srcGUID) and HostilePlayerControlled(dstFlags))
-			or (IsMine(dstGUID) and HostilePlayerControlled(srcFlags)) then
-			pvpSeenAt = GetTime()
-		end
-	end)
-end
-
+-- For the In PvP combat columns: fights while you're PvP flagged (as you
+-- always are in battlegrounds and arenas).
 local function InPvPFight()
-	if ns.isRetail then
-		return false
-	end
-	local _, instanceType = IsInInstance()
-	if instanceType == "pvp" or instanceType == "arena" then
-		return true
-	end
-	return pvpSeenAt >= fightStartedAt - PVP_START_SLACK
+	return ns.IsPvPFlagged() and true or false
 end
 ns.InPvPFight = InPvPFight
 
 -- Whether a kind shows in fights in cinematic mode (plateCombat<kind>,
--- plateCombatPvP<kind> in fights with players, or In group on the Nameplates
+-- plateCombatPvP<kind> while flagged for PvP, or In group on the Nameplates
 -- page, which keeps a row up in a party or raid whatever its other boxes say).
 local function ShownInFights(kind)
 	return (ns.db["plateCombat" .. kind] or (ns.db["plateGroup" .. kind] and IsInGroup())
@@ -843,35 +796,53 @@ end
 -- (or changing the ticks) doesn't pop plates on or off. kind -> 0 to 1.
 local keptLevel = {}
 
+-- The Nameplates page's "Always show group members' nameplates" (and its
+-- "Their minions"): your party or raid's players, and their pets (yours too),
+-- whatever their rows say. Kind ("Friends" or "FriendlyMinions") -> whether
+-- it's kept up for group members now.
+local function GroupKept(kind)
+	if not (ns.db.plateGroupMembers and IsInGroup()) then
+		return false
+	end
+	return kind == "Friends" or (kind == "FriendlyMinions" and ns.db.plateGroupMemberMinions) or false
+end
+
+local function InYourGroup(unit, kind)
+	local function Ask(fn, ...)
+		local ok, value = pcall(fn, ...)
+		return ok and Known(value) and value and true or false
+	end
+	if kind == "FriendlyMinions" and Ask(UnitIsUnit, unit, "pet") then
+		return true
+	end
+	return Ask(UnitPlayerOrPetInParty, unit) or Ask(UnitPlayerOrPetInRaid, unit)
+end
+
+-- How far group members' plates are held up, faded like keptLevel. kind -> 0 to 1.
+local groupLevel = { Friends = 0, FriendlyMinions = 0 }
+
+local function GroupMemberAlpha(unit, kind)
+	local level = groupLevel[kind]
+	if not level or level <= 0 or not InYourGroup(unit, kind) then
+		return 0
+	end
+	return level
+end
+
 -- Any kind kept up in cinematic mode keeps the plates switched on.
 local function AnyPlatesKeptCinematic()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		if KeptHere(kind) or (keptLevel[kind] or 0) > 0 then
+		if KeptHere(kind) or (keptLevel[kind] or 0) > 0 or GroupKept(kind) or (groupLevel[kind] or 0) > 0 then
 			return true
 		end
 	end
 	return false
 end
 
--- Whether your target's plate always shows here, from the Nameplates grid's
--- Enemy Target row (units you can attack, neutral mobs too, and the other
--- faction's players, flagged or not) or Friendly Target row (the rest): its
--- In combat column in fights and for the Calm Timer after, else the column
--- for where you are.
-local function TargetRowKept(row)
-	local combat = ShownInFights(row)
-	if InCombatLockdown() or (combat and ns.FightLingering and ns.FightLingering()) then
-		return combat and true or false
-	end
-	return KeptHere(row)
-end
-
+-- Whether your target's plate always shows (the Nameplates page's "Always
+-- show your target's nameplate"), whatever its own row says.
 local function AlwaysShownTarget(unit)
-	local enemy = ns.IsEnemyUnit(unit)
-	if enemy == nil then
-		return false
-	end
-	return TargetRowKept(enemy and "EnemyTarget" or "FriendlyTarget")
+	return ns.db.plateTarget and ns.IsEnemyUnit(unit) ~= nil
 end
 
 local function TargetKeptUp()
@@ -1001,11 +972,12 @@ end
 local function KindAlpha(unit)
 	local kind = unit and PlateKind(unit)
 	if kind then
+		local member = GroupMemberAlpha(unit, kind)
 		-- Plates can't be switched off in fights, only made invisible.
 		if platesActive and InCombatLockdown() and not ShownInFights(kind) then
-			return 0
+			return member
 		end
-		return math.min(math.max(ns.plates.level, keptLevel[kind] or 0), combatCap[kind] or 1)
+		return math.max(math.min(math.max(ns.plates.level, keptLevel[kind] or 0), combatCap[kind] or 1), member)
 	end
 	return ns.plates.level
 end
@@ -1072,8 +1044,7 @@ function ns.PrintPlatesDebug()
 			keptHere[#keptHere + 1] = kind
 		end
 	end
-	ns.Print(("pvp fight=%s (player seen %s)"):format(tostring(InPvPFight()),
-		pvpSeenAt > -math.huge and ("%.0f sec ago"):format(GetTime() - pvpSeenAt) or "never"))
+	ns.Print(("pvp fights=%s"):format(tostring(InPvPFight())))
 	ns.Print(("place=%s, kept up here=%s"):format(placeSuffix or "open world",
 		#keptHere > 0 and table.concat(keptHere, ", ") or "none"))
 	local function describe(unit)
@@ -1198,8 +1169,13 @@ end
 -- nothing ticked are left alone.
 function ns.EnsurePlateRows()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
+		local groupKept = kind == "Friends" and ns.db.plateGroupMembers
+			or kind == "FriendlyMinions" and ns.db.plateGroupMembers and ns.db.plateGroupMemberMinions
+		if groupKept then
+			ns.EnablePlateRow(kind)
+		end
 		for _, prefix in ipairs({ "plateGroup", "plateCombat", "plateCombatPvP", "plateCinematic",
-			"plateInInstances", "plateInPvP" }) do
+			"plateInInstances", "plateInPvP", "plateInBGs" }) do
 			if ns.db[prefix .. kind] then
 				ns.EnablePlateRow(kind)
 				break
@@ -1229,7 +1205,7 @@ local function UpdateLockedPlates()
 	local locked = platesActive and placeSuffix == "Instances"
 	local hidden = {}
 	for _, kind in ipairs(LOCKED_PLATE_KINDS) do
-		hidden[kind] = locked and not KeptHere(kind) and not ShownInFights(kind)
+		hidden[kind] = locked and not KeptHere(kind) and not ShownInFights(kind) and not GroupKept(kind)
 	end
 	hidden.Friends = hidden.Friends and hidden.FriendlyMinions
 	local changed = false
@@ -1287,6 +1263,14 @@ function ns.UpdatePlates(cinematic, elapsed)
 		local combat = ShownInFights(kind)
 		local cinematicKept = KeptHere(kind)
 		local keptTarget = cinematicKept and 1 or 0
+		if groupLevel[kind] then
+			local groupTarget = GroupKept(kind) and 1 or 0
+			if groupLevel[kind] ~= groupTarget then
+				groupLevel[kind] = ns.Approach(groupLevel[kind], groupTarget, elapsed,
+					groupTarget > groupLevel[kind] and ns.FadeInTime() or ns.FadeOutTime())
+				changed = true
+			end
+		end
 		if keptLevel[kind] == nil then
 			keptLevel[kind] = keptTarget -- logging in: no fade
 		elseif keptLevel[kind] ~= keptTarget then

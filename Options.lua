@@ -535,9 +535,14 @@ local function CreateRevealPanel()
 		"unless it has its own time below. In the camera modes the shorter default is used.")
 	GreyUnless(hold, IfMouseover)
 
+	-- Set aside for now (hidden, their settings kept as they are): each
+	-- group's own mouseover time, and the Exit CineMode section.
+	local setAside = {}
+
 	local overrideLabel = Label(content, "GameFontHighlightSmall",
 		"Tick a group to give it its own time instead:")
 	overrideLabel:SetPoint("TOPLEFT", hold, "BOTTOMLEFT", -2, -18)
+	setAside[#setAside + 1] = overrideLabel
 
 	local OVERRIDE_ROWS = math.ceil(#ns.HOVER_GROUPS / 2)
 	local lastOverride
@@ -562,6 +567,7 @@ local function CreateRevealPanel()
 		Tooltip(groupHold, "How long until this group is gone after your mouse leaves it, fade " ..
 			"included. In the camera modes the shorter default is used.")
 		GreyUnless(groupHold, function(db) return db.mouseover and db[key .. "HoverOverride"] end)
+		setAside[#setAside + 1], setAside[#setAside + 2] = override, groupHold
 		if row == OVERRIDE_ROWS - 1 and column == 0 then
 			lastOverride = override
 		end
@@ -603,12 +609,20 @@ local function CreateRevealPanel()
 	Tooltip(returnDelay, "How long things must stay calm (no cast, window, dragging and the like) " ..
 		"before CineMode comes back. After a fight it comes back at once instead. 0 returns at once.")
 
-	local combatTextHeader = Header(content, "Combat text", returnDelay, -24)
-	combatTextHeader:SetPoint("TOPLEFT", returnDelay, "BOTTOMLEFT", -2, -24)
+	for _, control in ipairs({ revealHeader, cast, npcs, windows, drag, returnDelay }) do
+		setAside[#setAside + 1] = control
+	end
+	for _, control in ipairs(setAside) do
+		control:Hide()
+	end
+
+	local combatTextHeader = Header(content, "Combat text", hold, -24)
+	combatTextHeader:SetPoint("TOPLEFT", hold, "BOTTOMLEFT", -2, -24)
 
 	local combatText = Check(content, "hideCombatText", "Hide combat text out of combat",
 		"No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
-		"mode while you're out of combat. They come back the moment a fight starts, and your " ..
+		"mode while you're out of combat. They come back the moment a fight starts and stay for the " ..
+		"Calm Timer after it, and your " ..
 		"combat text settings are put back when the UI returns.")
 	combatText:SetPoint("TOPLEFT", combatTextHeader, "BOTTOMLEFT", -2, -6)
 
@@ -630,6 +644,13 @@ local function CreateRevealPanel()
 		"Calm Timer above, so things like casting a buff in town don't bring it up.")
 	afterCombat:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(afterCombat, IfPortrait)
+	afterCombat:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+	local afterResurrect = Check(content, "portraitAfterResurrect", "Or after you resurrect",
+		"After you come back to life, keep the portrait up until your health and power are full, " ..
+		"however long that takes.")
+	afterResurrect:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
+	GreyUnless(afterResurrect, function(db) return db.portraitWhenNotFull and db.portraitAfterCombat end)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -3067,7 +3088,7 @@ local function CreatePlatesPanel()
 	-- Both grids' column tooltips (each box adds its row's note). In group keeps
 	-- its row up in a party or raid, in fights and out, whatever the rest says.
 	local COMBAT_TIP = "Show in fights, and for the Calm Timer after."
-	local PVP_COMBAT_TIP = "Show in fights against players, and for the Calm Timer after."
+	local PVP_COMBAT_TIP = "Show in fights while you're PvP flagged, and for the Calm Timer after."
 	local GROUP_TIP = "Always show while you're in a party or raid."
 
 	local showHeader = Header(content, "Nameplates", subtitle, -18)
@@ -3080,25 +3101,56 @@ local function CreatePlatesPanel()
 		self:SetShown(GetCVar("nameplateShowAll") == "0")
 	end
 	controls[#controls + 1] = showAllWarning
+	-- Your target, whatever its own row says (not a game option of its own).
+	local targetCheck = Check(content, "plateTarget", "Always show your target's nameplate",
+		"Your target's nameplate shows in CineMode everywhere, in fights and out, even where its row below is off.",
+		function(value)
+			ns.GetDB().plateTarget = value
+			Refresh()
+		end)
+	targetCheck:SetPoint("TOPLEFT", showHeader, "BOTTOMLEFT", -2, -6)
+	-- Your party or raid, and (a child option) their pets.
+	local membersCheck = Check(content, "plateGroupMembers", "Always show group members' nameplates",
+		"Your party or raid members' nameplates show in CineMode everywhere, in fights and out, even " ..
+		"where Friendly Players is off. In dungeons and raids on retail the game won't let addons pick " ..
+		"them out: there every friendly player's nameplate shows.",
+		function(value)
+			ns.GetDB().plateGroupMembers = value
+			if value then
+				ns.EnablePlateRow("Friends")
+			end
+			Refresh()
+		end)
+	membersCheck:SetPoint("TOPLEFT", targetCheck, "BOTTOMLEFT", 0, -2)
+	local minionsCheck = Check(content, "plateGroupMemberMinions", "Their minions",
+		"Their pets too, and yours.",
+		function(value)
+			ns.GetDB().plateGroupMemberMinions = value
+			if value then
+				ns.EnablePlateRow("FriendlyMinions")
+			end
+			Refresh()
+		end)
+	minionsCheck:SetPoint("TOPLEFT", membersCheck, "BOTTOMLEFT", 16, -2)
+	GreyUnless(minionsCheck, function(db) return db.plateGroupMembers end)
 	-- PvP first, beside the In PvP combat column; In group (not a place)
 	-- beside Dungeons & Raids.
 	local PLACE_COLUMNS = {
-		{ "PvP", "PvP", "Show while PvP flagged, and in battlegrounds and arenas." },
+		{ "PvP", "PvP", "Show while PvP flagged, outside battlegrounds and arenas." },
+		{ "BGs", "BGs & Arenas", "Show in battlegrounds and arenas." },
 		{ "", "Open world", "Show everywhere else, cities and inns included." },
 		{ group = true },
 		{ "Instances", "Dungeons & Raids", "Show in dungeons, scenarios and raids." },
 	}
-	-- In PvP combat: not on retail, whose combat log is closed to addons.
-	local pvpColumn = not ns.isRetail
-	local headings = { "In combat" }
-	if pvpColumn then
-		headings[#headings + 1] = "In PvP combat"
-	end
+	local headings = { "In combat", "In PvP combat" }
 	for _, place in ipairs(PLACE_COLUMNS) do
 		headings[#headings + 1] = place.group and "In group" or place[2]
 	end
 	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 0
-	local columnTop = TableTop(showHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local columnTop = TableTop(minionsCheck, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	-- (Lined up with the switches' left edge, not the indented child.)
+	columnTop:ClearAllPoints()
+	columnTop:SetPoint("TOPLEFT", minionsCheck, "BOTTOMLEFT", -16, -10)
 
 	-- The game's own nameplate options, with enemy players and NPCs apart.
 	local KINDS = {
@@ -3109,20 +3161,14 @@ local function CreatePlatesPanel()
 		{ "Friends", "Friendly Players" },
 		{ "FriendlyMinions", "Minions", true },
 		{ "FriendlyNPCs", "Friendly NPCs" },
-		-- Your target, whatever its own row says (not a game option of its own).
-		{ "EnemyTarget", "Enemy Target", false, "if you can attack it" },
-		{ "FriendlyTarget", "Friendly Target", false, "if you can't attack it" },
 	}
-	local rowTip = " Also turns these nameplates on in the game's options."
+	local tip = " Also turns these nameplates on in the game's options."
 	local lastLabel
 	for r, kind in ipairs(KINDS) do
-		local target = kind[4]
-		local tip = target and (" Your target, " .. target .. ", shows here even if its own row is off.")
-			or rowTip
 		local function Ticked(key)
 			return function(value)
 				ns.GetDB()[key] = value
-				if value and not target then
+				if value then
 					ns.EnablePlateRow(kind[1])
 				end
 				Refresh()
@@ -3132,12 +3178,9 @@ local function CreatePlatesPanel()
 		local checks = {
 			Check(content, combatKey, "", COMBAT_TIP .. tip, Ticked(combatKey)),
 		}
-		local pvpCheck
-		if pvpColumn then
-			pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "", PVP_COMBAT_TIP .. tip,
-				Ticked("plateCombatPvP" .. kind[1]))
-			checks[2] = pvpCheck
-		end
+		local pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "", PVP_COMBAT_TIP .. tip,
+			Ticked("plateCombatPvP" .. kind[1]))
+		checks[2] = pvpCheck
 		for _, place in ipairs(PLACE_COLUMNS) do
 			if place.group then
 				local groupKey = "plateGroup" .. kind[1]
@@ -3150,7 +3193,7 @@ local function CreatePlatesPanel()
 		end
 		-- Greyed out where this client has no such setting.
 		local function Available()
-			return target ~= nil or ns.HasPlateSettings(kind[1])
+			return ns.HasPlateSettings(kind[1])
 		end
 		-- (In PvP combat also under In combat, which covers every fight.)
 		for _, check in ipairs(checks) do
@@ -3179,14 +3222,11 @@ local function CreatePlatesPanel()
 		local checks = {
 			Check(content, combatKey, "", COMBAT_TIP .. nameTip, Ticked(combatKey)),
 		}
-		local pvpCheck
-		if pvpColumn then
-			-- Names can't change mid-fight: they go by how the fight started.
-			pvpCheck = Check(content, "nameCombatPvP" .. group.key, "",
-				PVP_COMBAT_TIP .. " The game only allows this to be set as the fight starts." .. nameTip,
-				Ticked("nameCombatPvP" .. group.key))
-			checks[2] = pvpCheck
-		end
+		-- Names can't change mid-fight: they go by how the fight started.
+		local pvpCheck = Check(content, "nameCombatPvP" .. group.key, "",
+			PVP_COMBAT_TIP .. " The game only allows this to be set as the fight starts." .. nameTip,
+			Ticked("nameCombatPvP" .. group.key))
+		checks[2] = pvpCheck
 		for _, place in ipairs(PLACE_COLUMNS) do
 			if place.group then
 				local groupKey = "nameGroup" .. group.key
@@ -3206,8 +3246,8 @@ local function CreatePlatesPanel()
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 
-	-- Laid out top to bottom: the target and fight settings, then the two
-	-- grids (nameplates, then names).
+	-- Laid out top to bottom: the target and group switches, then the two grids
+	-- (nameplates, then names).
 	showHeader:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -18)
 	-- (Lined up with the nameplate grid, so both grids' columns match.)
 	namesHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
@@ -3445,11 +3485,16 @@ local function CreateMinimapPanel()
 			ns.GetDB().minimapForTracking = value
 			Refresh()
 		end)
+	local ping = Check(content, "minimapRevealOnPing", "Reveal when a group member pings it",
+		"Someone in your party or raid pinging the minimap shows it as if you'd hovered it, so " ..
+		"you can see where: it goes after \"Stays after mouseover\" on the CineMode page. Your " ..
+		"own pings don't count.")
 	if aboveTracking then
-		trackingMaster:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
+		ping:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
 	else
-		trackingMaster:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+		ping:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 	end
+	trackingMaster:SetPoint("TOPLEFT", ping, "BOTTOMLEFT", 0, -2)
 	local TRACKING_TIP = "While this tracking is active, the minimap stays up during cinematic " ..
 		"mode so you can spot nodes or creatures."
 	local previousTracking = trackingMaster
@@ -3484,17 +3529,23 @@ local function CreateMinimapPanel()
 		previousTracking = check
 	end
 
-	-- Hide in camera modes: one box per camera (keys <cam>HideMinimap).
+	-- Hide in camera modes: one box per camera (keys <cam>HideMinimap), in
+	-- two columns.
 	local hideInCams = Label(content, "GameFontHighlight", "Hide in camera modes")
 	hideInCams:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", -30, -14)
-	local previousCam
+	local CAM_ROWS, CAM_COLUMN = math.ceil(#ns.CAMERA_OFF_CAMS / 2), 140
+	local camAbove = {}
 	for i, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 		local check = Check(content, cam[1] .. "HideMinimap", cam[2],
 			"While the " .. cam[2] .. " camera runs, the minimap fades, even if it's set to " ..
 			"always show or tracking would keep it up. Hovering it still shows it.")
-		check:SetPoint("TOPLEFT", i == 1 and hideInCams or previousCam, "BOTTOMLEFT",
-			i == 1 and -2 or 0, i == 1 and -4 or -2)
-		previousCam = check
+		local column, row = math.floor((i - 1) / CAM_ROWS), (i - 1) % CAM_ROWS
+		if row == 0 then
+			check:SetPoint("TOPLEFT", hideInCams, "BOTTOMLEFT", -2 + column * CAM_COLUMN, -4)
+		else
+			check:SetPoint("TOPLEFT", camAbove[column], "BOTTOMLEFT", 0, -2)
+		end
+		camAbove[column] = check
 	end
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()

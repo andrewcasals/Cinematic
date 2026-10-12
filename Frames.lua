@@ -928,6 +928,18 @@ local FALL_LANDING_GRACE = 1
 local lastFallingAt = -math.huge
 local lastFallDamageAt = -math.huge
 
+-- Coming back to life does too, until health and power are full (however
+-- long that takes).
+local resurrectRecovering = false
+local resurrectWatcher = CreateFrame("Frame")
+resurrectWatcher:RegisterEvent("PLAYER_ALIVE") -- (also as you release to a ghost)
+resurrectWatcher:RegisterEvent("PLAYER_UNGHOST")
+resurrectWatcher:SetScript("OnEvent", function()
+	if not ns.Flag(UnitIsDeadOrGhost("player")) then
+		resurrectRecovering = true
+	end
+end)
+
 -- Buff peek: a new or refreshed buff/debuff briefly shows the buffs group.
 -- UNIT_AURA says what changed (added, updated, removed) without needing the
 -- aura details, which may be secret. Removals and the full refresh at login or
@@ -1146,6 +1158,23 @@ questWatcher:SetScript("OnEvent", function(_, event)
 		local hold = ns.HoldTime(HoverHoldKey("quests")) - ns.FadeOutTime()
 		questRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
 	end
+end)
+
+-- A group member pinging the minimap brings it up the same way
+-- (minimapRevealOnPing), even in a camera mode that hides it. Your own pings don't.
+local pingRevealUntil = 0
+local pingWatcher = CreateFrame("Frame")
+pcall(pingWatcher.RegisterEvent, pingWatcher, "MINIMAP_PING")
+pingWatcher:SetScript("OnEvent", function(_, _, unit)
+	if not (ns.db and ns.db.minimapRevealOnPing) then
+		return
+	end
+	local ok, mine = pcall(UnitIsUnit, unit or "player", "player")
+	if ok and ns.Flag(mine) then
+		return
+	end
+	local hold = ns.HoldTime(HoverHoldKey("minimap")) - ns.FadeOutTime()
+	pingRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
 end)
 
 -- Gamepad mode: pressing a gamepad button brings its action bars up, as
@@ -1527,8 +1556,12 @@ function ns.UpdateFrames(cinematic, elapsed)
 	if ns.Flag(IsFalling()) then
 		lastFallingAt = now
 	end
+	if resurrectRecovering and not IsPlayerRecovering() then
+		resurrectRecovering = false
+	end
 	local portraitAllowed = ns.db.portraitWhenNotFull and (not ns.db.portraitAfterCombat
-		or now - math.max(lastCombatAt, lastFallDamageAt) < ns.db.calmTime)
+		or now - math.max(lastCombatAt, lastFallDamageAt) < ns.db.calmTime
+		or (ns.db.portraitAfterResurrect and resurrectRecovering))
 	if ns.IsChatActive() then
 		ns.chatTypingUntil = now + ns.HoldTime("chatPeekTime")
 	end
@@ -1552,6 +1585,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local questTimerUp = ns.db.questTimerShow and HasQuestTimer()
 	local questReveal = questRevealUntil > now
 	local padReveal = padRevealUntil > now
+	local pingReveal = pingRevealUntil > now
 	-- Work out which groups are hovered so the whole group reveals together.
 	local hovered = {}
 	if cinematic and ns.db.mouseover then
@@ -1600,6 +1634,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			or (questTimerUp and entry.group == "questtimer")
 			or (questReveal and entry.group == "quests")
 			or (padReveal and entry.group == "gamepadbars")
+			or (pingReveal and entry.group == "minimap")
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown["group:" .. entry.group])
 		local fightingShown = listShown
@@ -1627,7 +1662,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			end
 			entry.debugUp = up
 		end
-		if camHidesMinimap and entry.group == "minimap" and not hovered.minimap then
+		if camHidesMinimap and entry.group == "minimap" and not hovered.minimap and not pingReveal then
 			target = 0
 		end
 		if typing and entry.group == "chat" and entry.alpha < 1 then
