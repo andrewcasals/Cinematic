@@ -1630,6 +1630,14 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		if ns.db.noMusicWhenAFK == false and ns.db.eventAFKMusic == nil then
 			ns.db.eventAFKMusic = true
 		end
+		-- Stand still with the AFK camera first took Go AFK's music; it has its
+		-- own now, so it starts out as Go AFK's was.
+		if not ns.db.stillMusicV2 then
+			if ns.db.eventStillCamera == "afk" and ns.db.eventAFKMusic == true and ns.db.eventStillMusic == nil then
+				ns.db.eventStillMusic = true
+			end
+			ns.db.stillMusicV2 = true
+		end
 		-- Tracking's "Except when standing still or flying" (Minimap page) is now
 		-- Hide in camera modes, the Flight and AFK boxes.
 		if ns.db.trackingHideWhenIdle == false then

@@ -91,8 +91,8 @@ ns.EVENTS = {
 }
 -- Each event's Music column (event<key>Music): its camera can start music
 -- (when music fatigue allows). Flights use the flight camera's own switch
--- (musicCamFlight). Going AFK's (eventAFKMusic) covers the AFK camera however
--- it starts.
+-- (musicCamFlight). The AFK camera's is Go AFK's (eventAFKMusic) while flagged
+-- AFK, Stand still's (eventStillMusic) when standing still started it.
 ns.EVENT_MUSIC_DEFAULT = { cozy = false, tele = false, vista = true, fish = false }
 for _, event in ipairs(ns.EVENTS) do
 	ns.DEFAULTS["event" .. event.key .. "Camera"] = event.camera
@@ -102,7 +102,7 @@ for _, event in ipairs(ns.EVENTS) do
 end
 ns.DEFAULTS.eventAFKMusic = false
 ns.DEFAULTS.eventQuestMusic = false
-ns.DEFAULTS.eventStillMusic = false -- (for the cozy, vista or fish camera; the AFK camera's is Go AFK's)
+ns.DEFAULTS.eventStillMusic = false
 
 -- Taking a flight: the flight camera runs, unless the event is set to no camera.
 local flightSince -- when this flight took off, or nil on the ground

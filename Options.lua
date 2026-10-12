@@ -311,11 +311,12 @@ local function CreateScrollPage(noReset)
 	scroll:SetScript("OnSizeChanged", function(_, width)
 		content:SetWidth(width)
 	end)
-	-- Every page gets a "Reset page" button, top right; it stays put as the
-	-- page scrolls, and goes on a page with no settings of its own.
-	local reset = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+	-- Every page gets a "Reset page" button, top right; it scrolls away with
+	-- the top of the page (left in place, the settings scrolled under it), and
+	-- goes on a page with no settings of its own.
+	local reset = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	reset:SetSize(100, 22)
-	reset:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -SCROLLBAR_WIDTH - 8, -12)
+	reset:SetPoint("TOPRIGHT", content, "TOPRIGHT", -8, -8)
 	reset:SetText("Reset page")
 	Tooltip(reset, "Put this page's settings back to the active profile's own values (the defaults, " ..
 		"or a built-in profile's).")
@@ -1348,9 +1349,9 @@ local function CreateEventsPanel()
 		"within the fatigue time (Audio page). Music already playing just carries on. Off: this " ..
 		"camera never starts music. Needs \"Allow CineMode to queue Music\" on the Audio page."
 	local MUSIC_EXTRA_TIPS = {
-		AFK = " This covers the AFK camera however it starts, standing still included. Off also " ..
-			"keeps music from coming back after a pause while you're away.",
-		Still = " For the cozy, vista or fish camera; with the AFK camera, Go AFK's box above decides.",
+		AFK = " While you're flagged AFK, whatever the camera. Off also keeps music from coming back " ..
+			"after a pause while you're away.",
+		Still = " Off also keeps music from coming back after a pause while you stand still.",
 	}
 
 	local previous, dx = header, 0
@@ -1392,16 +1393,15 @@ local function CreateEventsPanel()
 		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
 
 		-- Music: the event's own switch; a flight's is the flight camera's.
-		-- Going AFK's covers the AFK camera
-		-- however it starts, so it isn't greyed with the event set to none.
+		-- Going AFK's covers being AFK whatever the camera, so it isn't greyed
+		-- with the event set to none.
 		local musicKey = (event.key == "Flight" and "musicCamFlight")
 			or (ns.DEFAULTS["event" .. event.key .. "Music"] ~= nil and ("event" .. event.key .. "Music"))
 		if musicKey then
 			local music = Check(content, musicKey, "", MUSIC_TIP .. (MUSIC_EXTRA_TIPS[event.key] or ""))
 			music:SetPoint("LEFT", label, "LEFT", MUSIC_X + 8, 0)
 			GreyUnless(music, function(db)
-				return db.musicInCinematic and (event.key == "AFK" or (db[key .. "Camera"] ~= "none"
-					and not (event.key == "Still" and db[key .. "Camera"] == "afk")))
+				return db.musicInCinematic and (event.key == "AFK" or db[key .. "Camera"] ~= "none")
 			end)
 		end
 		previous, dx = label, 0
@@ -3422,62 +3422,136 @@ end
 -- Sub-page listing the built-in frames, each with a checkbox to keep it shown.
 local RefreshExtras
 
--- One row of the extras list, made as needed: Stop/Restore, Delete, the name.
+-- The 3rd Party Frames page's columns, for the supported addons and the
+-- custom frames alike: the name, then CineMode and the Standard Frames
+-- page's columns ({ heading, isOn, list, needs "stay cinematic in combat" }).
+local THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_COLUMN_WIDTH = 220, 100
+local THIRD_PARTY_COLUMNS = {
+	{ "CineMode" },
+	{ "In combat", ns.IsCombatShowOn, "combatShow", true },
+	{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
+	{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
+}
+local function ThirdPartyColumnX(c)
+	return THIRD_PARTY_LABEL_WIDTH + (c - 1) * THIRD_PARTY_COLUMN_WIDTH + (THIRD_PARTY_COLUMN_WIDTH - 26) / 2
+end
+
+-- The custom frames' column headings, above their rows.
+local function GetExtraHeadings()
+	if extrasPanel.headings then
+		return extrasPanel.headings
+	end
+	local headings = CreateFrame("Frame", nil, extrasPanel)
+	headings:SetSize(THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH, 16)
+	headings:SetPoint("TOPLEFT", extrasPanel.addMode, "BOTTOMLEFT", 0, -10)
+	for c, column in ipairs(THIRD_PARTY_COLUMNS) do
+		local heading = Label(headings, "GameFontNormalSmall", column[1])
+		heading:SetWidth(THIRD_PARTY_COLUMN_WIDTH)
+		heading:SetJustifyH("CENTER")
+		heading:SetPoint("TOPLEFT", THIRD_PARTY_LABEL_WIDTH + (c - 1) * THIRD_PARTY_COLUMN_WIDTH, 0)
+	end
+	extrasPanel.headings = headings
+	return headings
+end
+
+-- One row of the custom frames list, made as needed: a small X (takes it off
+-- the list), the name, and the columns. row.item: { name, picked, kept, added }.
 local function GetExtraRow(index)
 	local row = extraRows[index]
 	if row then
 		return row
 	end
 	row = CreateFrame("Frame", nil, extrasPanel)
-	row:SetSize(560, 22)
-	row:SetPoint("TOPLEFT", extrasPanel.help, "BOTTOMLEFT", 0, -10 - (index - 1) * 24)
+	row:SetSize(THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH, 26)
+	row:SetPoint("TOPLEFT", GetExtraHeadings(), "BOTTOMLEFT", 0, -2 - (index - 1) * 24)
 
-	row.button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-	row.button:SetSize(70, 20)
-	row.button:SetPoint("LEFT")
-	row.button:SetScript("OnClick", function()
-		if row.item.faded then
-			ns.StopFading(row.item.name)
+	row.delete = CreateFrame("Button", nil, row, "UIPanelCloseButton")
+	row.delete:SetSize(22, 22)
+	row.delete:SetPoint("LEFT", -4, 0)
+	Tooltip(row.delete, "Takes this frame off the list. A frame you added stops fading; " ..
+		"one you kept up fades again if it's one the addon fades by itself.")
+	row.delete:SetScript("OnClick", function()
+		if row.item.picked then
+			ns.DropPickedFrame(row.item.name)
 		else
-			ns.UnignoreFrame(row.item.name)
+			ns.ForgetExtraFrame(row.item.name)
 		end
 		RefreshExtras()
 	end)
 
-	row.delete = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-	row.delete:SetSize(70, 20)
-	row.delete:SetPoint("LEFT", row.button, "RIGHT", 4, 0)
-	row.delete:SetText("Delete")
-	Tooltip(row.delete, "Removes this frame from the list. A frame you added stops fading; " ..
-		"one you stopped fades again if it's one the addon fades by itself.")
-	row.delete:SetScript("OnClick", function()
-		ns.ForgetExtraFrame(row.item.name)
-		RefreshExtras()
-	end)
-
-	row.text = Label(row, "GameFontHighlightSmall")
-	row.text:SetPoint("LEFT", row.delete, "RIGHT", 8, 0)
-	row.text:SetPoint("RIGHT")
+	row.text = Label(row, "GameFontHighlight")
+	row.text:SetPoint("LEFT", 20, 0)
+	row.text:SetWidth(THIRD_PARTY_LABEL_WIDTH - 24)
 	row.text:SetWordWrap(false)
+
+	row.checks = {}
+	for c, column in ipairs(THIRD_PARTY_COLUMNS) do
+		local check
+		if c == 1 then
+			check = Check(row, nil, "", "Show this frame the whole time in CineMode (Cinematic leaves it " ..
+				"alone). Unticked, it's hidden, except as the other columns say.", function(value)
+				ns.SetFrameKept(row.item.name, value)
+				RefreshExtras()
+			end)
+			check.Refresh = function(self)
+				if row.item then self:SetChecked(row.item.kept) end
+			end
+		else
+			local isOn, list, needsStay = column[2], column[3], column[4]
+			check = Check(row, nil, "", nil, function(value)
+				ns.GetDB()[list]["extra:" .. row.item.name] = value
+			end)
+			check.Refresh = function(self)
+				if not row.item then return end
+				self:SetChecked(isOn("extra:" .. row.item.name))
+				self:SetEnabled(not row.item.kept and (not needsStay or ns.GetDB().stayInCombat))
+			end
+		end
+		check:SetPoint("LEFT", ThirdPartyColumnX(c), 0)
+		row.checks[c] = check
+	end
 	extraRows[index] = row
 	return row
 end
 
 RefreshExtras = function()
 	local faded, ignored = ns.GetExtraFrames()
+	local db = ns.GetDB()
 	local items = {}
-	for _, name in ipairs(faded) do items[#items + 1] = { name = name, faded = true } end
-	for _, name in ipairs(ignored) do items[#items + 1] = { name = name, faded = false } end
+	-- Frames add mode has picked so far, at the top while it's on.
+	for _, name in ipairs(ns.GetPickedFrames()) do items[#items + 1] = { name = name, picked = true } end
+	for _, name in ipairs(faded) do items[#items + 1] = { name = name, added = true } end
+	-- Kept up (/cine keep, or CineMode ticked): added ones and built-in ones.
+	for _, name in ipairs(ignored) do
+		items[#items + 1] = { name = name, kept = true, added = db.extraFrames[name] or false }
+	end
 
 	for i, item in ipairs(items) do
 		local row = GetExtraRow(i)
 		row.item = item
-		row.text:SetText(item.faded and item.name or ("|cff808080" .. item.name .. "|r"))
-		row.button:SetText(item.faded and "Stop" or "Restore")
+		for c, check in ipairs(row.checks) do
+			-- (A built-in frame kept up has its rows on the Standard Frames page.)
+			check:SetShown(not item.picked and (c == 1 or item.added))
+			if not item.picked then
+				local list = THIRD_PARTY_COLUMNS[c][3]
+				if list then
+					-- (For the page's Reset: just these rows of the shared lists.)
+					RecordKey(extrasPanel, list)
+					RecordRow(extrasPanel, list, "extra:" .. item.name)
+				end
+				check:Refresh()
+			end
+		end
+		if item.picked then
+			row.text:SetText("|cffffd100" .. item.name .. "|r |cff808080(picked)|r")
+		else
+			row.text:SetText(item.name)
+		end
 		row:Show()
 	end
 	for i = #items + 1, #extraRows do extraRows[i]:Hide() end
 
+	GetExtraHeadings():SetShown(#items > 0)
 	extrasPanel.empty:SetShown(#items == 0)
 	FitContentHeight(extrasPanel)
 end
@@ -3787,13 +3861,8 @@ local function CreateExtrasPanel()
 	box:SetSize(640, 1)
 	stack:Add(box, "label")
 
-	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, INDENT = 220, 100, 24, 18
-	local COLUMNS = {
-		{ "CineMode" },
-		{ "In combat", ns.IsCombatShowOn, "combatShow", true },
-		{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
-		{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
-	}
+	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, INDENT = THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_COLUMN_WIDTH, 24, 18
+	local COLUMNS = THIRD_PARTY_COLUMNS
 	local headings = {}
 	for c, column in ipairs(COLUMNS) do
 		local heading = Label(box, "GameFontNormalSmall", column[1])
@@ -3994,12 +4063,56 @@ local function CreateExtrasPanel()
 	stack:Header(content, "Custom frames")
 	content.help = stack:Note(content,
 		"To fade something else, hover over it and type |cffffd100/cine add|r, " ..
-			"or type |cffffd100/cine add|r and its frame name. " ..
-		"Stop fading one with |cffffd100Stop|r; greyed-out frames are ones you stopped, " ..
-		"which |cffffd100Restore|r undoes. |cffffd100Delete|r takes a frame off the list.", 560)
+			"or type |cffffd100/cine add|r and its frame name. To pick up several, use the button below " ..
+			"(or |cffffd100/cine add mode|r) and hover over each one. " ..
+		"The columns work as for the supported addons above; the X takes a frame off the list.", 560)
+
+	-- Add mode (/cine add mode): pick up frames by hovering, then fade them all.
+	local addMode = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	addMode:SetSize(180, 22)
+	addMode:SetPoint("TOPLEFT", content.help, "BOTTOMLEFT", 0, -10)
+	Tooltip(addMode, "Hover over the frames you want to fade (move this window out of the way, " ..
+		"or close it), then click Stop or type /cine add mode again to fade them all. " ..
+		"The game's own frames and ones already faded are left out. /cine add cancel drops them.")
+	addMode:SetScript("OnClick", ns.ToggleAddMode)
+	-- A spinner beside it while it's on, to show it's still watching the mouse.
+	local spinner = addMode:CreateTexture(nil, "OVERLAY")
+	spinner:SetTexture("Interface\\COMMON\\StreamCircle")
+	spinner:SetSize(20, 20)
+	spinner:SetPoint("LEFT", addMode, "RIGHT", 6, 0)
+	spinner:SetVertexColor(0.3, 1, 0.3)
+	local spin = spinner:CreateAnimationGroup()
+	local turn = spin:CreateAnimation("Rotation")
+	turn:SetDegrees(-360)
+	turn:SetDuration(1)
+	spin:SetLooping("REPEAT")
+
+	-- Tinted green while it's on. (The button's art is three pieces on some
+	-- clients, one texture on others.)
+	local function ShowAddMode()
+		local on = ns.IsAddModeOn()
+		spinner:SetShown(on)
+		if on then spin:Play() else spin:Stop() end
+		addMode:SetText(on and "Stop" or "Pick frames by hovering")
+		local r, g, b = 1, 1, 1
+		if on then r, g, b = 0.3, 1, 0.3 end
+		for _, art in ipairs({ addMode.Left or false, addMode.Middle or false, addMode.Right or false,
+			addMode:GetNormalTexture() or false, addMode:GetPushedTexture() or false }) do
+			if art and art.SetVertexColor then art:SetVertexColor(r, g, b) end
+		end
+	end
+	content.addMode = addMode
+	ShowAddMode()
+	-- Kept up to date when /cine add mode turns it on or off.
+	ns.OnAddModeChanged = function()
+		ShowAddMode()
+		if canvas:IsVisible() then
+			RefreshExtras()
+		end
+	end
 
 	content.empty = Label(content, "GameFontDisableSmall", "None yet.")
-	content.empty:SetPoint("TOPLEFT", content.help, "BOTTOMLEFT", 0, -12)
+	content.empty:SetPoint("TOPLEFT", addMode, "BOTTOMLEFT", 0, -12)
 
 	canvas:SetScript("OnShow", PageShown(function()
 		if ns.GetDB() then

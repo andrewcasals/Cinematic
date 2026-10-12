@@ -15,6 +15,7 @@ Support\Details.lua
 Support\CooldownManagerCentered.lua
 Support\ForeverEnhancedCooldownManager.lua
 Support\EllesmereUI.lua
+Support\Bartender4.lua
 Frames.lua
 Chat.lua
 Effects.lua

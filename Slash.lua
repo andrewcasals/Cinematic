@@ -36,6 +36,7 @@ local function PrintHelp()
 	print("  /cine welcome - the welcome window, to pick a profile")
 	Heading("Frames (hover over one first)")
 	print("  /cine add - fade it too (or /cine add <FrameName>)")
+	print("  /cine add mode - pick up every frame you hover over, then again to fade them all")
 	print("  /cine keep - always show it")
 	print("  /cine list - show the extra faded frames")
 	Heading("Camera")
@@ -141,7 +142,14 @@ function ns.HandleSlash(msg)
 		ns.Print("letterbox size set to " .. num .. "%")
 	elseif cmd == "add" then
 		-- Frame names are case-sensitive, so take the name before lowercasing.
-		ns.AddUnderMouse(msg:match("^%s*%S+%s+(%S+)"))
+		local name = msg:match("^%s*%S+%s+(%S+)")
+		if name == "mode" then
+			ns.ToggleAddMode()
+		elseif name == "cancel" then
+			ns.CancelAddMode()
+		else
+			ns.AddUnderMouse(name)
+		end
 	elseif cmd == "remove" or cmd == "keep" then
 		ns.RemoveUnderMouse()
 	elseif cmd == "button" then

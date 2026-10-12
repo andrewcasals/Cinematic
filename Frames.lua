@@ -1,7 +1,7 @@
 -- Cinematic: the frames that fade. The built-in fade list, fading and
 -- nesting, the minimap shrink, scanning for frames created later, the Issue
 -- Reporter, hover, and the 3rd Party Frames page's lists.
-local _, ns = ...
+local ADDON_NAME, ns = ...
 
 -- Frames to fade, grouped so hovering one member reveals the whole group.
 -- Names differ between Classic Era, progression Classic and Retail; missing
@@ -53,6 +53,9 @@ local FRAME_GROUPS = {
 	gamepadbars = { "GamepadMainActionBarFrame" },
 	gamepadlegend = { "GamepadPersistentInputLegend" },
 	gamepadreticle = { "GamepadReticle" },
+	-- Action bar art from addons (Bartender4's art bar); the game's own is
+	-- found by FindBarArt.
+	barart = {},
 	chat = {
 		"GeneralDockManager", "ChatFrameMenuButton", "ChatFrameChannelButton",
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
@@ -489,6 +492,68 @@ local function FindIssueReporter()
 	end
 end
 
+-- Action bar 1's art (the Standard Frames page's Action bar art row): the
+-- end caps and the bar the buttons sit on, by name on older clients and by
+-- parentKey on newer ones. The pieces are textures (which the fade's frame
+-- code can't take), so a frame of ours over the bar stands in for them in
+-- the fade, and its alpha is copied onto them. They ignore the bar's own
+-- alpha, so they can stay up while its buttons fade, or the other way round.
+local BAR_ART_NAMES = {
+	"MainMenuBarLeftEndCap", "MainMenuBarRightEndCap", "MainMenuBarArtFrameBackground",
+	"MainMenuBarTexture0", "MainMenuBarTexture1", "MainMenuBarTexture2", "MainMenuBarTexture3",
+}
+local BAR_ART_KEYS = {
+	MainMenuBarArtFrame = { "LeftEndCap", "RightEndCap" },
+	MainMenuBar = { "EndCaps", "BorderArt" },
+	MainActionBar = { "EndCaps", "BorderArt" },
+}
+local barArt, barArtSeen = {}, {}
+local artStandIn
+
+local function AddBarArt(region)
+	if type(region) ~= "table" or barArtSeen[region] or type(region.SetAlpha) ~= "function"
+		or IsForbidden(region) then
+		return
+	end
+	-- (A bar an addon took over is left alone, its art with it.)
+	local bar = TopLevelAncestor(region)
+	if bar and bar:GetName() and leftAlone[bar:GetName()] then
+		return
+	end
+	barArtSeen[region] = true
+	barArt[#barArt + 1] = { region = region, bar = bar and bar:GetName() }
+	if region.SetIgnoreParentAlpha then
+		region:SetIgnoreParentAlpha(true)
+	end
+	if not artStandIn then
+		artStandIn = CreateFrame("Frame", nil, UIParent)
+		artStandIn:SetAllPoints(bar or region)
+		hooksecurefunc(artStandIn, "SetAlpha", function(_, alpha)
+			for _, art in ipairs(barArt) do
+				art.region:SetAlpha(alpha)
+			end
+		end)
+	end
+	region:SetAlpha(artStandIn:GetAlpha())
+end
+
+local function FindBarArt()
+	for _, name in ipairs(BAR_ART_NAMES) do
+		AddBarArt(_G[name])
+	end
+	for barName, keys in pairs(BAR_ART_KEYS) do
+		local bar = _G[barName]
+		if type(bar) == "table" then
+			for _, key in ipairs(keys) do
+				AddBarArt(bar[key])
+			end
+		end
+	end
+	if artStandIn then
+		AddFrame(artStandIn, "barart")
+	end
+end
+
 -- Saved extras that are really built-in frames (added before /cine add
 -- checked for that) would show in the extras list, where Stop would break the
 -- built-in fade. Drop them.
@@ -544,6 +609,7 @@ function ns.BuildManagedList()
 	ScanTopLevelFrames()
 	ScanAddonFrames()
 	FindIssueReporter()
+	FindBarArt()
 	RecomputeNesting()
 end
 
@@ -747,6 +813,11 @@ ns.COMBAT_SHOW = {
 	-- bars, so there each also says where it sits.
 	{ key = "mainbar", label = "Action bar 1", default = true,
 		frames = { "MainMenuBar", "MainActionBar", "MainMenuBarVehicleLeaveButton" } },
+	-- The game's art round action bar 1 (end caps, the bar behind the buttons),
+	-- left up or faded apart from its buttons, which an action bar addon may
+	-- have taken away. Follows Action bar 1's ticks until set (see ROW_FALLBACK).
+	-- noHoverRow: hovering it is hovering action bar 1.
+	{ key = "art", label = "Action bar art", default = true, groups = { "barart" }, noHoverRow = true },
 	{ key = "bottomleft", label = ns.isRetail and "Action bar 2" or "Action bar 2 (bottom left)", default = true,
 		frames = { "MultiBarBottomLeft" } },
 	{ key = "bottomright", label = ns.isRetail and "Action bar 3" or "Action bar 3 (bottom right)", default = true,
@@ -819,7 +890,7 @@ ns.HOVER_ROWS = {}
 local HOVER_ROW_BY_NAME = {} -- frame name -> row key (the first row listing it)
 for _, list in ipairs({ HOVER_EXTRA_ROWS, ns.COMBAT_SHOW }) do
 	for _, item in ipairs(list) do
-		if item.key ~= "gamepadxp" then
+		if item.key ~= "gamepadxp" and not item.noHoverRow then
 			ns.HOVER_ROWS[#ns.HOVER_ROWS + 1] = item
 			for _, name in ipairs(item.frames or {}) do
 				HOVER_ROW_BY_NAME[name] = HOVER_ROW_BY_NAME[name] or item.key
@@ -835,7 +906,7 @@ local HOVER_ROW_BY_GROUP = {
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
-	chat = "chat",
+	chat = "chat", barart = "mainbar",
 }
 function ns.HoverRowFor(entry)
 	return (entry.name and HOVER_ROW_BY_NAME[entry.name]) or HOVER_ROW_BY_GROUP[entry.group] or entry.group
@@ -946,9 +1017,26 @@ function ns.IsGamePadOn()
 	return C_GamePad ~= nil and GetCVarBool("GamePadEnable")
 end
 
+-- Frames added on the 3rd Party Frames page ("extra:<name>") start out like
+-- the supported addons': up in combat and with an enemy targeted.
+local function IsExtraKey(key)
+	return key:find("^extra:") ~= nil
+end
+
+-- Rows that take another row's tick in a column until given their own: the
+-- bar art follows action bar 1, so profiles and lists from before it was a
+-- row (the Cooldown Manager profile's: no action bars) still hold.
+local ROW_FALLBACK = { art = "mainbar" }
+
 function ns.IsCombatShowOn(key)
 	local on = ns.db.combatShow[key]
 	if on == nil then
+		if ROW_FALLBACK[key] then
+			return ns.IsCombatShowOn(ROW_FALLBACK[key])
+		end
+		if IsExtraKey(key) then
+			return true
+		end
 		for _, item in ipairs(ns.COMBAT_SHOW) do
 			if item.key == key then return item.default end
 		end
@@ -959,6 +1047,12 @@ end
 local function IsListOn(list, key, defaults)
 	local on = ns.db[list][key]
 	if on == nil then
+		if ROW_FALLBACK[key] then
+			return IsListOn(list, ROW_FALLBACK[key], defaults)
+		end
+		if IsExtraKey(key) then
+			return defaults == ENEMY_SHOW_DEFAULT
+		end
 		return defaults[key] or false
 	end
 	return on
@@ -972,7 +1066,11 @@ function ns.IsCineShowOn(key)
 	if setting then
 		return ns.db[setting] or false
 	end
-	return ns.db.cineShow[key] or false
+	local on = ns.db.cineShow[key]
+	if on == nil and ROW_FALLBACK[key] then
+		return ns.IsCineShowOn(ROW_FALLBACK[key])
+	end
+	return on or false
 end
 function ns.IsEnemyShowOn(key) return IsListOn("enemyShow", key, ENEMY_SHOW_DEFAULT) end
 function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SHOW_DEFAULT) end
@@ -1015,6 +1113,14 @@ local function GetCombatShownFrames()
 			end
 			for _, group in ipairs(item.groups or {}) do
 				shown["group:" .. group] = true
+			end
+		end
+	end
+	-- Added frames, by their rows on the 3rd Party Frames page.
+	if isOn then
+		for name in pairs(ns.db.extraFrames) do
+			if isOn("extra:" .. name) then
+				shown["group:extra:" .. name] = true
 			end
 		end
 	end
@@ -2084,13 +2190,16 @@ function ns.UpdateFrames(cinematic, elapsed)
 end
 
 -- Frames beyond the built-in list (and built-in ones kept up): added ones (including auto-matched) and
--- ones the player chose to stop fading. Sorted for stable display.
+-- ones the player chose to stop fading (an added one stays in extraFrames
+-- then too, so it fades again when let go). Sorted for stable display.
 -- Lists saved names rather than managed frames, so frames that don't exist
 -- yet (created later in the session) still show.
 function ns.GetExtraFrames()
 	local faded, ignored = {}, {}
 	for name in pairs(ns.db.extraFrames) do
-		faded[#faded + 1] = name
+		if not ns.db.ignoredFrames[name] then
+			faded[#faded + 1] = name
+		end
 	end
 	for name in pairs(ns.db.ignoredFrames) do
 		ignored[#ignored + 1] = name -- (built-in frames kept with /cine keep too)
@@ -2101,12 +2210,11 @@ function ns.GetExtraFrames()
 end
 
 function ns.StopFading(name)
-	ns.db.extraFrames[name] = nil
 	ns.db.ignoredFrames[name] = true
 	if _G[name] then RemoveFrame(_G[name]) end
 end
 
--- Built-in and auto-matched frames come back on the next scan.
+-- Built-in, auto-matched and added frames come back on the next scan.
 function ns.UnignoreFrame(name)
 	ns.db.ignoredFrames[name] = nil
 end
@@ -2123,11 +2231,12 @@ end
 -- addons' bars) are invisible to GetMouseFoci, so failing that, the smallest
 -- named, shown top-level frame the cursor is over. Smallest, so a frame
 -- covering the whole screen doesn't win over the one actually being pointed at.
-local function GetTopLevelFrameUnderCursor()
+-- accept(frame): only frames it says yes to (add mode: ones not picked yet).
+local function GetTopLevelFrameUnderCursor(accept)
 	local best, bestArea
 	for _, frame in ipairs({ UIParent:GetChildren() }) do
 		if not IsForbidden(frame) and frame ~= ns.letterbox and frame:GetName()
-			and frame:IsVisible() and frame:IsMouseOver() then
+			and frame:IsVisible() and frame:IsMouseOver() and (not accept or accept(frame)) then
 			local width, height = frame:GetSize()
 			local area = (width or 0) * (height or 0)
 			if area > 0 and (not bestArea or area < bestArea) then
@@ -2200,7 +2309,162 @@ function ns.RemoveUnderMouse()
 		return
 	end
 	ns.StopFading(name)
-	ns.Print(name .. " will always be shown (undo under Custom frames on the 3rd Party Frames options page).")
+	ns.Print(name .. " will always be shown (untick its CineMode box under Custom frames on the 3rd Party Frames " ..
+		"options page to undo).")
+end
+
+-- Add mode (/cine add mode): hovering frames collects them, and the second
+-- /cine add mode fades them all. Only frames /cine add would take and that
+-- aren't faded yet: not the game's own, not this addon's, not windows.
+local ADD_MODE_CHECK = 0.1 -- seconds between looks under the cursor
+local addMode            -- the ticker while on
+local pending = {}       -- names picked, in order
+local overlays = {}      -- name: its gold box
+local skipped = {}       -- names not to pick again this time: dropped, or kept (and told so)
+
+-- Whether the game made the frame's global (an addon's CreateFrame taints
+-- it), and if not, the addon that did.
+local function GlobalSource(name)
+	if type(issecurevariable) ~= "function" then
+		return false
+	end
+	local ok, secure, source = pcall(issecurevariable, name)
+	if not ok then
+		return false
+	end
+	return secure == true, type(source) == "string" and source or nil
+end
+
+-- A gold box over a collected frame, so it's clear what was picked.
+-- Unnamed and not taking the mouse, so the cursor checks never find it.
+local function ShowOverlay(frame, name)
+	local overlay = CreateFrame("Frame", nil, UIParent)
+	overlay:SetFrameStrata("TOOLTIP")
+	overlay:SetAllPoints(frame)
+	local fill = overlay:CreateTexture(nil, "BACKGROUND")
+	fill:SetAllPoints()
+	fill:SetColorTexture(1, 0.82, 0, 0.2)
+	local label = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	label:SetPoint("TOPLEFT", 2, -2)
+	label:SetText(name)
+	overlays[name] = overlay
+end
+
+-- The 3rd Party Frames page's button and list (see Options.lua).
+local function AddModeChanged()
+	if ns.OnAddModeChanged then
+		ns.OnAddModeChanged()
+	end
+end
+
+-- Whether add mode can pick the frame: not picked or faded already, not the
+-- game's own or this addon's, not a window.
+local function Pickable(frame)
+	local name = frame:GetName()
+	if not name or overlays[name] or skipped[name] or seen[frame] or ns.db.extraFrames[name]
+		or leftAlone[name] then
+		return false
+	end
+	local game, source = GlobalSource(name)
+	return not (game or source == ADDON_NAME or IsWindow(frame, name))
+end
+
+local function CheckUnderMouse()
+	local frame = GetTopLevelFrameUnderMouse()
+	-- One already picked or faded can sit over one that isn't (an action bar
+	-- addon's buttons over its art bar): the smallest one under the cursor
+	-- that is, then. (Not under a window or the game's frames: what's behind
+	-- the settings window isn't being pointed at.)
+	local name = frame and frame:GetName()
+	if name and (overlays[name] or seen[frame] or ns.db.extraFrames[name]) then
+		frame = GetTopLevelFrameUnderCursor(Pickable)
+	elseif not (frame and Pickable(frame)) then
+		return
+	end
+	if not frame then
+		return
+	end
+	name = frame:GetName()
+	local _, source = GlobalSource(name)
+	if ns.db.ignoredFrames[name] then
+		skipped[name] = true
+		ns.Print(name .. " skipped: you set it to always show (untick its CineMode box under Custom frames " ..
+			"on the 3rd Party Frames page).")
+		return
+	end
+	pending[#pending + 1] = name
+	ShowOverlay(frame, name)
+	ns.Print("found " .. name .. (source and (" (" .. source .. ")") or ""))
+	AddModeChanged()
+end
+
+-- The frames picked so far, in the order found.
+function ns.GetPickedFrames()
+	return pending
+end
+
+-- Takes a picked frame back out (the list's Drop), and doesn't pick it again.
+function ns.DropPickedFrame(name)
+	for i, picked in ipairs(pending) do
+		if picked == name then
+			table.remove(pending, i)
+			break
+		end
+	end
+	if overlays[name] then
+		overlays[name]:Hide()
+		overlays[name] = nil
+	end
+	skipped[name] = true
+	AddModeChanged()
+end
+
+local function EndAddMode()
+	addMode:Cancel()
+	addMode = nil
+	for _, overlay in pairs(overlays) do
+		overlay:Hide()
+	end
+	local names = pending
+	pending, overlays, skipped = {}, {}, {}
+	return names
+end
+
+function ns.IsAddModeOn()
+	return addMode ~= nil
+end
+
+function ns.ToggleAddMode()
+	if not addMode then
+		addMode = C_Timer.NewTicker(ADD_MODE_CHECK, CheckUnderMouse)
+		ns.Print("add mode: hover over the frames to fade. Type /cine add mode again to fade them " ..
+			"(or /cine add cancel to drop them). The game's own frames and ones already faded are left out.")
+		AddModeChanged()
+		return
+	end
+	local added = 0
+	for _, name in ipairs(EndAddMode()) do
+		local frame = _G[name]
+		if IsFrame(frame) then
+			ns.db.ignoredFrames[name] = nil
+			ns.db.extraFrames[name] = true
+			AddFrame(frame, "extra:" .. name)
+			added = added + 1
+		end
+	end
+	ns.Print(added == 0 and "add mode off: nothing found to add."
+		or ("add mode off: now fading %d frame%s."):format(added, added == 1 and "" or "s"))
+	AddModeChanged()
+end
+
+function ns.CancelAddMode()
+	if not addMode then
+		ns.Print("add mode isn't on (/cine add mode starts it).")
+		return
+	end
+	local count = #EndAddMode()
+	ns.Print(("add mode cancelled: %d frame%s left as they were."):format(count, count == 1 and "" or "s"))
+	AddModeChanged()
 end
 
 function ns.ListExtras()
@@ -2252,9 +2516,25 @@ function ns.FollowOwnAlpha(names)
 end
 
 -- Game frames the addon hides for good: never faded.
+-- An addon took the bar over (and may keep it at alpha 0): its art goes back
+-- to following the bar.
+local function ReleaseBarArt(barName)
+	for i = #barArt, 1, -1 do
+		local art = barArt[i]
+		if art.bar == barName then
+			if art.region.SetIgnoreParentAlpha then
+				art.region:SetIgnoreParentAlpha(false)
+			end
+			art.region:SetAlpha(1)
+			table.remove(barArt, i)
+		end
+	end
+end
+
 function ns.LeaveAlone(names)
 	for _, name in ipairs(names) do
 		leftAlone[name] = true
+		ReleaseBarArt(name)
 		LetGo(name)
 	end
 end

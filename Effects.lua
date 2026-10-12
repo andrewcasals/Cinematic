@@ -310,16 +310,26 @@ function ns.StopMusicNow()
 	end
 end
 
+-- Music for standing still (not flagged AFK): Stand still's switch, or with
+-- that event set to no camera (its switch greyed out) Go AFK's.
+local function StillMusicOn()
+	if ns.db.eventStillCamera == "none" then
+		return ns.db.eventAFKMusic
+	end
+	return ns.db.eventStillMusic
+end
+
 -- Standing still or AFK, as far as music goes: the AFK camera, the wait for it
--- (standing still with the UI faded) or being flagged AFK. With Go AFK's
--- music off (Camera Triggers page), none of these brings music back from the
--- move-on pause; music already playing carries on.
+-- (standing still with the UI faded) or being flagged AFK. With that one's
+-- music off (Camera Triggers page: Go AFK's while flagged AFK, otherwise
+-- StillMusicOn's), none of these brings music back from the move-on pause;
+-- music already playing carries on.
 local function QuietForAFK()
-	if ns.db.eventAFKMusic then
-		return false
+	if ns.Flag(UnitIsAFK("player")) then
+		return not ns.db.eventAFKMusic
 	end
 	local mode = ns.CameraMode and ns.CameraMode()
-	return ns.Flag(UnitIsAFK("player")) or mode == "idle" or (mode == nil and ns.stillSince ~= nil)
+	return (mode == "idle" or (mode == nil and ns.stillSince ~= nil)) and not StillMusicOn()
 end
 
 -- Muting music in combat: a 0-1 level that fades down during fights and back
@@ -462,14 +472,21 @@ local deathSong = { file = nil, playing = false }
 -- music fatigue allows. The flight, RP walk and auto-run cameras each have a
 -- switch; the cozy, vista and fish cameras follow the event that started them
 -- (the Camera Triggers page's Music column, event<key>Music). The AFK camera's
--- is Go AFK's (eventAFKMusic), and the quest camera's its own event's
+-- is Go AFK's (eventAFKMusic) while flagged AFK, Stand still's (eventStillMusic)
+-- when standing still started it; the quest camera's its own event's
 -- (eventQuestMusic). Music already playing just carries on: no camera swaps
 -- in a new song.
 local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "musicCamRun",
-	idle = "eventAFKMusic", quest = "eventQuestMusic" }
+	quest = "eventQuestMusic" }
 local EVENT_MUSIC_CAMS = { cozy = true, vista = true, fish = true }
 
 local function CameraMusicOn(mode)
+	if mode == "idle" then
+		if ns.Flag(UnitIsAFK("player")) then
+			return ns.db.eventAFKMusic or false
+		end
+		return StillMusicOn() or false
+	end
 	if EVENT_MUSIC_CAMS[mode] then
 		local key = ns.ActiveEvent and ns.ActiveEvent()
 		return key ~= nil and ns.db["event" .. key .. "Music"] or false

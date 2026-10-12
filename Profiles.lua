@@ -56,7 +56,7 @@ end
 
 -- A Standard Frames column as a list: every row given true (in on) or false.
 local STANDARD_ROWS = {
-	"player", "target", "tot", "focus", "minimap", "quests", "buffs", "swing", "cooldowns", "mainbar",
+	"player", "target", "tot", "focus", "minimap", "quests", "buffs", "swing", "cooldowns", "mainbar", "art",
 	"bottomleft", "bottomright", "right1", "right2", "bar6", "bar7", "bar8", "pet", "stance", "totems",
 	"micro", "xp",
 }
@@ -140,7 +140,8 @@ ns.BUILTIN_PROFILES = {
 		name = "Pure Cinema",
 		tip = "As little UI as possible: chat, buffs, the quest tracker, the minimap and your portrait " ..
 			"don't pop up on their own (hovering still shows them), your target's and group members' " ..
-			"nameplates aren't kept up, and fights don't bring the letterbox down.",
+			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
+			"your target, and every camera can start music.",
 		apply = function(set)
 			set("chatPeek", false)
 			set("buffPeek", false)
@@ -154,6 +155,40 @@ ns.BUILTIN_PROFILES = {
 			set("plateTarget", false)
 			set("plateGroupMembers", false)
 			set("plateGroupMemberMinions", false)
+			-- Fights bring up only your target and its target: no portrait,
+			-- bars, buffs, minimap or swing timer. (Rows not listed keep the
+			-- defaults.)
+			set("combatShow", { tot = true, minimap = false, buffs = false, swing = false, mainbar = false,
+				art = false, bottomleft = false, bottomright = false, pet = false, stance = false, totems = false,
+				micro = false, xp = false, focus = false })
+			set("enemyShow", { target = true, tot = true, player = false, focus = false, buffs = false,
+				mainbar = false, art = false, bottomleft = false, bottomright = false, pet = false, stance = false,
+				totems = false, micro = false, xp = false })
+			set("friendlyShow", { target = true, tot = true })
+			-- Standing still starts the AFK camera, and every event's camera can
+			-- start music.
+			set("eventStillCamera", "afk")
+			for _, event in ipairs({ "AFK", "Still", "Chair", "Kneel", "Sleep", "Dance", "Weapon", "Campfire",
+				"Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
+				set("event" .. event .. "Music", true)
+			end
+			-- The cameras don't wait for things to calm down after a fight, and RP
+			-- walk and auto-run carry on in cities and instances.
+			for _, cam in ipairs({ "walk", "run", "tele", "quest" }) do
+				set(cam .. "CalmWait", false)
+			end
+			for _, cam in ipairs({ "walk", "run" }) do
+				set(cam .. "OffInCities", false)
+				set(cam .. "OffInInstances", false)
+			end
+			-- No minimap for tracking, nor hiding it on flights or while AFK; no
+			-- quest timer box.
+			set("minimapForTracking", false)
+			set("flightHideMinimap", false)
+			set("idleHideMinimap", false)
+			set("questTimerShow", false)
+			-- Chat doesn't peek for General or LocalDefense.
+			set("chatPeekChannelList", { General = false, LocalDefense = false })
 		end,
 	},
 }

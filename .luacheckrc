@@ -206,6 +206,7 @@ read_globals = {
 	"FCF_StartAlertFlash",
 	"FCF_StopAlertFlash",
 	"issecretvalue",
+	"issecurevariable",
 	"seterrorhandler",
 	"tinsert",
 }
