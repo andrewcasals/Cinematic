@@ -5,6 +5,7 @@
 ## Category: UI
 ## Version: dev
 ## SavedVariables: CinematicDB
+## SavedVariablesPerCharacter: CinematicCharDB
 
 Diagnostics.lua
 Core.lua
@@ -23,5 +24,7 @@ Tint.lua
 Focus.lua
 Tracking.lua
 Slash.lua
+Profiles.lua
+Welcome.lua
 Options.lua
 MinimapButton.lua

@@ -262,8 +262,9 @@ local SCROLLBAR_WIDTH = 26
 local RESET_TO_NIL = { hoverGroups = true }
 local function ResetPage(content)
 	local db = ns.GetDB()
+	local base = ns.ProfileBase() -- (the active profile's values, not just the defaults)
 	for key in pairs(pageKeys[content] or {}) do
-		local default = ns.DEFAULTS[key]
+		local default = base[key]
 		local rows = pageRows[content] and pageRows[content][key]
 		if RESET_TO_NIL[key] then
 			db[key] = nil
@@ -283,7 +284,7 @@ local function ResetPage(content)
 end
 
 StaticPopupDialogs.CINEMATIC_RESET_PAGE = {
-	text = "Put this page's settings back to their defaults?",
+	text = "Put this page's settings back to the profile's own?",
 	button1 = YES, button2 = NO,
 	OnAccept = function(_, content) ResetPage(content) end,
 	timeout = 0, whileDead = true, hideOnEscape = true,
@@ -307,7 +308,8 @@ local function CreateScrollPage(noReset)
 	reset:SetSize(100, 22)
 	reset:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -SCROLLBAR_WIDTH - 8, -12)
 	reset:SetText("Reset page")
-	Tooltip(reset, "Put this page's settings back to their defaults.")
+	Tooltip(reset, "Put this page's settings back to the active profile's own values (the defaults, " ..
+		"or a built-in profile's).")
 	reset:SetScript("OnClick", function()
 		StaticPopup_Show("CINEMATIC_RESET_PAGE", nil, nil, content)
 	end)
@@ -379,13 +381,18 @@ local function CreatePanel()
 		"Also toggled with /cine or the keybind under Key Bindings > AddOns.", ns.SetEnabled)
 	enabled:SetPoint("TOPLEFT", general, "BOTTOMLEFT", -2, -6)
 
+	local fadeUI = Check(panel, "fadeUI", "Fade the UI (CineMode)",
+		"Off: the UI stays as it is and the camera's left to you, with just the visual effects " ..
+		"(if \"Enabled outside of CineMode\" is ticked on the Visual Effects page). The VFX Only profile.")
+	fadeUI:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -2)
+
 	local minimapButton = Check(panel, "minimapButton", "Show minimap button",
 		"Left-click it for quick options (combat, music, tint), right-click for " ..
 		"these settings, drag to move it.", function(value)
 			ns.GetDB().minimapButton = value
 			if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
 		end)
-	minimapButton:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -2)
+	minimapButton:SetPoint("TOPLEFT", fadeUI, "BOTTOMLEFT", 0, -2)
 
 	-- The same setting as "Turn off in: Combat" on the right, the right way round.
 	local stay = Check(panel, "stayInCombat", "Stay in CineMode in combat",
@@ -442,12 +449,24 @@ local function CreatePanel()
 	local defaults = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	defaults:SetSize(140, 22)
 	defaults:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -16, -12)
-	defaults:SetText("Reset settings")
-	Tooltip(defaults, "Restore the default settings. Frames you added or stopped fading are kept.")
+	defaults:SetText("Reset profile")
+	Tooltip(defaults, "Put the active profile's settings back to how it started (a built-in profile's " ..
+		"own values, or the defaults). Frames you added or stopped fading are kept.")
 	defaults:SetScript("OnClick", function()
-		ns.ResetSettings()
-		Refresh()
+		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ActiveProfile())
 	end)
+	-- The active profile, under the button (picked on the Profiles page).
+	local profileLabel = Label(panel, "GameFontHighlightSmall")
+	profileLabel:SetPoint("TOPRIGHT", defaults, "BOTTOMRIGHT", 0, -4)
+	profileLabel:SetJustifyH("RIGHT")
+	controls[#controls + 1] = { Refresh = function()
+		if not ns.ProfileChosen() then
+			profileLabel:SetText("Profile: |cffff8000none yet|r (pick one on the Profiles page)")
+			return
+		end
+		profileLabel:SetText("Profile: |cffffd100" .. ns.ActiveProfile() .. "|r" ..
+			(ns.IsCharacterProfile() and " (this character)" or ""))
+	end }
 
 	mainCanvas:SetScript("OnShow", PageShown(Refresh, panel))
 	mainCanvas:Hide() -- so OnShow fires on the first visit too
@@ -460,12 +479,17 @@ local function CreatePanel()
 	end
 end
 
+-- Each sub-page by name, for ns.OpenOptions: its category, or its frame on
+-- clients with the old options window.
+local subpages = {}
 local function RegisterSubpage(subpanel, name)
 	subpanel.name = name
 	subpanel.parent = "Cinematic"
+	subpages[name] = subpanel
 	if category and Settings and Settings.RegisterCanvasLayoutSubcategory then
 		local sub = Settings.RegisterCanvasLayoutSubcategory(category, subpanel, name)
 		Settings.RegisterAddOnCategory(sub)
+		subpages[name] = sub
 	elseif InterfaceOptions_AddCategory then
 		InterfaceOptions_AddCategory(subpanel)
 	end
@@ -4119,23 +4143,234 @@ end
 
 -- The settings window can't open in combat (the game blocks it, "Interface
 -- action failed because of an AddOn"): just say so.
-function ns.OpenOptions()
+ns.RefreshOptions = function() Refresh() end
+
+-- Opens the settings, at a sub-page by name if given (else the main page).
+function ns.OpenOptions(page)
 	if InCombatLockdown() then
 		ns.Print("settings can't be opened in combat")
 		return
 	end
 	if category and Settings and Settings.OpenToCategory then
-		Settings.OpenToCategory(category:GetID())
+		local target = subpages[page] or category
+		Settings.OpenToCategory(target:GetID())
 	elseif InterfaceOptionsFrame_OpenToCategory then
 		-- Called twice: the first call can land on the wrong page in old clients.
-		InterfaceOptionsFrame_OpenToCategory(mainCanvas)
-		InterfaceOptionsFrame_OpenToCategory(mainCanvas)
+		InterfaceOptionsFrame_OpenToCategory(subpages[page] or mainCanvas)
+		InterfaceOptionsFrame_OpenToCategory(subpages[page] or mainCanvas)
 	end
 end
 
 -- Sub-page: mouseover. Groups of frames that come up together when you
 -- mouse over any of them (db.hoverGroups, Frames.lua's ns.GetHoverGroups),
 -- and the events that bring each group up besides.
+-- The text typed into a popup's edit box (named differently on some clients).
+local function PopupText(popup)
+	local box = popup.editBox or popup.EditBox or (popup.GetEditBox and popup:GetEditBox())
+	return box and (box:GetText() or ""):match("^%s*(.-)%s*$") or "", box
+end
+
+-- A popup asking for a profile name: Enter accepts, Escape cancels.
+local function NamePopup(text, accept)
+	return {
+		text = text, button1 = ACCEPT, button2 = CANCEL,
+		hasEditBox = true, maxLetters = 32,
+		OnShow = function(self, data)
+			local _, box = PopupText(self)
+			if box then
+				box:SetText(data or "")
+				box:HighlightText()
+				box:SetFocus()
+			end
+		end,
+		OnAccept = function(self, data) accept(PopupText(self), data) end,
+		EditBoxOnEnterPressed = function(box)
+			local popup = box:GetParent()
+			accept(PopupText(popup), popup.data)
+			popup:Hide()
+		end,
+		EditBoxOnEscapePressed = function(box) box:GetParent():Hide() end,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+end
+
+-- Checks a new profile name; prints why not if it can't be used.
+local function NameFree(name)
+	if name == "" then
+		return false
+	elseif ns.ProfileExists(name) then
+		ns.Print("there's already a profile called " .. name)
+		return false
+	end
+	return true
+end
+
+StaticPopupDialogs.CINEMATIC_PROFILE_NEW = NamePopup("Name the new profile (it starts from your current settings):",
+	function(name)
+		if NameFree(name) then
+			ns.NewProfile(name)
+			Refresh()
+		end
+	end)
+StaticPopupDialogs.CINEMATIC_PROFILE_RENAME = NamePopup("Rename the profile:", function(name, old)
+	if name ~= old and NameFree(name) then
+		ns.RenameProfile(old, name)
+		Refresh()
+	end
+end)
+StaticPopupDialogs.CINEMATIC_PROFILE_DELETE = {
+	text = "Delete the profile %s?",
+	button1 = YES, button2 = NO,
+	OnAccept = function(_, name)
+		ns.DeleteProfile(name)
+		Refresh()
+	end,
+	timeout = 0, whileDead = true, hideOnEscape = true,
+}
+StaticPopupDialogs.CINEMATIC_PROFILE_RESET = {
+	text = "Put the profile %s back to how it started? Every change you've made to it goes.",
+	button1 = YES, button2 = NO,
+	OnAccept = function()
+		ns.ResetSettings()
+		Refresh()
+	end,
+	timeout = 0, whileDead = true, hideOnEscape = true,
+}
+
+local function CreateProfilesPanel()
+	local canvas, content = CreateScrollPage(true)
+
+	local title = Label(content, "GameFontNormalLarge", "Profiles")
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		"A profile is a whole set of settings. Pick one to switch to it; changes you make go into the " ..
+		"active profile and stay with it. The built-in ones keep your changes too, until you reset them. " ..
+		"New profile starts one of your own from the settings you have now. Every character uses " ..
+		"the same profile unless you tick the box below for one. Not part of a profile: the minimap button, frames you added or stopped fading, " ..
+		"and the zone and time tint colours you picked.")
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	-- Ticked, this character keeps the one it's on as its own.
+	local perChar = Check(content, nil, "Use a profile just for this character",
+		"Ticked: switching profiles changes only this character's, and it stays on it whatever " ..
+		"your other characters use. Unticked: this character uses the same profile as the rest " ..
+		"(switching back to it now if this one's differs).", function(value)
+			ns.SetCharacterProfile(value)
+			Refresh()
+		end)
+	perChar.Refresh = function(self) self:SetChecked(ns.IsCharacterProfile()) end
+	perChar:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+
+	local header = Header(content, "Profiles", perChar, -12)
+	header:SetPoint("TOPLEFT", perChar, "BOTTOMLEFT", 2, -12)
+
+	-- One row per profile (built up as profiles come and go).
+	local rows = {}
+	local function GetRow(i)
+		if rows[i] then return rows[i] end
+		local row = CreateFrame("Frame", nil, content)
+		row:SetSize(540, 26)
+		local pick = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+		pick:SetSize(26, 26)
+		pick:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+		pick:SetScript("OnClick", function()
+			ns.SetProfile(row.name)
+			Refresh()
+		end)
+		local name = Label(row, "GameFontHighlight")
+		name:SetPoint("LEFT", pick, "RIGHT", 2, 0)
+		name:SetWidth(170)
+		local tip = Label(row, "GameFontHighlightSmall")
+		tip:SetPoint("TOPLEFT", row, "TOPLEFT", 200, -6)
+		tip:SetWidth(340)
+		tip:SetJustifyV("TOP")
+		row.pick, row.label, row.tip = pick, name, tip
+		rows[i] = row
+		return row
+	end
+
+	local buttons = CreateFrame("Frame", nil, content)
+	buttons:SetSize(540, 22)
+	local function Button(text, width, tip, onClick)
+		local button = CreateFrame("Button", nil, buttons, "UIPanelButtonTemplate")
+		button:SetSize(width, 22)
+		button:SetText(text)
+		Tooltip(button, tip)
+		button:SetScript("OnClick", onClick)
+		return button
+	end
+	local new = Button("New profile", 120, "A profile of your own, starting from your current settings. " ..
+		"To copy another profile, switch to it first.", function()
+		StaticPopup_Show("CINEMATIC_PROFILE_NEW")
+	end)
+	new:SetPoint("LEFT", buttons, "LEFT", 0, 0)
+	local rename = Button("Rename", 100, "Rename the active profile (your own ones only).", function()
+		local name = ns.ActiveProfile()
+		StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name)
+	end)
+	rename:SetPoint("LEFT", new, "RIGHT", 8, 0)
+	local delete = Button("Delete", 100, "Delete the active profile (your own ones only), switching to " ..
+		ns.BUILTIN_PROFILES[1].name .. ".", function()
+		local name = ns.ActiveProfile()
+		StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
+	end)
+	delete:SetPoint("LEFT", rename, "RIGHT", 8, 0)
+	local reset = Button("Reset profile", 120, "Put the active profile back to how it started: a built-in " ..
+		"profile's own values, or the defaults for one of yours.", function()
+		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ActiveProfile())
+	end)
+	reset:SetPoint("LEFT", delete, "RIGHT", 8, 0)
+
+	local function Layout()
+		if not ns.GetDB() then return end
+		-- (None ticked until a new player picks one; Cinematic does nothing till then.)
+		local active = ns.ProfileChosen() and ns.ActiveProfile() or nil
+		local names = ns.ProfileNames()
+		local last = header
+		for i, name in ipairs(names) do
+			local row = GetRow(i)
+			row.name = name
+			local builtin
+			for _, profile in ipairs(ns.BUILTIN_PROFILES) do
+				if profile.name == name then builtin = profile end
+			end
+			local text = name
+			if name == active and ns.ProfileChanged() then
+				text = text .. " |cff808080(changed)|r"
+			end
+			row.label:SetText(text)
+			row.tip:SetText(builtin and builtin.tip or "Your own profile.")
+			row.pick:SetChecked(name == active)
+			row:SetHeight(math.max(26, row.tip:GetStringHeight() + 10))
+			row:ClearAllPoints()
+			row:SetPoint("TOPLEFT", last, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -4)
+			row:Show()
+			last = row
+		end
+		for i = #names + 1, #rows do rows[i]:Hide() end
+		buttons:ClearAllPoints()
+		buttons:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 2, -16)
+		local own = active ~= nil and not ns.IsBuiltinProfile(active)
+		rename:SetEnabled(own)
+		delete:SetEnabled(own)
+		FitContentHeight(content)
+	end
+	controls[#controls + 1] = { Refresh = function()
+		if canvas:IsShown() then Layout() end
+	end }
+
+	canvas:SetScript("OnShow", function()
+		Refresh()
+		Layout()
+		C_Timer.After(0, function() FitContentHeight(content) end)
+	end)
+	canvas:Hide()
+	RegisterSubpage(canvas, "Profiles")
+end
+
 local function CreateMouseoverPanel()
 	local canvas, content = CreateScrollPage()
 	local LEFT, WIDTH, ROW = 16, 560, 22
@@ -4585,6 +4820,7 @@ local function CreateMouseoverPanel()
 end
 
 CreatePanel()
+CreateProfilesPanel()
 -- Sub-pages in the order they're listed: what fades and shows, then the look
 -- and sound, then the camera modes (their shared page and events first),
 -- keybinds. (Standard Frames and 3rd Party Frames come right after CineMode.)

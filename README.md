@@ -51,8 +51,9 @@ Each situation has its own camera, and they hand over seamlessly:
 
 ## Easy to tweak
 
+* **Profiles** to switch the whole setup at once: Immersive (everything, as the developer plays), Lite (just a few cameras), VFX Only (the look without fading anything), Camera Only, Solo Explorer and Pure Cinema, or make and name your own. New players pick one the first time they log in.
 * **A minimap button** with quick switches for tint strength, music and combat.
-* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus CineMode, Minimap, Buffs/debuffs, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Nameplates, Chat, Fishing, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds.
+* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus Profiles, CineMode, Minimap, Buffs/debuffs, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Nameplates, Chat, Fishing, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds.
 * **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, or start any camera on demand.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.
 

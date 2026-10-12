@@ -222,6 +222,7 @@ local function Summary()
 		add("game settings held: " .. table.concat(left, ", "))
 	end
 
+	add("profile: " .. (ns.ActiveProfile and ns.ActiveProfile() or "?"))
 	-- Settings changed from the defaults (tables, like frame lists, left out).
 	local changed = {}
 	for key, default in pairs(ns.DEFAULTS) do

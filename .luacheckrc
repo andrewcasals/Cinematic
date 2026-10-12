@@ -8,7 +8,7 @@ ignore = { "542", "212/self", "421", "422", "431" }
 
 -- What the addon defines or changes
 globals = {
-	"CinematicDB", "SlashCmdList", "StaticPopupDialogs", "ColorPickerFrame",
+	"CinematicDB", "CinematicCharDB", "SlashCmdList", "StaticPopupDialogs", "ColorPickerFrame",
 	"Cinematic_Toggle", "Cinematic_ToggleUI", "Cinematic_StartCam", "Cinematic_Peek", "Cinematic_FlyBy",
 	"SLASH_CINEMATIC1", "SLASH_CINEMATIC2",
 	"BINDING_HEADER_CINEMATIC",
@@ -22,6 +22,7 @@ read_globals = {
 	"bit",
 	"AuraUtil",
 	"BackdropTemplateMixin",
+	"ACCEPT",
 	"CANCEL",
 	"C_AddOns",
 	"C_CVar",

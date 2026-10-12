@@ -23,6 +23,7 @@ BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: Test the death camera"
 
 local DEFAULTS = {
 	enabled = true,
+	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, with visualEffectsAlways)
 	minimapButton = true,     -- show the minimap button
 	minimapAngle = 225,       -- its position around the minimap, in degrees
 	-- Hide world tooltips in each camera mode:
@@ -873,7 +874,7 @@ end
 local snoozeUntil = 0
 
 local function ShouldBeCinematic(now)
-	if not ns.db.enabled or peeking or GetTime() < snoozeUntil or IsInDisabledZone()
+	if not ns.db.enabled or not ns.db.fadeUI or not ns.ProfileChosen() or peeking or GetTime() < snoozeUntil or IsInDisabledZone()
 		or IsInDisabledGroup() then
 		lastBusy = now -- the full fade delay applies after leaving
 		quickStart = false
@@ -1146,7 +1147,7 @@ local function OnUpdate(_, elapsed)
 	local situation = Situation(now)
 	-- Outside CineMode too, if chosen: still not while it's turned off or snoozed.
 	local effectsOn = cinematic
-		or (ns.db.visualEffectsAlways and ns.db.enabled and now >= snoozeUntil) or false
+		or (ns.db.visualEffectsAlways and ns.db.enabled and ns.ProfileChosen() and now >= snoozeUntil) or false
 	for _, effect in ipairs(SITUATION_EFFECTS) do
 		local key = effect.key
 		local wanted
@@ -1279,7 +1280,23 @@ function ns.SetEnabled(enabled)
 	end
 end
 
+-- Switching profiles starts afresh: CineMode comes in now (fading as usual)
+-- rather than after the fade delay, and a Calm Timer running from the last
+-- fight is dropped (not mid-fight).
+function ns.RestartTimers()
+	lastBusy = GetTime()
+	quickStart = true
+	if not (InCombatLockdown() or Flag(UnitAffectingCombat("player"))) then
+		fightEndedAt, lastFightAt = -math.huge, -math.huge
+	end
+end
+
 function Cinematic_Toggle()
+	-- No profile picked yet: nothing to turn on; ask for one.
+	if not ns.ProfileChosen() then
+		ns.ShowWelcome()
+		return
+	end
 	ns.SetEnabled(not ns.db.enabled)
 	ns.Print(ns.db.enabled and "enabled" or "disabled")
 	if ns.IsSuspended() then
@@ -1363,7 +1380,7 @@ function ns.TogglePeek()
 	return peeking
 end
 
-local function EnsureTables()
+function ns.EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
 	ns.db.addonFrames = ns.db.addonFrames or {} -- 3rd Party Frames page: key -> false when switched off
@@ -1394,12 +1411,11 @@ local function EnsureTables()
 	ns.db.friendlyShow = ns.db.friendlyShow or copy(ns.db.targetShow)
 end
 
--- Restores the tunable settings but keeps the player's added/ignored frames.
+-- Puts the active profile back to how it started (Profiles.lua): its
+-- settings only, so the player's added/ignored frames are kept.
+-- (Straight back into CineMode after, as on switching: ResetProfile restarts the timers.)
 function ns.ResetSettings()
-	for k, v in pairs(DEFAULTS) do ns.db[k] = v end
-	lastBusy = GetTime()
-	quickStart = false
-	ns.letterboxDirty = true
+	ns.ResetProfile()
 end
 
 -- Shared with Options.lua
@@ -1527,6 +1543,7 @@ ticker:RegisterEvent("PLAYER_LEVEL_UP")
 ticker:RegisterEvent("PLAYER_STOPPED_MOVING")
 ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 	if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
+		ns.newInstall = CinematicDB == nil -- (for the welcome window: Welcome.lua)
 		CinematicDB = CinematicDB or {}
 		ns.db = CinematicDB
 		-- Older settings: one vertical range for up and down, and a separate
@@ -2126,7 +2143,8 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		for k, v in pairs(DEFAULTS) do
 			if ns.db[k] == nil then ns.db[k] = v end
 		end
-		EnsureTables()
+		ns.EnsureTables()
+		ns.InitProfiles()
 		ns.InitLog()
 		SLASH_CINEMATIC1 = "/cine"
 		SLASH_CINEMATIC2 = "/cinematic"
@@ -2259,7 +2277,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		C_Timer.After(1, CheckMoving) -- (the speed can read 0 for a moment while loading)
 		-- arg1 is isInitialLogin (a real login), arg2 isReloadingUi (a /reload).
 		-- Other loading screens never start straight in cinematic mode.
-		if (arg1 or arg2) and ns.db.timeOfDayMessage and ns.db.visualEffects then
+		if (arg1 or arg2) and ns.db.timeOfDayMessage and ns.db.visualEffects and ns.ProfileChosen() then
 			ns.ShowTimeOfDayTitle()
 		end
 		if arg1 or arg2 then
@@ -2269,6 +2287,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			snapRound = snapRound + 1
 		end
 	elseif event == "PLAYER_LOGOUT" then
+		ns.SaveProfile()
 		ns.MusicTrace(("LOGOUT volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 		-- Put the player's music/name/nameplate settings back before they're saved.
 		ns.UpdateCVars(false)

@@ -31,7 +31,9 @@ local function PrintHelp()
 	print("  /cine hideui - hide the UI but keep the look (again to bring it back)")
 	print("  /cine size <percent> - letterbox bar height (now " .. ns.db.letterboxSize * 100 .. "%)")
 	print("  /cine button - show or hide the minimap button")
-	print("  /cine reset - restore the default settings")
+	print("  /cine reset - put the active profile back to how it started")
+	print("  /cine profile - list the profiles (/cine profile <name> switches to one)")
+	print("  /cine welcome - the welcome window, to pick a profile")
 	Heading("Frames (hover over one first)")
 	print("  /cine add - fade it too (or /cine add <FrameName>)")
 	print("  /cine keep - always show it")
@@ -59,6 +61,7 @@ local function PrintDebugHelp()
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
 	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
 	print("  /cine debug mode - which camera mode it thinks you're in")
+	print("  /cine debug newplayer - back to no profile picked, as on a fresh install (the welcome window)")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
 	print("  /cine debug fishing - the last red error message, and whether it paused right-click casting")
@@ -772,6 +775,12 @@ function ns.HandleSlash(msg)
 			tostring(GetCVar("cameraSmoothStyle"))))
 		ns.Print(("orbitFrame running=%s, MoveViewUpStart=%s"):format(
 			tostring(ns.orbitFrame:GetScript("OnUpdate") ~= nil), tostring(MoveViewUpStart ~= nil)))
+	elseif cmd == "debug" and arg == "newplayer" then
+		-- (Your profiles and their settings stay; picking one carries on from them.)
+		ns.SaveProfile()
+		ns.db.profileChosen = false
+		ns.Print("no profile picked: Cinematic is off until you pick one")
+		ns.ShowWelcome()
 	elseif cmd == "debug" then
 		-- Hover over something and run this to see how the addon sees it.
 		local found = false
@@ -790,7 +799,23 @@ function ns.HandleSlash(msg)
 		ns.ListExtras()
 	elseif cmd == "reset" then
 		ns.ResetSettings()
-		ns.Print("settings reset")
+		ns.Print("profile " .. ns.ActiveProfile() .. " reset")
+	elseif cmd == "welcome" then
+		ns.ShowWelcome()
+	elseif cmd == "profile" or cmd == "profiles" then
+		-- (The name's matched ignoring case: msg was lowered.)
+		local name = arg ~= "" and ns.FindProfile(arg)
+		if name then
+			ns.SetProfile(name)
+			ns.Print("profile: " .. name)
+		else
+			if arg ~= "" then ns.Print("no profile called " .. arg) end
+			ns.Print("profiles (the active one in yellow):")
+			for _, each in ipairs(ns.ProfileNames()) do
+				local active = ns.ProfileChosen() and each == ns.ActiveProfile()
+				print("  " .. (active and "|cffffd100" .. each .. "|r" or each))
+			end
+		end
 	else
 		PrintHelp()
 	end

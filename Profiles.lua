@@ -1,0 +1,385 @@
+-- Profiles: named sets of settings to switch between.
+--
+-- The settings themselves stay where they always were (ns.db, flat), so the
+-- rest of the addon never knows about profiles. Each profile is stored as the
+-- settings that differ from its base: the built-in profile's own values (the
+-- defaults with its changes on top), or the defaults for the player's own.
+-- Switching saves the one you're leaving and loads the next; so does logging
+-- out. Every character uses the account's profile (db.profile) unless it's
+-- been given one of its own (CinematicCharDB.profile); db.liveProfile is the
+-- one whose settings are live, so logging in on a character with a different
+-- one swaps them over. Built-in profiles keep your changes too, until you reset them, and
+-- settings you never changed follow the built-in's values as they're updated.
+--
+-- Not part of a profile: the minimap button and its position, the on/off
+-- switch, debug options, frames you added or stopped fading, zone and time
+-- tint colours you picked, and things the addon keeps for itself (flight
+-- times, the log, game settings it's holding).
+
+local _, ns = ...
+
+local GLOBAL_KEYS = {
+	enabled = true, minimapButton = true, minimapAngle = true, logDetail = true,
+}
+-- Lists kept as tables that belong to a profile (their defaults are in code;
+-- see EnsureTables in Core.lua). Missing from a profile: emptied, which means defaults.
+local PROFILE_TABLES = {
+	"chatPeekTypes", "chatPeekChannelList", "combatShow", "cineShow", "targetShow", "enemyShow",
+	"friendlyShow", "addonFrames", "gamepadPressButtons", "hoverGroups",
+}
+
+local DEFAULT_PROFILE = "Immersive"
+
+-- Switches cameras off: an event's camera to none, or (for the ones no
+-- event starts) its row of the Camera Modes page's "Turn off in" grid.
+local EVENT_CAMS = { flight = true, idle = true, cozy = true, tele = true, vista = true, fish = true,
+	quest = true }
+local function CamsOff(set, cams)
+	local off = {}
+	for _, cam in ipairs(cams) do off[cam] = true end
+	for _, event in ipairs(ns.EVENTS or {}) do
+		local cam = event.camera == "afk" and "idle" or event.camera
+		if off[cam] then
+			set("event" .. event.key .. "Camera", "none")
+		end
+	end
+	for _, cam in ipairs(cams) do
+		if not EVENT_CAMS[cam] then
+			for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
+				if not (ns.CAMERA_OFF_NEVER[cam] or {})[where] then
+					set(cam .. "OffIn" .. where, true)
+				end
+			end
+		end
+	end
+end
+
+-- The built-in profiles, in the order they're listed. apply(set) makes its
+-- changes to the defaults.
+ns.BUILTIN_PROFILES = {
+	{
+		name = DEFAULT_PROFILE,
+		tip = "Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
+			"and how the developer plays every day.",
+		apply = function() end,
+	},
+	{
+		name = "Lite",
+		tip = "The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
+			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras.",
+		apply = function(set)
+			CamsOff(set, { "cozy", "vista", "fish", "walk", "run", "death", "quest" })
+		end,
+	},
+	{
+		name = "VFX Only",
+		tip = "Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no " ..
+			"letterbox, and the camera's left to you.",
+		apply = function(set)
+			set("fadeUI", false)
+			set("visualEffectsAlways", true)
+			set("letterbox", false)
+			set("musicInCinematic", false)
+		end,
+	},
+	{
+		name = "Camera Only",
+		tip = "The UI fades and the camera modes run, with no visual effects: no letterbox, tint, " ..
+			"vignette or soft edges.",
+		apply = function(set)
+			set("visualEffects", false)
+			set("depthOfField", false)
+			set("deathScreen", false)
+		end,
+	},
+	{
+		name = "Solo Explorer",
+		tip = "Everything on while you're out in the world on your own; the normal UI in a group, " ..
+			"in dungeons, raids and PvP.",
+		apply = function(set)
+			set("offInDungeons", true)
+			set("offInRaids", true)
+			set("offInPvP", true)
+			set("offInParty", true)
+			set("offInRaidGroup", true)
+		end,
+	},
+	{
+		name = "Pure Cinema",
+		tip = "As little UI as possible: chat, buffs, the quest tracker, the minimap and your portrait " ..
+			"don't pop up on their own (hovering still shows them), your target's and group members' " ..
+			"nameplates aren't kept up, and fights don't bring the letterbox down.",
+		apply = function(set)
+			set("chatPeek", false)
+			set("buffPeek", false)
+			set("debuffPeek", false)
+			set("questRevealOnAccept", false)
+			set("questRevealOnProgress", false)
+			set("minimapRevealOnPing", false)
+			set("portraitWhenNotFull", false)
+			set("letterboxInCombat", true)
+			set("timeOfDayMessage", false)
+			set("plateTarget", false)
+			set("plateGroupMembers", false)
+			set("plateGroupMemberMinions", false)
+		end,
+	},
+}
+local builtinByName = {}
+for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
+
+function ns.IsBuiltinProfile(name)
+	return builtinByName[name] ~= nil
+end
+
+local function IsProfileKey(key)
+	return not GLOBAL_KEYS[key] and not key:find("^debug")
+end
+
+local function CopyTable(source)
+	if type(source) ~= "table" then return source end
+	local result = {}
+	for k, v in pairs(source) do result[k] = CopyTable(v) end
+	return result
+end
+
+-- The values a profile starts from: the defaults, with a built-in's changes.
+local baseCache = {}
+function ns.ProfileBase(name)
+	name = name or ns.ActiveProfile()
+	if baseCache[name] then return baseCache[name] end
+	local base = {}
+	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
+	local builtin = builtinByName[name]
+	if builtin then
+		builtin.apply(function(key, value) base[key] = value end)
+	end
+	baseCache[name] = base
+	return base
+end
+
+-- A new player has none until they pick one (Welcome.lua): Cinematic does
+-- nothing meanwhile. (The default profile's settings are the live ones.)
+function ns.ProfileChosen()
+	return not ns.db or ns.db.profileChosen ~= false
+end
+
+function ns.ActiveProfile()
+	return ns.db and ns.db.liveProfile or DEFAULT_PROFILE
+end
+
+-- This character has a profile of its own (not the account's).
+function ns.IsCharacterProfile()
+	return ns.chardb ~= nil and ns.chardb.profile ~= nil
+end
+
+-- Makes name the active one: this character's, or the account's.
+local function Choose(name)
+	if ns.IsCharacterProfile() then
+		ns.chardb.profile = name
+	else
+		ns.db.profile = name
+	end
+	ns.db.liveProfile = name
+end
+
+-- The live settings as a profile: what differs from the base, and the lists.
+local function Snapshot(name)
+	local db, base = ns.db, ns.ProfileBase(name)
+	local saved = {}
+	for k in pairs(ns.DEFAULTS) do
+		if IsProfileKey(k) and db[k] ~= base[k] then
+			saved[k] = db[k]
+		end
+	end
+	for _, k in ipairs(PROFILE_TABLES) do
+		if type(db[k]) == "table" and next(db[k]) ~= nil then saved[k] = CopyTable(db[k]) end
+	end
+	return saved
+end
+
+-- Puts a profile's settings into the live ones.
+local function Load(name)
+	local db, base = ns.db, ns.ProfileBase(name)
+	local saved = db.profiles[name] or {}
+	for k in pairs(ns.DEFAULTS) do
+		if IsProfileKey(k) then
+			if saved[k] ~= nil then
+				db[k] = saved[k]
+			else
+				db[k] = base[k]
+			end
+		end
+	end
+	for _, k in ipairs(PROFILE_TABLES) do
+		db[k] = CopyTable(saved[k])
+	end
+	ns.EnsureTables()
+end
+
+-- Everything that reads settings once picks up the new ones.
+local function SettingsChanged()
+	ns.letterboxDirty = true
+	if ns.RestartTimers then ns.RestartTimers() end
+	if ns.RefreshTint then ns.RefreshTint() end
+	if ns.BuildManagedList then ns.BuildManagedList() end
+	if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
+-- Keeps the live settings in the active profile (on switching and logout).
+function ns.SaveProfile()
+	if ns.db and ns.db.profiles then
+		ns.db.profiles[ns.ActiveProfile()] = Snapshot(ns.ActiveProfile())
+	end
+end
+
+function ns.ProfileExists(name)
+	return builtinByName[name] ~= nil or (ns.db.profiles[name] ~= nil)
+end
+
+-- Every profile's name: the built-in ones in order, then the player's A to Z.
+function ns.ProfileNames()
+	local names, own = {}, {}
+	for _, profile in ipairs(ns.BUILTIN_PROFILES) do names[#names + 1] = profile.name end
+	for name in pairs(ns.db.profiles) do
+		if not builtinByName[name] then own[#own + 1] = name end
+	end
+	table.sort(own, function(a, b) return a:lower() < b:lower() end)
+	for _, name in ipairs(own) do names[#names + 1] = name end
+	return names
+end
+
+-- Finds a profile ignoring case (for /cine profile).
+function ns.FindProfile(text)
+	text = text:lower()
+	for _, name in ipairs(ns.ProfileNames()) do
+		if name:lower() == text then return name end
+	end
+end
+
+function ns.SetProfile(name)
+	if not ns.ProfileExists(name) then return end
+	local first = not ns.ProfileChosen()
+	ns.db.profileChosen = true
+	if name == ns.ActiveProfile() then
+		if first then SettingsChanged() end -- (the first pick: Cinematic starts)
+		return
+	end
+	ns.SaveProfile()
+	Choose(name)
+	Load(name)
+	SettingsChanged()
+	ns.Log("state", "profile: " .. name)
+end
+
+-- A new profile of your own from the current settings.
+function ns.NewProfile(name)
+	if ns.ProfileExists(name) then return false end
+	local saved = Snapshot(ns.ActiveProfile())
+	-- Stored against the defaults (a player's profile has no built-in under it).
+	local base, own = ns.ProfileBase(ns.ActiveProfile()), ns.ProfileBase(name)
+	for k in pairs(ns.DEFAULTS) do
+		if IsProfileKey(k) then
+			local value = saved[k]
+			if value == nil then value = base[k] end
+			if value == own[k] then value = nil end
+			saved[k] = value
+		end
+	end
+	ns.SaveProfile()
+	ns.db.profiles[name] = saved
+	Choose(name)
+	ns.db.profileChosen = true
+	return true
+end
+
+function ns.RenameProfile(old, new)
+	if builtinByName[old] or ns.ProfileExists(new) then return false end
+	if old == ns.ActiveProfile() then ns.SaveProfile() end
+	ns.db.profiles[new], ns.db.profiles[old] = ns.db.profiles[old], nil
+	-- (Other characters with it as their own go back to the account's next login.)
+	for _, holder in ipairs({ ns.db, ns.chardb }) do
+		if holder.profile == old then holder.profile = new end
+	end
+	if ns.db.liveProfile == old then ns.db.liveProfile = new end
+	return true
+end
+
+-- Deleting the active one switches to the default profile first.
+function ns.DeleteProfile(name)
+	if builtinByName[name] then return false end
+	if name == ns.ActiveProfile() then ns.SetProfile(DEFAULT_PROFILE) end
+	if ns.db.profile == name then ns.db.profile = DEFAULT_PROFILE end
+	ns.db.profiles[name] = nil
+	return true
+end
+
+-- Back to the profile's base: a built-in's own values, or the defaults.
+function ns.ResetProfile()
+	ns.db.profiles[ns.ActiveProfile()] = nil
+	Load(ns.ActiveProfile())
+	SettingsChanged()
+end
+
+-- Settings changed from the active profile's base, for the Profiles page's
+-- "(changed)". (Not the lists: those are tables whatever's in them.)
+function ns.ProfileChanged()
+	local base = ns.ProfileBase()
+	for k in pairs(ns.DEFAULTS) do
+		if IsProfileKey(k) and ns.db[k] ~= base[k] then return true end
+	end
+	return false
+end
+
+-- Ticked: this character keeps the profile it's on as its own, and
+-- switching changes only its. Unticked: back to the account's profile.
+function ns.SetCharacterProfile(own)
+	if own then
+		ns.chardb.profile = ns.ActiveProfile()
+	elseif ns.IsCharacterProfile() then
+		ns.chardb.profile = nil
+		if ns.db.profile ~= ns.ActiveProfile() then
+			ns.SaveProfile()
+			ns.db.liveProfile = ns.db.profile
+			Load(ns.db.profile)
+			SettingsChanged()
+		end
+	end
+end
+
+-- After the settings load (Core.lua). Settings from before profiles become
+-- the default profile's, changes and all.
+function ns.InitProfiles()
+	CinematicCharDB = CinematicCharDB or {}
+	ns.chardb = CinematicCharDB
+	local db, chardb = ns.db, ns.chardb
+	db.profiles = db.profiles or {}
+	-- The default profile was first called Cinematic Strong (test builds).
+	local old = "Cinematic Strong"
+	if db.profiles[old] and not db.profiles[DEFAULT_PROFILE] then
+		db.profiles[DEFAULT_PROFILE], db.profiles[old] = db.profiles[old], nil
+	end
+	for _, holder in ipairs({ db, chardb }) do
+		if holder.profile == old then holder.profile = DEFAULT_PROFILE end
+	end
+	if db.liveProfile == old then db.liveProfile = DEFAULT_PROFILE end
+	-- Only a new player is asked to pick one (Welcome.lua); everyone else has
+	-- their settings already.
+	if db.profileChosen == nil then
+		db.profileChosen = not ns.newInstall
+	end
+	if not db.profile or not ns.ProfileExists(db.profile) then
+		db.profile = DEFAULT_PROFILE
+	end
+	-- (One deleted or renamed on another character: the account's again.)
+	if chardb.profile and not ns.ProfileExists(chardb.profile) then
+		chardb.profile = nil
+	end
+	db.liveProfile = db.liveProfile or db.profile
+	local wanted = chardb.profile or db.profile
+	if wanted ~= db.liveProfile then
+		if ns.ProfileExists(db.liveProfile) then ns.SaveProfile() end
+		db.liveProfile = wanted
+		Load(wanted)
+	end
+end
