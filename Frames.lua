@@ -999,51 +999,66 @@ local function IsIgnoredAura(aura)
 	return ids[id] or (type(name) == "string" and names[name:lower()]) or false
 end
 
--- Only ignored auras added (false when unsure).
-local function OnlyIgnoredAdded(list)
-	if list == nil or (issecretvalue and issecretvalue(list)) then
+-- Buffs and debuffs each bring the buffs up on their own switch (buffPeek,
+-- debuffPeek), each with its own "Only after combat" (within the Calm Timer).
+local function PeekAllowed(harmful)
+	local prefix = harmful and "debuffPeek" or "buffPeek"
+	if not ns.db[prefix] then
 		return false
 	end
-	local ok, onlyIgnored = pcall(function()
-		local any = false
-		for _, aura in pairs(list) do
-			any = true
-			if not IsIgnoredAura(aura) then
-				return false
-			end
-		end
-		return any
-	end)
-	return ok and onlyIgnored
+	return not (ns.db[prefix .. "AfterCombat"] and GetTime() - lastCombatAt > ns.db.calmTime)
 end
 
--- Only ignored auras updated (a stack ticking up, say). Updates only give
--- instance IDs, so each is looked up. False when unsure.
-local function OnlyIgnoredUpdated(ids)
-	if ids == nil or (issecretvalue and issecretvalue(ids))
-		or not (C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID) then
+-- One aura gained or refreshed: does it bring the buffs up? Not if it's on the
+-- ignore list; otherwise as its kind allows. When unsure (no data, secret
+-- values), either kind will do.
+local function AuraCounts(aura)
+	if IsIgnoredAura(aura) then
 		return false
 	end
-	local ok, onlyIgnored = pcall(function()
-		local any = false
-		for _, instanceID in pairs(ids) do
-			any = true
-			if not IsIgnoredAura(C_UnitAuras.GetAuraDataByAuraInstanceID("player", instanceID)) then
-				return false
+	local harmful = type(aura) == "table" and aura.isHarmful
+	if harmful == nil or (issecretvalue and issecretvalue(harmful)) then
+		return PeekAllowed(false) or PeekAllowed(true)
+	end
+	return PeekAllowed(harmful and true or false)
+end
+
+-- Any aura gained or refreshed that brings the buffs up. Updates (a stack
+-- ticking up, say) only give instance IDs, so each is looked up. True when
+-- unsure.
+local function AnyAuraCounts(updateInfo)
+	local ok, counts = pcall(function()
+		local added, updated = updateInfo.addedAuras, updateInfo.updatedAuraInstanceIDs
+		if HasEntries(added) then
+			if issecretvalue and issecretvalue(added) then
+				return AuraCounts(nil)
+			end
+			for _, aura in pairs(added) do
+				if AuraCounts(aura) then
+					return true
+				end
 			end
 		end
-		return any
+		if HasEntries(updated) then
+			if (issecretvalue and issecretvalue(updated))
+				or not (C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID) then
+				return AuraCounts(nil)
+			end
+			for _, instanceID in pairs(updated) do
+				if AuraCounts(C_UnitAuras.GetAuraDataByAuraInstanceID("player", instanceID)) then
+					return true
+				end
+			end
+		end
+		return false
 	end)
-	return ok and onlyIgnored
+	return not ok or counts
 end
 
 local auraWatcher = CreateFrame("Frame")
 auraWatcher:RegisterUnitEvent("UNIT_AURA", "player")
 auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
-	if not (ns.db and ns.db.buffPeek) then
-		return
-	end
-	if ns.db.buffPeekAfterCombat and GetTime() - lastCombatAt > ns.db.calmTime then
+	if not (ns.db and (PeekAllowed(false) or PeekAllowed(true))) then
 		return
 	end
 	-- In a fight the buffs follow the fight's own frames, and a peek started
@@ -1060,10 +1075,7 @@ auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
 	end
 	local changed
 	if type(updateInfo) == "table" then
-		local added = HasEntries(updateInfo.addedAuras) and not OnlyIgnoredAdded(updateInfo.addedAuras)
-		local updated = HasEntries(updateInfo.updatedAuraInstanceIDs)
-			and not OnlyIgnoredUpdated(updateInfo.updatedAuraInstanceIDs)
-		changed = not IsFullUpdate(updateInfo.isFullUpdate) and (added or updated)
+		changed = not IsFullUpdate(updateInfo.isFullUpdate) and AnyAuraCounts(updateInfo)
 	else
 		changed = true
 	end

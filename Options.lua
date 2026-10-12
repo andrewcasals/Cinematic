@@ -649,22 +649,32 @@ local function CreateBuffsPanel()
 	note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 
 	local buffPeek = Check(content, "buffPeek", "Show buffs when you gain or refresh one",
-		"A new buff or debuff, or one being refreshed, briefly shows your buffs and " ..
-		"debuffs. Buffs falling off don't count, and neither do flights.")
+		"Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on flights.")
 	buffPeek:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -14)
 	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
 
 	local BUFF_INDENT = 16
 	local function IfBuffPeek(db) return db.buffPeek end
+	local function IfDebuffPeek(db) return db.debuffPeek end
+	local function IfAnyPeek(db) return db.buffPeek or db.debuffPeek end
 
 	local buffAfterCombat = Check(content, "buffPeekAfterCombat", "Only after combat",
-		"Only show your buffs within the Calm Timer (above) of a fight, so buffing up or " ..
-		"picking up a buff in town doesn't bring them up.")
+		"Only within the Calm Timer after a fight, so buffing up in town doesn't count.")
 	buffAfterCombat:SetPoint("TOPLEFT", buffPeek, "BOTTOMLEFT", BUFF_INDENT, -2)
 	GreyUnless(buffAfterCombat, IfBuffPeek)
 
+	local debuffPeek = Check(content, "debuffPeek", "Show debuffs when you gain or refresh one",
+		"Gaining or refreshing a debuff briefly shows your buffs and debuffs. Not on flights.")
+	debuffPeek:SetPoint("TOPLEFT", buffAfterCombat, "BOTTOMLEFT", -BUFF_INDENT, -2)
+	debuffPeek:HookScript("OnClick", Refresh)
+
+	local debuffAfterCombat = Check(content, "debuffPeekAfterCombat", "Only after combat",
+		"Only within the Calm Timer after a fight. Off: debuffs like Hunter's Mark show any time.")
+	debuffAfterCombat:SetPoint("TOPLEFT", debuffPeek, "BOTTOMLEFT", BUFF_INDENT, -2)
+	GreyUnless(debuffAfterCombat, IfDebuffPeek)
+
 	local buffPeekTime = Slider(content, "buffPeekTime", "Show buffs for", 0.5, 30, 0.5, "%.1f sec")
-	buffPeekTime:SetPoint("TOPLEFT", buffAfterCombat, "BOTTOMLEFT", 4 - BUFF_INDENT, -30)
+	buffPeekTime:SetPoint("TOPLEFT", debuffAfterCombat, "BOTTOMLEFT", 4 - BUFF_INDENT, -30)
 
 	-- Buffs and debuffs that never bring the buffs up: a row each (icon, name,
 	-- Remove), then a box to add one. Still saved as one comma-separated list
@@ -762,7 +772,7 @@ local function CreateBuffsPanel()
 
 	-- Rebuilt as the page shows and after each change.
 	local ignoreList = { Refresh = function()
-		local enabled = ns.GetDB().buffPeek and true or false
+		local enabled = IfAnyPeek(ns.GetDB()) and true or false
 		local previous = ignoreLabel
 		local entries = IgnoreEntries()
 		for i, entry in ipairs(entries) do
@@ -3054,10 +3064,11 @@ local function CreatePlatesPanel()
 		end
 		return rowLabel
 	end
-	-- The In group column: keeps its row up while you're in a party or raid,
-	-- in fights and out, whatever the rest of the row says.
-	local GROUP_TIP = "Keep these up in CineMode while you're in a party or raid, in fights and " ..
-		"out, whatever the rest of this row says."
+	-- Both grids' column tooltips (each box adds its row's note). In group keeps
+	-- its row up in a party or raid, in fights and out, whatever the rest says.
+	local COMBAT_TIP = "Show in fights, and for the Calm Timer after."
+	local PVP_COMBAT_TIP = "Show in fights against players, and for the Calm Timer after."
+	local GROUP_TIP = "Always show while you're in a party or raid."
 
 	local showHeader = Header(content, "Nameplates", subtitle, -18)
 	-- The grid can't keep plates up out of fights while the game's own
@@ -3069,14 +3080,13 @@ local function CreatePlatesPanel()
 		self:SetShown(GetCVar("nameplateShowAll") == "0")
 	end
 	controls[#controls + 1] = showAllWarning
-	-- PvP and BGs first, beside the In PvP combat column; In group (not a
-	-- place) beside Dungeons & Raids.
+	-- PvP first, beside the In PvP combat column; In group (not a place)
+	-- beside Dungeons & Raids.
 	local PLACE_COLUMNS = {
-		{ "PvP", "PvP", "while you're PvP flagged out in the world, and in arenas" },
-		{ "BGs", "BGs", "in battlegrounds" },
-		{ "", "Open world", "anywhere else (cities and inns too)" },
+		{ "PvP", "PvP", "Show while PvP flagged, and in battlegrounds and arenas." },
+		{ "", "Open world", "Show everywhere else, cities and inns included." },
 		{ group = true },
-		{ "Instances", "Dungeons & Raids", "in dungeons, scenarios and raids" },
+		{ "Instances", "Dungeons & Raids", "Show in dungeons, scenarios and raids." },
 	}
 	-- In PvP combat: not on retail, whose combat log is closed to addons.
 	local pvpColumn = not ns.isRetail
@@ -3100,17 +3110,15 @@ local function CreatePlatesPanel()
 		{ "FriendlyMinions", "Minions", true },
 		{ "FriendlyNPCs", "Friendly NPCs" },
 		-- Your target, whatever its own row says (not a game option of its own).
-		{ "EnemyTarget", "Enemy Target", false,
-			"a target you can attack (neutral mobs too), or the other faction's player even unflagged" },
-		{ "FriendlyTarget", "Friendly Target", false, "a target you can't attack" },
+		{ "EnemyTarget", "Enemy Target", false, "if you can attack it" },
+		{ "FriendlyTarget", "Friendly Target", false, "if you can't attack it" },
 	}
-	local rowTip = " Ticking it switches this kind of nameplate on in the game's own options."
+	local rowTip = " Also turns these nameplates on in the game's options."
 	local lastLabel
 	for r, kind in ipairs(KINDS) do
 		local target = kind[4]
-		local tip = target and (" The nameplate of " .. target .. " shows here whatever its own row " ..
-			"says. It still needs that kind of nameplate switched on in the game's own options, or " ..
-			"there's no plate to show.") or rowTip
+		local tip = target and (" Your target, " .. target .. ", shows here even if its own row is off.")
+			or rowTip
 		local function Ticked(key)
 			return function(value)
 				ns.GetDB()[key] = value
@@ -3122,17 +3130,12 @@ local function CreatePlatesPanel()
 		end
 		local combatKey = "plateCombat" .. kind[1]
 		local checks = {
-			Check(content, combatKey, "",
-				"Show these nameplates during fights in CineMode, and for the Calm Timer (on the " ..
-				"CineMode page) after. The game won't let nameplates be switched off mid-fight, so " ..
-				"hidden ones can still be clicked." .. tip, Ticked(combatKey)),
+			Check(content, combatKey, "", COMBAT_TIP .. tip, Ticked(combatKey)),
 		}
 		local pvpCheck
 		if pvpColumn then
-			pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "",
-				"Show these nameplates during fights with the other side's players (or their pets " ..
-				"and totems), and for the Calm Timer after, even if In combat is unticked. Every " ..
-				"fight in a battleground or arena counts." .. tip, Ticked("plateCombatPvP" .. kind[1]))
+			pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "", PVP_COMBAT_TIP .. tip,
+				Ticked("plateCombatPvP" .. kind[1]))
 			checks[2] = pvpCheck
 		end
 		for _, place in ipairs(PLACE_COLUMNS) do
@@ -3142,9 +3145,7 @@ local function CreatePlatesPanel()
 			else
 				-- The open world keeps the original "keep up in CineMode" key.
 				local key = place[1] == "" and ("plateCinematic" .. kind[1]) or ("plateIn" .. place[1] .. kind[1])
-				checks[#checks + 1] = Check(content, key, "",
-					("Keep these nameplates up in CineMode %s when you're not in a fight."):format(place[3])
-					.. tip, Ticked(key))
+				checks[#checks + 1] = Check(content, key, "", place[3] .. tip, Ticked(key))
 			end
 		end
 		-- Greyed out where this client has no such setting.
@@ -3165,8 +3166,7 @@ local function CreatePlatesPanel()
 	-- name options decide.
 	local namesHeader = Header(content, "Names", lastLabel, -24)
 	local namesTop = TableTop(namesHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
-	local nameTip = " Anything ticked in this row switches these names on in the game's own options; " ..
-		"nothing ticked switches them off."
+	local nameTip = " Ticking any box turns these names on in the game's options. Ticking none turns them off."
 	for r, group in ipairs(ns.NAME_GROUPS) do
 		local function Ticked(key)
 			return function(value)
@@ -3177,17 +3177,14 @@ local function CreatePlatesPanel()
 		end
 		local combatKey = "nameCombat" .. group.key
 		local checks = {
-			Check(content, combatKey, "", "Keep these names up during fights in CineMode." .. nameTip,
-				Ticked(combatKey)),
+			Check(content, combatKey, "", COMBAT_TIP .. nameTip, Ticked(combatKey)),
 		}
 		local pvpCheck
 		if pvpColumn then
 			-- Names can't change mid-fight: they go by how the fight started.
 			pvpCheck = Check(content, "nameCombatPvP" .. group.key, "",
-				"Keep these names up during fights with the other side's players, and for the Calm " ..
-				"Timer after, even if In combat is unticked. The game won't change names mid-fight, " ..
-				"so it has to be one from the start: a player attacked first, or you're in a " ..
-				"battleground or arena." .. nameTip, Ticked("nameCombatPvP" .. group.key))
+				PVP_COMBAT_TIP .. " The game only allows this to be set as the fight starts." .. nameTip,
+				Ticked("nameCombatPvP" .. group.key))
 			checks[2] = pvpCheck
 		end
 		for _, place in ipairs(PLACE_COLUMNS) do
@@ -3197,9 +3194,7 @@ local function CreatePlatesPanel()
 			else
 				-- The open world keeps the original Keep column's key.
 				local key = place[1] == "" and ("nameKeep" .. group.key) or ("nameIn" .. place[1] .. group.key)
-				checks[#checks + 1] = Check(content, key, "",
-					("Keep these names up in CineMode %s when you're not in a fight."):format(place[3])
-					.. nameTip, Ticked(key))
+				checks[#checks + 1] = Check(content, key, "", place[3] .. nameTip, Ticked(key))
 			end
 		end
 		-- Greyed out where this client has no such setting.

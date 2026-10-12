@@ -82,7 +82,7 @@ end
 
 -- Whether any box in a names row is ticked.
 local NAME_ROW_PREFIXES = { "nameGroup", "nameCombat", "nameCombatPvP", "nameKeep", "nameInInstances",
-	"nameInPvP", "nameInBGs" }
+	"nameInPvP" }
 local function NameRowTicked(group)
 	for _, prefix in ipairs(NAME_ROW_PREFIXES) do
 		if ns.db[prefix .. group.key] then
@@ -765,7 +765,7 @@ end
 -- game's own options decide. Set each frame.
 local platesActive = false
 
--- Where you are, for the Nameplates page's place columns: "PvP", "BGs" or "Instances"
+-- Where you are, for the Nameplates page's place columns: "PvP" or "Instances"
 -- or nil for the open world. Set each frame.
 local placeSuffix
 
@@ -1199,7 +1199,7 @@ end
 function ns.EnsurePlateRows()
 	for _, kind in ipairs(ns.PLATE_KINDS) do
 		for _, prefix in ipairs({ "plateGroup", "plateCombat", "plateCombatPvP", "plateCinematic",
-			"plateInInstances", "plateInPvP", "plateInBGs" }) do
+			"plateInInstances", "plateInPvP" }) do
 			if ns.db[prefix .. kind] then
 				ns.EnablePlateRow(kind)
 				break

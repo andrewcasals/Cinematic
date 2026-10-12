@@ -49,9 +49,9 @@ local DEFAULTS = {
 	offInParty = false,       -- while in a party (not a raid group)
 	offInRaidGroup = false,   -- while in a raid group
 	fadeOutTime = 1.5,
-	combatFadeOutTime = 1.5,  -- ...for fades that start within the Calm Timer after a fight
+	combatFadeOutTime = 6,    -- ...for fades that start within the Calm Timer after a fight
 	fadeInTime = 1.5,
-	combatFadeInTime = 1.5,   -- ...for fades in during a fight (the UI coming back as it starts)
+	combatFadeInTime = 0.2,   -- ...for fades in during a fight (the UI coming back as it starts)
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
@@ -100,9 +100,11 @@ local DEFAULTS = {
 	stayWithWindows = true, -- stay cinematic when opening the spellbook, options and similar
 	portraitWhenNotFull = true, -- keep the player portrait up while health or power isn't full
 	portraitAfterCombat = true,  -- ...but only within the Calm Timer (calmTime) of combat
-	buffPeek = true,          -- briefly show buffs/debuffs when one is gained or refreshed
+	buffPeek = true,          -- briefly show buffs/debuffs when a buff is gained or refreshed
 	buffPeekAfterCombat = true,  -- ...but only within the Calm Timer of a fight
-	buffPeekTime = 2.5,         -- seconds they stay up
+	debuffPeek = true,        -- ...and when a debuff is
+	debuffPeekAfterCombat = false, -- (any time: Hunter's Mark and the like matter out of fights too)
+	buffPeekTime = 3,           -- seconds they stay up
 	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584", -- buffs or debuffs that never bring them up
 	                                                    -- (spell IDs or names; 8326/20584: Ghost)
 	buffHoverPadX = 40,         -- how far beside the buff icons hovering reveals them (UI units)
@@ -256,12 +258,11 @@ ns.HOVER_GROUPS = {
 	{ "swing", "Swing timer" }, { "meters", "Damage meter" }, { "cooldowns", "Cooldown Manager" },
 	{ "misc", "Other" },
 }
--- The minimap and quest tracker linger by default; the rest follow mouseoverHold.
-local HOVER_HOLD_DEFAULTS = { minimap = 5, quests = 5 }
+-- By default every group follows mouseoverHold.
 for _, group in ipairs(ns.HOVER_GROUPS) do
 	local key = group[1]
-	DEFAULTS[key .. "HoverOverride"] = HOVER_HOLD_DEFAULTS[key] ~= nil
-	DEFAULTS[key .. "HoverHold"] = HOVER_HOLD_DEFAULTS[key] or 5
+	DEFAULTS[key .. "HoverOverride"] = false
+	DEFAULTS[key .. "HoverHold"] = 5
 end
 DEFAULTS.idleOrbitBackArc = 45
 DEFAULTS.idleOrbitDrift = true
@@ -443,7 +444,7 @@ for key, value in pairs({
 end
 -- The Nameplates page's kinds of unit (see Effects), and its columns per
 -- place: keep these up in cinematic mode out of combat there.
-ns.PLATE_PLACES = { "PvP", "BGs", "Instances" } -- (Instances: dungeons and raids)
+ns.PLATE_PLACES = { "PvP", "Instances" } -- (Instances: dungeons and raids)
 ns.PLATE_KINDS = {
 	"Enemies", "EnemyMinions", "EnemyNPCs", "EnemyMinor", "Friends", "FriendlyMinions", "FriendlyNPCs",
 }
@@ -454,13 +455,12 @@ for _, kind in ipairs(ns.PLATE_KINDS) do
 	end
 end
 -- Kept up in dungeons and raids: friendly players and NPCs; in PvP (flagged,
--- and arenas) and battlegrounds: enemy players and NPCs.
-for _, key in ipairs({ "plateInInstancesFriends", "plateInInstancesFriendlyNPCs", "plateInPvPEnemies",
-	"plateInPvPEnemyNPCs", "plateInBGsEnemies", "plateInBGsEnemyNPCs" }) do
+-- battlegrounds and arenas): enemy players.
+for _, key in ipairs({ "plateInInstancesFriends", "plateInInstancesFriendlyNPCs", "plateInPvPEnemies" }) do
 	DEFAULTS[key] = true
 end
--- Shown in fights with the other side's players: players on both sides and enemy minions.
-for _, key in ipairs({ "plateCombatPvPEnemies", "plateCombatPvPEnemyMinions", "plateCombatPvPFriends" }) do
+-- Shown in fights with the other side's players: players on both sides.
+for _, key in ipairs({ "plateCombatPvPEnemies", "plateCombatPvPFriends" }) do
 	DEFAULTS[key] = true
 end
 -- And its two rows for your target, shown whatever its own row says: your
@@ -482,12 +482,10 @@ for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions",
 end
 DEFAULTS.nameInPvPEnemies = true
 DEFAULTS.nameInPvPEnemyMinions = true
-DEFAULTS.nameInBGsEnemies = true
-DEFAULTS.nameInBGsEnemyMinions = true
 -- Both grids' In group column: the row stays up in a party or raid, in fights
--- and out, whatever its other boxes say.
+-- and out, whatever its other boxes say. Friendly players and their minions by default.
 for _, kind in ipairs(ns.PLATE_KINDS) do
-	DEFAULTS["plateGroup" .. kind] = false
+	DEFAULTS["plateGroup" .. kind] = kind == "Friends" or kind == "FriendlyMinions"
 end
 for row in pairs(ns.PLATE_TARGET_ROWS) do
 	DEFAULTS["plateGroup" .. row] = false
@@ -816,15 +814,11 @@ function ns.PlaceSuffix()
 end
 
 -- The same for the Nameplates page, whose columns are its own: cities go with
--- the open world, battlegrounds ("BGs") are apart from PvP (flagged, and
--- arenas), and dungeons and raids are one ("Instances").
+-- the open world, and dungeons and raids are one ("Instances").
 function ns.PlateSuffix()
 	local place = ns.GetOptionPlace()
 	if place == "city" then
 		return nil
-	end
-	if place == "pvp" and select(2, IsInInstance()) == "pvp" then
-		return "BGs"
 	end
 	if place == "dungeon" or place == "raid" then
 		return "Instances"
@@ -1853,6 +1847,11 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.deathSongFile ~= 53519 then ns.db.deathSongFiles = tostring(ns.db.deathSongFile) end
 			ns.db.deathSongFile = nil
 		end
+		-- "Show buffs when you gain or refresh one" covered debuffs too; now they
+		-- have their own switch, on if it was.
+		if ns.db.debuffPeek == nil and ns.db.buffPeek ~= nil then
+			ns.db.debuffPeek = ns.db.buffPeek
+		end
 		if not ns.db.buffPeekIgnoreV2 then -- Ghost joins the list, unless it was changed
 			if ns.db.buffPeekIgnore == "2479, Plainsrunning" then ns.db.buffPeekIgnore = nil end
 			ns.db.buffPeekIgnoreV2 = true
@@ -2012,8 +2011,8 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			end
 		end
 		-- The Nameplates page's Cities column joined Open world (ticked there
-		-- wherever either was), and Battlegrounds got a column of their own,
-		-- starting from PvP's ticks. Dungeons and Raids became one column
+		-- wherever either was), and its BGs column went back into PvP (ticked
+		-- there where both were). Dungeons and Raids became one column
 		-- (ticked wherever either was). Its Always column is gone: a row it
 		-- kept up is now ticked In combat and everywhere.
 		local plateRows = {}
@@ -2031,9 +2030,10 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			local head = prefix .. "In"
 			if ns.db[head .. "Cities" .. key] then ns.db[open .. key] = true end
 			ns.db[head .. "Cities" .. key] = nil
-			if ns.db[head .. "BGs" .. key] == nil and ns.db[head .. "PvP" .. key] ~= nil then
-				ns.db[head .. "BGs" .. key] = ns.db[head .. "PvP" .. key]
+			if ns.db[head .. "BGs" .. key] ~= nil and ns.db[head .. "PvP" .. key] ~= nil then
+				ns.db[head .. "PvP" .. key] = (ns.db[head .. "PvP" .. key] and ns.db[head .. "BGs" .. key]) and true or false
 			end
+			ns.db[head .. "BGs" .. key] = nil
 			local dungeons, raids = ns.db[head .. "Dungeons" .. key], ns.db[head .. "Raids" .. key]
 			if dungeons ~= nil or raids ~= nil then
 				ns.db[head .. "Instances" .. key] = (dungeons or raids) and true or false
