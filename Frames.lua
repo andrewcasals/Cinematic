@@ -1851,7 +1851,9 @@ end
 -- says so, when the game lets it be read; in fights WoW Forever keeps it
 -- secret, so then it goes by when you last cast the spell and how long its
 -- cooldown is. Not knowing (say, cast before a reload), it shows.
-local READY_FADE = 0.25 -- (sec: quicker than the CineMode fades, it's a cue)
+-- (Sec: quicker than the CineMode fades, it's a cue. Coming back eases in;
+-- going, as it's cast, it's out of the way at once.)
+local READY_FADE_IN, READY_FADE_OUT = 0.5, 0.25
 ns.READY_EARLY = 0.15 -- (of its cooldown)
 local lastCastOf = {} -- spell ID -> when you last cast it
 local cooldownLength = {} -- spell ID -> its cooldown (sec), last read off its swipe
@@ -2014,7 +2016,8 @@ local function UpdateReadyOnly(elapsed, now)
 	-- (Re-applied while faded, in case the game sets it; back to full, and
 	-- unticked or reused for another spell, it's left alone again.)
 	for icon, alpha in pairs(readyAlpha) do
-		alpha = ns.Approach(alpha, readyTargets[icon] or 1, elapsed, READY_FADE)
+		local target = readyTargets[icon] or 1
+		alpha = ns.Approach(alpha, target, elapsed, target > alpha and READY_FADE_IN or READY_FADE_OUT)
 		if not IsForbidden(icon) then
 			icon:SetAlpha(alpha)
 		end
