@@ -3826,8 +3826,9 @@ local function CreateCooldownPanel()
 	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", -14, -18)
 	local readyNote = Label(content, "GameFontHighlightSmall",
 		"Tick a spell to show its icon only in fights, and only once it's nearly ready: out of fights, " ..
-		"and while it recharges, it fades out, in CineMode or not. It comes back the seconds set " ..
-		"beside it before it's ready (left empty: " .. ns.READY_EARLY * 100 .. "% of its cooldown). " ..
+		"and while it recharges, it fades out, in CineMode or not. It comes back once it's ready, or " ..
+		"with Show Early ticked the seconds set beside it before (left empty: " .. ns.READY_EARLY * 100 ..
+		"% of its cooldown). " ..
 		"Its place in the bar stays, so it sits best at the end of one. In fights the game may not " ..
 		"say how long is left, so then it goes by when you last cast it.")
 	readyNote:SetPoint("TOPLEFT", readyHeader, "BOTTOMLEFT", 0, -6)
@@ -3836,7 +3837,7 @@ local function CreateCooldownPanel()
 	readyNote:SetJustifyV("TOP")
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
 	RecordKey(content, "cooldownReadyEarly")
-	RecordKey(content, "cooldownEarlyOff")
+	RecordKey(content, "cooldownEarlyOn")
 	-- Two columns: the spell (ticked: only when ready in combat), and Show
 	-- Early (ticked: back the seconds in its box before it's ready).
 	local EARLY_X, ROW_HEIGHT = 296, 24
@@ -3873,7 +3874,7 @@ local function CreateCooldownPanel()
 				-- Show Early: ticked, back before it's ready; unticked, only once it is.
 				local earlyCheck = Check(content, nil, "", "Bring the icon back a little before it's " ..
 					"ready, by the seconds beside it. Unticked, it comes back once it's ready.", function(value)
-					ns.GetDB().cooldownEarlyOff[check.spellID] = not value or nil
+					ns.GetDB().cooldownEarlyOn[check.spellID] = value or nil
 					check:Refresh()
 				end)
 				earlyCheck:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", EARLY_X - 2, y)
@@ -3929,7 +3930,7 @@ local function CreateCooldownPanel()
 					local label = self.Text or self.text
 					if label then label:SetFontObject(handled and "GameFontHighlight" or "GameFontDisable") end
 					local ticked = db.cooldownReadyOnly[spell] and handled and true or false
-					local earlyOn = not db.cooldownEarlyOff[spell]
+					local earlyOn = db.cooldownEarlyOn[spell] and true or false
 					self.earlyCheck:SetChecked(earlyOn)
 					self.earlyCheck:SetEnabled(ticked)
 					local seconds = ticked and earlyOn

@@ -1465,7 +1465,8 @@ function ns.EnsureTables()
 	ns.db.combatShow = ns.db.combatShow or {}
 	ns.db.cooldownReadyOnly = ns.db.cooldownReadyOnly or {} -- Cooldown Manager page: spell ID -> true
 	ns.db.cooldownReadyEarly = ns.db.cooldownReadyEarly or {} -- ...spell ID -> seconds early it comes back
-	ns.db.cooldownEarlyOff = ns.db.cooldownEarlyOff or {} -- ...spell ID -> true: Show Early unticked
+	ns.db.cooldownEarlyOn = ns.db.cooldownEarlyOn or {} -- ...spell ID -> true: Show Early ticked
+	ns.db.cooldownEarlyOff = nil -- (a test build's, when Show Early started ticked)
 	ns.db.gamepadPressButtons = ns.db.gamepadPressButtons or {} -- Gamepad page: button -> reveals the bars
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode

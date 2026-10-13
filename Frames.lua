@@ -1844,9 +1844,10 @@ end
 -- The Cooldown Manager page's "Only when ready in combat" spells
 -- (db.cooldownReadyOnly: spell ID -> true): out of fights, and in fights
 -- while it's recharging, a spell's icon fades out, the rest of its bar as
--- usual (the icon's place stays: it leaves a gap). It comes back a little
--- before it's ready: db.cooldownReadyEarly[spell ID] seconds, or by default
--- READY_EARLY of its cooldown (not at all with db.cooldownEarlyOff[spell ID]). Recharging: its swipe
+-- usual (the icon's place stays: it leaves a gap). It comes back once it's
+-- ready, or with Show Early (db.cooldownEarlyOn[spell ID]) a little before:
+-- db.cooldownReadyEarly[spell ID] seconds, or by default READY_EARLY of its
+-- cooldown. Recharging: its swipe
 -- says so, when the game lets it be read; in fights WoW Forever keeps it
 -- secret, so then it goes by when you last cast the spell and how long its
 -- cooldown is. Not knowing (say, cast before a reload), it shows.
@@ -1883,7 +1884,7 @@ local CooldownLength = ns.CooldownLength
 
 -- How long before a spell's icon is ready it comes back (sec), or nil until its cooldown's known.
 local function ReadyEarly(id, length)
-	if ns.db.cooldownEarlyOff[id] then
+	if not ns.db.cooldownEarlyOn[id] then
 		return 0 -- (Show Early unticked: back once it's ready)
 	end
 	return ns.db.cooldownReadyEarly[id] or (length and length * ns.READY_EARLY)
