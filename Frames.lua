@@ -1836,6 +1836,126 @@ local function AnyCooldownRecharging(now)
 	return found
 end
 
+-- The Cooldown Manager page's "Only when ready in combat" spells
+-- (db.cooldownReadyOnly: spell ID -> true): out of fights, and in fights
+-- while it's recharging, a spell's icon fades out, the rest of its bar as
+-- usual (the icon's place stays: it leaves a gap). Recharging: its swipe
+-- says so, when the game lets it be read; in fights WoW Forever keeps it
+-- secret, so then it goes by when you last cast the spell and how long its
+-- cooldown is. Not knowing (say, cast before a reload), it shows.
+local READY_FADE = 0.25 -- (sec: quicker than the CineMode fades, it's a cue)
+local lastCastOf = {} -- spell ID -> when you last cast it
+local cooldownLength = {} -- spell ID -> its cooldown (sec), last read off its swipe
+local iconSpell = setmetatable({}, { __mode = "k" }) -- icon -> its spell, last read (for when it's secret)
+local readyTargets = {} -- icon -> 0 or 1, for the ticked spells' icons
+local readyAlpha = {} -- icon -> its alpha, while not full
+local readyCheckedAt = 0
+
+local castWatcher = CreateFrame("Frame")
+castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+castWatcher:SetScript("OnEvent", function(_, _, _, _, spellID)
+	if not Secret(spellID) and type(spellID) == "number" then
+		lastCastOf[spellID] = GetTime()
+	end
+end)
+
+local function CooldownLength(id)
+	if cooldownLength[id] then
+		return cooldownLength[id]
+	end
+	if GetSpellBaseCooldown then
+		local ok, ms = pcall(GetSpellBaseCooldown, id)
+		if ok and not Secret(ms) and type(ms) == "number" and ms > 0 then
+			return ms / 1000
+		end
+	end
+end
+
+-- Whether an icon's spell is recharging: true, false, or nil when it can't tell.
+local function IconRecharging(icon, id, now)
+	local start, duration = SpellCooldown(id)
+	if not start then
+		EachCooldownPart(icon, 1, function(part, kind)
+			if kind == "swipe" and not start then
+				start, duration = SwipeTimes(part)
+			end
+		end)
+	end
+	if start then
+		if duration > GCD then
+			cooldownLength[id] = duration
+		end
+		return Recharging(start, duration, now)
+	end
+	local cast, length = lastCastOf[id], CooldownLength(id)
+	if cast and length then
+		return now < cast + length
+	end
+	return nil
+end
+
+-- Calls visit(icon, spell) for each icon in the Cooldown Manager's spell bars.
+local function EachCooldownIcon(visit)
+	EachCooldownFrame(function(entry, frame)
+		if COOLDOWN_VIEWERS[entry.name] then
+			EachCooldownPart(frame, 3, function(part, kind)
+				if kind == "item" then
+					local id = ItemSpell(part)
+					if id then
+						iconSpell[part] = id
+					end
+					id = id or iconSpell[part]
+					if id then
+						visit(part, id)
+					end
+				end
+			end)
+		end
+	end)
+end
+
+-- The spells in the Cooldown Manager's spell bars now, in the order found (for its page).
+function ns.CooldownManagerSpells()
+	local ids, listed = {}, {}
+	EachCooldownIcon(function(_, id)
+		if not listed[id] then
+			listed[id] = true
+			ids[#ids + 1] = id
+		end
+	end)
+	return ids
+end
+
+local function UpdateReadyOnly(elapsed, now)
+	if now - readyCheckedAt >= 0.1 then
+		readyCheckedAt = now
+		wipe(readyTargets)
+		local list = ns.db.cooldownReadyOnly
+		if next(list) then
+			local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+			EachCooldownIcon(function(icon, id)
+				if list[id] then
+					readyTargets[icon] = (inCombat and IconRecharging(icon, id, now) ~= true) and 1 or 0
+				end
+			end)
+		end
+	end
+	for icon, target in pairs(readyTargets) do
+		if target < 1 and not readyAlpha[icon] then
+			readyAlpha[icon] = 1
+		end
+	end
+	-- (Re-applied while faded, in case the game sets it; back to full, and
+	-- unticked or reused for another spell, it's left alone again.)
+	for icon, alpha in pairs(readyAlpha) do
+		alpha = ns.Approach(alpha, readyTargets[icon] or 1, elapsed, READY_FADE)
+		if not IsForbidden(icon) then
+			icon:SetAlpha(alpha)
+		end
+		readyAlpha[icon] = alpha < 1 and alpha or nil
+	end
+end
+
 -- /cine debug cooldowns: what the Cooldown Manager check sees.
 function ns.ReportCooldowns()
 	local now = GetTime()
@@ -1859,6 +1979,14 @@ function ns.ReportCooldowns()
 				print(("  icon spell=%s cooldown %s"):format(tostring(id), start
 					and ("%.1fs left of %.1fs"):format(math.max(0, start + duration - now), duration)
 					or "unreadable"))
+				if id and ns.db.cooldownReadyOnly[id] then
+					local recharging = IconRecharging(part, id, now)
+					local cast = lastCastOf[id]
+					print(("    only when ready in combat: %s (last cast %s, cooldown %s)"):format(
+						recharging == nil and "can't tell, shown" or (recharging and "recharging" or "ready"),
+						cast and ("%.0fs ago"):format(now - cast) or "not seen",
+						CooldownLength(id) and ("%.0fs"):format(CooldownLength(id)) or "unknown"))
+				end
 			else
 				local start, duration = SwipeTimes(part)
 				print(("  swipe %s"):format(start
@@ -2063,6 +2191,7 @@ local PORTRAIT_FRAMES = { PlayerFrame = true }
 
 function ns.UpdateFrames(cinematic, elapsed)
 	local now = GetTime()
+	UpdateReadyOnly(elapsed, now)
 	local combatShown
 	if cinematic then
 		combatShown = GetCombatShownFrames()

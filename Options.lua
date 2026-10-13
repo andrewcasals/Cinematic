@@ -3806,7 +3806,70 @@ local function CreateCooldownPanel()
 	afterCombat:SetPoint("TOPLEFT", recharging, "BOTTOMLEFT", 16, -2)
 	GreyUnless(afterCombat, function(db) return db.cooldownWhileRecharging end)
 
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	-- Spells shown only when ready in combat: a box per spell in the
+	-- Cooldown Manager's spell bars now, then any ticked that aren't in it.
+	local readyHeader = Label(content, "GameFontNormal", "Only when ready in combat")
+	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", -14, -18)
+	local readyNote = Label(content, "GameFontHighlightSmall",
+		"Tick a spell to show its icon only in fights, and only while it's ready: out of fights, and " ..
+		"while it recharges, it fades out, in CineMode or not. Its place in the bar stays, so it " ..
+		"sits best at the end of one. In fights the game may not say how long is left, so then " ..
+		"it goes by when you last cast it.")
+	readyNote:SetPoint("TOPLEFT", readyHeader, "BOTTOMLEFT", 0, -6)
+	readyNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	readyNote:SetJustifyH("LEFT")
+	readyNote:SetJustifyV("TOP")
+	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
+	local noSpells = Label(content, "GameFontDisable",
+		"No spells in the Cooldown Manager's spell bars right now.")
+	noSpells:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -8)
+
+	local GetName = (C_Spell and C_Spell.GetSpellName) or function(id) return (GetSpellInfo(id)) end
+	local GetIcon = (C_Spell and C_Spell.GetSpellTexture) or GetSpellTexture
+	local spellChecks = {}
+	local function ListSpells()
+		local ids, inManager = ns.CooldownManagerSpells(), {}
+		for _, id in ipairs(ids) do inManager[id] = true end
+		local others = {}
+		for id in pairs(ns.GetDB().cooldownReadyOnly) do
+			if not inManager[id] then others[#others + 1] = id end
+		end
+		table.sort(others)
+		for _, id in ipairs(others) do ids[#ids + 1] = id end
+		for i, id in ipairs(ids) do
+			local check = spellChecks[i]
+			if not check then
+				check = Check(content, nil, "", "Out of fights, and while it recharges, this spell's " ..
+					"icon fades out of the Cooldown Manager.", function(value)
+					ns.GetDB().cooldownReadyOnly[spellChecks[i].spellID] = value or nil
+				end)
+				check:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", -2, -6 - (i - 1) * 24)
+				check.Refresh = function(self)
+					self:SetChecked(self.spellID and ns.GetDB().cooldownReadyOnly[self.spellID] or false)
+				end
+				spellChecks[i] = check
+			end
+			check.spellID = id
+			local okName, name = pcall(GetName, id)
+			local okIcon, icon = pcall(GetIcon, id)
+			local text = check.Text or check.text
+			text:SetText(("|T%s:16|t %s%s"):format(okIcon and icon or 134400,
+				okName and name or ("Spell " .. id),
+				inManager[id] and "" or " |cff808080(not in the Cooldown Manager now)|r"))
+			check:Show()
+		end
+		for i = #ids + 1, #spellChecks do
+			spellChecks[i].spellID = nil
+			spellChecks[i]:Hide()
+		end
+		noSpells:SetShown(#ids == 0)
+	end
+
+	local shown = PageShown(Refresh, content)
+	canvas:SetScript("OnShow", function()
+		ListSpells()
+		shown()
+	end)
 	canvas:Hide()
 	RegisterSubpage(canvas, "Cooldown Manager")
 end
