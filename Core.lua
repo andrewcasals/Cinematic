@@ -12,18 +12,17 @@ ns.isRetail = WOW_PROJECT_ID ~= nil and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 
 BINDING_HEADER_CINEMATIC = "Cinematic"
 BINDING_NAME_CINEMATIC_TOGGLE = "Cinematic: Toggle CineMode"
-BINDING_NAME_CINEMATIC_PEEK = "Cinematic: Peek at UI (hold)"
 BINDING_NAME_CINEMATIC_HIDEUI = "Cinematic: Hide the UI (keep the look)"
-BINDING_NAME_CINEMATIC_FLYBY = "Cinematic: Fly-by (turn round to look back)"
 BINDING_NAME_CINEMATIC_CAM_IDLE = "Cinematic: Start the AFK camera"
 BINDING_NAME_CINEMATIC_CAM_COZY = "Cinematic: Start the cozy camera"
 BINDING_NAME_CINEMATIC_CAM_VISTA = "Cinematic: Start the vista camera"
 BINDING_NAME_CINEMATIC_CAM_FISH = "Cinematic: Start the fish camera"
+BINDING_NAME_CINEMATIC_CAM_TELE = "Cinematic: Start the tele camera"
 BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: Test the death camera"
 
 local DEFAULTS = {
 	enabled = true,
-	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, with visualEffectsAlways)
+	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, over the normal UI)
 	minimapButton = true,     -- show the minimap button
 	minimapAngle = 225,       -- its position around the minimap, in degrees
 	-- Hide world tooltips in each camera mode:
@@ -39,7 +38,6 @@ local DEFAULTS = {
 	tooltipOffQuest = true,   -- the quest camera
 	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
 	visualEffects = true,     -- the Visual Effects page's master switch (off: none of its effects)
-	visualEffectsAlways = true, -- ...and they show outside CineMode too (not while it's off or snoozed)
 	timeOfDayMessage = true,  -- "Dusk" under the zone name on login and /reload, and when it
 	                          -- changes, with a fitting sound (rooster, bells, frogs, owl, wolf)
 	offInDungeons = false,    -- no cinematic mode in dungeons (and scenarios)
@@ -49,6 +47,9 @@ local DEFAULTS = {
 	offInWorld = false,       -- the open world: anywhere outside instances, cities and inns
 	offInParty = false,       -- while in a party (not a raid group)
 	offInRaidGroup = false,   -- while in a raid group
+	offWhileMoving = false,   -- while walking or riding about yourself (not auto-run, RP walking or flights)
+	movingBackAfter = 15,     -- ...until you've stood still, or kept moving, this many seconds
+	movingKeepVFX = true,     -- ...and the visual effects (letterbox, tint...) stay on meanwhile
 	fadeOutTime = 1.5,
 	combatFadeOutTime = 6,    -- ...for fades that start within the Calm Timer after a fight
 	fadeInTime = 1.5,
@@ -56,12 +57,10 @@ local DEFAULTS = {
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
-	-- When the letterbox and tint show: moving around, standing still (past the
-	-- standing-still delay), on flights, and in combat (while staying cinematic).
-	letterboxMoving = true, letterboxStill = true, letterboxFlight = true,
-	letterboxInCombat = false,
-	tintMoving = true, tintStill = true, tintFlight = true,
-	tintInCombat = true,
+	-- The Visual Effects page's "Turn off in" grid for the letterbox and tint:
+	-- <effect>OffIn<where> (ns.EFFECT_OFF_WHERE), <effect>OffInCombat (gone in
+	-- fights, back once the Calm Timer has run out after) and
+	-- <effect>OnlyInCameras (only while a camera mode runs). Set below.
 	calmTime = 60,            -- Calm Timer: seconds after a fight before things settle back (nameplates
 	                          -- and names shown for fights go, the letterbox and tint fade back in)
 	tintPreset = "zonetime",   -- screen tint over the game world (see TINT_PRESETS)
@@ -112,6 +111,7 @@ local DEFAULTS = {
 	buffPeekIgnoreSelf = true,   -- ...and not for buffs you cast on yourself (or your pet does)
 	debuffPeek = true,        -- ...and when a debuff is
 	debuffPeekAfterCombat = false, -- (any time: Hunter's Mark and the like matter out of fights too)
+	debuffPeekUntilGone = false,   -- ...and keep them up until your debuffs are gone
 	buffPeekTime = 3,           -- seconds they stay up for a buff
 	debuffPeekTime = 3,         -- ...and for a debuff
 	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584", -- buffs or debuffs that never bring them up
@@ -191,7 +191,7 @@ local DEFAULTS = {
 	zoneGapTime = 1.5,        -- seconds untinted between zone tints on the ground
 	zoneGapFlying = 6,        -- ...and in the air
 	idleOrbit = true,         -- also rotate it after standing still for a while
-	idleOrbitDelay = 30,      -- seconds of standing still before it starts
+	idleOrbitDelay = 60,      -- seconds of standing still before it starts
 	-- Cozy camera: swings round to face you and sways in front, when an event
 	-- picks it (Camera Triggers page: ns.EVENTS in Camera.lua has their defaults).
 	cozyOrbit = true,         -- sway in front of you
@@ -374,16 +374,27 @@ DEFAULTS.deathSong = true          -- play a song of its own meanwhile
 DEFAULTS.deathSongFiles = "53519, 53232, 53235, 53234, 53240, 53216, 53602"
 -- Each camera mode's "Turn off in" grid (Camera Modes page): <cam>OffIn<where>,
 -- for the cameras in ns.CAMERA_OFF_CAMS and the places in ns.CAMERA_OFF_WHERE
--- (capital cities; instances: dungeons, raids, battlegrounds and arenas; the
--- open world), but not those in ns.CAMERA_OFF_NEVER (no flight from there).
+-- (capital cities; instances: dungeons, scenarios and raids; battlegrounds and
+-- arenas; the open world), but not those in ns.CAMERA_OFF_NEVER (no flight from there).
 -- All off.
 ns.CAMERA_OFF_CAMS = {
 	{ "flight", "Flight" }, { "idle", "AFK" }, { "cozy", "Cozy" }, { "tele", "Tele" },
 	{ "vista", "Vista" }, { "fish", "Fish" }, { "walk", "RP Walk" }, { "run", "Auto-run" },
 	{ "death", "Death" }, { "quest", "Quest" },
 }
-ns.CAMERA_OFF_WHERE = { "Cities", "Instances", "World" }
-ns.CAMERA_OFF_NEVER = { flight = { Instances = true } }
+ns.CAMERA_OFF_WHERE = { "Cities", "Instances", "BGs", "World" }
+ns.CAMERA_OFF_NEVER = { flight = { Instances = true, BGs = true } }
+-- The Visual Effects page's grid: the same places, by where you are now.
+ns.EFFECT_OFF_WHERE = ns.CAMERA_OFF_WHERE
+ns.EFFECT_GRID = { "letterbox", "tint" }
+for _, effect in ipairs(ns.EFFECT_GRID) do
+	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
+		DEFAULTS[effect .. "OffIn" .. where] = false
+	end
+	DEFAULTS[effect .. "OnlyInCameras"] = false
+end
+DEFAULTS.letterboxOffInCombat = true -- (the bars slide away for fights)
+DEFAULTS.tintOffInCombat = false
 -- The same grid's Calm Timer column: <cam>CalmWait, that camera holds off
 -- until the Calm Timer (calmTime) has run out after a fight. By default the
 -- ones you'd walk or run off into after one (RP walking, auto-running), the
@@ -465,6 +476,16 @@ end
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
 DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
+-- The other pages' master switches likewise (see ns.HANDLE_SWITCHES): off,
+-- CineMode leaves that part of the UI to the game.
+DEFAULTS.handleFrames = true -- Standard Frames
+DEFAULTS.handleAddonFrames = true -- 3rd Party Frames
+DEFAULTS.handleGamepad = true
+DEFAULTS.handleMinimap = true
+DEFAULTS.handleQuests = true -- Quest tracker
+DEFAULTS.handleBuffs = true -- Buffs/debuffs
+DEFAULTS.handleChat = true
+DEFAULTS.handleFishing = true -- right-click casting and the cast bar
 DEFAULTS.plateTarget = true
 -- And your party or raid members' plates (their pets' too), likewise.
 DEFAULTS.plateGroupMembers = true
@@ -540,7 +561,6 @@ local lastBusy = 0
 -- After a fight, login, /reload or turning it on, cinematic mode starts at
 -- once instead of waiting the fade delay (until something else brings the UI back).
 local quickStart = false
-local peeking = false
 
 function ns.Print(msg)
 	print("|cffe0b050Cinematic:|r " .. msg)
@@ -692,6 +712,41 @@ local function CursorBusy()
 	return ns.db.revealOnDrag and GetCursorInfo() ~= nil and not BindPopupShown()
 end
 
+-- "Turn off in" Moving: walking or riding about yourself. Auto-run, RP
+-- walking and flights carry on in CineMode. It comes back once you've moved,
+-- or stood still, for movingBackAfter seconds.
+-- Timed from when you last took over yourself: starting to move, or ending
+-- an auto-run or RP walk (say, pressing forward) without stopping.
+local movingOffSince
+local function MovingFor()
+	if not ns.db.offWhileMoving or not ns.playerMoving or UnitOnTaxi("player")
+		or (ns.IsAutoRunning and ns.IsAutoRunning()) or (ns.IsRPWalking and ns.IsRPWalking()) then
+		movingOffSince = nil
+		return nil
+	end
+	local started = ns.movingSince or GetTime()
+	if movingOffSince == nil or movingOffSince < started then
+		movingOffSince = movingOffSince and started or GetTime()
+	end
+	return GetTime() - movingOffSince
+end
+
+local function MovingWait()
+	return math.max(1, ns.db.movingBackAfter or DEFAULTS.movingBackAfter)
+end
+
+local function MovingOff()
+	local moving = MovingFor()
+	return moving ~= nil and moving < MovingWait()
+end
+
+local function LongMove()
+	local moving = MovingFor()
+	return moving ~= nil and moving >= MovingWait()
+end
+local lastMovingOff = -math.huge -- when Moving last kept CineMode off
+local offForMoving = false -- this tick, Moving (and nothing else) kept CineMode off
+
 local function IsBusy()
 	local inCombat = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
 	if inCombat and not ns.db.stayInCombat then
@@ -833,7 +888,11 @@ end
 -- world (inns too, PvP flagged or not). A flight doesn't count as being in a
 -- city (see ns.GetPlaceType): for it, Cities means taking off from one
 -- (db.takeoffInCity, noted at takeoff), and the open world anywhere else.
-local CAMERA_OFF_PLACE = { city = "Cities", dungeon = "Instances", raid = "Instances", pvp = "Instances" }
+local CAMERA_OFF_PLACE = { city = "Cities", dungeon = "Instances", raid = "Instances", pvp = "BGs" }
+-- Where you are, as those grids' columns name it.
+function ns.EffectPlace()
+	return CAMERA_OFF_PLACE[ns.GetPlaceType()] or "World"
+end
 local SWITCHED_CAMS = { walk = "walkCamera", run = "runCamera" }
 function ns.IsCameraOffHere(cam)
 	local db = ns.db
@@ -873,24 +932,62 @@ local function IsInDisabledZone()
 	return ns.db[OFF_IN[place]] or false
 end
 
+-- /cine debug group: Cinematic acts as if you're in a party or raid ("party"
+-- or "raid"; nil: as you are), to try its group options on your own. Session
+-- only. The game's own frames (raid frames and the like) still go by the real group.
+ns.fakeGroup = nil
+function ns.InGroup()
+	return ns.fakeGroup ~= nil or IsInGroup()
+end
+function ns.InRaid()
+	return ns.fakeGroup == "raid" or IsInRaid()
+end
+
 -- "Turn off in" a party or raid group: who you're with, not where you are.
 local function IsInDisabledGroup()
-	if IsInRaid() then
+	if ns.InRaid() then
 		return ns.db.offInRaidGroup
 	end
-	return IsInGroup() and ns.db.offInParty
+	return ns.InGroup() and ns.db.offInParty
 end
 
 -- "Turn off for a while" from the minimap menu. Session only: a reload or
 -- logout clears it.
 local snoozeUntil = 0
 
+-- A change to the CineMode page's "Turn off in" boxes (Combat among them)
+-- that lets CineMode back starts it at once, with no "Back into CineMode
+-- after" wait. Until CineMode starts.
+local switchedOn = false
+local OFF_IN_KEYS = {
+	"stayInCombat", "offInWorld", "offInCities", "offInDungeons", "offInRaids", "offInPvP", "offInParty",
+	"offInRaidGroup", "offWhileMoving",
+}
+local offInWas = {}
+local function OffInChanged()
+	local changed = false
+	for _, key in ipairs(OFF_IN_KEYS) do
+		local on = ns.db[key] and true or false
+		if offInWas[key] ~= nil and offInWas[key] ~= on then
+			changed = true
+		end
+		offInWas[key] = on
+	end
+	return changed
+end
+
 local function ShouldBeCinematic(now)
-	if not ns.db.enabled or not ns.db.fadeUI or not ns.ProfileChosen() or peeking or GetTime() < snoozeUntil or IsInDisabledZone()
-		or IsInDisabledGroup() then
-		lastBusy = now -- the full fade delay applies after leaving
+	local changed = OffInChanged()
+	MovingFor() -- (each tick, so its timer sees every auto-run and stop)
+	-- Switched off, or in a place or group where it's off: once that ends
+	-- (switched on, or you leave), straight back, at the fade out time.
+	if not ns.db.enabled or not ns.db.fadeUI or not ns.ProfileChosen() or GetTime() < snoozeUntil
+		or IsInDisabledZone() or IsInDisabledGroup() then
 		quickStart = false
 		return false
+	end
+	if changed then
+		switchedOn = true
 	end
 	if IsBusy() then
 		lastBusy = now
@@ -906,10 +1003,28 @@ local function ShouldBeCinematic(now)
 		or (ns.db.runInstant and ns.IsAutoRunning())
 		or (ns.ActiveEvent and ns.ActiveEvent())
 		or (ns.IsDeathCinematic and ns.IsDeathCinematic())
+		or LongMove()
+	-- Moving: back once you've moved on, or stood still, for its own time
+	-- (not the "Back into CineMode after" one).
+	if MovingOff() then
+		lastMovingOff = now
+		offForMoving = true
+		return false
+	end
+	if instant or not ns.db.offWhileMoving then
+		lastMovingOff = -math.huge
+	elseif now - lastMovingOff < MovingWait() then
+		offForMoving = true
+		return false
+	end
 	-- Otherwise things must stay calm (no cast, window or the like) for the
 	-- "Back into CineMode after" time first. After fights and at login, at once.
-	local delay = (instant or quickStart) and 0 or ns.db.returnDelay
-	return now - lastBusy >= delay
+	local delay = (instant or quickStart or switchedOn) and 0 or ns.db.returnDelay
+	if now - lastBusy >= delay then
+		switchedOn = false
+		return true
+	end
+	return false
 end
 
 -- Settings held by a set marked playerWins, and the value written: if the
@@ -1138,23 +1253,14 @@ local START_SCAN_INTERVAL = 0.5
 local startSnapUntil = 0
 local snapRound = 0
 
--- Effects shown only in some situations (db.<key>Moving, Still, Flight and
--- InCombat), fading back in once the Calm Timer (db.calmTime) has run out after a fight.
-local SITUATION_EFFECTS = {
+-- The effects in the Visual Effects page's grid: off where ticked, off in
+-- fights (and until the Calm Timer, db.calmTime, has run out after one), or
+-- only while a camera mode runs.
+local GRID_EFFECTS = {
 	{ key = "letterbox", update = "UpdateLetterbox" },
 	{ key = "tint", update = "UpdateTint" },
 }
 local lastFightAt = -math.huge
-
--- Out of combat: on a flight, standing still past the standing-still delay, or moving around.
-local function Situation(now)
-	if UnitOnTaxi("player") then
-		return "Flight"
-	elseif ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay then
-		return "Still"
-	end
-	return "Moving"
-end
 
 local function OnUpdate(_, elapsed)
 	-- Every frame (with EllesmereUI, or watching with /cine debug alpha): frames
@@ -1188,6 +1294,7 @@ local function OnUpdate(_, elapsed)
 	end
 
 	Step(UpdateDroppedTarget)
+	offForMoving = false
 	local cinematic = Step(ShouldBeCinematic, GetTime()) or false -- (an error: the normal UI)
 	if cinematic and starting then
 		-- Start in cinematic mode: hide the UI at once instead of fading. The
@@ -1203,26 +1310,24 @@ local function OnUpdate(_, elapsed)
 		ns.Log("state", cinematic and "cinematic" or "normal UI")
 	end
 	Step(ns.UpdateFrames, cinematic, elapsed)
-	-- The letterbox and tint each show only in the situations ticked for them.
-	-- One kept out of fights waits its own time after one before fading back in.
+	-- The letterbox and tint each show except where their grid row says. One
+	-- kept out of fights waits out the Calm Timer after one before fading back in.
 	local now = GetTime()
 	local inCombat = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
 	if inCombat then
 		lastFightAt = now
 	end
-	local situation = Situation(now)
-	-- Outside CineMode too, if chosen: still not while it's turned off or snoozed.
-	local effectsOn = cinematic
-		or (ns.db.visualEffectsAlways and ns.db.enabled and ns.ProfileChosen() and now >= snoozeUntil) or false
-	for _, effect in ipairs(SITUATION_EFFECTS) do
+	local fighting = inCombat or now - lastFightAt < ns.db.calmTime
+	local place = ns.EffectPlace()
+	-- In CineMode; with Fade the UI off, over the normal UI (the VFX Only profile);
+	-- and while just moving about takes you out of it, with Keep VFX on.
+	local effectsOn = cinematic or (not ns.db.fadeUI and ns.db.enabled and ns.ProfileChosen())
+		or (offForMoving and ns.db.movingKeepVFX) or false
+	for _, effect in ipairs(GRID_EFFECTS) do
 		local key = effect.key
-		local wanted
-		if inCombat then
-			wanted = ns.db[key .. "InCombat"]
-		else
-			wanted = ns.db[key .. situation]
-				and (ns.db[key .. "InCombat"] or now - lastFightAt >= ns.db.calmTime)
-		end
+		local wanted = not ns.db[key .. "OffIn" .. place]
+			and not (ns.db[key .. "OffInCombat"] and fighting)
+			and not (ns.db[key .. "OnlyInCameras"] and not ns.activeCam)
 		Step(ns[effect.update], effectsOn and wanted and ns.db.visualEffects and true or false, elapsed)
 	end
 	Step(ns.UpdateCVars, cinematic)
@@ -1380,7 +1485,7 @@ end
 -- Key bindings for the standing-still cameras: each starts its camera now, as
 -- if its event had happened, and pressing it again stops it. Moving or jumping
 -- ends it, like an emote. "death" runs the death camera test (/cine deathtest).
-local CAM_NAMES = { idle = "AFK", cozy = "cozy", vista = "vista", fish = "fish" }
+local CAM_NAMES = { idle = "AFK", cozy = "cozy", vista = "vista", fish = "fish", tele = "tele" }
 function Cinematic_StartCam(camera)
 	if not ns.db then
 		return
@@ -1430,20 +1535,6 @@ end
 
 function Cinematic_ToggleUI()
 	ns.ToggleUI()
-end
-
-function Cinematic_Peek(down)
-	peeking = down
-	if not down then
-		lastBusy = GetTime()
-		quickStart = false
-	end
-end
-
--- /cine peek: the peek key as a toggle, for macros (which can't be held).
-function ns.TogglePeek()
-	Cinematic_Peek(not peeking)
-	return peeking
 end
 
 function ns.EnsureTables()
@@ -1679,6 +1770,11 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			if ns.db.runOrbitPitchUp == 8 then ns.db.runOrbitPitchUp = nil end
 			if ns.db.runOrbitPitchDown == 8 then ns.db.runOrbitPitchDown = nil end
 			ns.db.runSettingsV2 = true
+		end
+		-- Standing still first waited 30 sec before the camera started; 60 now, unless changed.
+		if not ns.db.stillDelayV2 then
+			if ns.db.idleOrbitDelay == 30 then ns.db.idleOrbitDelay = nil end
+			ns.db.stillDelayV2 = true
 		end
 		-- Enemy nameplates were first hidden in fights by default; show them once.
 		if not ns.db.plateCombatV2 then
@@ -2120,6 +2216,34 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			ns.db.tintMoving, ns.db.tintInCombat = false, false
 			ns.db.tintFlight = ns.db.tintWhen == "flight"
 			ns.db.tintStill = ns.db.tintWhen == "idle"
+		end
+		-- The letterbox and tint first showed by situation (moving around,
+		-- standing still, on flights, in combat): now by place, with fights
+		-- their own column. In combat off is Combat ticked; the rest go.
+		-- Battlegrounds and arenas were part of Instances on the Camera Modes
+		-- grid: their own column now, starting as Instances was. (The live
+		-- settings and each saved profile alike.)
+		local function CarryOver(settings)
+			for _, effect in ipairs(ns.EFFECT_GRID) do
+				local inCombat = settings[effect .. "InCombat"]
+				if inCombat ~= nil and settings[effect .. "OffInCombat"] == nil then
+					settings[effect .. "OffInCombat"] = not inCombat
+				end
+				for _, old in ipairs({ "Moving", "Still", "Flight", "InCombat" }) do
+					settings[effect .. old] = nil
+				end
+			end
+			settings.visualEffectsAlways = nil -- (Fade the UI off shows them over the normal UI now)
+			for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+				local instances = settings[cam[1] .. "OffInInstances"]
+				if instances ~= nil and settings[cam[1] .. "OffInBGs"] == nil then
+					settings[cam[1] .. "OffInBGs"] = instances
+				end
+			end
+		end
+		CarryOver(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then CarryOver(saved) end
 		end
 		-- "Always show your target's nameplate" (plateTarget) was split into a
 		-- switch each for enemy and friendly targets, then into Enemy Target and

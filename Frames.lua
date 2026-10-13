@@ -32,6 +32,11 @@ local FRAME_GROUPS = {
 		"MultiCastActionPage1", "MultiCastActionPage2", "MultiCastActionPage3",
 	},
 	target = { "TargetFrame", "TargetFrameToT", "FocusFrame" },
+	-- In a group, the tab at the left edge and the panel it opens. (The raid
+	-- frames themselves, raidplayers and raidpets, are found by ScanRaidFrames.)
+	raidmanager = { "CompactRaidFrameManager" },
+	-- In battlegrounds, the flag carriers' frames (the arena enemy frames, reused).
+	flags = { "ArenaEnemyFramesContainer" },
 	-- (With the queue eyes for the dungeon finder and battlegrounds, which can
 	-- sit outside the minimap: named differently by client.)
 	minimap = {
@@ -118,7 +123,14 @@ function ns.IsAddonFramesOn(key)
 end
 
 -- Groups whose frames set their own alpha (see AddFrame).
-local OWN_ALPHA = { chat = true, waypoint = true, cooldowns = true }
+local OWN_ALPHA = { chat = true, waypoint = true, cooldowns = true, raidplayers = true, raidpets = true }
+-- Parts of the raid frames with rows of their own (role icons, names, group
+-- titles, buffs and debuffs). They sit inside the frames they're part of but
+-- fade apart from them (not nested), and they don't take the mouse: hovering
+-- the raid frames brings them up (their Mouseover group).
+local PART_GROUPS = {
+	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true,
+}
 
 ns.managed = {}       -- { frame, name, group, alpha, baseAlpha }
 local seen = {}
@@ -187,14 +199,58 @@ local function TakeOwnAlpha(entry)
 	return false
 end
 
+-- Parts of a raid frame that ignore its alpha (the outline round your
+-- target's frame, which stays bright when out of range dims the rest): found
+-- once per frame, a few levels down (a group's frame holds its members').
+local LOOSE_PART_GROUPS = { raidplayers = true, raidpets = true }
+local function LooseParts(frame, depth, found)
+	found = found or {}
+	for _, region in ipairs({ frame:GetRegions() }) do
+		local ignoring = region.IsIgnoringParentAlpha and region:IsIgnoringParentAlpha()
+		-- (A secret answer counts as no.)
+		if not (issecretvalue and issecretvalue(ignoring)) and ignoring then
+			found[#found + 1] = region
+		end
+	end
+	if depth > 0 then
+		for _, child in ipairs({ frame:GetChildren() }) do
+			if not (child.IsForbidden and child:IsForbidden()) then
+				LooseParts(child, depth - 1, found)
+			end
+		end
+	end
+	return found
+end
+
+-- Those parts follow the fade too, back to their own alpha once it's over.
+local function FadeLooseParts(entry, alpha)
+	entry.looseParts = entry.looseParts or LooseParts(entry.frame, 2)
+	for _, part in ipairs(entry.looseParts) do
+		if alpha < 1 then
+			if not part.cinematicAlpha then
+				local own = part:GetAlpha()
+				part.cinematicAlpha = (issecretvalue and issecretvalue(own)) and 1 or own
+			end
+			part:SetAlpha(alpha * part.cinematicAlpha)
+		elseif part.cinematicAlpha then
+			part:SetAlpha(part.cinematicAlpha)
+			part.cinematicAlpha = nil
+		end
+	end
+end
+
 local function ApplyAlpha(entry)
 	if entry.ownAlpha then
 		TakeOwnAlpha(entry)
 	end
-	entry.applied = VisualAlpha(entry) * (entry.baseAlpha or 1)
+	local visual = VisualAlpha(entry)
+	entry.applied = visual * (entry.baseAlpha or 1)
 	entry.settingAlpha = true
 	entry.frame:SetAlpha(entry.applied)
 	entry.settingAlpha = false
+	if LOOSE_PART_GROUPS[entry.group] then
+		FadeLooseParts(entry, visual)
+	end
 end
 
 local function SyncOwnAlpha(entry)
@@ -248,6 +304,34 @@ for _, known in ipairs(ns.ADDON_FRAMES) do
 	end
 end
 
+-- The options pages' master switches (handle<...>, all on to start with):
+-- off, the frames in their groups aren't faded (let go, their own alpha
+-- back). The Standard Frames page's covers every built-in group but the chat
+-- and gamepad ones (their own pages'); the page switches below it come on
+-- top. The 3rd Party Frames page's covers other addons' and added frames.
+local GROUP_SWITCH = {
+	minimap = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
+	buffs = "handleBuffs", cooldowns = "handleCooldowns", chat = "handleChat",
+	gamepadbars = "handleGamepad", gamepadlegend = "handleGamepad", gamepadreticle = "handleGamepad",
+}
+local OWN_PAGE_GROUPS = { chat = true, gamepadbars = true, gamepadlegend = true, gamepadreticle = true }
+ns.HANDLE_SWITCHES = {
+	"handleFrames", "handleAddonFrames", "handleGamepad", "handleMinimap", "handleQuests", "handleBuffs",
+	"handleCooldowns", "handleChat",
+}
+local function GroupHandled(group)
+	local db = ns.db
+	if group:find("^addon:") or group:find("^extra:") then
+		return db.handleAddonFrames and true or false
+	end
+	if not OWN_PAGE_GROUPS[group] and not db.handleFrames then
+		return false
+	end
+	local switch = GROUP_SWITCH[group]
+	return not switch or (db[switch] and true or false)
+end
+ns.GroupHandled = GroupHandled
+
 local function AddFrame(frame, group)
 	if not frame or seen[frame] or not frame.SetAlpha or frame == ns.letterbox then
 		return false
@@ -259,8 +343,8 @@ local function AddFrame(frame, group)
 	if name and (ns.db.ignoredFrames[name] or leftAlone[name]) then
 		return false
 	end
-	-- (The Cooldown Manager page's master switch off: left alone.)
-	if group == "cooldowns" and not ns.db.handleCooldowns then
+	-- (Its page's master switch off: left alone.)
+	if not GroupHandled(group) then
 		return false
 	end
 	seen[frame] = true
@@ -271,6 +355,13 @@ local function AddFrame(frame, group)
 	ns.managed[#ns.managed + 1] = entry
 	if group == "questtimer" and frame.SetIgnoreParentAlpha then
 		frame:SetIgnoreParentAlpha(true)
+	end
+	-- Classic clients' raid frames sit inside the Raid Frame Manager: they
+	-- don't fade with it (their own rows fade them).
+	local raidFrames = _G.CompactRaidFrameContainer
+	if group == "raidmanager" and raidFrames and raidFrames.SetIgnoreParentAlpha
+		and raidFrames:GetParent() == frame then
+		raidFrames:SetIgnoreParentAlpha(true)
 	end
 
 	-- Chat frames manage their own alpha (the input bar sits faint until you
@@ -304,13 +395,19 @@ local NEVER_NESTED = { TargetFrameToT = true, QuestTimerFrame = true }
 local function RecomputeNesting()
 	for _, entry in ipairs(ns.managed) do
 		local nested = false
-		local parent = entry.frame:GetParent()
-		while parent and parent ~= UIParent and not NEVER_NESTED[entry.name] do
+		local frame = entry.frame
+		local parent = frame:GetParent()
+		while parent and parent ~= UIParent and not NEVER_NESTED[entry.name] and not PART_GROUPS[entry.group] do
+			-- (A parent's fade doesn't reach through a frame ignoring it.)
+			local ignoring = frame.IsIgnoringParentAlpha and frame:IsIgnoringParentAlpha()
+			if not (issecretvalue and issecretvalue(ignoring)) and ignoring then
+				break
+			end
 			if seen[parent] then
 				nested = true
 				break
 			end
-			parent = parent:GetParent()
+			frame, parent = parent, parent:GetParent()
 		end
 		if nested ~= (entry.nested or false) then
 			entry.nested = nested
@@ -326,6 +423,7 @@ local function RemoveFrame(frame)
 				alphaHooked[frame] = false
 			end
 			frame:SetAlpha(entry.baseAlpha or 1)
+			if entry.looseParts then FadeLooseParts(entry, 1) end
 			if entry.shrunk then frame:SetScale(entry.savedScale or 1) end
 			table.remove(ns.managed, i)
 			seen[frame] = nil
@@ -789,6 +887,9 @@ local function IsNearIcon(depth, padX, padY, ...)
 end
 
 function ns.IsEntryHovered(entry)
+	if PART_GROUPS[entry.group] then
+		return false
+	end
 	if entry.shrunk then
 		return IsCursorInSavedRect(entry)
 	end
@@ -819,11 +920,39 @@ ns.COMBAT_SHOW = {
 	{ key = "target", label = "Target", default = true, frames = { "TargetFrame" } },
 	{ key = "tot", label = "Target of target", default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = "Focus", default = true, frames = { "FocusFrame" } },
+	-- The raid frames (raid-style party frames too), members and pets apart,
+	-- and the Raid Frame Manager (the tab at the left edge): the Standard
+	-- Frames page's Raid frames section (page = "raid").
+	{ key = "raidplayers", label = "Players", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidplayers" } },
+	{ key = "raidpets", label = "Pets", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidpets" } },
+	-- Parts of them, Always ticked to start with (CINE_SHOW_DEFAULT): untick
+	-- one to hide it in CineMode (names and role icons while you heal, say).
+	{ key = "raidroles", label = "Role icons", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidroles" } },
+	{ key = "raidnames", label = "Player names", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidnames" } },
+	{ key = "raidpetnames", label = "Pet names", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidpetnames" } },
+	{ key = "raidtitles", label = "Group titles", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidtitles" } },
+	{ key = "raidbuffs", label = "Buffs", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidbuffs" } },
+	{ key = "raiddebuffs", label = "Debuffs", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raiddebuffs" } },
+	{ key = "raidmanager", label = "Raid Frame Manager", default = false, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", frames = { "CompactRaidFrameManager" } },
+	-- The battlegrounds' flag carriers: its Battlegrounds section (page = "bg").
+	-- Always shown to start with (CINE_SHOW_DEFAULT), as before it had a row.
+	{ key = "flags", label = "Flag carriers", default = true, addon = "Blizzard_Deprecated_ArenaUI",
+		page = "bg", frames = { "ArenaEnemyFramesContainer" } },
 	-- morePage: the options page with more settings for it, which can keep it up besides.
-	{ key = "minimap", label = "Minimap", default = true, groups = { "minimap" }, morePage = "Minimap" },
+	{ key = "minimap", label = "Minimap", default = true, groups = { "minimap" }, morePage = "Minimap",
+		handledBy = "handleMinimap" },
 	{ key = "quests", label = "Quest tracker", default = false, frames = FRAME_GROUPS.quests,
-		morePage = "Quest tracker" },
-	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs",
+		morePage = "Quest tracker", handledBy = "handleQuests" },
+	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs", handledBy = "handleBuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
 	{ key = "swing", label = "Swing timer", default = true, retail = false,
 		frames = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
@@ -883,6 +1012,19 @@ ns.COMBAT_SHOW = {
 		"StatusTrackingBarManager",
 	} },
 }
+-- The Standard Frames page's sections (page) for the rows not given one
+-- above. (Kept in the order above within each.)
+local ROW_SECTIONS = {
+	player = "units", prd = "units", target = "units", tot = "units", focus = "units",
+	buffs = "combat", swing = "combat", cooldowns = "combat",
+	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
+	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
+	minimap = "interface", quests = "interface", micro = "interface", xp = "interface",
+}
+for _, item in ipairs(ns.COMBAT_SHOW) do
+	item.page = item.page or ROW_SECTIONS[item.key]
+end
+
 -- Then the Other addons, by group (their frames may have no names).
 for _, known in ipairs(ns.ADDON_FRAMES) do
 	ns.COMBAT_SHOW[#ns.COMBAT_SHOW + 1] = {
@@ -924,6 +1066,9 @@ end
 -- addon's or added frame's row is its fade group ("addon:<key>", "extra:<name>").
 local HOVER_ROW_BY_GROUP = {
 	bars = "mainbar", sidebars = "right1", player = "player", prd = "prd", totems = "totems", target = "target",
+	raidplayers = "raidplayers", raidpets = "raidpets", raidmanager = "raidmanager", flags = "flags",
+	raidroles = "raidroles", raidnames = "raidnames", raidpetnames = "raidpetnames", raidtitles = "raidtitles",
+	raidbuffs = "raidbuffs", raiddebuffs = "raiddebuffs",
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
@@ -948,6 +1093,8 @@ ns.HOVER_TRIGGERS = {
 		tip = "While the minimap stays up for herb, mineral or other tracking (Minimap page)." },
 	{ key = "quest", label = "Quest progress", tip = "Accepting a quest or progress on one (Quest tracker page)." },
 	{ key = "gamepad", label = "Gamepad input", gamepad = true, tip = "Pressing a gamepad button (Gamepad page)." },
+	{ key = "roster", label = "Group joins or leaves",
+		tip = "Someone joining or leaving your party or raid, or you joining or leaving one." },
 	{ key = "cooldown", label = "Cooldown recharging", tip = "While a spell in the Cooldown Manager (or " ..
 		"Enhanced Cooldown Manager's cooldown bars) is still recharging, until they're all ready. Not " ..
 		"the global cooldown (Cooldown Manager page)." },
@@ -962,6 +1109,8 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ name = "Side bars", members = { "right1", "right2" } },
 	{ name = "Player", members = { "player", "prd", "totemtimers" } },
 	{ name = "Target and focus", members = { "target", "tot", "focus" } },
+	{ name = "Raid frames", members = { "raidplayers", "raidpets", "raidmanager", "raidroles", "raidnames",
+		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs" }, triggers = { roster = true } },
 	{ name = "Minimap", members = { "minimap" }, triggers = { ping = true, tracking = true } },
 	{ name = "Buffs", members = { "buffs" }, triggers = { aura = true } },
 	{ name = "Quest tracker", members = { "quests" }, triggers = { quest = true } },
@@ -1017,7 +1166,8 @@ end
 local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
-	player = true, prd = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
+	player = true, prd = true, raidroles = true, raidnames = true,
+	raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
 	gamepadbars = true, gamepadreticle = true,
 }
@@ -1082,6 +1232,11 @@ end
 -- Standard Frames page's Always column (cineShow): ticked, a row's frames stay shown all through CineMode.
 -- Some rows' Always tick is an option elsewhere too (the same setting).
 ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap" }
+-- Rows ticked there until changed (no profile lists them, so none hides them).
+local CINE_SHOW_DEFAULT = {
+	flags = true, raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
+	raiddebuffs = true,
+}
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
 	if setting then
@@ -1091,7 +1246,10 @@ function ns.IsCineShowOn(key)
 	if on == nil and ROW_FALLBACK[key] then
 		return ns.IsCineShowOn(ROW_FALLBACK[key])
 	end
-	return on or false
+	if on == nil then
+		return CINE_SHOW_DEFAULT[key] or false
+	end
+	return on
 end
 function ns.IsEnemyShowOn(key) return IsListOn("enemyShow", key, ENEMY_SHOW_DEFAULT) end
 function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SHOW_DEFAULT) end
@@ -1111,14 +1269,23 @@ ns.PLACE_SHOW = {
 		tip = "Show all through CineMode in dungeons, scenarios and raids." },
 }
 local NO_DEFAULTS = {}
-function ns.IsPlaceShowOn(list, key) return IsListOn(list, key, NO_DEFAULTS) end
+-- Ticked to start with: the raid frames in battlegrounds, arenas, dungeons
+-- and raids, where you're always in a group.
+local PLACE_SHOW_DEFAULTS = {
+	bgShow = { raidplayers = true, raidpets = true },
+	instanceShow = { raidplayers = true, raidpets = true },
+}
+local function PlaceDefaults(list)
+	return PLACE_SHOW_DEFAULTS[list] or NO_DEFAULTS
+end
+function ns.IsPlaceShowOn(list, key) return IsListOn(list, key, PlaceDefaults(list)) end
 
 -- The place columns that apply where you are now.
 local function PlaceListsHere()
 	local place = ns.GetPlaceType()
 	local lists = { (place == "pvp" and "bgShow")
 		or ((place == "dungeon" or place == "raid") and "instanceShow") or "worldShow" }
-	if IsInGroup() then
+	if ns.InGroup() then
 		lists[2] = "groupShow"
 	end
 	return lists
@@ -1155,7 +1322,7 @@ local function GetCombatShownFrames()
 	local placeLists = PlaceListsHere()
 	local function KeptHere(key)
 		for _, list in ipairs(placeLists) do
-			if IsListOn(list, key, NO_DEFAULTS) then
+			if IsListOn(list, key, PlaceDefaults(list)) then
 				return true
 			end
 		end
@@ -1222,20 +1389,25 @@ local lastFallDamageAt = -math.huge
 -- Coming back to life does too, until health and power are full (however
 -- long that takes).
 local resurrectRecovering = false
-local resurrectWatcher = CreateFrame("Frame")
-resurrectWatcher:RegisterEvent("PLAYER_ALIVE") -- (also as you release to a ghost)
-resurrectWatcher:RegisterEvent("PLAYER_UNGHOST")
-resurrectWatcher:SetScript("OnEvent", function()
-	if not ns.Flag(UnitIsDeadOrGhost("player")) then
-		resurrectRecovering = true
-	end
-end)
+do
+	local resurrectWatcher = CreateFrame("Frame")
+	resurrectWatcher:RegisterEvent("PLAYER_ALIVE") -- (also as you release to a ghost)
+	resurrectWatcher:RegisterEvent("PLAYER_UNGHOST")
+	resurrectWatcher:SetScript("OnEvent", function()
+		if not ns.Flag(UnitIsDeadOrGhost("player")) then
+			resurrectRecovering = true
+		end
+	end)
+end
 
 -- Buff peek: a new or refreshed buff/debuff briefly shows the buffs group.
 -- UNIT_AURA says what changed (added, updated, removed) without needing the
 -- aura details, which may be secret. Removals and the full refresh at login or
 -- zoning don't count. Clients that don't say what changed count every change.
 local buffPeekUntil = 0
+-- A debuff brought them up with debuffPeekUntilGone: held until you have no
+-- debuffs left (bar ignored ones).
+local debuffHeld = false
 
 -- When the player was last in combat (for "only after combat").
 local lastCombatAt = -math.huge
@@ -1363,7 +1535,37 @@ local function AuraHold(aura)
 	if not harmful and ns.db.buffPeekIgnoreSelf and IsSelfCast(aura) then
 		return nil
 	end
-	return PeekHold(harmful and true or false)
+	local hold = PeekHold(harmful and true or false)
+	if hold and harmful and ns.db.debuffPeekUntilGone then
+		debuffHeld = true
+	end
+	return hold
+end
+
+-- Any debuff on you that isn't on the ignore list? (Yes when unsure: secret
+-- values. The fight clears the hold anyway.)
+local function HasDebuff()
+	for i = 1, 40 do
+		local aura
+		if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+			-- (Errors rather than returning nil while auras are secret.)
+			local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, "player", i, "HARMFUL")
+			if not ok or (issecretvalue and issecretvalue(data)) then
+				return true
+			end
+			aura = data
+		elseif UnitDebuff then
+			local values = { UnitDebuff("player", i) }
+			aura = values[1] and { name = values[1], spellId = values[10] }
+		end
+		if not aura then
+			return false
+		end
+		if (issecretvalue and issecretvalue(aura.name)) or not IsIgnoredAura(aura) then
+			return true
+		end
+	end
+	return false
 end
 
 -- The longest hold of any aura gained or refreshed, or nil. Updates (a stack
@@ -1403,54 +1605,62 @@ local function AnyAuraHold(updateInfo)
 	return hold
 end
 
-local auraWatcher = CreateFrame("Frame")
-auraWatcher:RegisterUnitEvent("UNIT_AURA", "player")
-auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
-	if not (ns.db and (PeekAllowed(false) or PeekAllowed(true))) then
-		return
-	end
-	-- In a fight the buffs follow the fight's own frames, and a peek started
-	-- then would hold them up past its end: leaving combat, they fade with the
-	-- rest of the UI at the usual fade out time. (Nor auras the fight's end
-	-- itself changes, in the moment after it.)
-	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
-		or GetTime() - lastCombatAt < COMBAT_END_AURA_GRACE then
-		return
-	end
-	-- (wasOnTaxi: landed this instant, before the flight code has noticed.)
-	if UnitOnTaxi("player") or ns.wasOnTaxi or GetTime() < landedQuietUntil then
-		return
-	end
-	local hold
-	if type(updateInfo) == "table" then
-		hold = not IsFullUpdate(updateInfo.isFullUpdate) and AnyAuraHold(updateInfo)
-	else
-		hold = EitherHold()
-	end
-	if hold then
-		-- (a short buff peek doesn't cut a longer debuff one short)
-		buffPeekUntil = math.max(buffPeekUntil, GetTime() + hold)
-	end
-end)
+do
+	local auraWatcher = CreateFrame("Frame")
+	auraWatcher:RegisterUnitEvent("UNIT_AURA", "player")
+	auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
+		-- (Removals count here: the last debuff going lets them fade.)
+		if debuffHeld and not (ns.db and ns.db.debuffPeekUntilGone and HasDebuff()) then
+			debuffHeld = false
+		end
+		if not (ns.db and (PeekAllowed(false) or PeekAllowed(true))) then
+			return
+		end
+		-- In a fight the buffs follow the fight's own frames, and a peek started
+		-- then would hold them up past its end: leaving combat, they fade with the
+		-- rest of the UI at the usual fade out time. (Nor auras the fight's end
+		-- itself changes, in the moment after it.)
+		if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+			or GetTime() - lastCombatAt < COMBAT_END_AURA_GRACE then
+			return
+		end
+		-- (wasOnTaxi: landed this instant, before the flight code has noticed.)
+		if UnitOnTaxi("player") or ns.wasOnTaxi or GetTime() < landedQuietUntil then
+			return
+		end
+		local hold
+		if type(updateInfo) == "table" then
+			hold = not IsFullUpdate(updateInfo.isFullUpdate) and AnyAuraHold(updateInfo)
+		else
+			hold = EitherHold()
+		end
+		if hold then
+			-- (a short buff peek doesn't cut a longer debuff one short)
+			buffPeekUntil = math.max(buffPeekUntil, GetTime() + hold)
+		end
+	end)
+end
 
-local vitalsWatcher = CreateFrame("Frame")
-vitalsWatcher:RegisterUnitEvent("UNIT_HEALTH", "player")
-vitalsWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
-vitalsWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-vitalsWatcher:SetScript("OnEvent", function(_, event)
-	local now = GetTime()
-	if event == "UNIT_SPELLCAST_SUCCEEDED" then
-		lastCastAt = now
-		return
-	end
-	if event == "UNIT_POWER_UPDATE" and not PowerCounts() then
-		return
-	end
-	if event == "UNIT_HEALTH" and (ns.Flag(IsFalling()) or now - lastFallingAt <= FALL_LANDING_GRACE) then
-		lastFallDamageAt = now
-	end
-	lastVitalsChange = now
-end)
+do
+	local vitalsWatcher = CreateFrame("Frame")
+	vitalsWatcher:RegisterUnitEvent("UNIT_HEALTH", "player")
+	vitalsWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
+	vitalsWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+	vitalsWatcher:SetScript("OnEvent", function(_, event)
+		local now = GetTime()
+		if event == "UNIT_SPELLCAST_SUCCEEDED" then
+			lastCastAt = now
+			return
+		end
+		if event == "UNIT_POWER_UPDATE" and not PowerCounts() then
+			return
+		end
+		if event == "UNIT_HEALTH" and (ns.Flag(IsFalling()) or now - lastFallingAt <= FALL_LANDING_GRACE) then
+			lastFallDamageAt = now
+		end
+		lastVitalsChange = now
+	end)
+end
 
 local function IsPlayerRecovering()
 	local health, maxHealth = UnitHealth("player"), UnitHealthMax("player")
@@ -1477,34 +1687,57 @@ local hoverHeldUntil = {} -- [row key] = when the mouse's hold on it ends (Mouse
 -- tracker up as a mouseover would: it fades in, then is gone the quest
 -- tracker's mouseover time later.
 local questRevealUntil = 0
-local QUEST_REVEAL_EVENTS = { QUEST_ACCEPTED = "questRevealOnAccept", QUEST_WATCH_UPDATE = "questRevealOnProgress" }
-local questWatcher = CreateFrame("Frame")
-for event in pairs(QUEST_REVEAL_EVENTS) do
-	pcall(questWatcher.RegisterEvent, questWatcher, event)
-end
-questWatcher:SetScript("OnEvent", function(_, event)
-	if ns.db and ns.db[QUEST_REVEAL_EVENTS[event]] then
-		local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
-		questRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
+do
+	local QUEST_REVEAL_EVENTS = { QUEST_ACCEPTED = "questRevealOnAccept", QUEST_WATCH_UPDATE = "questRevealOnProgress" }
+	local questWatcher = CreateFrame("Frame")
+	for event in pairs(QUEST_REVEAL_EVENTS) do
+		pcall(questWatcher.RegisterEvent, questWatcher, event)
 	end
-end)
+	questWatcher:SetScript("OnEvent", function(_, event)
+		if ns.db and ns.db[QUEST_REVEAL_EVENTS[event]] then
+			local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
+			questRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
+		end
+	end)
+end
 
 -- A group member pinging the minimap brings it up the same way
 -- (minimapRevealOnPing), even in a camera mode that hides it. Your own pings don't.
 local pingRevealUntil = 0
-local pingWatcher = CreateFrame("Frame")
-pcall(pingWatcher.RegisterEvent, pingWatcher, "MINIMAP_PING")
-pingWatcher:SetScript("OnEvent", function(_, _, unit)
-	if not (ns.db and ns.db.minimapRevealOnPing) then
-		return
-	end
-	local ok, mine = pcall(UnitIsUnit, unit or "player", "player")
-	if ok and ns.Flag(mine) then
-		return
-	end
-	local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
-	pingRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
-end)
+do
+	local pingWatcher = CreateFrame("Frame")
+	pcall(pingWatcher.RegisterEvent, pingWatcher, "MINIMAP_PING")
+	pingWatcher:SetScript("OnEvent", function(_, _, unit)
+		if not (ns.db and ns.db.minimapRevealOnPing) then
+			return
+		end
+		local ok, mine = pcall(UnitIsUnit, unit or "player", "player")
+		if ok and ns.Flag(mine) then
+			return
+		end
+		local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
+		pingRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
+	end)
+end
+
+-- Someone joining or leaving your group (or you joining or leaving one)
+-- brings up the Mouseover groups with it ticked the same way: the raid
+-- frames by default. Just the group's size changing, not every roster update.
+local rosterRevealUntil = 0
+do
+	local groupSize = GetNumGroupMembers and GetNumGroupMembers() or 0
+	local rosterRevealWatcher = CreateFrame("Frame")
+	rosterRevealWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")
+	rosterRevealWatcher:SetScript("OnEvent", function()
+		local size = GetNumGroupMembers()
+		if (issecretvalue and issecretvalue(size)) or type(size) ~= "number" or size == groupSize or not ns.db then
+			return
+		end
+		groupSize = size
+		local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
+		rosterRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
+	end)
+end
 
 -- Gamepad mode: pressing a gamepad button brings its action bars up, as
 -- hovering does with the mouse (gamepadPressReveal): they fade in, then are
@@ -1862,13 +2095,15 @@ local readyTargets = {} -- icon -> 0 or 1, for the ticked spells' icons
 local readyAlpha = {} -- icon -> its alpha, while not full
 local readyCheckedAt = 0
 
-local castWatcher = CreateFrame("Frame")
-castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-castWatcher:SetScript("OnEvent", function(_, _, _, _, spellID)
-	if not Secret(spellID) and type(spellID) == "number" then
-		lastCastOf[spellID] = GetTime()
-	end
-end)
+do
+	local castWatcher = CreateFrame("Frame")
+	castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+	castWatcher:SetScript("OnEvent", function(_, _, _, _, spellID)
+		if not Secret(spellID) and type(spellID) == "number" then
+			lastCastOf[spellID] = GetTime()
+		end
+	end)
+end
 
 function ns.CooldownLength(id)
 	if cooldownLength[id] then
@@ -1967,32 +2202,44 @@ local function ReleaseReadyIcons()
 	end
 end
 
--- The Cooldown Manager page's master switch: off, its bars are let go (their
--- own opacity back) and its icons left alone; on, they fade from now.
-function ns.SetHandleCooldowns(on)
-	ns.db.handleCooldowns = on
-	if on then
-		ns.BuildManagedList()
+-- The master switches changing (on their pages, or with a profile): frames
+-- no longer handled are let go, and switched back on they're picked up and
+-- fade from now. Looked at each frame.
+local switchesWere = {}
+local function SyncSwitches()
+	local changed, turnedOn = false, false
+	for _, key in ipairs(ns.HANDLE_SWITCHES) do
+		local on = ns.db[key] and true or false
+		if switchesWere[key] ~= nil and switchesWere[key] ~= on then
+			changed = true
+			turnedOn = turnedOn or on
+		end
+		switchesWere[key] = on
+	end
+	if not changed then
 		return
 	end
-	ReleaseReadyIcons()
 	for i = #ns.managed, 1, -1 do
 		local entry = ns.managed[i]
-		if entry.group == "cooldowns" then
+		if not GroupHandled(entry.group) then
 			RemoveFrame(entry.frame)
 		end
 	end
-end
-
-local cooldownsHandled = true
-local function UpdateReadyOnly(elapsed, now)
-	-- (Switched by a profile too: let go, or picked up again, once it changes.)
-	local handled = ns.db.handleCooldowns and true or false
-	if handled ~= cooldownsHandled then
-		cooldownsHandled = handled
-		ns.SetHandleCooldowns(handled)
+	if not GroupHandled("cooldowns") then
+		ReleaseReadyIcons() -- (the "Only when ready in combat" icons)
 	end
-	if not handled then
+	if not GroupHandled("prd") then
+		ns.SetPersonalPlateAlpha(1) -- (Forever's: your own nameplate)
+	end
+	if turnedOn then
+		ns.BuildManagedList()
+	end
+end
+ns.SyncSwitches = SyncSwitches
+
+local function UpdateReadyOnly(elapsed, now)
+	SyncSwitches()
+	if not GroupHandled("cooldowns") then
 		return
 	end
 	if now - readyCheckedAt >= 0.1 then
@@ -2270,6 +2517,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
 		lastCombatAt = now
 		buffPeekUntil = 0 -- (a peek from just before the fight doesn't outlast it)
+		debuffHeld = false
 	end
 	if ns.Flag(IsFalling()) then
 		lastFallingAt = now
@@ -2304,6 +2552,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local questReveal = questRevealUntil > now
 	local padReveal = padRevealUntil > now
 	local pingReveal = pingRevealUntil > now
+	local rosterReveal = rosterRevealUntil > now
 	-- Tracking doesn't hold the minimap open in the places ticked under
 	-- "Except in" (cities and the like).
 	local trackingPaused = ns.IsTrackingOffHere()
@@ -2351,9 +2600,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 	end
 	local events = {
 		chat = dockPeek, whisper = whisperUnread, typing = typing,
-		aura = cinematic and buffPeekUntil > now, ping = pingReveal,
+		aura = cinematic and (buffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone)),
+		ping = pingReveal,
 		tracking = ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused,
-		quest = questReveal, gamepad = padReveal,
+		quest = questReveal, gamepad = padReveal, roster = rosterReveal,
 		cooldown = cinematic and ns.db.cooldownWhileRecharging
 			and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
 			and AnyCooldownRecharging(now),
@@ -2820,4 +3070,97 @@ end
 -- Its player frame, shown like the game's while health or power recovers.
 function ns.AddPortraitFrame(name)
 	PORTRAIT_FRAMES[name] = true
+end
+
+-- The raid frames (and raid-style party frames): each member's frame, or
+-- each group's when groups are kept together, in raidplayers; pets in
+-- raidpets; and their parts (PART_GROUPS) in theirs. The game makes and
+-- reuses them as the group changes (one can go from a player to a pet), so
+-- they're sorted afresh at each scan, and soon after the group changes.
+do
+	local function SortRaidPart(part, group)
+		if not part or IsForbidden(part) then
+			return
+		end
+		if seen[part] then
+			for _, entry in ipairs(ns.managed) do
+				if entry.frame == part then
+					if entry.group == group then
+						return
+					end
+					RemoveFrame(part) -- (sorted again below)
+					break
+				end
+			end
+		end
+		AddFrame(part, group)
+	end
+
+	local function GroupTitle(group)
+		local name = group:GetName()
+		return group.title or (name and _G[name .. "Title"])
+	end
+
+	-- A member's or pet's frame (inGroup: inside a group's frame, which fades
+	-- for it), and its parts.
+	local function SortUnitFrame(frame, inGroup)
+		local unit = frame.unit or frame.displayedUnit
+		if Secret(unit) or type(unit) ~= "string" then
+			return
+		end
+		local isPet = unit:find("pet") ~= nil
+		if not inGroup then
+			SortRaidPart(frame, isPet and "raidpets" or "raidplayers")
+		end
+		SortRaidPart(frame.roleIcon, "raidroles")
+		SortRaidPart(frame.name, isPet and "raidpetnames" or "raidnames")
+		for _, aura in ipairs(frame.buffFrames or {}) do
+			SortRaidPart(aura, "raidbuffs")
+		end
+		for _, list in ipairs({ frame.debuffFrames or {}, frame.dispelDebuffFrames or {} }) do
+			for _, aura in ipairs(list) do
+				SortRaidPart(aura, "raiddebuffs")
+			end
+		end
+	end
+
+	local function ScanRaidFrames()
+		for _, holderName in ipairs({ "CompactRaidFrameContainer", "CompactPartyFrame" }) do
+			local holder = _G[holderName]
+			if holder and not IsForbidden(holder) then
+				if holderName == "CompactPartyFrame" then
+					SortRaidPart(GroupTitle(holder), "raidtitles") -- ("Party")
+				end
+				for _, child in ipairs({ holder:GetChildren() }) do
+					if not IsForbidden(child) then
+						local name = child:GetName()
+						if name and name:find("^CompactRaidGroup%d+$") then
+							SortRaidPart(child, "raidplayers")
+							SortRaidPart(GroupTitle(child), "raidtitles") -- ("Group 1")
+							for _, member in ipairs({ child:GetChildren() }) do
+								if not IsForbidden(member) then
+									SortUnitFrame(member, true)
+								end
+							end
+						else
+							SortUnitFrame(child, false)
+						end
+					end
+				end
+			end
+		end
+	end
+	ns.AddScanner(ScanRaidFrames)
+
+	local rosterWatcher = CreateFrame("Frame")
+	rosterWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")
+	rosterWatcher:SetScript("OnEvent", function()
+		-- (After the game has set its frames up for the new group.)
+		C_Timer.After(0.5, function()
+			if ns.db then
+				ScanRaidFrames()
+				RecomputeNesting()
+			end
+		end)
+	end)
 end

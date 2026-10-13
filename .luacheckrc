@@ -9,11 +9,11 @@ ignore = { "542", "212/self", "421", "422", "431" }
 -- What the addon defines or changes
 globals = {
 	"CinematicDB", "CinematicCharDB", "SlashCmdList", "StaticPopupDialogs", "ColorPickerFrame",
-	"Cinematic_Toggle", "Cinematic_ToggleUI", "Cinematic_StartCam", "Cinematic_Peek", "Cinematic_FlyBy",
+	"Cinematic_Toggle", "Cinematic_ToggleUI", "Cinematic_StartCam", "Cinematic_FlyBy",
 	"SLASH_CINEMATIC1", "SLASH_CINEMATIC2",
 	"BINDING_HEADER_CINEMATIC",
-	"BINDING_NAME_CINEMATIC_TOGGLE", "BINDING_NAME_CINEMATIC_PEEK", "BINDING_NAME_CINEMATIC_HIDEUI",
-	"BINDING_NAME_CINEMATIC_FLYBY", "BINDING_NAME_CINEMATIC_CAM_VISTA", "BINDING_NAME_CINEMATIC_CAM_IDLE",
+	"BINDING_NAME_CINEMATIC_TOGGLE", "BINDING_NAME_CINEMATIC_HIDEUI",
+	"BINDING_NAME_CINEMATIC_CAM_VISTA", "BINDING_NAME_CINEMATIC_CAM_IDLE", "BINDING_NAME_CINEMATIC_CAM_TELE",
 	"BINDING_NAME_CINEMATIC_CAM_FISH", "BINDING_NAME_CINEMATIC_CAM_DEATH", "BINDING_NAME_CINEMATIC_CAM_COZY",
 }
 
@@ -61,6 +61,7 @@ read_globals = {
 	"GameTooltip_SetDefaultAnchor",
 	"GetAddOnInfo",
 	"GetAddOnMetadata",
+	"GetNumGroupMembers",
 	"GetSpellBaseCooldown",
 	"GetSpellCooldown",
 	"GetSpellTexture",
@@ -166,6 +167,7 @@ read_globals = {
 	"UNIT_SKINNABLE_ROCK",
 	"UnitAffectingCombat",
 	"UnitBuff",
+	"UnitDebuff",
 	"UnitCanAttack",
 	"UnitCastingInfo",
 	"UnitChannelInfo",

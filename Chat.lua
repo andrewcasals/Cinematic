@@ -34,6 +34,8 @@ ns.CHAT_PEEK_TYPES = {
 	-- Guild members' comings and goings arrive as system messages; see IsGuildLine below.
 	{ key = "guildmembers", label = "Guild members (online, offline, joins, leaves)", section = "game",
 		events = {} },
+	-- Group members' comings and goings likewise; see IsGroupLine below.
+	{ key = "groupmembers", label = "Group members (joins, leaves)", section = "game", events = {} },
 	-- Server announcements ("[SERVER] Shutdown in 9:00"); see the AddMessage hook below.
 	{ key = "server", label = "Server messages (shutdowns, restarts)", section = "game", events = {} },
 	-- Level ups arrive as a system message; see LEVEL_UP_WINDOW below.
@@ -47,6 +49,8 @@ ns.CHAT_PEEK_TYPES = {
 		events = { "CHAT_MSG_COMBAT_FACTION_CHANGE" } },
 	{ key = "honor", label = "Honor", section = "game", default = false,
 		events = { "CHAT_MSG_COMBAT_HONOR_GAIN" } },
+	{ key = "battleground", label = "Battleground objectives (assaults, captures, flags)", section = "game",
+		events = { "CHAT_MSG_BG_SYSTEM_ALLIANCE", "CHAT_MSG_BG_SYSTEM_HORDE", "CHAT_MSG_BG_SYSTEM_NEUTRAL" } },
 	-- Group loot rolls arrive as loot messages; see IsLootRollLine below.
 	{ key = "rolls", label = "Loot rolls (need, greed, won)", section = "game", events = {} },
 	{ key = "loot", label = "All loot", section = "game", default = false, events = { "CHAT_MSG_LOOT" } },
@@ -190,6 +194,38 @@ local function IsGuildLine(text)
 	return false
 end
 
+-- Party, raid and instance group members joining and leaving, and you
+-- joining, leaving or being removed, the group disbanding or becoming a
+-- raid: system messages, told apart by the game's own (localised) lines.
+-- (Ones a client doesn't have are skipped.)
+local GROUP_FORMATS = {
+	"ERR_JOINED_GROUP_S", "ERR_LEFT_GROUP_S", "ERR_RAID_MEMBER_ADDED_S", "ERR_RAID_MEMBER_REMOVED_S",
+	"ERR_INSTANCE_GROUP_ADDED_S", "ERR_INSTANCE_GROUP_REMOVED_S", "ERR_LEFT_GROUP_YOU", "ERR_UNINVITE_YOU",
+	"ERR_RAID_YOU_JOINED", "ERR_RAID_YOU_LEFT", "ERR_GROUP_DISBANDED", "ERR_PARTY_CONVERTED_TO_RAID",
+}
+local groupPatterns
+
+local function IsGroupLine(text)
+	if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then
+		return false
+	end
+	if not groupPatterns then
+		groupPatterns = {}
+		for _, name in ipairs(GROUP_FORMATS) do
+			local format = _G[name]
+			if type(format) == "string" and format ~= "" then
+				groupPatterns[#groupPatterns + 1] = FormatToPattern(format)
+			end
+		end
+	end
+	for _, pattern in ipairs(groupPatterns) do
+		if text:find(pattern) then
+			return true
+		end
+	end
+	return false
+end
+
 function ns.IsChannelPeekOn(name)
 	local on = ns.db.chatPeekChannelList[name]
 	if on == nil then
@@ -240,6 +276,8 @@ local function ChatPeekFilter(chatFrame, event, text, _, _, channelString, _, _,
 	elseif event == "CHAT_MSG_LOOT" and IsPeekTypeOn("rolls") and IsLootRollLine(text) then
 		wanted = true
 	elseif event == "CHAT_MSG_SYSTEM" and IsPeekTypeOn("guildmembers") and IsGuildLine(text) then
+		wanted = true
+	elseif event == "CHAT_MSG_SYSTEM" and IsPeekTypeOn("groupmembers") and IsGroupLine(text) then
 		wanted = true
 	else
 		wanted = IsPeekTypeOn(EVENT_PEEK_TYPE[event])

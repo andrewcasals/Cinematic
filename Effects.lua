@@ -146,7 +146,7 @@ local pvpNamesFight = false
 -- (Grouped on the Nameplates page keeps a row up in a party or raid, whatever
 -- its other boxes say.)
 local function NameKeptHere(key, inCombat)
-	if ns.db["nameGroup" .. key] and IsInGroup() then
+	if ns.db["nameGroup" .. key] and ns.InGroup() then
 		return true
 	end
 	local fightKept = ns.db["nameCombat" .. key] or (pvpNamesFight and ns.db["nameCombatPvP" .. key])
@@ -840,7 +840,7 @@ ns.InPvPFight = InPvPFight
 -- plateCombatPvP<kind> while flagged for PvP, or Grouped on the Nameplates
 -- page, which keeps a row up in a party or raid whatever its other boxes say).
 local function ShownInFights(kind)
-	return (ns.db["plateCombat" .. kind] or (ns.db["plateGroup" .. kind] and IsInGroup())
+	return (ns.db["plateCombat" .. kind] or (ns.db["plateGroup" .. kind] and ns.InGroup())
 		or (ns.db["plateCombatPvP" .. kind] and InPvPFight())) and true or false
 end
 
@@ -848,7 +848,7 @@ end
 -- plateCinematic<kind> in the open world, plateIn<place><kind> elsewhere.
 local function KeptHere(kind)
 	local key = placeSuffix and ("plateIn" .. placeSuffix .. kind) or ("plateCinematic" .. kind)
-	return (ns.db[key] or (ns.db["plateGroup" .. kind] and IsInGroup())) and true or false
+	return (ns.db[key] or (ns.db["plateGroup" .. kind] and ns.InGroup())) and true or false
 end
 
 -- How far each kind is held up by KeptHere, faded so moving between places
@@ -860,7 +860,7 @@ local keptLevel = {}
 -- whatever their rows say. Kind ("Friends" or "FriendlyMinions") -> whether
 -- it's kept up for group members now.
 local function GroupKept(kind)
-	if not (ns.db.plateGroupMembers and IsInGroup()) then
+	if not (ns.db.plateGroupMembers and ns.InGroup()) then
 		return false
 	end
 	return kind == "Friends" or (kind == "FriendlyMinions" and ns.db.plateGroupMemberMinions) or false

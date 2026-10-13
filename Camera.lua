@@ -301,7 +301,7 @@ do
 	-- The bar sets itself back to full alpha as each cast starts, so its own
 	-- events are followed and the alpha set again after them.
 	local function UpdateCastBar(bar)
-		if not ns.db or not ns.db.hideFishingCastBar then
+		if not ns.db or not ns.db.hideFishingCastBar or not ns.db.handleFishing then
 			if bar.cinematicFishingHidden then
 				bar.cinematicFishingHidden = nil
 				if bar:IsShown() then bar:SetAlpha(1) end
@@ -545,7 +545,8 @@ do
 		local poleReady = ns.db and ns.db.fishPoleRightClickCast and poleEquipped and not fishCam
 			and not ns.playerMoving and not IsMounted() and not UnitOnTaxi("player")
 			and not ns.Flag(UnitIsDeadOrGhost("player"))
-		local ready = ns.db and not UnitChannelInfo("player") and not UnitCastingInfo("player")
+		-- (The Fishing page's switch off: no casting from here.)
+		local ready = ns.db and ns.db.handleFishing and not UnitChannelInfo("player") and not UnitCastingInfo("player")
 			and GetTime() - channelEndedAt >= (tonumber(ns.db.fishRecastDelay) or 0.5)
 			and GetTime() - missedAt >= (tonumber(ns.db.fishMissPause) or 30)
 			and GetTime() >= skillBlockedUntil

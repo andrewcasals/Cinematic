@@ -57,7 +57,8 @@ end
 
 -- A Standard Frames column as a list: every row given true (in on) or false.
 local STANDARD_ROWS = {
-	"player", "prd", "target", "tot", "focus", "minimap", "quests", "buffs", "swing", "cooldowns", "mainbar", "art",
+	"player", "prd", "target", "tot", "focus", "raidplayers", "raidpets", "raidmanager", "minimap", "quests",
+	"buffs", "swing", "cooldowns", "mainbar", "art",
 	"bottomleft", "bottomright", "right1", "right2", "bar6", "bar7", "bar8", "pet", "stance", "totems",
 	"micro", "xp",
 }
@@ -89,9 +90,10 @@ ns.BUILTIN_PROFILES = {
 		apply = function(set)
 			-- The Standard Frames page's columns.
 			set("cineShow", Column({}))
-			set("combatShow", Column({ "player", "prd", "target", "tot", "focus", "minimap", "buffs", "swing",
-				"cooldowns", "pet", "stance", "totems" }))
-			set("enemyShow", Column({ "player", "prd", "target", "tot", "focus", "buffs", "pet", "stance", "totems" }))
+			set("combatShow", Column({ "player", "prd", "target", "tot", "focus", "raidplayers", "raidpets",
+				"minimap", "buffs", "swing", "cooldowns", "pet", "stance", "totems" }))
+			set("enemyShow", Column({ "player", "prd", "target", "tot", "focus", "buffs", "pet", "stance",
+				"totems" }))
 			set("friendlyShow", Column({ "target", "tot" }))
 			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
 			set("cooldownWhileRecharging", true)
@@ -116,8 +118,7 @@ ns.BUILTIN_PROFILES = {
 		tip = "Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no " ..
 			"letterbox, and the camera's left to you.",
 		apply = function(set)
-			set("fadeUI", false)
-			set("visualEffectsAlways", true)
+			set("fadeUI", false) -- (the effects then show over the normal UI)
 			set("letterbox", false)
 			set("musicInCinematic", false)
 		end,
@@ -158,7 +159,7 @@ ns.BUILTIN_PROFILES = {
 			set("questRevealOnProgress", false)
 			set("minimapRevealOnPing", false)
 			set("portraitWhenNotFull", false)
-			set("letterboxInCombat", true)
+			set("letterboxOffInCombat", false)
 			set("timeOfDayMessage", false)
 			set("plateTarget", false)
 			set("plateGroupMembers", false)
@@ -166,10 +167,11 @@ ns.BUILTIN_PROFILES = {
 			-- Fights bring up only your target and its target: no portrait,
 			-- bars, buffs, minimap or swing timer. (Rows not listed keep the
 			-- defaults.)
-			set("combatShow", { tot = true, prd = false, minimap = false, buffs = false, swing = false, mainbar = false,
+			set("combatShow", { tot = true, prd = false, raidplayers = false, raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false,
 				art = false, bottomleft = false, bottomright = false, pet = false, stance = false, totems = false,
 				micro = false, xp = false, focus = false })
-			set("enemyShow", { target = true, tot = true, player = false, prd = false, focus = false, buffs = false,
+			set("enemyShow", { target = true, tot = true, player = false, prd = false, raidplayers = false,
+				raidpets = false, focus = false, buffs = false,
 				mainbar = false, art = false, bottomleft = false, bottomright = false, pet = false, stance = false,
 				totems = false, micro = false, xp = false })
 			set("friendlyShow", { target = true, tot = true })

@@ -28,6 +28,7 @@ local extraRows = {}
 local sliderCount = 0
 
 local function Tooltip(widget, tip)
+	widget.searchTip = tip
 	widget:SetScript("OnEnter", function(self)
 		-- A slider's label can run past its bar: the tip goes beyond whichever
 		-- ends further right, so it never covers the value.
@@ -114,6 +115,8 @@ local function Check(parent, key, label, tip, onChange)
 	text:SetFontObject("GameFontHighlight")
 	text:SetText(label)
 	if tip then Tooltip(cb, tip) end
+	cb.searchLabel = label
+	cb.searchEdges = { top = cb, bottom = cb, left = cb, right = text }
 
 	cb:SetScript("OnClick", function(self)
 		local value = self:GetChecked() and true or false
@@ -158,6 +161,12 @@ local function Slider(parent, key, label, minV, maxV, step, fmt, scale, onChange
 	local title = Label(slider, "GameFontHighlight")
 	title:SetPoint("BOTTOMLEFT", slider, "TOPLEFT", 0, 4)
 	slider.tooltipLabel = title
+	if label ~= "" then
+		slider.searchLabel = label
+		slider.searchEdges = { top = title, bottom = slider, left = slider, right = slider }
+	else
+		title.searchSkip = true -- (just the value; its label is drawn beside it)
+	end
 
 	local function UpdateTitle(value)
 		local shown = "|cffffd100" .. (type(fmt) == "function" and fmt(value) or fmt:format(value)) .. "|r"
@@ -197,6 +206,8 @@ local function GreyUnless(control, test)
 		local label = self.Text or self.text
 		if label and self.GetObjectType and self:GetObjectType() == "CheckButton" then
 			label:SetFontObject(enabled and "GameFontHighlight" or "GameFontDisable")
+		elseif self.title and self.GetObjectType and self:GetObjectType() == "Slider" then
+			self.title:SetFontObject(enabled and "GameFontHighlight" or "GameFontDisable")
 		end
 	end
 end
@@ -206,11 +217,62 @@ local function DependsOnMusic(control)
 	GreyUnless(control, function(db) return db.musicInCinematic end)
 end
 
+-- The pages' master switches (handle<...>; see PageSwitch): page content ->
+-- { key, check }. While one is off, every other control on its page greys
+-- out, keeping its value; switched on, each is back as its own settings say.
+local pageSwitches = {}
+local function SwitchOf(control)
+	if control.pageSwitch == nil then
+		local frame = control:GetParent()
+		while frame and not pageSwitches[frame] do
+			frame = frame:GetParent()
+		end
+		control.pageSwitch = frame and pageSwitches[frame] or false
+	end
+	return control.pageSwitch
+end
+
 local function Refresh()
 	if not ns.GetDB() then return end
 	for _, control in ipairs(controls) do
-		control:Refresh()
+		local switch = control.SetEnabled and SwitchOf(control)
+		if switch and switch.check ~= control then
+			-- (Enabled first, so its own greying decides; then off with the switch.)
+			local label = control.GetObjectType and control:GetObjectType() == "CheckButton"
+				and (control.Text or control.text)
+			if label then
+				control.baseFont = control.baseFont or label:GetFontObject()
+				label:SetFontObject(control.baseFont)
+			end
+			control:SetEnabled(true)
+			control:Refresh()
+			if not ns.GetDB()[switch.key] then
+				control:SetEnabled(false)
+				if label then label:SetFontObject("GameFontDisable") end
+			end
+		else
+			control:Refresh()
+		end
 	end
+end
+
+-- A page's master switch at the top (below anchor): "Let CineMode handle ...".
+local function RegisterPageSwitch(content, key, check)
+	pageSwitches[content] = { key = key, check = check }
+end
+local function PageSwitch(content, key, label, tip, anchor, onChange)
+	local check = Check(content, key, label, tip, function(value)
+		ns.GetDB()[key] = value
+		if onChange then onChange(value) end
+		Refresh()
+	end)
+	check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -2, -14)
+	RegisterPageSwitch(content, key, check)
+	return check
+end
+-- Whether a page's switch is on (for lists a page builds on its own).
+local function SwitchOn(key)
+	return ns.GetDB()[key] ~= false
 end
 
 -- A checkbox that acts as one choice in a group sharing a db key.
@@ -231,6 +293,7 @@ local function Dropdown(parent, key, choices, width, onChange)
 		return nil
 	end
 	dropdown:SetWidth(width or 200)
+	dropdown.searchSkip = true -- (it shows the current choice, not a label)
 	dropdown:SetupMenu(function(_, rootDescription)
 		for _, choice in ipairs(choices) do
 			rootDescription:CreateRadio(choice.text,
@@ -308,6 +371,7 @@ local function CreateScrollPage(noReset)
 	local content = CreateFrame("Frame", nil, scroll)
 	content:SetSize(600, 1)
 	scroll:SetScrollChild(content)
+	canvas.scroll, canvas.content = scroll, content
 	scroll:SetScript("OnSizeChanged", function(_, width)
 		content:SetWidth(width)
 	end)
@@ -318,6 +382,7 @@ local function CreateScrollPage(noReset)
 	reset:SetSize(100, 22)
 	reset:SetPoint("TOPRIGHT", content, "TOPRIGHT", -8, -8)
 	reset:SetText("Reset page")
+	reset.searchSkip = true
 	Tooltip(reset, "Put this page's settings back to the active profile's own values (the defaults, " ..
 		"or a built-in profile's).")
 	reset:SetScript("OnClick", function()
@@ -368,6 +433,253 @@ local function PageShown(refresh, content)
 	end
 end
 
+-- Search (on the main page): finds a setting on any page by its label,
+-- tooltip or note, and opens its page with it highlighted. (The game's own
+-- search box can't see inside pages drawn like these.)
+local searchPages = {} -- { name = page name (nil: the main page), canvas = its canvas }, as listed
+
+-- Text as shown, without colour codes; nil if it has no words.
+local function SearchText(text)
+	if type(text) ~= "string" then return nil end
+	text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|n", " ")
+	if not text:find("%a") then return nil end
+	return text
+end
+
+-- Every page's settings, headings and notes as they are now (pages show and
+-- hide rows as settings change). rank: 0 a page, 1 a label or heading, 3 a note.
+local function BuildSearchIndex()
+	Refresh() -- (slider titles and some rows are only filled in on refresh)
+	local entries = {}
+	for _, page in ipairs(searchPages) do
+		local seen = {}
+		local function add(text, tip, rank, edges)
+			text = SearchText(text)
+			if not text or seen[text] then return end
+			seen[text] = true
+			tip = SearchText(tip)
+			entries[#entries + 1] = { page = page, text = text, lower = text:lower(),
+				tip = tip and tip:lower(), rank = rank, edges = edges, order = #entries }
+		end
+		add(page.name or "Cinematic", nil, 0)
+		local function walk(frame)
+			-- (IsShown: the frame's own flag, so hidden rows are left out even on
+			-- pages that aren't open)
+			if frame.searchSkip or not frame:IsShown() then return end
+			if frame.searchLabel then
+				add(frame.searchLabel, frame.searchTip, 1, frame.searchEdges)
+				return
+			end
+			local tip = frame.searchTip -- (a button's or box's tooltip goes with its text)
+			for _, region in ipairs({ frame:GetRegions() }) do
+				if region:GetObjectType() == "FontString" and not region.searchSkip and region:IsShown() then
+					local text = region:GetText()
+					local rank = (type(text) == "string" and #text <= 40) and 1 or 3
+					add(text, tip, rank, { top = region, bottom = region, left = region, right = region })
+					tip = nil
+				end
+			end
+			for _, child in ipairs({ frame:GetChildren() }) do
+				walk(child)
+			end
+		end
+		walk(page.canvas.content)
+	end
+	return entries
+end
+
+-- The best matches for what's typed (every word in the label, or in the
+-- label and tooltip together).
+local function SearchMatches(index, query)
+	local words = {}
+	for word in query:lower():gmatch("%S+") do words[#words + 1] = word end
+	local function has(text)
+		for _, word in ipairs(words) do
+			if not text:find(word, 1, true) then return false end
+		end
+		return true
+	end
+	local matches = {}
+	for _, entry in ipairs(index) do
+		if has(entry.lower) then
+			entry.score = entry.rank
+			matches[#matches + 1] = entry
+		elseif entry.tip and has(entry.lower .. " " .. entry.tip) then
+			entry.score = math.max(entry.rank, 2)
+			matches[#matches + 1] = entry
+		end
+	end
+	table.sort(matches, function(a, b)
+		if a.score ~= b.score then return a.score < b.score end
+		return a.order < b.order
+	end)
+	return matches
+end
+
+-- A brief glow over a found setting.
+local function Highlight(canvas, edges)
+	local glow = canvas.searchGlow
+	if not glow then
+		glow = CreateFrame("Frame", nil, canvas.content)
+		glow.searchSkip = true
+		glow:SetFrameLevel(canvas.content:GetFrameLevel() + 10)
+		local texture = glow:CreateTexture(nil, "OVERLAY")
+		texture:SetAllPoints()
+		texture:SetColorTexture(1, 0.82, 0, 0.25)
+		glow:SetScript("OnUpdate", function(self, elapsed)
+			self.time = self.time + elapsed
+			if self.time >= 2.5 then
+				self:Hide()
+			else
+				self:SetAlpha(math.min(1, 2.5 - self.time))
+			end
+		end)
+		canvas.searchGlow = glow
+	end
+	glow:ClearAllPoints()
+	glow:SetPoint("TOP", edges.top, "TOP", 0, 3)
+	glow:SetPoint("BOTTOM", edges.bottom, "BOTTOM", 0, -3)
+	glow:SetPoint("LEFT", edges.left, "LEFT", -4, 0)
+	glow:SetPoint("RIGHT", edges.right, "RIGHT", 6, 0)
+	glow.time = 0
+	glow:SetAlpha(1)
+	glow:Show()
+end
+
+-- Opens a match's page, scrolled to it and highlighted.
+local function ShowMatch(entry)
+	ns.OpenOptions(entry.page.name)
+	if not entry.edges then return end
+	local canvas = entry.page.canvas
+	-- (once the page has shown and sized itself)
+	C_Timer.After(0.1, function()
+		local content, scroll = canvas.content, canvas.scroll
+		local top, contentTop = entry.edges.top:GetTop(), content:GetTop()
+		if not top or not contentTop then return end
+		local offset = contentTop - top - 40
+		scroll:SetVerticalScroll(math.max(0, math.min(offset, scroll:GetVerticalScrollRange())))
+		Highlight(canvas, entry.edges)
+	end)
+end
+
+local SEARCH_ROWS = 12
+
+-- The search box, with its matches listed in a box below it (over the page).
+local function CreateSearch(canvas, parent)
+	local ok, box = pcall(CreateFrame, "EditBox", nil, parent, "SearchBoxTemplate")
+	if not ok or not box then
+		box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+	end
+	box:SetSize(260, 20)
+	box:SetAutoFocus(false)
+	box.searchSkip = true
+	if box.Instructions then box.Instructions:SetText("Search Cinematic's settings") end
+
+	local list = CreateFrame("Frame", nil, parent)
+	list.searchSkip = true
+	list:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -2)
+	list:SetWidth(580)
+	list:SetFrameLevel(parent:GetFrameLevel() + 20)
+	list:EnableMouse(true) -- (clicks don't reach the settings underneath)
+	list:Hide()
+	local border = list:CreateTexture(nil, "BACKGROUND")
+	border:SetAllPoints()
+	border:SetColorTexture(0.45, 0.38, 0.2, 1)
+	local bg = list:CreateTexture(nil, "BORDER")
+	bg:SetPoint("TOPLEFT", 1, -1)
+	bg:SetPoint("BOTTOMRIGHT", -1, 1)
+	bg:SetColorTexture(0.05, 0.05, 0.05, 0.97)
+
+	local rows, matches, index = {}, {}, nil
+	local function Row(i)
+		if rows[i] then return rows[i] end
+		local row = CreateFrame("Button", nil, list)
+		row:SetHeight(20)
+		row:SetPoint("TOPLEFT", 4, -4 - (i - 1) * 20)
+		row:SetPoint("RIGHT", -4, 0)
+		local hl = row:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints()
+		hl:SetColorTexture(1, 1, 1, 0.1)
+		row.text = Label(row, "GameFontHighlight")
+		row.text:SetPoint("LEFT", 6, 0)
+		row.text:SetPoint("RIGHT", -6, 0)
+		row.text:SetWordWrap(false)
+		row:SetScript("OnClick", function(self)
+			if not self.entry then return end
+			list:Hide()
+			box:ClearFocus()
+			ShowMatch(self.entry)
+		end)
+		rows[i] = row
+		return row
+	end
+
+	-- The matches from offset on; the mouse wheel scrolls through the rest.
+	local offset = 0
+	local function Draw()
+		local shown = math.min(#matches - offset, SEARCH_ROWS)
+		for i = 1, shown do
+			local entry, row = matches[offset + i], Row(i)
+			local text = entry.text
+			if #text > 70 then text = text:sub(1, 67) .. "..." end
+			row.entry = entry
+			row.text:SetText("|cffffd100" .. (entry.page.name or "Cinematic") .. ":|r  " .. text)
+			row:Show()
+		end
+		local lines = shown
+		local below = #matches - offset - shown
+		if #matches == 0 or below > 0 then
+			lines = lines + 1
+			local row = Row(lines)
+			row.entry = nil
+			row.text:SetText(#matches == 0 and "|cff808080Nothing found|r" or
+				("|cff808080Scroll for " .. below .. " more|r"))
+			row:Show()
+		end
+		for i = lines + 1, #rows do rows[i]:Hide() end
+		list:SetHeight(lines * 20 + 8)
+	end
+	list:EnableMouseWheel(true)
+	list:SetScript("OnMouseWheel", function(_, delta)
+		offset = math.max(0, math.min(offset - delta, #matches - SEARCH_ROWS))
+		Draw()
+	end)
+
+	local function Update()
+		local query = (box:GetText() or ""):match("^%s*(.-)%s*$")
+		if query == "" then
+			list:Hide()
+			return
+		end
+		index = index or BuildSearchIndex()
+		matches = SearchMatches(index, query)
+		offset = 0
+		Draw()
+		list:Show()
+	end
+
+	box:HookScript("OnTextChanged", Update)
+	-- A fresh look at the pages each time you start searching, and the
+	-- matches back for what's still typed there.
+	box:HookScript("OnEditFocusGained", function()
+		index = nil
+		Update()
+	end)
+	box:HookScript("OnEnterPressed", function(self)
+		self:ClearFocus()
+		if matches[1] and list:IsShown() then
+			list:Hide()
+			ShowMatch(matches[1])
+		end
+	end)
+	box:HookScript("OnEscapePressed", function(self)
+		self:SetText("")
+		self:ClearFocus()
+	end)
+	canvas:HookScript("OnHide", function() list:Hide() end)
+	return box
+end
+
 local function CreatePanel()
 	mainCanvas, panel = CreateScrollPage(true)
 	mainCanvas.name = "Cinematic"
@@ -390,8 +702,11 @@ local function CreatePanel()
 	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
+	local searchBox = CreateSearch(mainCanvas, panel)
+	searchBox:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 6, -14)
+
 	-- Left column: general
-	local general = Header(panel, "General", subtitle, -20)
+	local general = Header(panel, "General", subtitle, -54)
 
 	local enabled = Check(panel, "enabled", "Enable Cinematic",
 		"Also toggled with /cine or the keybind under Key Bindings > AddOns.", ns.SetEnabled)
@@ -399,7 +714,7 @@ local function CreatePanel()
 
 	local fadeUI = Check(panel, "fadeUI", "Fade the UI (CineMode)",
 		"Off: the UI stays as it is and the camera's left to you, with just the visual effects " ..
-		"(if \"Enabled outside of CineMode\" is ticked on the Visual Effects page). The VFX Only profile.")
+		"over it (as the Visual Effects page says). The VFX Only profile.")
 	fadeUI:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -2)
 
 	local minimapButton = Check(panel, "minimapButton", "Show minimap button",
@@ -410,24 +725,15 @@ local function CreatePanel()
 		end)
 	minimapButton:SetPoint("TOPLEFT", fadeUI, "BOTTOMLEFT", 0, -2)
 
-	-- The same setting as "Turn off in: Combat" on the right, the right way round.
-	local stay = Check(panel, "stayInCombat", "Stay in CineMode in combat",
-		"Fights don't bring the whole UI back: only the frames ticked under In combat on the " ..
-		"Standard Frames page show. Off: being in combat brings the UI back. Same as unticking " ..
-		"\"Turn off in: Combat\".", function(value)
-			ns.GetDB().stayInCombat = value
-			Refresh() -- grey out / enable the In combat column
-		end)
-	stay:SetPoint("TOPLEFT", minimapButton, "BOTTOMLEFT", 0, -2)
-
 	-- Right column: places
 	local placesHeader = Label(panel, "GameFontNormal", "Turn off in")
 	placesHeader:SetPoint("TOPLEFT", general, "TOPLEFT", 320, 0)
 
 	-- Stored the other way round (stayInCombat), as the Standard Frames page's lists apply while staying.
 	local combat = Check(panel, "stayInCombat", "Combat",
-		"Being in combat brings the UI back. Targeting an enemy only shows the frames chosen " ..
-		"for it on the Standard Frames page. Untick to stay cinematic in combat too.", function(value)
+		"Being in combat brings the UI back. Unticked, CineMode stays on in fights: only the frames " ..
+		"ticked under In combat on the Standard Frames page show. (Targeting an enemy only ever shows " ..
+		"the frames chosen for it there.)", function(value)
 			ns.GetDB().stayInCombat = not value
 			Refresh()
 		end)
@@ -462,10 +768,35 @@ local function CreatePanel()
 		"Keep the normal UI while you're in a raid group, wherever you are.")
 	raidGroup:SetPoint("TOPLEFT", party, "BOTTOMLEFT", 0, -2)
 
+	local moving = Check(panel, "offWhileMoving", "Moving",
+		"Walking or riding about yourself brings the UI back (names too), say to look for an NPC " ..
+		"in a city. CineMode comes back once you've stood still, or kept moving, for the time " ..
+		"below. Auto-run, RP walking and flights stay in CineMode.",
+		function(value)
+			ns.GetDB().offWhileMoving = value
+			Refresh()
+		end)
+	moving:SetPoint("TOPLEFT", raidGroup, "BOTTOMLEFT", 0, -2)
+
+	-- (Indented under Moving, as its sub-options.)
+	local movingVFX = Check(panel, "movingKeepVFX", "Keep VFX on",
+		"The visual effects (letterbox, tint and the rest on the Visual Effects page) stay on " ..
+		"while moving brings the UI back.")
+	movingVFX:SetPoint("TOPLEFT", moving, "BOTTOMLEFT", 24, -2)
+	GreyUnless(movingVFX, function(db) return db.offWhileMoving end)
+
+	local movingBack = Slider(panel, "movingBackAfter", "Back after", 1, 60, 1, "%d sec")
+	movingBack:SetPoint("TOPLEFT", movingVFX, "BOTTOMLEFT", 4, -26)
+	movingBack:SetWidth(176)
+	Tooltip(movingBack, "CineMode comes back once you've stood still this long, or kept moving " ..
+		"this long without stopping (a long walk or ride).")
+	GreyUnless(movingBack, function(db) return db.offWhileMoving end)
+
 	local defaults = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	defaults:SetSize(140, 22)
 	defaults:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -16, -12)
 	defaults:SetText("Reset profile")
+	defaults.searchSkip = true
 	Tooltip(defaults, "Put the active profile's settings back to how it started (a built-in profile's " ..
 		"own values, or the defaults). Frames you added or stopped fading are kept.")
 	defaults:SetScript("OnClick", function()
@@ -486,6 +817,7 @@ local function CreatePanel()
 
 	mainCanvas:SetScript("OnShow", PageShown(Refresh, panel))
 	mainCanvas:Hide() -- so OnShow fires on the first visit too
+	searchPages[1] = { canvas = mainCanvas }
 
 	if Settings and Settings.RegisterCanvasLayoutCategory then
 		category = Settings.RegisterCanvasLayoutCategory(mainCanvas, "Cinematic")
@@ -502,6 +834,7 @@ local function RegisterSubpage(subpanel, name)
 	subpanel.name = name
 	subpanel.parent = "Cinematic"
 	subpages[name] = subpanel
+	searchPages[#searchPages + 1] = { name = name, canvas = subpanel }
 	if category and Settings and Settings.RegisterCanvasLayoutSubcategory then
 		local sub = Settings.RegisterCanvasLayoutSubcategory(category, subpanel, name)
 		Settings.RegisterAddOnCategory(sub)
@@ -662,7 +995,10 @@ local function CreateBuffsPanel()
 
 	local buffPeek = Check(content, "buffPeek", "Show buffs when you gain or refresh one",
 		"Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on flights.")
-	buffPeek:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -14)
+	buffPeek:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -48)
+	PageSwitch(content, "handleBuffs", "Let CineMode handle buffs and debuffs",
+		"On: CineMode fades your buffs and debuffs as this page and their Standard Frames row say. " ..
+		"Off: it leaves them alone, with no peeks.", note)
 	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
 
 	local BUFF_INDENT = 16
@@ -691,8 +1027,14 @@ local function CreateBuffsPanel()
 	debuffAfterCombat:SetPoint("TOPLEFT", debuffPeek, "BOTTOMLEFT", BUFF_INDENT, -2)
 	GreyUnless(debuffAfterCombat, IfDebuffPeek)
 
+	local debuffUntilGone = Check(content, "debuffPeekUntilGone", "Keep them up until the debuff is gone",
+		"A debuff that brings them up keeps them up while you have any debuff (bar the ones listed below), " ..
+		"however long that is. Combat still takes over.")
+	debuffUntilGone:SetPoint("TOPLEFT", debuffAfterCombat, "BOTTOMLEFT", 0, -2)
+	GreyUnless(debuffUntilGone, IfDebuffPeek)
+
 	local buffPeekTime = Slider(content, "buffPeekTime", "Show buffs for", 0.5, 30, 0.5, "%.1f sec")
-	buffPeekTime:SetPoint("TOPLEFT", debuffAfterCombat, "BOTTOMLEFT", 4 - BUFF_INDENT, -30)
+	buffPeekTime:SetPoint("TOPLEFT", debuffUntilGone, "BOTTOMLEFT", 4 - BUFF_INDENT, -30)
 	GreyUnless(buffPeekTime, IfBuffPeek)
 
 	local debuffPeekTime = Slider(content, "debuffPeekTime", "Show debuffs for", 0.5, 30, 0.5, "%.1f sec")
@@ -913,7 +1255,8 @@ local function CreateCameraPanel()
 	local GRID_PLACES = GRID_NAME_WIDTH
 	local WHERE = {
 		Cities = { "Cities", "in capital cities" },
-		Instances = { "Instances", "in dungeons, scenarios, raids, battlegrounds and arenas" },
+		Instances = { "Instances", "in dungeons, scenarios and raids" },
+		BGs = { "BGs & Arenas", "in battlegrounds and arenas" },
 		World = { "Open World", "out in the world (not in a capital city or an instance), inns included" },
 	}
 	-- Calm Timer last, set apart too: it isn't a place.
@@ -2021,38 +2364,6 @@ local function OpenColorPicker(r, g, b, onChange)
 end
 ns.OpenColorPicker = OpenColorPicker
 
--- When the letterbox or tint shows: a checkbox per situation (db.<prefix>Moving,
--- Still, Flight and InCombat), the first at x, y from anchor, then the wait
--- after a fight. text: what's shown (it), and how it leaves (away) and comes
--- back (back). enabled: false greys them all. Returns the slider at the end.
-local function SituationChecks(content, prefix, anchor, x, y, text, onChange, enabled)
-	enabled = enabled or function() return true end
-	local function Situation(key, label, tip)
-		local check = Check(content, prefix .. key, label, tip, function(value)
-			ns.GetDB()[prefix .. key] = value
-			onChange()
-			Refresh()
-		end)
-		check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x, y)
-		anchor, x, y = check, 0, -2
-		return check
-	end
-	local moving = Situation("Moving", "Moving around",
-		("Show %s while you're out and about, or stopped for less than the standing-still delay."):format(text.it))
-	local still = Situation("Still", "Standing still",
-		("Show %s once you've stood still a while."):format(text.it))
-	local flight = Situation("Flight", "On flights", ("Show %s on flight paths."):format(text.it))
-	local combat = Situation("InCombat", "In combat",
-		("Keep %s during fights. Untick to %s, and back once the Calm Timer (on the CineMode " ..
-		"page) runs out after. Only while staying cinematic in combat (Combat unticked under " ..
-		"Turn off in, on the main page)."):format(text.it, text.away))
-	for _, check in ipairs({ moving, still, flight }) do
-		GreyUnless(check, enabled)
-	end
-	GreyUnless(combat, function(db) return enabled(db) and db.stayInCombat end)
-	return combat
-end
-
 -- Sub-page for the screen tint and vignette.
 local function CreateTintPanel()
 	local canvas, content = CreateScrollPage()
@@ -2061,7 +2372,8 @@ local function CreateTintPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"How the game world looks in CineMode (or always, if you choose): letterbox bars, colour " ..
+		"How the game world looks in CineMode (or over the normal UI, with Fade the UI off on the " ..
+		"main page): letterbox bars, colour " ..
 		"grading, vignette, inn glow and weather. The UI isn't tinted. While this page is open " ..
 		"the tint is previewed behind the options window. Names and nameplates are on the " ..
 		"Nameplates page.")
@@ -2070,8 +2382,7 @@ local function CreateTintPanel()
 	subtitle:SetJustifyV("TOP")
 
 	-- The master switch: off, none of this page's effects show (each keeps its
-	-- own setting), and its other controls grey out (see the end of the page).
-	local firstControl = #controls + 1
+	-- own setting), and its other controls grey out.
 	local master = Check(content, "visualEffects", "Enable visual effects",
 		"Turns everything on this page on or off at once: the letterbox, tint, time of day, " ..
 		"zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for when you " ..
@@ -2082,20 +2393,77 @@ local function CreateTintPanel()
 			Refresh()
 		end)
 	master:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+	RegisterPageSwitch(content, "visualEffects", master)
 
-	local always = Check(content, "visualEffectsAlways", "Enabled outside of CineMode",
-		"Shows this page's effects with the normal UI up too, not just in CineMode: say, the tint " ..
-		"and vignette while you play with every frame visible. Each still shows only in the " ..
-		"situations ticked for it. Not while Cinematic is turned off or snoozed.", function(value)
-			ns.GetDB().visualEffectsAlways = value
-			ns.letterboxDirty = true
-			if ns.RefreshTint then ns.RefreshTint() end
-		end)
-	always:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 16, -2)
+	-- Turn off in: a grid of the letterbox and tint (rows) by place, fights
+	-- and camera modes (columns), like the Camera Modes page's.
+	local gridHeader = Header(content, "Turn off in", master, -18)
+	gridHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
+	local gridNote = Label(content, "GameFontHighlightSmall",
+		"Ticked, that effect doesn't show there. Combat: it goes for fights, and comes back once the " ..
+		"Calm Timer (CineMode page) has run out after. Outside camera modes: it only shows while a " ..
+		"camera mode runs (flights, AFK, cozy and the rest).")
+	gridNote:SetPoint("TOPLEFT", gridHeader, "BOTTOMLEFT", 0, -6)
+	gridNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	gridNote:SetJustifyH("LEFT")
+	gridNote:SetJustifyV("TOP")
+	local EFFECT_ROWS = { letterbox = "Letterbox", tint = "Tint" }
+	local PLACE_NAMES = {
+		Cities = { "Cities", "in capital cities" },
+		Instances = { "Instances", "in dungeons, scenarios and raids" },
+		BGs = { "BGs & Arenas", "in battlegrounds and arenas" },
+		World = { "Open World", "out in the world (not in a capital city or an instance), inns included" },
+	}
+	local EFFECT_COLUMNS = {}
+	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
+		EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OffIn" .. where, heading = PLACE_NAMES[where][1],
+			tip = function(name) return ("No %s %s."):format(name, PLACE_NAMES[where][2]) end }
+	end
+	-- (Fights and camera modes set apart: they aren't places.)
+	local firstApart = #EFFECT_COLUMNS + 1
+	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OffInCombat", heading = "Combat",
+		tip = function(name) return ("The %s goes for fights, and comes back once the Calm Timer " ..
+			"(CineMode page) has run out after one."):format(name) end }
+	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OnlyInCameras", heading = "Outside camera modes",
+		tip = function(name) return ("The %s only shows while a camera mode runs: flights, AFK, cozy and " ..
+			"the rest."):format(name) end }
+	local NAME_WIDTH, COLUMN_WIDTH, GAP, HEADING_HEIGHT = 90, 72, 10, 26
+	local function ColumnX(c)
+		return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= firstApart and GAP or 0)
+	end
+	local gridTop = CreateFrame("Frame", nil, content)
+	gridTop:SetSize(ColumnX(#EFFECT_COLUMNS) + COLUMN_WIDTH, HEADING_HEIGHT)
+	gridTop:SetPoint("TOPLEFT", gridNote, "BOTTOMLEFT", 0, -10)
+	for c, column in ipairs(EFFECT_COLUMNS) do
+		local heading = Label(gridTop, "GameFontNormalSmall", column.heading)
+		heading:SetWidth(COLUMN_WIDTH)
+		heading:SetJustifyH("CENTER")
+		heading:SetPoint("BOTTOMLEFT", gridTop, "BOTTOMLEFT", ColumnX(c), 0)
+	end
+	local lastGridRow = gridTop
+	for _, effect in ipairs(ns.EFFECT_GRID) do
+		local row = CreateFrame("Frame", nil, content)
+		row:SetSize(gridTop:GetWidth(), 24)
+		row:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -2)
+		Label(row, "GameFontHighlight", EFFECT_ROWS[effect]):SetPoint("LEFT", row, "LEFT", 0, 0)
+		for c, column in ipairs(EFFECT_COLUMNS) do
+			local key = effect .. column.key
+			local check = Check(content, key, "", column.tip(EFFECT_ROWS[effect]:lower()), function(value)
+				ns.GetDB()[key] = value
+				ns.letterboxDirty = true
+				if ns.RefreshTint then ns.RefreshTint() end
+			end)
+			check:SetPoint("CENTER", row, "LEFT", ColumnX(c) + COLUMN_WIDTH / 2, 0)
+			if effect == "letterbox" then
+				GreyUnless(check, function(db) return db.letterbox end)
+			end
+		end
+		lastGridRow = row
+	end
 
 	-- Letterbox
-	local letterboxHeader = Header(content, "Letterbox", always, -20)
-	letterboxHeader:SetPoint("TOPLEFT", always, "BOTTOMLEFT", -14, -18)
+	local letterboxHeader = Header(content, "Letterbox", lastGridRow, -20)
+	letterboxHeader:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -20)
 
 	local letterbox = Check(content, "letterbox", "Show letterbox bars",
 		"Black bars slide in at the top and bottom of the screen.", function(value)
@@ -2105,12 +2473,8 @@ local function CreateTintPanel()
 		end)
 	letterbox:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", -2, -6)
 
-	local letterboxBack = SituationChecks(content, "letterbox", letterbox, 16, -2,
-		{ it = "the letterbox", away = "slide it away" },
-		ns.RefreshLetterbox, function(db) return db.letterbox end)
-
 	local size = Slider(content, "letterboxSize", "Bar height", 0, 25, 1, "%d%%", 100, ns.RefreshLetterbox)
-	size:SetPoint("TOPLEFT", letterboxBack, "BOTTOMLEFT", -12, -30)
+	size:SetPoint("TOPLEFT", letterbox, "BOTTOMLEFT", 4, -30)
 
 	local opacity = Slider(content, "letterboxAlpha", "Bar opacity", 10, 100, 5, "%d%%", 100, ns.RefreshLetterbox)
 	opacity:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -34)
@@ -2244,15 +2608,9 @@ local function CreateTintPanel()
 	Tooltip(driftAmount, "How far the strength wanders either way, as a share of the strength.")
 	GreyUnless(driftAmount, function(db) return db.tintDrift end)
 
-	-- When the tint shows
-	local whenLabel = Label(content, "GameFontHighlight", "Show the tint")
-	whenLabel:SetPoint("TOPLEFT", driftAmount, "BOTTOMLEFT", -4, -24)
-	local tintBack = SituationChecks(content, "tint", whenLabel, -2, -6,
-		{ it = "the tint", away = "fade it away" }, ns.RefreshTint)
-
 	-- Time of day: which clock, strength, your own phases
-	local timeHeader = Header(content, "Time of day", tintBack, -24)
-	timeHeader:SetPoint("TOPLEFT", tintBack, "BOTTOMLEFT", 2, -20)
+	local timeHeader = Header(content, "Time of day", driftAmount, -24)
+	timeHeader:SetPoint("TOPLEFT", driftAmount, "BOTTOMLEFT", -4, -24)
 	local timeHelp = Label(content, "GameFontHighlightSmall",
 		"For the Time of day and Zone + time of day presets, and the time of day message.")
 	timeHelp:SetPoint("TOPLEFT", timeHeader, "BOTTOMLEFT", 0, -6)
@@ -2710,24 +3068,6 @@ local function CreateTintPanel()
 		ns.SetTintPreview(true)
 	end, content))
 	canvas:SetScript("OnHide", function() ns.SetTintPreview(false) end)
-	-- Everything else on the page greys out while the master switch is off
-	-- (on top of its own greying: this only ever turns a control off).
-	for i = firstControl, #controls do
-		local control = controls[i]
-		if control ~= master then
-			local refresh = control.Refresh
-			control.Refresh = function(self)
-				refresh(self)
-				if not ns.GetDB().visualEffects then
-					if self.SetEnabled then self:SetEnabled(false) end
-					local label = self.Text or self.text
-					if label and self.GetObjectType and self:GetObjectType() == "CheckButton" then
-						label:SetFontObject("GameFontDisable")
-					end
-				end
-			end
-		end
-	end
 	canvas:Hide()
 	RegisterSubpage(canvas, "Visual Effects")
 end
@@ -2749,7 +3089,7 @@ local function CreateAudioPanel()
 	-- Left column: music, fatigue
 	local musicHeader = Header(content, "Music", subtitle, -20)
 
-	local music = Check(content, "musicInCinematic", "Allow CineMode to queue Music",
+	local music = Check(content, "musicInCinematic", "Enable CineMode music",
 		"With your game music off, a camera starting (the ones ticked under Music on the Camera " ..
 		"Triggers page) switches it on and fades it in, at your music volume; it fades out when " ..
 		"the UI returns and your music is switched off again (logging out too). With your game " ..
@@ -2909,16 +3249,34 @@ local function CreateCombatPanel()
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	-- The game's frames this client has, but for those with a page of their
-	-- own (gamepad). Other addons' frames have the same columns on the 3rd
-	-- Party Frames page.
-	local rows = {}
-	for _, item in ipairs(ns.COMBAT_SHOW) do
-		if ns.OptionAvailable(item) and not item.page and not item.key:find("^addon:") then
-			rows[#rows + 1] = item
+	-- The game's frames this client has, in sections (their page: see
+	-- ROW_SECTIONS), each a table of its own; the gamepad's are on the
+	-- Gamepad page, other addons' frames on the 3rd Party Frames page.
+	local switch = PageSwitch(content, "handleFrames", "Let CineMode handle the game's frames",
+		"On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
+		"alone, the minimap, quest tracker, buffs and Cooldown Manager included (their pages' " ..
+		"switches only count while this is on).", subtitle)
+	local lastRow = switch
+	local function Section(page, heading)
+		local sectionRows = {}
+		for _, item in ipairs(ns.COMBAT_SHOW) do
+			if item.page == page and ns.OptionAvailable(item) and not item.key:find("^addon:") then
+				sectionRows[#sectionRows + 1] = item
+			end
 		end
+		if #sectionRows == 0 then
+			return
+		end
+		lastRow = ShowTable(content, Header(content, heading, lastRow, lastRow == switch and -16 or -28),
+			sectionRows)
 	end
-	ShowTable(content, subtitle, rows)
+	Section("units", "Unit frames")
+	Section("combat", "Combat")
+	Section("bars", "Action bars")
+	Section("interface", "Interface")
+	Section("raid", "Raid frames")
+	Section("bg", "Battlegrounds")
+	Section(nil, "Other") -- (any row not given a section)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -2938,7 +3296,11 @@ local function CreateFishingPanel()
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	local stack = Stack(subtitle, "label")
+	local switch = PageSwitch(content, "handleFishing", "Let CineMode help with fishing",
+		"On: right-click (or a gamepad button) casts again, and the Fishing cast bar hides, as this " ..
+		"page says. Off: fishing is left to the game. (The fish camera is on the Camera Modes and " ..
+		"Camera Triggers pages.)", subtitle)
+	local stack = Stack(switch, "check")
 	stack:Header(content, "Casting")
 	stack:Add(Check(content, "hideFishingCastBar", "Hide the Fishing cast bar",
 		"Your cast bar stays hidden while it shows Fishing. Every other spell shows it as usual."),
@@ -3030,7 +3392,10 @@ local function CreateGamepadPanel()
 			rows[#rows + 1] = item
 		end
 	end
-	local lastRow = ShowTable(content, subtitle, rows)
+	local switch = PageSwitch(content, "handleGamepad", "Let CineMode handle the gamepad frames",
+		"On: CineMode fades the gamepad's bars, button hints and reticle as this page says. Off: it " ..
+		"leaves them alone.", subtitle)
+	local lastRow = ShowTable(content, switch, rows)
 
 	-- The prompt sits on a nameplate, not a frame of its own: a setting for
 	-- the plates' fade rather than a row.
@@ -3147,7 +3512,7 @@ local function CreatePlatesPanel()
 			Refresh()
 		end)
 	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
-	local firstControl = #controls + 1
+	RegisterPageSwitch(content, "handlePlates", handleCheck)
 
 	-- Nameplates and names each get a table: a row per kind of unit, a column
 	-- per situation. A narrower table can set its first column apart (gap).
@@ -3339,25 +3704,6 @@ local function CreatePlatesPanel()
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 
-	-- Everything below the master switch greys out with it off (on top of
-	-- each control's own greying).
-	for i = firstControl, #controls do
-		local control = controls[i]
-		if control.SetEnabled then
-			local refresh = control.Refresh
-			control.Refresh = function(self)
-				refresh(self)
-				if not ns.GetDB().handlePlates then
-					self:SetEnabled(false)
-					local label = self.Text or self.text
-					if label and self:GetObjectType() == "CheckButton" then
-						label:SetFontObject("GameFontDisable")
-					end
-				end
-			end
-		end
-	end
-
 	-- Laid out top to bottom: the master switch, the target and group
 	-- switches, then the two grids (nameplates, then names).
 	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
@@ -3395,6 +3741,7 @@ local function RefreshChannels()
 		row.channel = name
 		row.label:SetText(name)
 		row:SetChecked(ns.IsChannelPeekOn(name))
+		row:SetEnabled(SwitchOn("handleChat"))
 		row:ClearAllPoints()
 		row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
 		row:Show()
@@ -3421,7 +3768,11 @@ local function CreateChatPanel()
 	subtitle:SetJustifyV("TOP")
 
 	-- Left column: the chat window, message types
-	local windowHeader = Header(chatPanel, "Chat window", subtitle, -20)
+	local switch = PageSwitch(chatPanel, "handleChat", "Let CineMode handle chat",
+		"On: CineMode fades the chat windows and tabs as this page says. Off: it leaves them alone.",
+		subtitle)
+	local windowHeader = Header(chatPanel, "Chat window", switch, -20)
+	windowHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -16)
 
 	local chatPeek = Check(chatPanel, "chatPeek", "Show chat when a message arrives",
 		"While the UI is faded, a new message briefly shows just the chat window it " ..
@@ -3572,6 +3923,7 @@ local function GetExtraRow(index)
 			end)
 			check.Refresh = function(self)
 				if row.item then self:SetChecked(row.item.kept) end
+				self:SetEnabled(SwitchOn("handleAddonFrames"))
 			end
 		else
 			local isOn, list, needsStay = column[2], column[3], column[4]
@@ -3581,7 +3933,8 @@ local function GetExtraRow(index)
 			check.Refresh = function(self)
 				if not row.item then return end
 				self:SetChecked(isOn("extra:" .. row.item.name))
-				self:SetEnabled(not row.item.kept and (not needsStay or ns.GetDB().stayInCombat))
+				self:SetEnabled(SwitchOn("handleAddonFrames") and not row.item.kept
+					and (not needsStay or ns.GetDB().stayInCombat))
 			end
 		end
 		check:SetPoint("LEFT", ThirdPartyColumnX(c), 0)
@@ -3650,6 +4003,9 @@ local function CreateMinimapPanel()
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
+	local switch = PageSwitch(content, "handleMinimap", "Let CineMode handle the minimap",
+		"On: CineMode fades and shrinks the minimap as this page and its Standard Frames row say. " ..
+		"Off: it leaves it alone.", subtitle)
 
 	-- Retail's quest waypoint (the marker in the world showing where to go).
 	local aboveTracking
@@ -3657,7 +4013,7 @@ local function CreateMinimapPanel()
 		local waypoint = Check(content, "alwaysShowWaypoint", "Always show the quest waypoint",
 			"Keeps the marker showing where your tracked quest or map pin is, with its " ..
 			"distance, visible in CineMode. Off, it fades with the rest of the UI.")
-		waypoint:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+		waypoint:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -10)
 		aboveTracking = waypoint
 	end
 
@@ -3675,7 +4031,7 @@ local function CreateMinimapPanel()
 	if aboveTracking then
 		ping:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
 	else
-		ping:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+		ping:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -10)
 	end
 	local indoors = Check(content, "minimapIndoors", "Keep minimap open indoors",
 		"Inside buildings, caves and cities like Ironforge, the minimap stays up during CineMode. " ..
@@ -3759,7 +4115,10 @@ local function CreateQuestTrackerPanel()
 		"Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the " ..
 		"Mouseover groups that have Quest progress ticked): it goes after \"Stays after " ..
 		"mouseover\" (Mouseover page).")
-	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -48)
+	PageSwitch(content, "handleQuests", "Let CineMode handle the quest tracker",
+		"On: CineMode fades the quest tracker (and the quest timer and waypoint) as this page and its " ..
+		"Standard Frames row say. Off: it leaves them alone.", subtitle)
 
 	local revealProgress = Check(content, "questRevealOnProgress", "Reveal on receiving quest objective",
 		"Progress on a quest's objectives (a kill or item counted towards it) shows the quest " ..
@@ -3796,14 +4155,9 @@ local function CreateCooldownPanel()
 
 	-- The page's master switch: off, CineMode leaves the Cooldown Manager alone
 	-- (everything below greys out, and its Standard Frames row).
-	local handleCheck = Check(content, "handleCooldowns", "Let CineMode handle the Cooldown Manager",
+	local handleCheck = PageSwitch(content, "handleCooldowns", "Let CineMode handle the Cooldown Manager",
 		"On: CineMode fades the Cooldown Manager as this page and its Standard Frames row say. Off: " ..
-		"it leaves it alone, and the game's own options decide, in CineMode and out.",
-		function(value)
-			ns.SetHandleCooldowns(value)
-			Refresh()
-		end)
-	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
+		"it leaves it alone, and the game's own options decide, in CineMode and out.", subtitle)
 	local function Handled() return ns.GetDB().handleCooldowns end
 
 	local recharging = Check(content, "cooldownWhileRecharging", "Stay up while a cooldown is recharging",
@@ -4086,8 +4440,10 @@ local function CreateExtrasPanel()
 	local title = Label(content, "GameFontNormalLarge", "3rd Party Frames")
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	-- (As if the title were a note, so the first heading gets a full gap below it.)
-	local stack = Stack(title, "label")
+	local switch = PageSwitch(content, "handleAddonFrames", "Let CineMode handle other addons' frames",
+		"On: CineMode fades the supported addons' frames, and frames you added, as this page says. " ..
+		"Off: it leaves them all alone.", title)
+	local stack = Stack(switch, "check")
 	stack:Header(content, "Supported addons")
 	stack:Note(content, "These addons' frames are hidden in CineMode unless ticked, like the game's " ..
 		"frames on the Standard Frames page. Tick Always to leave an addon's frames alone (shown the " ..
@@ -4372,11 +4728,6 @@ local KEYBINDS = {
 			"and time-of-day title. Press again (or Blizzard's key) to bring it back." },
 	{ action = "CINEMATIC_TOGGLE", label = "Toggle CineMode",
 		tip = "Turns CineMode on or off, like /cine." },
-	{ action = "CINEMATIC_PEEK", label = "Peek at the UI (hold)",
-		tip = "Brings the UI back while held, and fades it again when let go." },
-	{ action = "CINEMATIC_FLYBY", label = "Fly-by",
-		tip = "The camera slowly turns round to look back past you, holds there, then turns " ..
-			"back behind you. Press again to stop; moving the camera stops it too. Like /cine flyby." },
 	{ action = "CINEMATIC_CAM_IDLE", label = "AFK camera",
 		tip = "Starts the AFK camera now, without waiting out its delay. " ..
 			"Press again, move or jump to stop it." },
@@ -4386,6 +4737,9 @@ local KEYBINDS = {
 		tip = "Starts the vista camera now, as if you'd done a /stare. Press again, move or jump to stop it." },
 	{ action = "CINEMATIC_CAM_FISH", label = "Fish camera",
 		tip = "Starts the fish camera now, without casting. Press again, move or jump to stop it." },
+	{ action = "CINEMATIC_CAM_TELE", label = "Tele camera",
+		tip = "Starts the tele camera now, as if you were casting your Hearthstone. Press again, move or " ..
+			"jump to stop it." },
 	{ action = "CINEMATIC_CAM_DEATH", label = "Death camera test",
 		tip = "Pretends you're dead for 30 seconds so the death camera runs. Press again to stop. " ..
 			"Like /cine deathtest." },
@@ -4841,7 +5195,7 @@ local function CreateMouseoverPanel()
 	subtitle:SetWidth(WIDTH)
 	subtitle:SetJustifyV("TOP")
 
-	local mouseover = Check(content, "mouseover", "Reveal on mouseover",
+	local mouseover = Check(content, "mouseover", "Let CineMode reveal frames on mouseover",
 		"Pointing at a faded frame shows it, with the rest of its groups.", function(value)
 			ns.GetDB().mouseover = value
 			Refresh() -- grey out / enable the hold time

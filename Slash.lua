@@ -27,7 +27,6 @@ local function PrintHelp()
 	Heading("General")
 	print("  /cine - toggle CineMode (also /cine on, /cine off)")
 	print("  /cine config - open the settings")
-	print("  /cine peek - show the UI until you run it again (the peek key, for macros)")
 	print("  /cine hideui - hide the UI but keep the look (again to bring it back)")
 	print("  /cine size <percent> - letterbox bar height (now " .. ns.db.letterboxSize * 100 .. "%)")
 	print("  /cine button - show or hide the minimap button")
@@ -48,7 +47,7 @@ local function PrintHelp()
 	print("  /cine debug help - troubleshooting commands")
 	print("  /cine log - copy the log and your setup for a bug report (/cine log clear empties it)")
 	print("  /cine panic - stop for this session and put your UI and settings back (/cine resume to restart)")
-	print("  Keybinds (toggle, hold-to-peek, hide the UI, fly-by) are on the Keybinds settings page.")
+	print("  Keybinds (toggle CineMode, hide the UI, start a camera) are on the Keybinds settings page.")
 	logPrints = true
 end
 
@@ -81,6 +80,7 @@ local function PrintDebugHelp()
 	print("  /cine debug questtimer - say whether a quest timer is running and how its box fades")
 	print("  /cine debug death - print what the death camera does on real deaths (again to stop)")
 	print("  /cine debug place - city, inn, dungeon detection")
+	print("  /cine debug group [party|raid|off] - act as if in a party or raid, for the group options")
 	print("  /cine debug portrait - the portrait-until-full rule")
 	print("  /cine debug tracking - which tracking is active")
 	print("  /cine debug tooltip - trace the world tooltip hold-back (10 seconds)")
@@ -190,8 +190,6 @@ function ns.HandleSlash(msg)
 		C_Timer.After(degrees / speed, function() MoveViewLeftStop() end)
 	elseif cmd == "flyby" then
 		Cinematic_FlyBy()
-	elseif cmd == "peek" then
-		ns.Print(ns.TogglePeek() and "peeking: /cine peek again fades the UI" or "peek over")
 	elseif cmd == "hideui" then
 		Cinematic_ToggleUI()
 	elseif cmd == "debug" and arg == "flybys" then
@@ -254,6 +252,19 @@ function ns.HandleSlash(msg)
 			tostring(ns.IsGamePadOn())))
 	elseif cmd == "debug" and arg == "frames" then
 		ns.ReportUnfadedFrames()
+	elseif cmd == "debug" and (arg == "group" or arg:find("^group ")) then
+		-- (No choice given: a party, or off again if already faking one.)
+		local kind = arg:match("^group%s+(%S+)") or (ns.fakeGroup and "off" or "party")
+		if kind == "party" or kind == "raid" then
+			ns.fakeGroup = kind
+			ns.Print(("acting as if in a %s (the game's own frames still go by your real group). " ..
+				"/cine debug group off to stop"):format(kind))
+		elseif kind == "off" then
+			ns.fakeGroup = nil
+			ns.Print("going by your real group again")
+		else
+			ns.Print("/cine debug group party, raid or off")
+		end
 	elseif cmd == "debug" and arg == "questtimer" then
 		ns.ReportQuestTimer()
 	elseif cmd == "debug" and arg == "death" then

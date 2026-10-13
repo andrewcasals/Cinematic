@@ -135,8 +135,9 @@ local function ShowMenu(owner)
 			Print("minimap button hidden. Bring it back with /cine button or the " ..
 				"\"Show minimap button\" option.")
 		end)
-		root:CreateCheckbox("Stay in CineMode in combat",
-			function() return db.stayInCombat end,
+		-- (The CineMode page's "Turn off in: Combat": stored the other way round.)
+		root:CreateCheckbox("Turn off in combat",
+			function() return not db.stayInCombat end,
 			function() db.stayInCombat = not db.stayInCombat end)
 		AddAudioMenu(root, db)
 		AddTintMenu(root, db)
