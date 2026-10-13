@@ -2881,9 +2881,10 @@ local function ShowTable(content, anchor, rows)
 			check:SetPoint("TOPLEFT", columnTop, "TOPLEFT",
 				LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
 			check.Refresh = function(self)
+				local db = ns.GetDB()
 				self:SetChecked(isOn(item.key))
-				self:SetEnabled(c == 1 or (not ns.IsCineShowOn(item.key)
-					and (not needsStay or ns.GetDB().stayInCombat)))
+				self:SetEnabled((not item.handledBy or db[item.handledBy]) and (c == 1
+					or (not ns.IsCineShowOn(item.key) and (not needsStay or db.stayInCombat))))
 			end
 		end
 		lastLabel = rowLabel
@@ -3793,36 +3794,59 @@ local function CreateCooldownPanel()
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
+	-- The page's master switch: off, CineMode leaves the Cooldown Manager alone
+	-- (everything below greys out, and its Standard Frames row).
+	local handleCheck = Check(content, "handleCooldowns", "Let CineMode handle the Cooldown Manager",
+		"On: CineMode fades the Cooldown Manager as this page and its Standard Frames row say. Off: " ..
+		"it leaves it alone, and the game's own options decide, in CineMode and out.",
+		function(value)
+			ns.SetHandleCooldowns(value)
+			Refresh()
+		end)
+	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
+	local function Handled() return ns.GetDB().handleCooldowns end
+
 	local recharging = Check(content, "cooldownWhileRecharging", "Stay up while a cooldown is recharging",
 		"Keeps the Cooldown Manager up until every cooldown in it is ready again, then it fades. Not " ..
 		"the global cooldown, nor its buff bars. (It brings up the Mouseover groups with Cooldown " ..
 		"recharging ticked: the Cooldowns group by default.)")
-	recharging:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+	recharging:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -8)
 	recharging:HookScript("OnClick", Refresh) -- grey out / enable the option below
+	GreyUnless(recharging, function(db) return db.handleCooldowns end)
 
 	local afterCombat = Check(content, "cooldownAfterCombat", "Only after combat",
 		"Only within the Calm Timer after a fight (CineMode page): after that it fades even with a " ..
 		"long cooldown still going, and cooldowns used out of fights don't bring it up.")
 	afterCombat:SetPoint("TOPLEFT", recharging, "BOTTOMLEFT", 16, -2)
-	GreyUnless(afterCombat, function(db) return db.cooldownWhileRecharging end)
+	GreyUnless(afterCombat, function(db) return db.handleCooldowns and db.cooldownWhileRecharging end)
 
 	-- Spells shown only when ready in combat: a box per spell in the
 	-- Cooldown Manager's spell bars now, then any ticked that aren't in it.
 	local readyHeader = Label(content, "GameFontNormal", "Only when ready in combat")
 	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", -14, -18)
 	local readyNote = Label(content, "GameFontHighlightSmall",
-		"Tick a spell to show its icon only in fights, and only while it's ready: out of fights, and " ..
-		"while it recharges, it fades out, in CineMode or not. Its place in the bar stays, so it " ..
-		"sits best at the end of one. In fights the game may not say how long is left, so then " ..
-		"it goes by when you last cast it.")
+		"Tick a spell to show its icon only in fights, and only once it's nearly ready: out of fights, " ..
+		"and while it recharges, it fades out, in CineMode or not. It comes back the seconds set " ..
+		"beside it before it's ready (left empty: " .. ns.READY_EARLY * 100 .. "% of its cooldown). " ..
+		"Its place in the bar stays, so it sits best at the end of one. In fights the game may not " ..
+		"say how long is left, so then it goes by when you last cast it.")
 	readyNote:SetPoint("TOPLEFT", readyHeader, "BOTTOMLEFT", 0, -6)
 	readyNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	readyNote:SetJustifyH("LEFT")
 	readyNote:SetJustifyV("TOP")
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
+	RecordKey(content, "cooldownReadyEarly")
+	RecordKey(content, "cooldownEarlyOff")
+	-- Two columns: the spell (ticked: only when ready in combat), and Show
+	-- Early (ticked: back the seconds in its box before it's ready).
+	local EARLY_X, ROW_HEIGHT = 296, 24
+	local spellHeading = Label(content, "GameFontNormalSmall", "Spell")
+	spellHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -10)
+	local earlyHeading = Label(content, "GameFontNormalSmall", "Show Early")
+	earlyHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", EARLY_X, -10)
 	local noSpells = Label(content, "GameFontDisable",
 		"No spells in the Cooldown Manager's spell bars right now.")
-	noSpells:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -8)
+	noSpells:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, -8)
 
 	local GetName = (C_Spell and C_Spell.GetSpellName) or function(id) return (GetSpellInfo(id)) end
 	local GetIcon = (C_Spell and C_Spell.GetSpellTexture) or GetSpellTexture
@@ -3839,13 +3863,79 @@ local function CreateCooldownPanel()
 		for i, id in ipairs(ids) do
 			local check = spellChecks[i]
 			if not check then
+				local y = -2 - (i - 1) * ROW_HEIGHT
 				check = Check(content, nil, "", "Out of fights, and while it recharges, this spell's " ..
 					"icon fades out of the Cooldown Manager.", function(value)
 					ns.GetDB().cooldownReadyOnly[spellChecks[i].spellID] = value or nil
+					spellChecks[i]:Refresh() -- (greys its Show Early)
 				end)
-				check:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", -2, -6 - (i - 1) * 24)
+				check:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", -2, y)
+				-- Show Early: ticked, back before it's ready; unticked, only once it is.
+				local earlyCheck = Check(content, nil, "", "Bring the icon back a little before it's " ..
+					"ready, by the seconds beside it. Unticked, it comes back once it's ready.", function(value)
+					ns.GetDB().cooldownEarlyOff[check.spellID] = not value or nil
+					check:Refresh()
+				end)
+				earlyCheck:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", EARLY_X - 2, y)
+				earlyCheck.Refresh = function() end -- (set by its row's)
+				-- Seconds before it's ready that it comes back: empty for the default.
+				local early = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+				early:SetSize(36, 20)
+				early:SetAutoFocus(false)
+				early:SetNumeric(true)
+				early:SetMaxLetters(4)
+				early:SetPoint("LEFT", earlyCheck, "RIGHT", 6, 0)
+				Tooltip(early, "How many seconds before it's ready the icon comes back. Leave it empty " ..
+					"for " .. ns.READY_EARLY * 100 .. "% of its cooldown.")
+				local function Save(self)
+					local spell = check.spellID
+					if spell then
+						ns.GetDB().cooldownReadyEarly[spell] = tonumber(self:GetText())
+					end
+					self:ClearFocus()
+					check:Refresh()
+				end
+				early:SetScript("OnEnterPressed", Save)
+				early:SetScript("OnEditFocusLost", function(self)
+					if self.saving then return end
+					self.saving = true
+					Save(self)
+					self.saving = nil
+				end)
+				early:SetScript("OnEscapePressed", function(self)
+					-- (Put back as it was: losing focus then saves that.)
+					local set = check.spellID and ns.GetDB().cooldownReadyEarly[check.spellID]
+					self:SetText(set and tostring(set) or "")
+					self:ClearFocus()
+				end)
+				check.earlyCheck, check.early = earlyCheck, early
+				check.earlyText = Label(content, "GameFontHighlightSmall", "")
+				check.earlyText:SetPoint("LEFT", early, "RIGHT", 6, 0)
 				check.Refresh = function(self)
-					self:SetChecked(self.spellID and ns.GetDB().cooldownReadyOnly[self.spellID] or false)
+					local spell = self.spellID
+					local db = ns.GetDB()
+					self:SetChecked(spell and db.cooldownReadyOnly[spell] or false)
+					if not spell then return end
+					local set = db.cooldownReadyEarly[spell]
+					if not self.early:HasFocus() then
+						self.early:SetText(set and tostring(set) or "")
+					end
+					local length = ns.CooldownLength(spell)
+					self.earlyText:SetText(set and "sec" or (length
+						and ("sec (empty: %d)"):format(math.floor(length * ns.READY_EARLY + 0.5))
+						or ("sec (empty: %d%%)"):format(ns.READY_EARLY * 100)))
+					local handled = Handled()
+					self:SetEnabled(handled)
+					local label = self.Text or self.text
+					if label then label:SetFontObject(handled and "GameFontHighlight" or "GameFontDisable") end
+					local ticked = db.cooldownReadyOnly[spell] and handled and true or false
+					local earlyOn = not db.cooldownEarlyOff[spell]
+					self.earlyCheck:SetChecked(earlyOn)
+					self.earlyCheck:SetEnabled(ticked)
+					local seconds = ticked and earlyOn
+					self.early:SetEnabled(seconds)
+					self.early:SetAlpha(seconds and 1 or 0.5)
+					self.earlyText:SetAlpha(seconds and 1 or 0.5)
 				end
 				spellChecks[i] = check
 			end
@@ -3855,14 +3945,25 @@ local function CreateCooldownPanel()
 			local text = check.Text or check.text
 			text:SetText(("|T%s:16|t %s%s"):format(okIcon and icon or 134400,
 				okName and name or ("Spell " .. id),
-				inManager[id] and "" or " |cff808080(not in the Cooldown Manager now)|r"))
+				inManager[id] and "" or " |cff808080(not in it now)|r"))
+			text:SetWidth(EARLY_X - 36)
+			text:SetJustifyH("LEFT")
+			text:SetWordWrap(false)
 			check:Show()
+			check.earlyCheck:Show()
+			check.early:Show()
+			check.earlyText:Show()
 		end
 		for i = #ids + 1, #spellChecks do
 			spellChecks[i].spellID = nil
 			spellChecks[i]:Hide()
+			spellChecks[i].earlyCheck:Hide()
+			spellChecks[i].early:Hide()
+			spellChecks[i].earlyText:Hide()
 		end
 		noSpells:SetShown(#ids == 0)
+		spellHeading:SetShown(#ids > 0)
+		earlyHeading:SetShown(#ids > 0)
 	end
 
 	local shown = PageShown(Refresh, content)

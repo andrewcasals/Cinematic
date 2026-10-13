@@ -259,6 +259,10 @@ local function AddFrame(frame, group)
 	if name and (ns.db.ignoredFrames[name] or leftAlone[name]) then
 		return false
 	end
+	-- (The Cooldown Manager page's master switch off: left alone.)
+	if group == "cooldowns" and not ns.db.handleCooldowns then
+		return false
+	end
 	seen[frame] = true
 	local entry = {
 		frame = frame, name = name, group = group, alpha = 1,
@@ -823,8 +827,9 @@ ns.COMBAT_SHOW = {
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
 	{ key = "swing", label = "Swing timer", default = true, retail = false,
 		frames = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
+	-- (handledBy: a master switch that, off, leaves its frames alone: its row greys out.)
 	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
-		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager" },
+		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager", handledBy = "handleCooldowns" },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
 	{ key = "mainbar", label = "Action bar 1", default = true,
@@ -1839,11 +1844,14 @@ end
 -- The Cooldown Manager page's "Only when ready in combat" spells
 -- (db.cooldownReadyOnly: spell ID -> true): out of fights, and in fights
 -- while it's recharging, a spell's icon fades out, the rest of its bar as
--- usual (the icon's place stays: it leaves a gap). Recharging: its swipe
+-- usual (the icon's place stays: it leaves a gap). It comes back a little
+-- before it's ready: db.cooldownReadyEarly[spell ID] seconds, or by default
+-- READY_EARLY of its cooldown (not at all with db.cooldownEarlyOff[spell ID]). Recharging: its swipe
 -- says so, when the game lets it be read; in fights WoW Forever keeps it
 -- secret, so then it goes by when you last cast the spell and how long its
 -- cooldown is. Not knowing (say, cast before a reload), it shows.
 local READY_FADE = 0.25 -- (sec: quicker than the CineMode fades, it's a cue)
+ns.READY_EARLY = 0.15 -- (of its cooldown)
 local lastCastOf = {} -- spell ID -> when you last cast it
 local cooldownLength = {} -- spell ID -> its cooldown (sec), last read off its swipe
 local iconSpell = setmetatable({}, { __mode = "k" }) -- icon -> its spell, last read (for when it's secret)
@@ -1859,7 +1867,7 @@ castWatcher:SetScript("OnEvent", function(_, _, _, _, spellID)
 	end
 end)
 
-local function CooldownLength(id)
+function ns.CooldownLength(id)
 	if cooldownLength[id] then
 		return cooldownLength[id]
 	end
@@ -1871,8 +1879,19 @@ local function CooldownLength(id)
 	end
 end
 
--- Whether an icon's spell is recharging: true, false, or nil when it can't tell.
-local function IconRecharging(icon, id, now)
+local CooldownLength = ns.CooldownLength
+
+-- How long before a spell's icon is ready it comes back (sec), or nil until its cooldown's known.
+local function ReadyEarly(id, length)
+	if ns.db.cooldownEarlyOff[id] then
+		return 0 -- (Show Early unticked: back once it's ready)
+	end
+	return ns.db.cooldownReadyEarly[id] or (length and length * ns.READY_EARLY)
+end
+
+-- How long until an icon's spell is ready (sec, 0 when it is), and its
+-- cooldown; nil when it can't tell.
+local function IconTimeLeft(icon, id, now)
 	local start, duration = SpellCooldown(id)
 	if not start then
 		EachCooldownPart(icon, 1, function(part, kind)
@@ -1882,16 +1901,24 @@ local function IconRecharging(icon, id, now)
 		end)
 	end
 	if start then
-		if duration > GCD then
-			cooldownLength[id] = duration
+		if not Recharging(start, duration, now) then
+			return 0, CooldownLength(id)
 		end
-		return Recharging(start, duration, now)
+		cooldownLength[id] = duration
+		return start + duration - now, duration
 	end
 	local cast, length = lastCastOf[id], CooldownLength(id)
 	if cast and length then
-		return now < cast + length
+		return math.max(0, cast + length - now), length
 	end
 	return nil
+end
+
+-- Whether a ticked spell's icon shows: in fights, once it's nearly ready (or
+-- when it can't tell).
+local function IconShows(icon, id, now)
+	local left, length = IconTimeLeft(icon, id, now)
+	return left == nil or left <= (ReadyEarly(id, length) or 0)
 end
 
 -- Calls visit(icon, spell) for each icon in the Cooldown Manager's spell bars.
@@ -1926,7 +1953,45 @@ function ns.CooldownManagerSpells()
 	return ids
 end
 
+-- Every icon faded here back to full.
+local function ReleaseReadyIcons()
+	wipe(readyTargets)
+	for icon in pairs(readyAlpha) do
+		if not IsForbidden(icon) then
+			icon:SetAlpha(1)
+		end
+		readyAlpha[icon] = nil
+	end
+end
+
+-- The Cooldown Manager page's master switch: off, its bars are let go (their
+-- own opacity back) and its icons left alone; on, they fade from now.
+function ns.SetHandleCooldowns(on)
+	ns.db.handleCooldowns = on
+	if on then
+		ns.BuildManagedList()
+		return
+	end
+	ReleaseReadyIcons()
+	for i = #ns.managed, 1, -1 do
+		local entry = ns.managed[i]
+		if entry.group == "cooldowns" then
+			RemoveFrame(entry.frame)
+		end
+	end
+end
+
+local cooldownsHandled = true
 local function UpdateReadyOnly(elapsed, now)
+	-- (Switched by a profile too: let go, or picked up again, once it changes.)
+	local handled = ns.db.handleCooldowns and true or false
+	if handled ~= cooldownsHandled then
+		cooldownsHandled = handled
+		ns.SetHandleCooldowns(handled)
+	end
+	if not handled then
+		return
+	end
 	if now - readyCheckedAt >= 0.1 then
 		readyCheckedAt = now
 		wipe(readyTargets)
@@ -1935,7 +2000,7 @@ local function UpdateReadyOnly(elapsed, now)
 			local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 			EachCooldownIcon(function(icon, id)
 				if list[id] then
-					readyTargets[icon] = (inCombat and IconRecharging(icon, id, now) ~= true) and 1 or 0
+					readyTargets[icon] = (inCombat and IconShows(icon, id, now)) and 1 or 0
 				end
 			end)
 		end
@@ -1980,12 +2045,14 @@ function ns.ReportCooldowns()
 					and ("%.1fs left of %.1fs"):format(math.max(0, start + duration - now), duration)
 					or "unreadable"))
 				if id and ns.db.cooldownReadyOnly[id] then
-					local recharging = IconRecharging(part, id, now)
+					local left, length = IconTimeLeft(part, id, now)
+					local early = ReadyEarly(id, length)
 					local cast = lastCastOf[id]
-					print(("    only when ready in combat: %s (last cast %s, cooldown %s)"):format(
-						recharging == nil and "can't tell, shown" or (recharging and "recharging" or "ready"),
+					print(("    only when ready in combat: %s, back %s early (last cast %s, cooldown %s)"):format(
+						left == nil and "can't tell, shown" or (left > 0 and ("%.0fs left"):format(left) or "ready"),
+						early and ("%.0fs"):format(early) or "?",
 						cast and ("%.0fs ago"):format(now - cast) or "not seen",
-						CooldownLength(id) and ("%.0fs"):format(CooldownLength(id)) or "unknown"))
+						length and ("%.0fs"):format(length) or "unknown"))
 				end
 			else
 				local start, duration = SwipeTimes(part)

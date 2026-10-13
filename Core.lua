@@ -464,6 +464,7 @@ for _, key in ipairs({ "plateCombatPvPEnemies", "plateCombatPvPFriends", "plateC
 end
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
+DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
 DEFAULTS.plateTarget = true
 -- And your party or raid members' plates (their pets' too), likewise.
 DEFAULTS.plateGroupMembers = true
@@ -1463,6 +1464,8 @@ function ns.EnsureTables()
 	ns.db.timePhaseStrength = ns.db.timePhaseStrength or {} -- "Night", "Dawn"... -> strength (0-1) of your own
 	ns.db.combatShow = ns.db.combatShow or {}
 	ns.db.cooldownReadyOnly = ns.db.cooldownReadyOnly or {} -- Cooldown Manager page: spell ID -> true
+	ns.db.cooldownReadyEarly = ns.db.cooldownReadyEarly or {} -- ...spell ID -> seconds early it comes back
+	ns.db.cooldownEarlyOff = ns.db.cooldownEarlyOff or {} -- ...spell ID -> true: Show Early unticked
 	ns.db.gamepadPressButtons = ns.db.gamepadPressButtons or {} -- Gamepad page: button -> reveals the bars
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode

@@ -26,7 +26,7 @@ local GLOBAL_KEYS = {
 local PROFILE_TABLES = {
 	"chatPeekTypes", "chatPeekChannelList", "combatShow", "cineShow", "targetShow", "enemyShow",
 	"friendlyShow", "bgShow", "worldShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
-	"hoverGroups", "cooldownReadyOnly",
+	"hoverGroups", "cooldownReadyOnly", "cooldownReadyEarly", "cooldownEarlyOff",
 }
 
 local DEFAULT_PROFILE = "Immersive"
