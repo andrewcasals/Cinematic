@@ -1041,7 +1041,29 @@ local function KindAlpha(unit)
 	return ns.plates.level
 end
 
+-- WoW Forever's personal resource bars are your own nameplate: it follows
+-- the Standard Frames page's row (its stand-in's fade, from Frames), not the
+-- Nameplates page's rows. (Retail's are a frame of their own.)
+local personalAlpha = 1
+local personalHeld = false -- (faded last time: put back to full once)
+
+local function PersonalPlate()
+	return C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("player")
+end
+
+function ns.SetPersonalPlateAlpha(alpha)
+	personalAlpha = alpha
+	local plate = PersonalPlate()
+	if plate and (alpha < 1 or personalHeld) then
+		ns.SetPlateAlpha(plate, alpha)
+	end
+	personalHeld = alpha < 1
+end
+
 local function PlateAlpha(unit, plate)
+	if plate and plate == PersonalPlate() then
+		return personalAlpha
+	end
 	local alpha = KindAlpha(unit)
 	if plate == targetFade.plate and not (unit and IsTarget(unit) and AlwaysShownTarget(unit)) then
 		return alpha -- a frame before the target fade catches up with a new target

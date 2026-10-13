@@ -20,6 +20,11 @@ local FRAME_GROUPS = {
 	},
 	sidebars = { "MultiBarLeft", "MultiBarRight" },
 	player = { "PlayerFrame", "PetFrame", "TotemFrame" },
+	-- The personal resource bars (health, power and class resources under
+	-- your character). Retail's is a frame placed in Edit Mode, which the
+	-- game only shows or hides, never its alpha; Forever's is your own
+	-- nameplate, so a stand-in fades for it (see below).
+	prd = { "PersonalResourceDisplayFrame", "CinematicPersonalResource" },
 	totems = {
 		"MultiCastActionBarFrame", "MultiCastSummonSpellButton", "MultiCastRecallSpellButton",
 		"MultiCastFlyoutFrame", "MultiCastSlotButton1", "MultiCastSlotButton2",
@@ -61,6 +66,15 @@ local FRAME_GROUPS = {
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
 	},
 }
+
+-- Forever's personal resource bars are your own nameplate, which comes and
+-- goes as the game likes: this stand-in fades with the row instead, and the
+-- plate takes its alpha (ns.SetPersonalPlateAlpha, Effects). (Clients with
+-- no personal resource display have no setting for it.)
+local personalStandIn
+if not ns.isRetail and GetCVar("nameplateShowSelf") ~= nil then
+	personalStandIn = CreateFrame("Frame", "CinematicPersonalResource", UIParent)
+end
 
 -- The queue eye (dungeon finder, battlegrounds): Forever pins it to the
 -- minimap, retail puts it beside the micro menu, so it goes with either.
@@ -796,6 +810,8 @@ end
 -- in combat (db.combatShow[key], missing = the default here).
 ns.COMBAT_SHOW = {
 	{ key = "player", label = "Player portrait (and pet)", default = true, frames = { "PlayerFrame", "PetFrame" } },
+	{ key = "prd", label = "Personal resource bars", default = true,
+		frames = { "PersonalResourceDisplayFrame", "CinematicPersonalResource" } },
 	{ key = "target", label = "Target", default = true, frames = { "TargetFrame" } },
 	{ key = "tot", label = "Target of target", default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = "Focus", default = true, frames = { "FocusFrame" } },
@@ -902,7 +918,7 @@ end
 -- bar with action bar 1, the minimap's clock with the minimap...); an
 -- addon's or added frame's row is its fade group ("addon:<key>", "extra:<name>").
 local HOVER_ROW_BY_GROUP = {
-	bars = "mainbar", sidebars = "right1", player = "player", totems = "totems", target = "target",
+	bars = "mainbar", sidebars = "right1", player = "player", prd = "prd", totems = "totems", target = "target",
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
@@ -939,7 +955,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 		"pet", "stance", "totems", "micro", "xp", "extra" } },
 	{ name = "Action bars 6-8", members = { "bar6", "bar7", "bar8" } },
 	{ name = "Side bars", members = { "right1", "right2" } },
-	{ name = "Player", members = { "player", "totemtimers" } },
+	{ name = "Player", members = { "player", "prd", "totemtimers" } },
 	{ name = "Target and focus", members = { "target", "tot", "focus" } },
 	{ name = "Minimap", members = { "minimap" }, triggers = { ping = true, tracking = true } },
 	{ name = "Buffs", members = { "buffs" }, triggers = { aura = true } },
@@ -996,7 +1012,7 @@ end
 local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
-	player = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
+	player = true, prd = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
 	gamepadbars = true, gamepadreticle = true,
 }
@@ -1058,8 +1074,8 @@ local function IsListOn(list, key, defaults)
 	return on
 end
 
--- Standard Frames page's CineMode column: ticked, a row's frames stay shown all through CineMode.
--- Some rows' CineMode tick is an option elsewhere too (the same setting).
+-- Standard Frames page's Always column (cineShow): ticked, a row's frames stay shown all through CineMode.
+-- Some rows' Always tick is an option elsewhere too (the same setting).
 ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap" }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
@@ -1075,6 +1091,34 @@ end
 function ns.IsEnemyShowOn(key) return IsListOn("enemyShow", key, ENEMY_SHOW_DEFAULT) end
 function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SHOW_DEFAULT) end
 
+-- The frames pages' place columns, after the others: ticked, a row's frames
+-- stay shown all through CineMode there, in fights and out, as the Always
+-- column does everywhere. Grouped isn't a place: a party or raid, anywhere.
+-- Places as the Nameplates page has them (bar its PvP flagged column, which
+-- goes with the open world here). All unticked to start with.
+ns.PLACE_SHOW = {
+	{ list = "bgShow", label = "BGs & Arenas", tip = "Show all through CineMode in battlegrounds and arenas." },
+	{ list = "worldShow", label = "Open World",
+		tip = "Show all through CineMode everywhere else, cities and inns included." },
+	{ list = "groupShow", label = "Grouped",
+		tip = "Show all through CineMode while you're in a party or raid, wherever you are." },
+	{ list = "instanceShow", label = "Instances",
+		tip = "Show all through CineMode in dungeons, scenarios and raids." },
+}
+local NO_DEFAULTS = {}
+function ns.IsPlaceShowOn(list, key) return IsListOn(list, key, NO_DEFAULTS) end
+
+-- The place columns that apply where you are now.
+local function PlaceListsHere()
+	local place = ns.GetPlaceType()
+	local lists = { (place == "pvp" and "bgShow")
+		or ((place == "dungeon" or place == "raid") and "instanceShow") or "worldShow" }
+	if IsInGroup() then
+		lists[2] = "groupShow"
+	end
+	return lists
+end
+
 -- Frame names to show right now: only while staying cinematic and fighting
 -- (in combat, or with an enemy targeted). Also returns whether the player is
 -- actually in combat, since the fast fade-in only applies then.
@@ -1087,7 +1131,7 @@ end
 -- applies: In combat (while staying cinematic), Tar Enemy (out of combat with
 -- a living enemy targeted) or Tar Friendly (anything else targeted: friends,
 -- NPCs, dead enemies).
--- Rows with CineMode ticked are always in it: they don't fade in CineMode at all.
+-- Rows with Always ticked are always in it: they don't fade in CineMode at all.
 local function GetCombatShownFrames()
 	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 	local isOn
@@ -1102,12 +1146,22 @@ local function GetCombatShownFrames()
 			isOn = ns.IsFriendlyShowOn
 		end
 	end
+	-- (And the rows ticked for where you are.)
+	local placeLists = PlaceListsHere()
+	local function KeptHere(key)
+		for _, list in ipairs(placeLists) do
+			if IsListOn(list, key, NO_DEFAULTS) then
+				return true
+			end
+		end
+		return false
+	end
 	local shown = {}
 	-- Rows for gamepad mode only, and the ones they stand in for then.
 	local gamepad = ns.IsGamePadOn()
 	for _, item in ipairs(ns.COMBAT_SHOW) do
 		local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
-		if applies and (ns.IsCineShowOn(item.key) or (isOn and isOn(item.key))) then
+		if applies and (ns.IsCineShowOn(item.key) or KeptHere(item.key) or (isOn and isOn(item.key))) then
 			for _, name in ipairs(item.frames or {}) do
 				shown[name] = true
 			end
@@ -1117,11 +1171,10 @@ local function GetCombatShownFrames()
 		end
 	end
 	-- Added frames, by their rows on the 3rd Party Frames page.
-	if isOn then
-		for name in pairs(ns.db.extraFrames) do
-			if isOn("extra:" .. name) then
-				shown["group:extra:" .. name] = true
-			end
+	for name in pairs(ns.db.extraFrames) do
+		local key = "extra:" .. name
+		if KeptHere(key) or (isOn and isOn(key)) then
+			shown["group:" .. key] = true
 		end
 	end
 	return shown
@@ -2185,6 +2238,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 				duration = deathFade and DEATH_FADE_TIME or GroupFadeTime(entry.group, false)
 			end
 			ns.SetEntryAlpha(entry, ns.Approach(entry.alpha, target, elapsed, duration))
+		end
+		if entry.frame == personalStandIn then
+			ns.SetPersonalPlateAlpha(entry.alpha)
 		end
 	end
 end

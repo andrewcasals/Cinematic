@@ -25,7 +25,8 @@ local GLOBAL_KEYS = {
 -- see EnsureTables in Core.lua). Missing from a profile: emptied, which means defaults.
 local PROFILE_TABLES = {
 	"chatPeekTypes", "chatPeekChannelList", "combatShow", "cineShow", "targetShow", "enemyShow",
-	"friendlyShow", "addonFrames", "gamepadPressButtons", "hoverGroups",
+	"friendlyShow", "bgShow", "worldShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
+	"hoverGroups",
 }
 
 local DEFAULT_PROFILE = "Immersive"
@@ -56,7 +57,7 @@ end
 
 -- A Standard Frames column as a list: every row given true (in on) or false.
 local STANDARD_ROWS = {
-	"player", "target", "tot", "focus", "minimap", "quests", "buffs", "swing", "cooldowns", "mainbar", "art",
+	"player", "prd", "target", "tot", "focus", "minimap", "quests", "buffs", "swing", "cooldowns", "mainbar", "art",
 	"bottomleft", "bottomright", "right1", "right2", "bar6", "bar7", "bar8", "pet", "stance", "totems",
 	"micro", "xp",
 }
@@ -88,9 +89,9 @@ ns.BUILTIN_PROFILES = {
 		apply = function(set)
 			-- The Standard Frames page's columns.
 			set("cineShow", Column({}))
-			set("combatShow", Column({ "player", "target", "tot", "focus", "minimap", "buffs", "swing",
+			set("combatShow", Column({ "player", "prd", "target", "tot", "focus", "minimap", "buffs", "swing",
 				"cooldowns", "pet", "stance", "totems" }))
-			set("enemyShow", Column({ "player", "target", "tot", "focus", "buffs", "pet", "stance", "totems" }))
+			set("enemyShow", Column({ "player", "prd", "target", "tot", "focus", "buffs", "pet", "stance", "totems" }))
 			set("friendlyShow", Column({ "target", "tot" }))
 			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
 			set("cooldownWhileRecharging", true)
@@ -165,10 +166,10 @@ ns.BUILTIN_PROFILES = {
 			-- Fights bring up only your target and its target: no portrait,
 			-- bars, buffs, minimap or swing timer. (Rows not listed keep the
 			-- defaults.)
-			set("combatShow", { tot = true, minimap = false, buffs = false, swing = false, mainbar = false,
+			set("combatShow", { tot = true, prd = false, minimap = false, buffs = false, swing = false, mainbar = false,
 				art = false, bottomleft = false, bottomright = false, pet = false, stance = false, totems = false,
 				micro = false, xp = false, focus = false })
-			set("enemyShow", { target = true, tot = true, player = false, focus = false, buffs = false,
+			set("enemyShow", { target = true, tot = true, player = false, prd = false, focus = false, buffs = false,
 				mainbar = false, art = false, bottomleft = false, bottomright = false, pet = false, stance = false,
 				totems = false, micro = false, xp = false })
 			set("friendlyShow", { target = true, tot = true })

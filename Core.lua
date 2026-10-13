@@ -1465,6 +1465,10 @@ function ns.EnsureTables()
 	ns.db.gamepadPressButtons = ns.db.gamepadPressButtons or {} -- Gamepad page: button -> reveals the bars
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode
+	-- The frames pages' place columns (ns.PLACE_SHOW): row -> true, shown all through CineMode there.
+	for _, place in ipairs(ns.PLACE_SHOW) do
+		ns.db[place.list] = ns.db[place.list] or {}
+	end
 	ns.db.targetShow = ns.db.targetShow or {}
 	-- The target list used to cover friend and foe alike; both new lists start from it.
 	local function copy(source)

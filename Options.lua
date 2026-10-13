@@ -2804,32 +2804,54 @@ local function CreateAudioPanel()
 	RegisterSubpage(canvas, "Audio")
 end
 
+-- The frames tables (Standard Frames, Gamepad, 3rd Party Frames): the
+-- name, then a column per situation ({ heading, isOn, list, needs "stay
+-- cinematic in combat", tip }): Always, the fights and targets, then the
+-- places (ns.PLACE_SHOW). Narrow columns, so all eight fit beside the
+-- scrollbar: a heading of two words or more takes two lines, the last lines level.
+local FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, FRAME_HEADING_HEIGHT = 160, 52, 24
+local FRAME_COLUMNS = {
+	{ "Always", ns.IsCineShowOn, "cineShow", false },
+	{ "In combat", ns.IsCombatShowOn, "combatShow", true },
+	{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
+	{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
+}
+for _, place in ipairs(ns.PLACE_SHOW) do
+	FRAME_COLUMNS[#FRAME_COLUMNS + 1] = {
+		place.label, function(key) return ns.IsPlaceShowOn(place.list, key) end, place.list, false, place.tip,
+	}
+end
+
+local function FrameHeading(parent, text)
+	local heading = Label(parent, "GameFontNormalSmall", (text:gsub("^(.*) ", "%1\n")))
+	heading:SetSize(FRAME_COLUMN_WIDTH, FRAME_HEADING_HEIGHT)
+	heading:SetJustifyH("CENTER")
+	heading:SetJustifyV("BOTTOM")
+	return heading
+end
+
 -- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
 -- items), a column per situation. Used by the Gamepad page too.
 local function ShowTable(content, anchor, rows)
 	-- One table: a row per frame, a column per situation.
-	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 100, 24
-	local COLUMNS = {
-		{ "CineMode", ns.IsCineShowOn, "cineShow", false },
-		{ "In combat", ns.IsCombatShowOn, "combatShow", true },
-		{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
-		{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
-	}
+	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, 24
+	local COLUMNS = FRAME_COLUMNS
 	local columnTop = CreateFrame("Frame", nil, content)
 	columnTop:SetSize(1, 1)
-	columnTop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -20)
+	columnTop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
 	for c, column in ipairs(COLUMNS) do
-		local heading = Label(content, "GameFontNormalSmall", column[1])
-		heading:SetWidth(COLUMN_WIDTH)
-		heading:SetJustifyH("CENTER")
-		heading:SetPoint("TOPLEFT", columnTop, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+		FrameHeading(content, column[1]):SetPoint("TOPLEFT", columnTop, "TOPLEFT",
+			LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
 	end
 
 	local lastLabel = columnTop
 	for r, item in ipairs(rows) do
-		local y = -16 - (r - 1) * ROW_HEIGHT
+		local y = -FRAME_HEADING_HEIGHT - 4 - (r - 1) * ROW_HEIGHT
 		local rowLabel = Label(content, "GameFontHighlight", item.label)
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
+		rowLabel:SetWidth(LABEL_WIDTH - 4)
+		rowLabel:SetJustifyH("LEFT")
+		rowLabel:SetWordWrap(false)
 		-- An asterisk, with a tip, on rows that have a page of their own.
 		if item.morePage then
 			rowLabel:SetText(item.label .. " |cffffd100*|r")
@@ -2845,7 +2867,8 @@ local function ShowTable(content, anchor, rows)
 		for c, column in ipairs(COLUMNS) do
 			local isOn, tableKey, needsStay = column[2], column[3], column[4]
 			local check = Check(content, tableKey, "", c == 1 and
-				"Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)" or nil, function(value)
+				"Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)"
+				or column[5], function(value)
 				local setting = c == 1 and ns.CINE_SHOW_SETTING[item.key]
 				if setting then
 					ns.GetDB()[setting] = value
@@ -2877,8 +2900,9 @@ local function CreateCombatPanel()
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		"Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
-		"CineMode shows it the whole time, the others only while you fight or have something " ..
-		"targeted. Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
+		"Always shows it the whole time, the next three only while you fight or have something " ..
+		"targeted, and the places the whole time while you're there (Grouped: in a party or raid). " ..
+		"Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
 		"frames are on the 3rd Party Frames page.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
@@ -2992,8 +3016,8 @@ local function CreateGamepadPanel()
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		"The frames gamepad mode adds (Options, Controls, Gamepad): its action bars, the button hints " ..
 		"and the reticle (the dot you aim with). As on the Standard Frames page, " ..
-		"each is hidden in CineMode unless ticked: CineMode shows it the whole time, the others only " ..
-		"while you fight or have something targeted. Rows also on the Standard Frames page (the " ..
+		"each is hidden in CineMode unless ticked: Always shows it the whole time, the next three only " ..
+		"while you fight or have something targeted, and the places while you're there. Rows also on the Standard Frames page (the " ..
 		"experience bars) follow this page in gamepad mode, and that one otherwise.")
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
@@ -3478,15 +3502,13 @@ end
 local RefreshExtras
 
 -- The 3rd Party Frames page's columns, for the supported addons and the
--- custom frames alike: the name, then CineMode and the Standard Frames
+-- custom frames alike: the name, then Always and the Standard Frames
 -- page's columns ({ heading, isOn, list, needs "stay cinematic in combat" }).
-local THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_COLUMN_WIDTH = 220, 100
-local THIRD_PARTY_COLUMNS = {
-	{ "CineMode" },
-	{ "In combat", ns.IsCombatShowOn, "combatShow", true },
-	{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
-	{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
-}
+local THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_COLUMN_WIDTH = FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH
+local THIRD_PARTY_COLUMNS = { { "Always" } } -- (its own setting: the frames left alone)
+for c = 2, #FRAME_COLUMNS do
+	THIRD_PARTY_COLUMNS[c] = FRAME_COLUMNS[c]
+end
 local function ThirdPartyColumnX(c)
 	return THIRD_PARTY_LABEL_WIDTH + (c - 1) * THIRD_PARTY_COLUMN_WIDTH + (THIRD_PARTY_COLUMN_WIDTH - 26) / 2
 end
@@ -3497,13 +3519,12 @@ local function GetExtraHeadings()
 		return extrasPanel.headings
 	end
 	local headings = CreateFrame("Frame", nil, extrasPanel)
-	headings:SetSize(THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH, 16)
+	headings:SetSize(THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH,
+		FRAME_HEADING_HEIGHT)
 	headings:SetPoint("TOPLEFT", extrasPanel.addMode, "BOTTOMLEFT", 0, -10)
 	for c, column in ipairs(THIRD_PARTY_COLUMNS) do
-		local heading = Label(headings, "GameFontNormalSmall", column[1])
-		heading:SetWidth(THIRD_PARTY_COLUMN_WIDTH)
-		heading:SetJustifyH("CENTER")
-		heading:SetPoint("TOPLEFT", THIRD_PARTY_LABEL_WIDTH + (c - 1) * THIRD_PARTY_COLUMN_WIDTH, 0)
+		FrameHeading(headings, column[1]):SetPoint("TOPLEFT",
+			THIRD_PARTY_LABEL_WIDTH + (c - 1) * THIRD_PARTY_COLUMN_WIDTH, 0)
 	end
 	extrasPanel.headings = headings
 	return headings
@@ -3553,7 +3574,7 @@ local function GetExtraRow(index)
 			end
 		else
 			local isOn, list, needsStay = column[2], column[3], column[4]
-			check = Check(row, nil, "", nil, function(value)
+			check = Check(row, nil, "", column[5], function(value)
 				ns.GetDB()[list]["extra:" .. row.item.name] = value
 			end)
 			check.Refresh = function(self)
@@ -3576,7 +3597,7 @@ RefreshExtras = function()
 	-- Frames add mode has picked so far, at the top while it's on.
 	for _, name in ipairs(ns.GetPickedFrames()) do items[#items + 1] = { name = name, picked = true } end
 	for _, name in ipairs(faded) do items[#items + 1] = { name = name, added = true } end
-	-- Kept up (/cine keep, or CineMode ticked): added ones and built-in ones.
+	-- Kept up (/cine keep, or Always ticked): added ones and built-in ones.
 	for _, name in ipairs(ignored) do
 		items[#items + 1] = { name = name, kept = true, added = db.extraFrames[name] or false }
 	end
@@ -3904,8 +3925,9 @@ local function CreateExtrasPanel()
 	local stack = Stack(title, "label")
 	stack:Header(content, "Supported addons")
 	stack:Note(content, "These addons' frames are hidden in CineMode unless ticked, like the game's " ..
-		"frames on the Standard Frames page. Tick CineMode to leave an addon's frames alone (shown the " ..
-		"whole time); the other columns show them only while you fight or have something targeted.", 560)
+		"frames on the Standard Frames page. Tick Always to leave an addon's frames alone (shown the " ..
+		"whole time); the next three show them only while you fight or have something targeted, and " ..
+		"the places while you're there.", 560)
 
 	-- The addons, laid out afresh each time the page opens (most load after
 	-- this one, so whether they're loaded isn't known when it's built): those
@@ -3920,10 +3942,7 @@ local function CreateExtrasPanel()
 	local COLUMNS = THIRD_PARTY_COLUMNS
 	local headings = {}
 	for c, column in ipairs(COLUMNS) do
-		local heading = Label(box, "GameFontNormalSmall", column[1])
-		heading:SetWidth(COLUMN_WIDTH)
-		heading:SetJustifyH("CENTER")
-		headings[c] = heading
+		headings[c] = FrameHeading(box, column[1])
 	end
 
 	-- A row per installed addon: CineMode (ticked: left alone, so shown), then
@@ -3955,7 +3974,7 @@ local function CreateExtrasPanel()
 				end
 			else
 				local isOn, tableKey, needsStay = column[2], column[3], column[4]
-				check = Check(content, tableKey, "", nil, function(value)
+				check = Check(content, tableKey, "", column[5], function(value)
 					ns.GetDB()[tableKey][item] = value
 				end)
 				RecordRow(content, tableKey, item)
@@ -4088,7 +4107,7 @@ local function CreateExtrasPanel()
 			for c, heading in ipairs(headings) do
 				Place(heading, LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
 			end
-			y = 16
+			y = FRAME_HEADING_HEIGHT + 4
 		else
 			for _, heading in ipairs(headings) do heading:Hide() end
 		end
