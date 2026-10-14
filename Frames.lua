@@ -2663,11 +2663,6 @@ function ns.UpdateFrames(cinematic, elapsed)
 				hovered[member] = true
 			end
 		end
-		-- Healers hover the raid frames all day: the role icons and names can
-		-- stay hidden then (Standard Frames page), whatever group they're in.
-		if ns.db.raidPartsNoHover then
-			hovered.raidroles, hovered.raidnames, hovered.raidpetnames = nil, nil, nil
-		end
 	end
 	local events = tickTables.events
 	events.chat, events.whisper, events.typing = dockPeek, whisperUnread, typing

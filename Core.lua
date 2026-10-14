@@ -1771,6 +1771,12 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		ns.newInstall = CinematicDB == nil -- (for the welcome window: Welcome.lua)
 		CinematicDB = CinematicDB or {}
 		ns.db = CinematicDB
+		-- Floating world text (the XP gained over you, and damage numbers with it:
+		-- one font) drawn in a font whose letters are specks too small to see.
+		-- The game keeps the font it first loaded, so changes need a game restart.
+		if ns.db.hideWorldText then
+			DAMAGE_TEXT_FONT = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Fonts\\Blank.ttf"
+		end
 		-- Older settings: one vertical range for up and down, and a separate
 		-- narrow behind mode (now behind mode with a 45 degree swing).
 		local function MigrateProfile(prefix)
@@ -1785,12 +1791,6 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		MigrateProfile("taxiOrbit")
 		-- Rotation settings used to be shared; start the standing-still profile
 		-- from the player's existing (flight) values.
-		-- Floating world text (the XP gained over you, and damage numbers with it:
-		-- one font) drawn in a font whose letters are specks too small to see.
-		-- The game keeps the font it first loaded, so changes need a game restart.
-		if ns.db.hideWorldText then
-			DAMAGE_TEXT_FONT = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Fonts\\Blank.ttf"
-		end
 		for _, key in ipairs(ORBIT_PROFILE_KEYS) do
 			if ns.db["idleOrbit" .. key] == nil then
 				ns.db["idleOrbit" .. key] = ns.db["taxiOrbit" .. key]
