@@ -1169,6 +1169,20 @@ do
 		logoutAt = nil
 	end
 
+	-- The first of the events given (in order; nil or false for ones not on)
+	-- that has a camera, and its camera. (Passed as arguments, not a list:
+	-- a table made each call was garbage.)
+	local function FirstWithCamera(...)
+		for i = 1, select("#", ...) do
+			local key = select(i, ...)
+			local camera = key and EventCamera(key)
+			if camera then
+				return key, camera
+			end
+		end
+		return nil
+	end
+
 	function CurrentEvent()
 		if not ns.db or UnitOnTaxi("player") then
 			return nil
@@ -1221,14 +1235,8 @@ do
 		-- standing still last.
 		local departing = (emoteEvent == "Hearth" or emoteEvent == "Teleport") and emoteEvent
 		local stoodStill = ns.stillSince ~= nil and GetTime() - ns.stillSince >= ns.db.idleOrbitDelay
-		for _, key in ipairs({ departing, LoggingOut() and "Logout", afk and "AFK", byFire and "Campfire",
-			emoteEvent or false, weapon and "Weapon", campfire and "Campfire", stoodStill and "Still" }) do
-			local camera = key and EventCamera(key)
-			if camera then
-				return key, camera
-			end
-		end
-		return nil
+		return FirstWithCamera(departing, LoggingOut() and "Logout", afk and "AFK", byFire and "Campfire",
+			emoteEvent, weapon and "Weapon", campfire and "Campfire", stoodStill and "Still")
 	end
 end
 

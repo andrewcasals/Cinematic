@@ -28,9 +28,8 @@ local function IsSecret(value)
 	return issecretvalue and issecretvalue(value) or false
 end
 
--- Spell IDs of tracking that's active right now, as a set.
-local function GetActiveTrackingSpells()
-	local active = {}
+-- Spell IDs of tracking that's active right now, as a set (into active).
+local function FillActiveTrackingSpells(active)
 	-- Auras (tracking spells show as buffs)
 	for i = 1, 40 do
 		local name, spellID
@@ -40,8 +39,8 @@ local function GetActiveTrackingSpells()
 			if not ok or IsSecret(aura) or not aura then break end
 			name, spellID = aura.name, aura.spellId
 		elseif UnitBuff then
-			local values = { UnitBuff("player", i) }
-			name, spellID = values[1], values[10]
+			local _
+			name, _, _, _, _, _, _, _, _, spellID = UnitBuff("player", i)
 		end
 		if IsSecret(name) or not name then break end
 		if not IsSecret(spellID) and spellID then active[spellID] = true end
@@ -58,6 +57,10 @@ local function GetActiveTrackingSpells()
 	return active
 end
 
+local function GetActiveTrackingSpells()
+	return FillActiveTrackingSpells({})
+end
+
 local function GetActiveTrackingIcon()
 	local icon = GetTrackingTexture and GetTrackingTexture()
 	if type(icon) == "string" then
@@ -66,10 +69,31 @@ local function GetActiveTrackingIcon()
 	return icon
 end
 
+-- The active tracking, read afresh only once the player's auras or tracking
+-- have changed: reading every aura (a table each) twice a second was most of
+-- the addon's garbage in cities.
+local activeSpells, activeIcon, trackingChanged = {}, nil, true
+local changeWatcher = CreateFrame("Frame")
+if not pcall(changeWatcher.RegisterUnitEvent, changeWatcher, "UNIT_AURA", "player") then
+	changeWatcher:RegisterEvent("UNIT_AURA")
+end
+for _, event in ipairs({ "MINIMAP_UPDATE_TRACKING", "PLAYER_ENTERING_WORLD" }) do
+	pcall(changeWatcher.RegisterEvent, changeWatcher, event)
+end
+changeWatcher:SetScript("OnEvent", function(_, event, unit)
+	if event ~= "UNIT_AURA" or unit == "player" then
+		trackingChanged = true
+	end
+end)
+
 local function IsTrackingSomethingWanted()
 	local db = ns.GetDB()
-	local active = GetActiveTrackingSpells()
-	local icon = GetActiveTrackingIcon()
+	if trackingChanged then
+		trackingChanged = false
+		FillActiveTrackingSpells(wipe(activeSpells))
+		activeIcon = GetActiveTrackingIcon()
+	end
+	local active, icon = activeSpells, activeIcon
 	for _, kind in ipairs(TRACKING) do
 		if db[kind.option] then
 			for _, spellID in ipairs(kind.spells) do

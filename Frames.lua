@@ -301,6 +301,7 @@ local function ReapplyIfChanged(entry)
 		ApplyAlpha(entry)
 	end
 end
+ReapplyIfChanged = ns.Profiled("ReapplyIfChanged", ReapplyIfChanged)
 
 local function SyncOwnAlpha(entry)
 	if TakeOwnAlpha(entry) then
@@ -989,6 +990,7 @@ function ns.SetEntryAlpha(entry, alpha)
 	end
 	ApplyAlpha(entry)
 end
+ns.SetEntryAlpha = ns.Profiled("SetEntryAlpha", ns.SetEntryAlpha)
 
 local function IsCursorInSavedRect(entry)
 	local left, bottom, width, height = unpack(entry.savedRect)
@@ -1000,18 +1002,29 @@ local function IsCursorInSavedRect(entry)
 	return x >= left and x <= left + width and y >= bottom and y <= bottom + height
 end
 
--- The UI element the mouse is actually over (nil over the 3D world).
-local function MouseFocus()
-	local focus
-	if GetMouseFoci then
-		focus = GetMouseFoci()[1]
-	elseif GetMouseFocus then
-		focus = GetMouseFocus()
+-- The UI element the mouse is actually over (nil over the 3D world). Asked
+-- for every faded frame each tick, so worked out once a frame (GetMouseFoci
+-- makes a table each call).
+local MouseFocus
+do
+	local focusAt, focus = -1, nil
+	function MouseFocus()
+		local now = GetTime()
+		if focusAt ~= now then
+			focusAt = now
+			if GetMouseFoci then
+				focus = GetMouseFoci()[1]
+			elseif GetMouseFocus then
+				focus = GetMouseFocus()
+			else
+				focus = nil
+			end
+			if focus == WorldFrame then
+				focus = nil
+			end
+		end
+		return focus
 	end
-	if focus == WorldFrame then
-		return nil
-	end
-	return focus
 end
 
 local function IsInside(frame, ancestor)
@@ -1058,6 +1071,11 @@ function ns.IsEntryHovered(entry)
 	if entry.group == "buffs" then
 		return entry.frame:IsVisible() and IsNearIcon(BUFF_HOVER_DEPTH,
 			ns.db.buffHoverPadX or 20, ns.db.buffHoverPadY or 20, entry.frame:GetChildren())
+	end
+	-- (The mouse over the 3D world, as it mostly is in CineMode: none of the
+	-- rest can be hovered, so no need to ask each frame.)
+	if entry.group ~= "chat" and not MouseFocus() then
+		return false
 	end
 	if not (entry.frame:IsVisible() and entry.frame:IsMouseOver()) then
 		return false
@@ -1486,6 +1504,14 @@ local tickTables = {
 	combatShown = {}, placeLists = {},
 }
 
+-- "group:<group>", a group's key in the shown lists, made once for each
+-- group: built every tick for each faded frame's group, it was garbage.
+local GROUP_KEY = setmetatable({}, { __index = function(keys, group)
+	local key = "group:" .. group
+	keys[group] = key
+	return key
+end })
+
 local function PlaceListsHere()
 	local place = ns.GetPlaceType()
 	local lists = wipe(tickTables.placeLists)
@@ -1516,26 +1542,12 @@ local lastCombatAt = -math.huge
 -- Rows with Always ticked are always in it: they don't fade in CineMode at all.
 -- Rows with a Calm Timer option of their own on their page: their In combat
 -- tick lasts until the Calm Timer runs out even with combatShowCalm off.
-local CALM_ROW_SETTING = { quests = "questCombatCalm" }
-local function GetCombatShownFrames()
-	local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
-	local calm = not fighting and GetTime() - lastCombatAt < (ns.db.calmTime or 0)
-	local inCombat = fighting or (calm and ns.db.combatShowCalm)
-	local isOn
-	if inCombat then
-		if ns.db.stayInCombat then
-			isOn = ns.IsCombatShowOn
-		end
-	elseif HasAnyTarget() then
-		if ns.IsEnemyUnit("target") and not ns.Flag(UnitIsDeadOrGhost("target")) then
-			isOn = ns.IsEnemyShowOn
-		else
-			isOn = ns.IsFriendlyShowOn
-		end
-	end
-	-- (And the rows ticked for where you are.)
-	local placeLists = PlaceListsHere()
-	local function KeptHere(key)
+local GetCombatShownFrames
+do
+	local CALM_ROW_SETTING = { quests = "questCombatCalm" }
+	-- Whether a row is ticked in one of the place columns that apply here.
+	-- (Kept out of GetCombatShownFrames: a closure made each tick was garbage.)
+	local function KeptHere(placeLists, key)
 		for _, list in ipairs(placeLists) do
 			if IsListOn(list, key, PlaceDefaults(list)) then
 				return true
@@ -1543,30 +1555,49 @@ local function GetCombatShownFrames()
 		end
 		return false
 	end
-	local shown = wipe(tickTables.combatShown)
-	-- Rows for gamepad mode only, and the ones they stand in for then.
-	local gamepad = ns.IsGamePadOn()
-	for _, item in ipairs(ns.COMBAT_SHOW) do
-		local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
-		local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
-			and ns.IsCombatShowOn(item.key)
-		if applies and (ns.IsCineShowOn(item.key) or KeptHere(item.key) or (isOn and isOn(item.key)) or calmRow) then
-			for _, name in ipairs(item.frames or {}) do
-				shown[name] = true
+	function GetCombatShownFrames()
+		local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+		local calm = not fighting and GetTime() - lastCombatAt < (ns.db.calmTime or 0)
+		local inCombat = fighting or (calm and ns.db.combatShowCalm)
+		local isOn
+		if inCombat then
+			if ns.db.stayInCombat then
+				isOn = ns.IsCombatShowOn
 			end
-			for _, group in ipairs(item.groups or {}) do
-				shown["group:" .. group] = true
+		elseif HasAnyTarget() then
+			if ns.IsEnemyUnit("target") and not ns.Flag(UnitIsDeadOrGhost("target")) then
+				isOn = ns.IsEnemyShowOn
+			else
+				isOn = ns.IsFriendlyShowOn
 			end
 		end
-	end
-	-- Added frames, by their rows on the 3rd Party Frames page.
-	for name in pairs(ns.db.extraFrames) do
-		local key = "extra:" .. name
-		if KeptHere(key) or (isOn and isOn(key)) then
-			shown["group:" .. key] = true
+		-- (And the rows ticked for where you are.)
+		local placeLists = PlaceListsHere()
+		local shown = wipe(tickTables.combatShown)
+		-- Rows for gamepad mode only, and the ones they stand in for then.
+		local gamepad = ns.IsGamePadOn()
+		for _, item in ipairs(ns.COMBAT_SHOW) do
+			local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
+			local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
+				and ns.IsCombatShowOn(item.key)
+			if applies and (ns.IsCineShowOn(item.key) or KeptHere(placeLists, item.key) or (isOn and isOn(item.key)) or calmRow) then
+				for _, name in ipairs(item.frames or NO_DEFAULTS) do
+					shown[name] = true
+				end
+				for _, group in ipairs(item.groups or NO_DEFAULTS) do
+					shown[GROUP_KEY[group]] = true
+				end
+			end
 		end
+		-- Added frames, by their rows on the 3rd Party Frames page.
+		for name in pairs(ns.db.extraFrames) do
+			local key = "extra:" .. name
+			if KeptHere(placeLists, key) or (isOn and isOn(key)) then
+				shown[GROUP_KEY[key]] = true
+			end
+		end
+		return shown
 	end
-	return shown
 end
 GetCombatShownFrames = ns.Profiled("GetCombatShownFrames", GetCombatShownFrames)
 
@@ -2531,6 +2562,7 @@ local function UpdateReadyOnly(elapsed, now)
 		readyAlpha[icon] = alpha < 1 and alpha or nil
 	end
 end
+UpdateReadyOnly = ns.Profiled("UpdateReadyOnly", UpdateReadyOnly)
 
 -- /cine debug cooldowns: what the Cooldown Manager check sees.
 function ns.ReportCooldowns()
@@ -3030,7 +3062,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
 		and AnyCooldownRecharging(now)
 	for _, group in ipairs(hoverGroups) do
-		for key, on in pairs(group.triggers or {}) do
+		for key, on in pairs(group.triggers or NO_DEFAULTS) do
 			if on and events[key] then
 				for _, member in ipairs(group.members) do
 					triggered[member] = true
@@ -3068,7 +3100,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			or (durabilityUp and entry.group == "misc")
 			or triggered[entry.row]
 		local listShown = combatShown
-			and (entry.name and combatShown[entry.name] or combatShown["group:" .. entry.group])
+			and (entry.name and combatShown[entry.name] or combatShown[GROUP_KEY[entry.group]])
 		local fightingShown = listShown
 		if not fightingShown and PORTRAIT_FRAMES[entry.name] and cinematic
 			and portraitAllowed and IsPlayerRecovering() then
@@ -3087,7 +3119,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		local follows = followsRow[entry.frame]
 		if follows and cinematic and not hovered[follows] and not triggered[follows]
-			and not (combatShown and combatShown["group:" .. follows]) then
+			and not (combatShown and combatShown[GROUP_KEY[follows]]) then
 			target = 0
 		end
 		-- (/cine debug pad: why the gamepad bars come up, as they start to.)
