@@ -4441,7 +4441,8 @@ local function CreateTooltipPanel()
 		"shows them the rest of the time.")
 	onlyModes:SetPoint("TOPLEFT", throughout, "BOTTOMLEFT", 0, -2)
 	GreyUnless(onlyModes, function(db) return db.tooltipCineMode end)
-	local tooltipModes = onlyModes
+	-- In two columns of five, down the first then the second.
+	local tooltipModes, firstOfColumn, endOfFirst = onlyModes, nil, nil
 	for i, mode in ipairs({
 		{ "Flight", "On flights" },
 		{ "Idle", "AFK camera (standing still or AFK)" },
@@ -4456,13 +4457,23 @@ local function CreateTooltipPanel()
 	}) do
 		local hide = Check(content, "tooltipOff" .. mode[1], mode[2],
 			"Hides world tooltips while this camera mode is running.")
-		hide:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", i == 1 and 20 or 0, -2)
+		if i == 1 then
+			hide:SetPoint("TOPLEFT", onlyModes, "BOTTOMLEFT", 20, -2)
+			firstOfColumn = hide
+		elseif i == 6 then
+			hide:SetPoint("TOPLEFT", firstOfColumn, "TOPLEFT", 280, 0)
+		else
+			hide:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", 0, -2)
+		end
 		GreyUnless(hide, Cine(function(db) return not db.fadeTooltip end))
 		tooltipModes = hide
+		if i == 5 then
+			endOfFirst = hide -- (the page carries on under the first column)
+		end
 	end
 
 	local backLabel = Label(content, "GameFontNormalSmall", "Showing them again")
-	backLabel:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", -16, -14)
+	backLabel:SetPoint("TOPLEFT", endOfFirst, "BOTTOMLEFT", -16, -14)
 
 	local tooltipReveal = Check(content, "tooltipReveal", "After hovering",
 		"A hidden world tooltip shows once you've kept the mouse on the same player, NPC or " ..
