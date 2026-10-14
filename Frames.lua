@@ -1185,6 +1185,7 @@ ns.COMBAT_SHOW = {
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
 		"StatusTrackingBarManager",
 	} },
+	-- Always ticked to start with (CINE_SHOW_DEFAULT): it's what a quest or fight asks you to press.
 	{ key = "extra", label = L["Extra action and zone ability"], default = true, retail = true,
 		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
 	-- WoW Forever's gamepad mode, on the Gamepad page (page = "gamepad") rather
@@ -1432,7 +1433,7 @@ ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWa
 local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
-	raiddebuffs = true, raidthreat = true,
+	raiddebuffs = true, raidthreat = true, extra = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
