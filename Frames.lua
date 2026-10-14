@@ -256,6 +256,14 @@ local function ApplyAlpha(entry)
 	end
 end
 
+-- A faded frame's alpha put back if something (Blizzard code, say) changed it.
+local function ReapplyIfChanged(entry)
+	local alpha = entry.frame:GetAlpha()
+	if (issecretvalue and issecretvalue(alpha)) or math.abs(alpha - (entry.applied or -1)) > ALPHA_SLACK then
+		ApplyAlpha(entry)
+	end
+end
+
 local function SyncOwnAlpha(entry)
 	if TakeOwnAlpha(entry) then
 		ApplyAlpha(entry)
@@ -911,7 +919,14 @@ function ns.IsEntryHovered(entry)
 	if entry.group == "chat" then
 		return true
 	end
-	return IsInside(MouseFocus(), entry.frame)
+	local focus = MouseFocus()
+	-- Classic clients' raid frames sit inside the Raid Frame Manager: the
+	-- mouse on them isn't on the manager.
+	local raidFrames = _G.CompactRaidFrameContainer
+	if entry.group == "raidmanager" and raidFrames and IsInside(focus, raidFrames) then
+		return false
+	end
+	return IsInside(focus, entry.frame)
 end
 ns.IsEntryHovered = ns.Profiled("IsEntryHovered", ns.IsEntryHovered)
 
@@ -1113,7 +1128,9 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ name = "Side bars", members = { "right1", "right2" } },
 	{ name = "Player", members = { "player", "prd", "totemtimers" } },
 	{ name = "Target and focus", members = { "target", "tot", "focus" } },
-	{ name = "Raid frames", members = { "raidplayers", "raidpets", "raidmanager", "raidroles", "raidnames",
+	-- (Not the Raid Frame Manager: healers have the mouse on the raid frames
+	-- all the time, and the manager comes up only when it's hovered itself.)
+	{ name = "Raid frames", members = { "raidplayers", "raidpets", "raidroles", "raidnames",
 		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs" }, triggers = { roster = true } },
 	{ name = "Minimap", members = { "minimap" }, triggers = { ping = true, tracking = true } },
 	{ name = "Buffs", members = { "buffs" }, triggers = { aura = true } },
@@ -1285,10 +1302,18 @@ end
 function ns.IsPlaceShowOn(list, key) return IsListOn(list, key, PlaceDefaults(list)) end
 
 -- The place columns that apply where you are now.
+-- Tables UpdateFrames (and what it calls) fills afresh each tick, kept rather
+-- than made anew: making them 33 times a second was a lot of garbage.
+local tickTables = {
+	hovered = {}, triggered = {}, pinged = {}, mouseRows = {}, mouseGroups = {}, events = {},
+	combatShown = {}, placeLists = {},
+}
+
 local function PlaceListsHere()
 	local place = ns.GetPlaceType()
-	local lists = { (place == "pvp" and "bgShow")
-		or ((place == "dungeon" or place == "raid") and "instanceShow") or "worldShow" }
+	local lists = wipe(tickTables.placeLists)
+	lists[1] = (place == "pvp" and "bgShow")
+		or ((place == "dungeon" or place == "raid") and "instanceShow") or "worldShow"
 	if ns.InGroup() then
 		lists[2] = "groupShow"
 	end
@@ -1332,7 +1357,7 @@ local function GetCombatShownFrames()
 		end
 		return false
 	end
-	local shown = {}
+	local shown = wipe(tickTables.combatShown)
 	-- Rows for gamepad mode only, and the ones they stand in for then.
 	local gamepad = ns.IsGamePadOn()
 	for _, item in ipairs(ns.COMBAT_SHOW) do
@@ -2600,9 +2625,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- Mouseover groups: the rows the mouse is on (each held a while after it
 	-- leaves), and the events going on now, bring up every row in their groups.
 	local hoverGroups = ns.GetHoverGroups()
-	local hovered, triggered, pinged = {}, {}, {}
+	local hovered, triggered, pinged = wipe(tickTables.hovered), wipe(tickTables.triggered), wipe(tickTables.pinged)
 	if cinematic and ns.db.mouseover then
-		local mouseRows = {}
+		local mouseRows = wipe(tickTables.mouseRows)
 		for _, entry in ipairs(ns.managed) do
 			entry.row = entry.row or ns.HoverRowFor(entry)
 			if ns.IsEntryHovered(entry) then
@@ -2624,7 +2649,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			end
 		end
 		-- (Only groups a hovered row is in directly: groups sharing a row don't chain.)
-		local mouseGroups = {}
+		local mouseGroups = wipe(tickTables.mouseGroups)
 		for _, group in ipairs(hoverGroups) do
 			for _, key in ipairs(group.members) do
 				if hovered[key] then
@@ -2638,17 +2663,21 @@ function ns.UpdateFrames(cinematic, elapsed)
 				hovered[member] = true
 			end
 		end
+		-- Healers hover the raid frames all day: the role icons and names can
+		-- stay hidden then (Standard Frames page), whatever group they're in.
+		if ns.db.raidPartsNoHover then
+			hovered.raidroles, hovered.raidnames, hovered.raidpetnames = nil, nil, nil
+		end
 	end
-	local events = {
-		chat = dockPeek, whisper = whisperUnread, typing = typing,
-		aura = cinematic and (buffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone)),
-		ping = pingReveal,
-		tracking = ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused,
-		quest = questReveal, gamepad = padReveal, roster = rosterReveal,
-		cooldown = cinematic and ns.db.cooldownWhileRecharging
-			and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
-			and AnyCooldownRecharging(now),
-	}
+	local events = tickTables.events
+	events.chat, events.whisper, events.typing = dockPeek, whisperUnread, typing
+	events.aura = cinematic and (buffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone))
+	events.ping = pingReveal
+	events.tracking = ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused
+	events.quest, events.gamepad, events.roster = questReveal, padReveal, rosterReveal
+	events.cooldown = cinematic and ns.db.cooldownWhileRecharging
+		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
+		and AnyCooldownRecharging(now)
 	for _, group in ipairs(hoverGroups) do
 		for key, on in pairs(group.triggers or {}) do
 			if on and events[key] then
@@ -2720,6 +2749,13 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if typing and entry.group == "chat" and entry.alpha < 1 then
 			-- Pressing Enter shows the chat input (and its window) at once.
 			ns.SetEntryAlpha(entry, 1)
+		elseif target == 0 and entry.alpha == 0 and not entry.shrinkWhenFaded
+			and not LOOSE_PART_GROUPS[entry.group] and entry.frame ~= artStandIn then
+			-- Faded and staying so: put back only if something changed its alpha
+			-- (frames setting their own were seen to above).
+			if not entry.ownAlpha then
+				ReapplyIfChanged(entry)
+			end
 		-- Keep re-applying 0 while hidden in case Blizzard code resets the alpha;
 		-- once fully revealed, leave the frame alone.
 		elseif entry.alpha ~= target or target == 0 or entry.shrunk then
