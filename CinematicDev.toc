@@ -32,6 +32,7 @@ Support\Bartender4.lua
 Support\Plater.lua
 Frames.lua
 Chat.lua
+Bubbles.lua
 Effects.lua
 Camera.lua
 QuestCam.lua

@@ -365,6 +365,7 @@ local function ResetPage(content)
 	end
 	ns.letterboxDirty = true
 	if ns.RefreshTint then ns.RefreshTint() end
+	if ns.ApplyBubbles then ns.ApplyBubbles() end
 	Refresh()
 end
 
@@ -3438,6 +3439,102 @@ local function CreateCombatPanel()
 	RegisterSubpage(canvas, L["Standard Frames"])
 end
 
+-- Sub-page: chat bubbles (where they show, and how they look).
+local function CreateBubblesPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Chat bubbles"])
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		L["Where chat bubbles show, and how they look."])
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local function Changed() if ns.ApplyBubbles then ns.ApplyBubbles() end end
+	local function BubbleCheck(key, label, tip)
+		return Check(content, key, label, tip, function(value)
+			ns.GetDB()[key] = value
+			Changed()
+		end)
+	end
+
+	local switch = PageSwitch(content, "handleBubbles", L["Let CineMode handle chat bubbles"],
+		L["On: chat bubbles show where this page says, and look as it says. Off: the game's own " ..
+		"chat bubble settings, as you had them."], subtitle, Changed)
+	-- Hide in: a grid of the kinds of bubble (rows) by place (columns), like
+	-- the Visual Effects page's. Always greys the rest of its row.
+	local stack = Stack(switch, "check")
+	stack:Header(content, L["Hide in"])
+	stack:Note(content, L["Ticked, those bubbles don't show there. Always: not at all."], 420)
+	local BUBBLE_ROWS = {
+		{ kind = "Say", label = L["Say & yell"], tipName = L["say, yell and NPC speech bubbles"] },
+		{ kind = "Party", label = L["Party"], tipName = L["party chat bubbles"] },
+	}
+	local PLACE_NAMES = {
+		Cities = { L["Cities"], L["in capital cities"] },
+		Instances = { L["Instances"], L["in dungeons, scenarios and raids"] },
+		BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
+		World = { L["Open World"], L["out in the world (not in a capital city or an instance), inns included"] },
+	}
+	local BUBBLE_COLUMNS = { { key = "OffAlways", heading = L["Always"],
+		tip = function(name) return (L["No %s at all."]):format(name) end } }
+	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
+		BUBBLE_COLUMNS[#BUBBLE_COLUMNS + 1] = { key = "OffIn" .. where, heading = PLACE_NAMES[where][1],
+			tip = function(name) return (L["No %s %s."]):format(name, PLACE_NAMES[where][2]) end }
+	end
+	local NAME_WIDTH, COLUMN_WIDTH, GAP, HEADING_HEIGHT = 90, 66, 10, 26
+	local function ColumnX(c)
+		-- (Always set apart from the places.)
+		return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= 2 and GAP or 0)
+	end
+	local gridTop = CreateFrame("Frame", nil, content)
+	gridTop:SetSize(ColumnX(#BUBBLE_COLUMNS) + COLUMN_WIDTH, HEADING_HEIGHT)
+	stack:Add(gridTop, "label")
+	for c, column in ipairs(BUBBLE_COLUMNS) do
+		local heading = Label(gridTop, "GameFontNormalSmall", column.heading)
+		heading:SetWidth(COLUMN_WIDTH)
+		heading:SetJustifyH("CENTER")
+		heading:SetPoint("BOTTOMLEFT", gridTop, "BOTTOMLEFT", ColumnX(c), 0)
+	end
+	local lastGridRow = gridTop
+	for _, bubbleRow in ipairs(BUBBLE_ROWS) do
+		local row = CreateFrame("Frame", nil, content)
+		row:SetSize(gridTop:GetWidth(), 24)
+		row:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -2)
+		Label(row, "GameFontHighlight", bubbleRow.label):SetPoint("LEFT", row, "LEFT", 0, 0)
+		local always = "bubbles" .. bubbleRow.kind .. "OffAlways"
+		for c, column in ipairs(BUBBLE_COLUMNS) do
+			local key = "bubbles" .. bubbleRow.kind .. column.key
+			local check = Check(content, key, "", column.tip(bubbleRow.tipName), function(value)
+				ns.GetDB()[key] = value
+				Changed()
+				Refresh() -- grey out / enable the row
+			end)
+			check:SetPoint("CENTER", row, "LEFT", ColumnX(c) + COLUMN_WIDTH / 2, 0)
+			if column.key ~= "OffAlways" then
+				GreyUnless(check, function(db) return not db[always] end)
+			end
+		end
+		lastGridRow = row
+	end
+	stack:Continue(lastGridRow, "label")
+
+	stack:Header(content, L["Look"])
+	stack:Add(BubbleCheck("bubblesTextOnly", L["Text only (no background or border)"],
+		L["Bubbles show just their text, floating over the speaker. (Not in instances on retail: " ..
+		"the game doesn't let addons change bubbles there.)"]), "check")
+	local size = stack:Add(Slider(content, "bubblesTextScale", L["Text size"], 50, 200, 5, "%d%%", 100,
+		Changed), "slider")
+	Tooltip(size, L["How big the bubbles' text is. (Not in instances on retail.)"])
+	stack:Note(content, L["Bubbles already showing change with the next thing said."])
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Chat bubbles")
+end
+
 -- Sub-page: fishing (casting with right-click or a gamepad button, the cast bar).
 local function CreateFishingPanel()
 	local canvas, content = CreateScrollPage()
@@ -6007,6 +6104,7 @@ ns.OnLanguage(function()
 	CreateBuffsPanel()
 	CreatePlatesPanel()
 	CreateChatPanel()
+	CreateBubblesPanel()
 	CreateFishingPanel()
 	CreateTintPanel()
 	CreateAudioPanel()

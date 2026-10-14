@@ -28,6 +28,7 @@ read_globals = {
 	"C_AddOns",
 	"C_CooldownViewer",
 	"C_CVar",
+	"C_ChatBubbles",
 	"C_GamePad",
 	"C_Console",
 	"C_ChatInfo",

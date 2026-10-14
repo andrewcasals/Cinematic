@@ -520,6 +520,18 @@ DEFAULTS.handleMinimap = true
 DEFAULTS.handleQuests = true -- Quest tracker
 DEFAULTS.handleBuffs = true -- Buffs/debuffs
 DEFAULTS.handleChat = true
+-- Chat bubbles page (off: the game's own settings, as you left them).
+DEFAULTS.handleBubbles = false
+-- Its grid: bubbles<Say|Party>OffAlways, and OffIn<where> (ns.EFFECT_OFF_WHERE),
+-- ticked = no bubbles there. Say covers yell and NPC speech too.
+for _, kind in ipairs({ "Say", "Party" }) do
+	DEFAULTS["bubbles" .. kind .. "OffAlways"] = false
+	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
+		DEFAULTS["bubbles" .. kind .. "OffIn" .. where] = false
+	end
+end
+DEFAULTS.bubblesTextOnly = false -- no background or border, just the text
+DEFAULTS.bubblesTextScale = 1
 DEFAULTS.handleSwing = true -- Swing timer
 -- Swing timer page: the ranged bar on top (it and the main hand's trade
 -- places), per class so one profile suits them all. To start with, the
