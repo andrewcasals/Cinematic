@@ -5,6 +5,7 @@
 ## Notes-esES: Desvanece la interfaz y añade franjas de cine entre combates para un aire más cinematográfico.
 ## Notes-esMX: Desvanece la interfaz y añade franjas de cine entre combates para un aire más cinematográfico.
 ## Notes-frFR: Estompe l'interface et ajoute des bandes noires entre les combats pour une ambiance plus cinématographique.
+## Notes-ruRU: Скрывает интерфейс и добавляет черные полосы кадра между боями для более кинематографичной атмосферы.
 ## Author: Andrew Casals
 ## Category: UI
 ## Version: @project-version@
@@ -16,6 +17,7 @@ Locales\Locales.lua
 Locales\deDE.lua
 Locales\esES.lua
 Locales\frFR.lua
+Locales\ruRU.lua
 Diagnostics.lua
 Profiler.lua
 Core.lua
