@@ -264,6 +264,14 @@ end
 ns.chatPeekUntil = {} -- [chat frame] = GetTime() when it may fade again
 ns.chatTypingUntil = 0 -- typing shows the whole chat group without leaving cinematic
 
+-- Only a window you'd see peeks: a docked tab that isn't the selected one is
+-- hidden, and peeking it would bring up just the dock's tabs.
+local function PeekWindow(chatFrame)
+	if ns.Flag(chatFrame:IsShown()) then
+		ns.chatPeekUntil[chatFrame] = GetTime() + ns.HoldTime("chatPeekTime")
+	end
+end
+
 -- Message filters run once per chat window that will show the message, which
 -- tells us exactly which window to reveal. Never filters anything out.
 local function ChatPeekFilter(chatFrame, event, text, _, _, channelString, _, _, _, _, channelBaseName)
@@ -285,7 +293,7 @@ local function ChatPeekFilter(chatFrame, event, text, _, _, channelString, _, _,
 		wanted = IsPeekTypeOn(EVENT_PEEK_TYPE[event])
 	end
 	if wanted then
-		ns.chatPeekUntil[chatFrame] = GetTime() + ns.HoldTime("chatPeekTime")
+		PeekWindow(chatFrame)
 	end
 	return false
 end
@@ -316,7 +324,7 @@ local function CheckServerLines(chatFrame, watch, peekOn)
 			local prefix = SERVER_MESSAGE_PREFIX or "[SERVER]"
 			if peekOn and watch.newest ~= nil and text ~= watch.server and text:find(prefix, 1, true) then
 				watch.server = text
-				ns.chatPeekUntil[chatFrame] = GetTime() + ns.HoldTime("chatPeekTime")
+				PeekWindow(chatFrame)
 			end
 		end
 	end
