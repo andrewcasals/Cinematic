@@ -999,8 +999,11 @@ local function ShouldBeCinematic(now)
 	local changed = OffInChanged()
 	MovingFor() -- (each tick, so its timer sees every auto-run and stop)
 	-- Switched off, or in a place or group where it's off: once that ends
-	-- (switched on, or you leave), straight back, at the fade out time.
-	if not ns.db.enabled or not ns.db.fadeUI or not ns.ProfileChosen() or GetTime() < snoozeUntil
+	-- (switched on, or you leave), straight back, at the fade out time. With
+	-- "Start in CineMode" off, only while a camera ticked in the Camera
+	-- Triggers page's CineMode column runs.
+	if not ns.db.enabled or not (ns.db.fadeUI or ns.TriggerStartsCine()) or not ns.ProfileChosen()
+		or GetTime() < snoozeUntil
 		or IsInDisabledZone() or IsInDisabledGroup() then
 		quickStart = false
 		return false
@@ -1346,7 +1349,7 @@ local function OnUpdate(_, elapsed)
 	end
 	local fighting = inCombat or now - lastFightAt < ns.db.calmTime
 	local place = ns.EffectPlace()
-	-- In CineMode; with Fade the UI off, over the normal UI (the VFX Only profile);
+	-- In CineMode; with Start in CineMode (fadeUI) off, over the normal UI (the VFX Only profile);
 	-- and while just moving about takes you out of it, with Keep VFX on.
 	local effectsOn = cinematic or (not ns.db.fadeUI and ns.db.enabled and ns.ProfileChosen())
 		or (offForMoving and ns.db.movingKeepVFX) or false

@@ -712,9 +712,11 @@ local function CreatePanel()
 		"Also toggled with /cine or the keybind under Key Bindings > AddOns.", ns.SetEnabled)
 	enabled:SetPoint("TOPLEFT", general, "BOTTOMLEFT", -2, -6)
 
-	local fadeUI = Check(panel, "fadeUI", "Fade the UI (CineMode)",
+	local fadeUI = Check(panel, "fadeUI", "Start in CineMode (Fade UI, Queue Music, etc.)",
 		"Off: the UI stays as it is and the camera's left to you, with just the visual effects " ..
-		"over it (as the Visual Effects page says). The VFX Only profile.")
+		"over it (as the Visual Effects page says), as in the VFX Only profile. Events ticked in " ..
+		"the Camera Triggers page's CineMode column still bring CineMode on while their camera " ..
+		"runs: standing still or going AFK, say, for a screensaver.")
 	fadeUI:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -2)
 
 	local minimapButton = Check(panel, "minimapButton", "Show minimap button",
@@ -1704,7 +1706,7 @@ local function CreateEventsPanel()
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	local CAMERA_X, MUSIC_X = 250, 425
+	local CAMERA_X, MUSIC_X, CINE_X = 250, 425, 490
 	local header = Header(content, "Event", subtitle, -20)
 	local cameraHeader = Label(content, "GameFontNormal", "Camera")
 	cameraHeader:SetPoint("LEFT", header, "LEFT", CAMERA_X, 0)
@@ -1713,6 +1715,20 @@ local function CreateEventsPanel()
 	local MUSIC_TIP = "Music starts as this event's camera starts, unless the addon started music " ..
 		"within the fatigue time (Audio page). Music already playing just carries on. Off: this " ..
 		"camera never starts music. Needs \"Allow CineMode to queue Music\" on the Audio page."
+	local cineHeader = Label(content, "GameFontNormal", "CineMode")
+	cineHeader:SetPoint("LEFT", header, "LEFT", CINE_X, 0)
+	local CINE_TIP = "With \"Start in CineMode\" off (Cinematic's main page), this event's camera " ..
+		"starting brings CineMode on (the UI fades, music, visual effects), and it ends with the " ..
+		"camera. Tick Stand still and Go AFK for a screensaver: the normal UI while you play, " ..
+		"CineMode once you've been idle a while."
+	-- A CineMode column switch: only with "Start in CineMode" off and a camera picked.
+	local function CineCheck(cineKey, label, hasCamera)
+		local cine = Check(content, cineKey, "", CINE_TIP)
+		cine:SetPoint("LEFT", label, "LEFT", CINE_X + 18, 0)
+		GreyUnless(cine, function(db)
+			return not db.fadeUI and hasCamera(db)
+		end)
+	end
 	local MUSIC_EXTRA_TIPS = {
 		AFK = " While you're flagged AFK, whatever the camera. Off also keeps music from coming back " ..
 			"after a pause while you're away.",
@@ -1776,6 +1792,9 @@ local function CreateEventsPanel()
 				return db.musicInCinematic and (event.key == "AFK" or db[key .. "Camera"] ~= "none")
 			end)
 		end
+		if ns.DEFAULTS[key .. "Cine"] ~= nil then
+			CineCheck(key .. "Cine", label, function(db) return db[key .. "Camera"] ~= "none" end)
+		end
 		previous, dx = label, 0
 
 		if event.key == "Campfire" then
@@ -1809,10 +1828,11 @@ local function CreateEventsPanel()
 	-- only game music.)
 	for _, cam in ipairs({
 		{ label = "Auto-walk (RP walk)", cameraKey = "walkCamera", choices = WALK_CAMERAS, off = "none",
-			key = "musicCamWalk",
+			key = "musicCamWalk", cineKey = "walkCine",
 			tip = "Auto-walking (auto-run in walk mode). The camera's settings are on the RP Walk Cam " ..
 				"page; Camera Modes turns it off in some places." },
 		{ label = "Auto-run", cameraKey = "runCamera", choices = RUN_CAMERAS, off = "none", key = "musicCamRun",
+			cineKey = "runCine",
 			tip = "Auto-running. The camera's settings are on the Auto-run Cam page; Camera Modes turns " ..
 				"it off in some places." },
 		{ label = "Die", cameraKey = "deathOrbit", choices = DEATH_CAMERAS, off = false, key = "deathSong",
@@ -1837,6 +1857,9 @@ local function CreateEventsPanel()
 		GreyUnless(music, function(db)
 			return (cam.deathSong or db.musicInCinematic) and db[cam.cameraKey] ~= cam.off
 		end)
+		if cam.cineKey then
+			CineCheck(cam.cineKey, label, function(db) return db[cam.cameraKey] ~= cam.off end)
+		end
 		previous, dx = label, 0
 	end
 
@@ -2382,7 +2405,7 @@ local function CreateTintPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"How the game world looks in CineMode (or over the normal UI, with Fade the UI off on the " ..
+		"How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the " ..
 		"main page): letterbox bars, colour " ..
 		"grading, vignette, inn glow and weather. The UI isn't tinted. While this page is open " ..
 		"the tint is previewed behind the options window. Names and nameplates are on the " ..

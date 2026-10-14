@@ -104,6 +104,35 @@ ns.DEFAULTS.eventAFKMusic = false
 ns.DEFAULTS.eventQuestMusic = false
 ns.DEFAULTS.eventStillMusic = false
 
+-- Each event's CineMode column (event<key>Cine, and walkCine/runCine for
+-- auto-walking and auto-running): with "Start in CineMode" off, its camera
+-- starting brings CineMode on (the UI fades, music, the camera) until it ends.
+-- Not the quest camera's: it runs whether or not CineMode is on.
+for _, event in ipairs(ns.EVENTS) do
+	if event.key ~= "Quest" then
+		ns.DEFAULTS["event" .. event.key .. "Cine"] = false
+	end
+end
+ns.DEFAULTS.walkCine = false
+ns.DEFAULTS.runCine = false
+
+-- Whether a camera ticked in the CineMode column is running (or, for the
+-- standing-still events, due to start).
+function ns.TriggerStartsCine()
+	local db = ns.db
+	if ns.FlightCameraOn() and db.eventFlightCine then
+		return true
+	end
+	if db.walkCine and db.walkCamera ~= "none" and ns.IsRPWalking and ns.IsRPWalking() then
+		return true
+	end
+	if db.runCine and db.runCamera ~= "none" and ns.IsAutoRunning and ns.IsAutoRunning() then
+		return true
+	end
+	local key = ns.ActiveEvent()
+	return key ~= nil and db["event" .. key .. "Cine"] == true
+end
+
 -- Taking a flight: the flight camera runs, unless the event is set to no camera.
 local flightSince -- when this flight took off, or nil on the ground
 local flightCamStarted = false -- this flight's camera has started (takeoff swing done)

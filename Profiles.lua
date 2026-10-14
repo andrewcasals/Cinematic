@@ -125,12 +125,24 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Camera Only",
-		tip = "The UI fades and the camera modes run, with no visual effects: no letterbox, tint, " ..
-			"vignette or soft edges.",
+		tip = "The UI fades and the camera modes run. The letterbox and tint show only while a " ..
+			"camera mode runs; no soft edges.",
 		apply = function(set)
-			set("visualEffects", false)
+			-- The letterbox and tint just for the camera modes (Visual Effects
+			-- page's "Outside camera modes" column).
+			set("letterboxOnlyInCameras", true)
+			set("tintOnlyInCameras", true)
 			set("depthOfField", false)
 			set("deathScreen", false)
+			-- Every camera brings CineMode on (Camera Triggers page's CineMode
+			-- column), for when "Start in CineMode" is off.
+			for _, event in ipairs(ns.EVENTS or {}) do
+				if ns.DEFAULTS["event" .. event.key .. "Cine"] ~= nil then
+					set("event" .. event.key .. "Cine", true)
+				end
+			end
+			set("walkCine", true)
+			set("runCine", true)
 		end,
 	},
 	{
