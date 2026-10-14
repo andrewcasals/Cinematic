@@ -28,6 +28,18 @@ end
 local extraRows = {}
 local sliderCount = 0
 
+-- Changes a label's font. The game picks the font's alphabet (Cyrillic, say,
+-- on an English client) when text is set, so text already there is set again:
+-- otherwise it falls back to the Latin font and shows boxes.
+local function SetLabelFont(label, font)
+	label:SetFontObject(font)
+	local text = label:GetText()
+	if text and text ~= "" then
+		label:SetText("")
+		label:SetText(text)
+	end
+end
+
 local function Tooltip(widget, tip)
 	widget.searchTip = tip
 	widget:SetScript("OnEnter", function(self)
@@ -206,9 +218,9 @@ local function GreyUnless(control, test)
 		if self.SetEnabled then self:SetEnabled(enabled) end
 		local label = self.Text or self.text
 		if label and self.GetObjectType and self:GetObjectType() == "CheckButton" then
-			label:SetFontObject(enabled and "GameFontHighlight" or "GameFontDisable")
+			SetLabelFont(label, enabled and "GameFontHighlight" or "GameFontDisable")
 		elseif self.title and self.GetObjectType and self:GetObjectType() == "Slider" then
-			self.title:SetFontObject(enabled and "GameFontHighlight" or "GameFontDisable")
+			SetLabelFont(self.title, enabled and "GameFontHighlight" or "GameFontDisable")
 		end
 	end
 end
@@ -242,14 +254,14 @@ local function Refresh()
 			local label = control.GetObjectType and control:GetObjectType() == "CheckButton"
 				and (control.Text or control.text)
 			if label then
-				control.baseFont = control.baseFont or label:GetFontObject()
-				label:SetFontObject(control.baseFont)
+				control.baseFont = control.baseFont or label:GetFontObject() or "GameFontHighlight"
+				SetLabelFont(label, control.baseFont)
 			end
 			control:SetEnabled(true)
 			control:Refresh()
 			if not ns.GetDB()[switch.key] then
 				control:SetEnabled(false)
-				if label then label:SetFontObject("GameFontDisable") end
+				if label then SetLabelFont(label, "GameFontDisable") end
 			end
 		else
 			control:Refresh()
@@ -3865,7 +3877,7 @@ local function RefreshChannels()
 				row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 				row.label:SetPoint("LEFT", row, "RIGHT", 2, 0)
 			end
-			row.label:SetFontObject("GameFontHighlight")
+			SetLabelFont(row.label, "GameFontHighlight")
 			row:SetScript("OnClick", function(self)
 				ns.GetDB().chatPeekChannelList[self.channel] = self:GetChecked() and true or false
 			end)
@@ -4465,7 +4477,7 @@ local function CreateCooldownPanel()
 					local handled = Handled()
 					self:SetEnabled(handled)
 					local label = self.Text or self.text
-					if label then label:SetFontObject(handled and "GameFontHighlight" or "GameFontDisable") end
+					if label then SetLabelFont(label, handled and "GameFontHighlight" or "GameFontDisable") end
 					local ticked = db.cooldownReadyOnly[spell] and handled and true or false
 					local earlyOn = db.cooldownEarlyOn[spell] and true or false
 					self.earlyCheck:SetChecked(earlyOn)
@@ -5638,7 +5650,7 @@ local function CreateMouseoverPanel()
 					tag = #others > 0 and L["in %s"]:format(table.concat(others, ", ")) or item.tag or ""
 				end
 				button.text:SetText(item.label)
-				button.text:SetFontObject(here and "GameFontDisable" or "GameFontHighlight")
+				SetLabelFont(button.text, here and "GameFontDisable" or "GameFontHighlight")
 				button.tag:SetText(here and L["already here"] or tag)
 				button.tip = list.events and item.tip or nil
 				button:SetEnabled(not here)

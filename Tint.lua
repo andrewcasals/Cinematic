@@ -1061,7 +1061,12 @@ local function PlaceTimeTitle()
 	end
 	if not timeTitle.sized then
 		local font, size, flags = (SubZoneTextString or ZoneTextString):GetFont()
-		if font then
+		if timeTitle.text.SetTextScale then
+			-- Scaled rather than set by file, which would keep only the Latin
+			-- letters (a Russian title on an English client showed boxes).
+			timeTitle.text:SetTextScale(0.75)
+			timeTitle.sized = true
+		elseif font then
 			timeTitle.text:SetFont(font, math.floor(size * 0.75 + 0.5), flags)
 			timeTitle.sized = true
 		end
