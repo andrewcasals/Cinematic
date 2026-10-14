@@ -176,6 +176,7 @@ read_globals = {
 	"UnitCanAttack",
 	"UnitCastingInfo",
 	"UnitChannelInfo",
+	"UnitClass",
 	"UnitClassification",
 	"UnitCreatureType",
 	"UnitExists",

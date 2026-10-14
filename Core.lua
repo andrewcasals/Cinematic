@@ -512,6 +512,14 @@ DEFAULTS.handleQuests = true -- Quest tracker
 DEFAULTS.handleBuffs = true -- Buffs/debuffs
 DEFAULTS.handleChat = true
 DEFAULTS.handleSwing = true -- Swing timer
+-- Swing timer page: the ranged bar on top (it and the main hand's trade
+-- places), per class so one profile suits them all. To start with, the
+-- classes that shoot most: hunters, and the casters with wands.
+for _, class in ipairs({ "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE",
+	"WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }) do
+	DEFAULTS["swingRangedOnTop" .. class] = class == "HUNTER" or class == "MAGE" or class == "PRIEST"
+		or class == "WARLOCK"
+end
 DEFAULTS.handleFishing = true -- right-click casting and the cast bar
 DEFAULTS.plateTarget = true
 -- And your party or raid members' plates (their pets' too), likewise.

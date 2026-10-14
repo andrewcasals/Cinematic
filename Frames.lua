@@ -2810,11 +2810,89 @@ do
 		end
 		return GetTime() - usedAt[weapon] > Speed(weapon) + ns.db.swingHideAfter
 	end
+
+	-- Ranged bar on top (swingRangedOnTop<CLASS>, for your class): the main hand and ranged bars
+	-- trade places. Each takes the other's anchors, and one anchored to the
+	-- other (stacked) is anchored the other way round. The game's own anchors
+	-- are kept (and taken afresh whenever it moves a bar), so it can be undone.
+	local order = { swapped = false, game = {}, moving = false }
+
+	local function ReadPoints(frame)
+		local points = {}
+		for i = 1, frame:GetNumPoints() do
+			local point, relativeTo, relativePoint, x, y = frame:GetPoint(i)
+			if not (Number(x) and Number(y)) then
+				return nil -- (secret: leave it alone)
+			end
+			points[i] = { point, relativeTo, relativePoint, x, y }
+		end
+		return points
+	end
+
+	local function SetPoints(frame, points, from, to)
+		order.moving = true
+		frame:ClearAllPoints()
+		for _, p in ipairs(points) do
+			frame:SetPoint(p[1], p[2] == from and to or p[2], p[3], p[4], p[5])
+		end
+		order.moving = false
+	end
+
+	local function Apply(swap)
+		local main, ranged = _G.SwingTimerMainHandFrame, _G.SwingTimerRangedFrame
+		if not (main and ranged) or InCombatLockdown() and (main:IsProtected() or ranged:IsProtected()) then
+			return
+		end
+		local mainPoints = order.game[main] or ReadPoints(main)
+		local rangedPoints = order.game[ranged] or ReadPoints(ranged)
+		if not (mainPoints and rangedPoints and #mainPoints > 0 and #rangedPoints > 0) then
+			return
+		end
+		order.game[main], order.game[ranged] = mainPoints, rangedPoints
+		if not order.hooked then
+			order.hooked = true
+			-- The game moving a bar: its new anchors are the game's, and the swap is done again.
+			local function OnMoved(frame)
+				if order.moving then return end
+				order.game[frame] = nil
+				order.swapped = nil -- (looked at next tick)
+			end
+			hooksecurefunc(main, "SetPoint", OnMoved)
+			hooksecurefunc(ranged, "SetPoint", OnMoved)
+		end
+		if swap then
+			SetPoints(main, rangedPoints, main, ranged)
+			SetPoints(ranged, mainPoints, ranged, main)
+		else
+			SetPoints(main, mainPoints)
+			SetPoints(ranged, rangedPoints)
+		end
+		order.swapped = swap
+	end
+
+	-- Each tick: the bars as the setting (and the page's master switch) say.
+	function ns.UpdateSwingOrder()
+		local swap = ns.db.handleSwing and ns.db["swingRangedOnTop" .. select(2, UnitClass("player"))]
+			and true or false
+		if order.swapped ~= swap then
+			-- (Not swapped and the game's anchors not taken yet: nothing to put back.)
+			if swap or next(order.game) then
+				if not pcall(Apply, swap) then
+					order.swapped = swap -- (an error: not tried again every tick)
+				end
+			else
+				order.swapped = false
+			end
+		end
+	end
 end
 
 function ns.UpdateFrames(cinematic, elapsed)
 	local now = GetTime()
 	UpdateReadyOnly(elapsed, now)
+	if not ns.isRetail then
+		ns.UpdateSwingOrder()
+	end
 	local combatShown
 	if cinematic then
 		combatShown = GetCombatShownFrames()

@@ -4245,6 +4245,14 @@ local function CreateSwingPanel()
 		"Never show the off-hand swing timer, dual wielding or not.")
 	offHand:SetPoint("TOPLEFT", after, "BOTTOMLEFT", -20, -16)
 
+	-- (Per class: your current one's.)
+	local className, class = UnitClass("player")
+	local rangedTop = Check(content, "swingRangedOnTop" .. class, "Ranged bar on top for " .. className,
+		"The main hand and ranged bars trade places, so the ranged bar is where the main hand's " ..
+		"was. Set for each class on its own (ticked for hunters, mages, priests and warlocks to start with), so one profile " ..
+		"suits all your characters.")
+	rangedTop:SetPoint("TOPLEFT", offHand, "BOTTOMLEFT", 0, -2)
+
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Swing timer")
