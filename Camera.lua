@@ -350,6 +350,7 @@ do
 			if bar.cinematicFishingHidden then
 				bar.cinematicFishingHidden = nil
 				if bar:IsShown() then bar:SetAlpha(1) end
+				ns.ReapplyCastBar(bar) -- (unless CineMode has it faded: Cast bar row)
 			end
 			return
 		end
@@ -363,6 +364,7 @@ do
 		elseif bar.cinematicFishingHidden and (UnitCastingInfo("player") or UnitChannelInfo("player")) then
 			bar.cinematicFishingHidden = nil -- another cast: the bar shows it as usual
 			bar:SetAlpha(1)
+			ns.ReapplyCastBar(bar)
 		end
 	end
 	-- (Gamepad mode has its own bar. Looked for again as casts start, in

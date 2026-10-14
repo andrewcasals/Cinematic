@@ -176,7 +176,7 @@ ns.BUILTIN_PROFILES = {
 		tip = "As little UI as possible: chat, buffs, the quest tracker, the minimap and your portrait " ..
 			"don't pop up on their own (hovering still shows them), your target's and group members' " ..
 			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
-			"your target, and every camera can start music.",
+			"your target and your cast bar (hidden otherwise), and every camera can start music.",
 		apply = function(set)
 			set("chatPeek", false)
 			set("buffPeek", false)
@@ -190,9 +190,11 @@ ns.BUILTIN_PROFILES = {
 			set("plateTarget", false)
 			set("plateGroupMembers", false)
 			set("plateGroupMemberMinions", false)
-			-- Fights bring up only your target and its target: no portrait,
-			-- bars, buffs, minimap or swing timer. (Rows not listed keep the
-			-- defaults.)
+			-- No cast bar out of fights (it's up in them, with the default).
+			set("cineShow", { castbar = false })
+			-- Fights bring up only your target and its target (and the cast
+			-- bar): no portrait, bars, buffs, minimap or swing timer. (Rows not
+			-- listed keep the defaults.)
 			set("combatShow", { tot = true, prd = false, party = false, raidplayers = false, raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false,
 				art = false, bottomleft = false, bottomright = false, pet = false, stance = false, totems = false,
 				micro = false, xp = false, focus = false })
