@@ -153,7 +153,7 @@ ns.BUILTIN_PROFILES = {
 			-- Standing still starts the AFK camera, and every camera can start music.
 			set("eventStillCamera", "afk")
 			for _, event in ipairs({ "AFK", "Still", "Chair", "Kneel", "Sleep", "Dance", "Weapon", "Campfire",
-				"Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
+				"SitButton", "Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
 				set("event" .. event .. "Music", true)
 			end
 			set("musicCamWalk", true)
@@ -208,7 +208,7 @@ ns.BUILTIN_PROFILES = {
 			-- start music.
 			set("eventStillCamera", "afk")
 			for _, event in ipairs({ "AFK", "Still", "Chair", "Kneel", "Sleep", "Dance", "Weapon", "Campfire",
-				"Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
+				"SitButton", "Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
 				set("event" .. event .. "Music", true)
 			end
 			-- The cameras don't wait for things to calm down after a fight, and

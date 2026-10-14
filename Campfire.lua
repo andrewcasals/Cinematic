@@ -1,6 +1,7 @@
 -- Cinematic: a Sit button at campfires. Hovering a campfire with the cursor
--- near the middle of the screen brings up a campfire icon just above the
--- cursor; clicking it does /sit, so you needn't type it.
+-- near the middle of the screen brings up a campfire icon right under the
+-- cursor; clicking it does /sit, so you needn't type it. Moving the cursor
+-- off it puts it away.
 -- (campfireSitButton, on the Quality of life page; WoW Forever only.)
 local ADDON_NAME, ns = ...
 
@@ -22,9 +23,8 @@ local CAMPFIRE_NAMES = {
 local campfireName = CAMPFIRE_NAMES[GetLocale()] or "campfire"
 
 local CENTER_REACH = 0.1 -- how near the middle the cursor must be: this much of the screen's height
-local ABOVE_CURSOR = 30  -- UI units from the cursor up to the button's middle, as it shows
 local OBJECT_REACH = 40  -- UI units the cursor may wander from where a hidden tooltip's campfire was found
-local LINGER = 1.5       -- seconds the button stays after the cursor leaves the campfire (time to reach it)
+local LINGER = 1.5       -- seconds a sighting of the fire counts for, to bring it up
 local REST = 5           -- seconds after it's gone before it can show again
 local WALK_OFF = 5       -- yards you can move from where it showed before it goes
 local LOOK_EVERY = 0.1   -- seconds between looks at the tooltip
@@ -39,10 +39,11 @@ local lastSeen = -math.huge
 local dismissed = false  -- clicked: not again until the cursor has left the campfire
 local restUntil = 0      -- shown and gone again: not again until then (REST)
 local alpha, sinceLook = 0, 0
-local HOVER = 0.25       -- seconds the cursor must stay on the campfire before it shows
+local HOVER = 0.5        -- seconds the cursor must stay on the campfire before it shows
 local hoverSince         -- when the cursor came onto the campfire (near the middle), or nil
 local shownX, shownY     -- where you stood as it showed (yards)
 local walkedOff = false  -- moved WALK_OFF from there: going, whatever the cursor's on
+local leftIcon = false   -- the cursor has moved off it: going
 
 local function CursorPosition()
 	local x, y = GetCursorPosition()
@@ -97,6 +98,8 @@ local function Sit()
 	elseif DoEmote then
 		pcall(DoEmote, "SIT")
 	end
+	-- (Its own Camera Triggers row, cozy by default, rather than /sit's.)
+	if ns.SatByButton then ns.SatByButton() end
 end
 
 -- Where you are, in yards; nil where the game won't say (some instances).
@@ -161,21 +164,32 @@ local function OnUpdate(_, elapsed)
 			walkedOff = true
 		end
 	end
-	local want = not dismissed and not walkedOff and (now - lastSeen < LINGER or (button:IsShown() and button:IsMouseOver()))
-		and CanSit()
+	-- It shows under the cursor, so once it's up the cursor leaving it puts it
+	-- away (and the REST wait after starts as it's gone).
+	if alpha > 0 and button:IsShown() and not button:IsMouseOver() then
+		leftIcon = true
+	end
+	-- (Up already: stays while the cursor's on it. Not up: needs a fresh
+	-- sighting of the fire, and the REST wait over.)
+	local want = not dismissed and not walkedOff and not leftIcon and CanSit()
+		and (alpha > 0 or now >= restUntil)
+		and (now - lastSeen < LINGER or (button:IsShown() and button:IsMouseOver()))
 	if want then
 		if alpha == 0 then
 			shownX, shownY = PlayerPosition()
-			-- Just above the cursor, and left there to be clicked.
+			-- Right under the cursor, and left there to be clicked.
 			local x, y = CursorPosition()
 			button:ClearAllPoints()
-			button:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y + ABOVE_CURSOR)
+			button:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
 		end
 		alpha = math.min(1, alpha + elapsed / FADE_TIME)
 	elseif alpha > 0 then
 		alpha = math.max(0, alpha - elapsed / FADE_TIME)
 		if alpha == 0 then
-			restUntil, walkedOff, shownX, shownY = now + REST, false, nil, nil
+			restUntil, walkedOff, leftIcon, shownX, shownY = now + REST, false, false, nil, nil
+			-- (Gone: the sighting that brought it up is used up, so it doesn't
+			-- come straight back wherever the cursor is now.)
+			lastSeen, hoverSince = -math.huge, nil
 		end
 	else
 		return
@@ -194,7 +208,7 @@ local function OnTooltipShow()
 	end
 end
 
--- The button: the campfire icon (placed as it shows, above the cursor).
+-- The button: the campfire icon (placed as it shows, under the cursor).
 button = CreateFrame("Button", "CinematicSitButton", UIParent)
 button:SetSize(SIZE, SIZE)
 button:SetFrameStrata("DIALOG")

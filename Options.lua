@@ -1750,6 +1750,8 @@ local TELE_CAMERAS = {
 local EVENT_TIPS = {
 	Campfire = L["Standing or sitting still with any of the buffs listed below (like Welcoming Campfire)."],
 	Sit = L["Doing the emote (or pressing the sit key). Moving, jumping or another emote ends it."],
+	SitButton = L["Clicking the campfire Sit button (Quality of life page). Once the campfire's buff " ..
+		"comes, the first row's camera takes over. Moving, jumping or another emote ends it."],
 	Sleep = L["Doing the emote. Moving, jumping or another emote ends it."],
 	Dance = L["Doing the emote. Moving, jumping or another emote ends it."],
 	Kneel = L["Doing the emote. Moving, jumping or another emote ends it."],
@@ -1854,7 +1856,11 @@ local function CreateEventsPanel()
 	end
 
 	local previous, dx = header, 0
+	local shownEvents = {} -- (a WoW Forever event has no row on retail)
 	for _, event in ipairs(ns.EVENTS) do
+		if not (event.forever and ns.isRetail) then shownEvents[#shownEvents + 1] = event end
+	end
+	for _, event in ipairs(shownEvents) do
 		local key = "event" .. event.key
 		local label = Label(content, "GameFontHighlight", event.label)
 		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -20)
@@ -3552,9 +3558,9 @@ local function CreateQualityPanel()
 	stack:Header(content, L["General"])
 	-- (WoW Forever: Campfire.lua.)
 	local sit = stack:Add(Check(content, "campfireSitButton", L["Sit button at campfires"],
-		L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon just " ..
-		"above the cursor: click it to sit down by the fire, without typing /sit. Not in a fight or " ..
-		"while mounted."]), "check")
+		L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon where " ..
+		"the cursor is: click it to sit down by the fire, without typing /sit. Moving the cursor off it " ..
+		"puts it away. Not in a fight or while mounted."]), "check")
 	sit:HookScript("OnClick", Refresh) -- grey out / enable the option below
 	local stand = stack:Add(Check(content, "campfireStandUp", L["Stand up once you get Camp Benefits"],
 		L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, " ..

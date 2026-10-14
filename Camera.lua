@@ -70,6 +70,8 @@ local turnKeys = { left = false, right = false }
 ns.EVENTS = {
 	{ key = "Campfire", label = L["Resting with a listed buff (campfire)"], camera = "cozy", stopsOnMove = true },
 	{ key = "Sit", label = L["/sit (or press the sit key)"], camera = "vista" },
+	-- Sitting down with Campfire.lua's Sit button (WoW Forever only: forever).
+	{ key = "SitButton", label = L["Sit button at a campfire"], camera = "cozy", forever = true },
 	{ key = "Sleep", label = L["/sleep or /lie down"], camera = "cozy" },
 	{ key = "Dance", label = L["/dance"], camera = "cozy" },
 	{ key = "Kneel", label = L["/kneel"], camera = "cozy" },
@@ -169,7 +171,13 @@ local emoteEvent -- the event for the emote (or seat) you're doing, or nil
 -- Whether you're sitting or lying down (an emote, the sit key or a seat), as
 -- far as the emotes followed here can tell (Campfire.lua's Sit button).
 function ns.IsSitting()
-	return emoteEvent == "Sit" or emoteEvent == "Sleep" or emoteEvent == "Chair"
+	return emoteEvent == "Sit" or emoteEvent == "SitButton" or emoteEvent == "Sleep" or emoteEvent == "Chair"
+end
+-- The sit just done was the campfire Sit button's: its own event, not /sit's.
+function ns.SatByButton()
+	if emoteEvent == "Sit" then
+		emoteEvent = "SitButton"
+	end
 end
 
 -- Hearthstone and teleports: casting one counts like an emote until the cast
@@ -1229,7 +1237,7 @@ do
 		-- Sitting or lying down (or in a seat) with the campfire buff: the
 		-- campfire's camera takes over from the emote's. Settling down by the
 		-- fire starts it afresh, even if walking up to it had stopped it.
-		local resting = emoteEvent == "Sit" or emoteEvent == "Sleep" or emoteEvent == "Chair"
+		local resting = ns.IsSitting()
 		local byFire = resting and atCampfire and EventCamera("Campfire") ~= nil
 		if byFire then
 			stoppedByMove.Campfire = nil
