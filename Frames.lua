@@ -135,12 +135,12 @@ local OWN_ALPHA = {
 	chat = true, waypoint = true, cooldowns = true, raidplayers = true, raidpets = true, party = true,
 }
 -- Parts of the raid frames with rows of their own (role icons, names, group
--- titles, buffs and debuffs). They sit inside the frames they're part of but
--- fade apart from them (not nested), and they don't take the mouse: hovering
--- the raid frames brings them up (their Mouseover group).
+-- titles, buffs, debuffs and the threat highlight). They sit inside the frames
+-- they're part of but fade apart from them (not nested), and they don't take
+-- the mouse: hovering the raid frames brings them up (their Mouseover group).
 local PART_GROUPS = {
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true,
-	partyroles = true, partynames = true,
+	raidthreat = true, partyroles = true, partynames = true,
 }
 -- Parts that go only while a row's frames are up (part -> row): the "Party"
 -- title sits in no faded frame (the party members fade one by one), so its
@@ -239,10 +239,14 @@ local function LooseParts(frame, depth, found)
 end
 
 -- Those parts follow the fade too, back to their own alpha once it's over.
+-- (Not ones with a row of their own, like the threat highlight: they fade as
+-- that, and may have been found before they got it.)
 local function FadeLooseParts(entry, alpha)
 	entry.looseParts = entry.looseParts or LooseParts(entry.frame, 2)
 	for _, part in ipairs(entry.looseParts) do
-		if alpha < 1 then
+		if seen[part] then
+			part.cinematicAlpha = nil
+		elseif alpha < 1 then
 			if not part.cinematicAlpha then
 				local own = part:GetAlpha()
 				part.cinematicAlpha = (issecretvalue and issecretvalue(own)) and 1 or own
@@ -979,6 +983,11 @@ ns.COMBAT_SHOW = {
 	-- (part: Always means whenever its frame shows, over its Mouseover groups.)
 	{ key = "raidroles", label = "Role icons", default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidroles" }, part = true },
+	-- The glow round a member with threat. (tip: the row name's tooltip.)
+	{ key = "raidthreat", label = "Threat highlight", default = true, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidthreat" }, part = true,
+		tip = "The glow round a member with threat (aggro). To hide it all the time, CineMode or not, " ..
+			"turn off the game's own Display Aggro Highlight raid frame option." },
 	{ key = "raidnames", label = "Player names", default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidnames" }, part = true },
 	{ key = "raidpetnames", label = "Pet names", default = true, addon = "Blizzard_CompactRaidFrames",
@@ -1118,7 +1127,7 @@ local HOVER_ROW_BY_GROUP = {
 	raidplayers = "raidplayers", raidpets = "raidpets", raidmanager = "raidmanager", flags = "flags",
 	raidroles = "raidroles", raidnames = "raidnames", raidpetnames = "raidpetnames", raidtitles = "raidtitles",
 	partyroles = "partyroles", partynames = "partynames",
-	raidbuffs = "raidbuffs", raiddebuffs = "raiddebuffs",
+	raidbuffs = "raidbuffs", raiddebuffs = "raiddebuffs", raidthreat = "raidthreat",
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
@@ -1161,7 +1170,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ name = "Target and focus", members = { "target", "tot", "focus" } },
 	-- (Raid-style party frames are the raid frames; the Raid Frame Manager
 	-- goes with both.)
-	{ name = "Raid frames", members = { "raidplayers", "raidpets", "raidroles", "raidnames",
+	{ name = "Raid frames", members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidnames",
 		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
 	{ name = "Party frames", members = { "party", "partyroles", "partynames", "raidmanager" },
 		triggers = { roster = true } },
@@ -1221,7 +1230,7 @@ local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
 	player = true, prd = true, raidroles = true, raidnames = true, partyroles = true, partynames = true,
-	raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
+	raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true, raidthreat = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
 	gamepadbars = true, gamepadreticle = true,
 }
@@ -1290,7 +1299,7 @@ ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap" }
 local CINE_SHOW_DEFAULT = {
 	flags = true, partyroles = true, partynames = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
-	raiddebuffs = true,
+	raiddebuffs = true, raidthreat = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
@@ -3225,6 +3234,8 @@ do
 			SortRaidPart(frame, isPet and "raidpets" or "raidplayers")
 		end
 		SortRaidPart(frame.roleIcon, "raidroles")
+		-- (The game only shows and hides it, never sets its alpha.)
+		SortRaidPart(frame.aggroHighlight, "raidthreat")
 		SortRaidPart(frame.name, isPet and "raidpetnames" or "raidnames")
 		for _, aura in ipairs(frame.buffFrames or {}) do
 			SortRaidPart(aura, "raidbuffs")

@@ -3251,6 +3251,11 @@ local function ShowTable(content, anchor, rows)
 			hover:EnableMouse(true)
 			Tooltip(hover, ("More settings on the %s page. They can keep it up beyond what's " ..
 				"ticked here (hovering, tracking, new auras, cooldowns recharging and the like)."):format(item.morePage))
+		elseif item.tip then
+			local hover = CreateFrame("Frame", nil, content)
+			hover:SetAllPoints(rowLabel)
+			hover:EnableMouse(true)
+			Tooltip(hover, item.tip)
 		end
 		if ns.CINE_SHOW_SETTING[item.key] then
 			RecordKey(content, ns.CINE_SHOW_SETTING[item.key]) -- (for the page's Reset)

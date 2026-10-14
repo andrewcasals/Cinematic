@@ -2346,6 +2346,24 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		for _, saved in pairs(ns.db.profiles or {}) do
 			if type(saved) == "table" then CarryOver(saved) end
 		end
+		-- The raid frames' threat highlight got a row: into saved Mouseover
+		-- groups with the role icons, as the default groups have it. Once.
+		if not ns.db.raidThreatHoverV1 then
+			local function AddThreatRow(groups)
+				for _, group in ipairs(groups or {}) do
+					local has = {}
+					for _, key in ipairs(group.members or {}) do has[key] = true end
+					if has.raidroles and not has.raidthreat then
+						table.insert(group.members, "raidthreat")
+					end
+				end
+			end
+			AddThreatRow(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then AddThreatRow(saved.hoverGroups) end
+			end
+			ns.db.raidThreatHoverV1 = true
+		end
 		-- The vignette and weather went with the tint's row of the Visual
 		-- Effects grid: rows of their own now, starting as the tint's was. Once.
 		if not ns.db.effectGridV2 then
