@@ -153,6 +153,13 @@ local DEFAULTS = {
 	tooltipFriendlyAtOnce = false, -- ...or a unit you can't
 	tooltipWarmTime = 5,     -- once one's shown, the rest show at once until none has been up this long (0: off)
 	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
+	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
+	tooltipCineMode = true,   -- hide world tooltips in CineMode (fadeTooltip, tooltipOff* and the reveal above)
+	tooltipCombat = true,     -- hide tooltips in combat (in CineMode or not), these kinds:
+	tooltipCombatWorld = true,  -- players, NPCs and objects in the world
+	tooltipCombatUnits = true,  -- unit frames: player, target, party and raid frames (other addons' too)
+	tooltipCombatUI = false,    -- everything else: action bars, buffs, bags, menus
+	tooltipShowKey = "shift", -- holding this shows hidden tooltips anyway ("none", "shift", "ctrl", "alt")
 	musicFadeTime = 3,        -- seconds for music to fade in or out
 	musicFatigue = 2,         -- minutes: don't start music again within this long of the last start
 	-- Which cameras can start music as they start (when music fatigue allows).
