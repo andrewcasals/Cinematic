@@ -1586,7 +1586,15 @@ end
 -- element's tooltip for a unit (hovering a unit frame makes it the mouseover);
 -- the rest: any other UI element's. Nothing comes back after hovering here,
 -- only with the key held.
+-- The owner SetUnit was last called for: a unit frame's tooltip appears
+-- (OnShow) before the mouseover and GetUnit catch up, so it's told apart by
+-- that until it hides or another owner takes it over.
+local unitTooltipOwner
+
 local function TooltipHasUnit(tooltip)
+	if unitTooltipOwner ~= nil and unitTooltipOwner == tooltip:GetOwner() then
+		return true
+	end
 	if ns.Flag(UnitExists("mouseover")) then
 		return true
 	end
@@ -2122,7 +2130,21 @@ function ns.OnTooltipShow(self)
 	HoldBack(self)
 end
 
+-- After GameTooltip:SetUnit (a unit frame's OnEnter): OnShow ran inside it,
+-- before the unit was known, and took it for "everything else". Hidden here,
+-- still before it's drawn, rather than flashing until the next tick.
+function ns.OnTooltipSetUnit(self)
+	if revealing then
+		return
+	end
+	unitTooltipOwner = self:GetOwner()
+	if ns.Flag(self:IsShown()) and not WorldOwned() and CombatHides(self) then
+		HideForCombat(self)
+	end
+end
+
 function ns.OnTooltipHide()
+	unitTooltipOwner = nil
 	StopFade()
 end
 

@@ -2536,6 +2536,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		ns.HookTaxiRoutes()
 		GameTooltip:HookScript("OnShow", ns.Profiled("Tooltip shown", ns.OnTooltipShow))
 		GameTooltip:HookScript("OnHide", ns.OnTooltipHide)
+		hooksecurefunc(GameTooltip, "SetUnit", ns.OnTooltipSetUnit)
 		-- The minimap button first, so the fade list picks it up straight away
 		-- (otherwise it stays visible until the next scan).
 		if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
