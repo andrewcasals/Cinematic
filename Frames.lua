@@ -2988,20 +2988,27 @@ local function GetTopLevelFrameUnderCursor(accept)
 end
 
 -- The top-level (direct child of UIParent) frame under the cursor, so adding
--- e.g. a damage meter's bar picks up the whole meter window.
-local function GetTopLevelFrameUnderMouse()
+-- e.g. a damage meter's bar picks up the whole meter window. Also the
+-- outermost named frame below it that accept(frame) takes (any named one
+-- without accept): an addon's button on one of the game's frames, like a
+-- copy button on the chat window.
+local function GetTopLevelFrameUnderMouse(accept)
 	local focus = MouseFocus()
+	local inner
 	while focus and focus ~= UIParent do
 		local parent = focus:GetParent()
 		if parent == UIParent or parent == nil then
 			if focus:GetName() then
-				return focus
+				return focus, inner
 			end
 			break
 		end
+		if focus:GetName() and (not accept or accept(focus)) then
+			inner = focus
+		end
 		focus = parent
 	end
-	return GetTopLevelFrameUnderCursor()
+	return GetTopLevelFrameUnderCursor(), inner
 end
 
 -- name: a frame's global name (/cine add <name>), for frames that are hard
@@ -3015,7 +3022,12 @@ function ns.AddUnderMouse(name)
 			return
 		end
 	else
-		frame = GetTopLevelFrameUnderMouse()
+		local inner
+		frame, inner = GetTopLevelFrameUnderMouse(function(f) return not seen[f] end)
+		-- On a frame faded already (the chat window), its own named part.
+		if inner and frame and seen[frame] then
+			frame = inner
+		end
 		name = frame and frame:GetName()
 	end
 	if not name then
@@ -3112,13 +3124,16 @@ do
 	end
 
 	local function CheckUnderMouse()
-		local frame = GetTopLevelFrameUnderMouse()
+		local frame, inner = GetTopLevelFrameUnderMouse(Pickable)
 		-- One already picked or faded can sit over one that isn't (an action bar
 		-- addon's buttons over its art bar): the smallest one under the cursor
 		-- that is, then. (Not under a window or the game's frames: what's behind
-		-- the settings window isn't being pointed at.)
+		-- the settings window isn't being pointed at.) On one of the game's
+		-- frames, an addon's named frame on it (a copy button on the chat window).
 		local name = frame and frame:GetName()
-		if name and (overlays[name] or seen[frame] or ns.db.extraFrames[name]) then
+		if name and inner and GlobalSource(name) then
+			frame = inner
+		elseif name and (overlays[name] or seen[frame] or ns.db.extraFrames[name]) then
 			frame = GetTopLevelFrameUnderCursor(Pickable)
 		elseif not (frame and Pickable(frame)) then
 			return
