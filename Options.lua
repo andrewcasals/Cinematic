@@ -4382,7 +4382,7 @@ local function CreateTooltipPanel()
 	local title = Label(content, "GameFontNormalLarge", "Tooltips")
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleTooltips", "Let CineMode hide tooltips",
+	local switch = PageSwitch(content, "handleTooltips", "Hide tooltips",
 		"On: Cinematic hides tooltips as this page says. Off: every tooltip shows as normal.", title)
 
 	-- In combat: which kinds.
@@ -4420,7 +4420,8 @@ local function CreateTooltipPanel()
 
 	local cineMode = Check(content, "tooltipCineMode", "Hide world tooltips in CineMode",
 		"While CineMode is on, hides the tooltips for players, NPCs and objects you mouse over " ..
-		"in the world, as set below. Tooltips for the UI still show.")
+		"in the world, as set below. Tooltips for the UI still show. In fights, Hide tooltips " ..
+		"in combat above decides instead, while it's ticked.")
 	cineMode:SetPoint("TOPLEFT", cineLabel, "BOTTOMLEFT", -2, -6)
 	cineMode:HookScript("OnClick", Refresh) -- grey out / enable the rest of the page
 	local function Cine(test)
@@ -4843,7 +4844,7 @@ local KEYBINDS = {
 			"while you're on a unit or something in the world brings its tooltip up; anything else, " ..
 			"hover it again with the key held." },
 	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = "Toggle tooltip hiding",
-		tip = "Turns the Tooltips page's \"Let CineMode hide tooltips\" on or off." },
+		tip = "Turns the Tooltips page's \"Hide tooltips\" switch on or off." },
 }
 
 local IGNORED_KEYS = {

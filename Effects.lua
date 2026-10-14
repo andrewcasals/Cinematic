@@ -1546,9 +1546,17 @@ local function ShowKeyDown()
 	return bindHeld
 end
 
--- Whether world tooltips are hidden in CineMode right now (not whether one is up).
+local function InCombat()
+	return InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+end
+
+-- Whether world tooltips are hidden in CineMode right now (not whether one is
+-- up). In fights, with Hide tooltips in combat ticked, that section decides.
 local function HidingWorldTooltips()
 	if not (Handling() and ns.db.tooltipCineMode and ns.lastCinematic) then
+		return false
+	end
+	if ns.db.tooltipCombat and InCombat() then
 		return false
 	end
 	if ns.db.fadeTooltip then
@@ -1589,10 +1597,6 @@ local function CombatKind(tooltip)
 		return not OverMinimap() and "tooltipCombatWorld" or nil
 	end
 	return TooltipHasUnit(tooltip) and "tooltipCombatUnits" or "tooltipCombatUI"
-end
-
-local function InCombat()
-	return InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 end
 
 local function CombatHides(tooltip)
