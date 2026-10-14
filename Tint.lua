@@ -372,7 +372,7 @@ end
 local function BlendZoneColor(elapsed, instant)
 	local target = ZoneTargetColor()
 	local targetStrength = (HereStrength())
-	local before = { zoneColor[1], zoneColor[2], zoneColor[3], zoneStrength }
+	local before1, before2, before3, beforeStrength = zoneColor[1], zoneColor[2], zoneColor[3], zoneStrength
 	if instant or not zoneStrength then
 		zoneGoal = { target[1], target[2], target[3] }
 		zoneMix, zonePhase, zoneStrength = 1, nil, targetStrength
@@ -415,8 +415,8 @@ local function BlendZoneColor(elapsed, instant)
 	for c = 1, 3 do
 		zoneColor[c] = 1 - (1 - zoneGoal[c]) * zoneMix
 	end
-	return zoneColor[1] ~= before[1] or zoneColor[2] ~= before[2] or zoneColor[3] ~= before[3]
-		or zoneStrength ~= before[4]
+	return zoneColor[1] ~= before1 or zoneColor[2] ~= before2 or zoneColor[3] ~= before3
+		or zoneStrength ~= beforeStrength
 end
 
 local function GetClockTime()
@@ -504,10 +504,21 @@ for _, preset in ipairs(TINT_PRESETS) do TINT_BY_KEY[preset.key] = preset end
 -- Gradient across a texture, coping with both the colour-object API of newer
 -- clients and the older number-based one. Colours are { r, g, b, a }; for
 -- VERTICAL "from" is the bottom, for HORIZONTAL the left.
+-- The two colour objects are made once and reused: CreateColor makes a new
+-- one, with its own copy of every colour method, each call, and the tint
+-- sets several gradients a few times a second.
+local gradientColors
 local function SetGradient(texture, orientation, from, to)
-	if CreateColor and pcall(texture.SetGradient, texture, orientation,
-		CreateColor(unpack(from)), CreateColor(unpack(to))) then
-		return
+	if CreateColor and not gradientColors then
+		gradientColors = { CreateColor(0, 0, 0, 0), CreateColor(0, 0, 0, 0) }
+	end
+	local fromColor, toColor = gradientColors and gradientColors[1], gradientColors and gradientColors[2]
+	if fromColor and fromColor.SetRGBA then
+		fromColor:SetRGBA(from[1], from[2], from[3], from[4])
+		toColor:SetRGBA(to[1], to[2], to[3], to[4])
+		if pcall(texture.SetGradient, texture, orientation, fromColor, toColor) then
+			return
+		end
 	end
 	if texture.SetGradientAlpha then
 		texture:SetGradientAlpha(orientation, from[1], from[2], from[3], from[4], to[1], to[2], to[3], to[4])
