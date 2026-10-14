@@ -60,12 +60,13 @@ local DEFAULTS = {
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
-	-- The Visual Effects page's "Turn off in" grid for the letterbox and tint:
+	-- The Visual Effects page's "Turn off in" grid for the letterbox, tint,
+	-- vignette and weather:
 	-- <effect>OffIn<where> (ns.EFFECT_OFF_WHERE), <effect>OffInCombat (gone in
 	-- fights, back once the Calm Timer has run out after) and
 	-- <effect>OnlyInCameras (only while a camera mode runs). Set below.
 	calmTime = 60,            -- Calm Timer: seconds after a fight before things settle back (nameplates
-	                          -- and names shown for fights go, the letterbox and tint fade back in)
+	                          -- and names shown for fights go, the visual effects fade back in)
 	tintPreset = "zonetime",   -- screen tint over the game world (see TINT_PRESETS)
 	tintStrength = 1,
 	tintCustomR = 1, tintCustomG = 0.8, tintCustomB = 0.6,
@@ -396,7 +397,7 @@ ns.CAMERA_OFF_WHERE = { "Cities", "Instances", "BGs", "World" }
 ns.CAMERA_OFF_NEVER = { flight = { Instances = true, BGs = true } }
 -- The Visual Effects page's grid: the same places, by where you are now.
 ns.EFFECT_OFF_WHERE = ns.CAMERA_OFF_WHERE
-ns.EFFECT_GRID = { "letterbox", "tint" }
+ns.EFFECT_GRID = { "letterbox", "tint", "vignette", "weather" }
 for _, effect in ipairs(ns.EFFECT_GRID) do
 	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
 		DEFAULTS[effect .. "OffIn" .. where] = false
@@ -405,6 +406,11 @@ for _, effect in ipairs(ns.EFFECT_GRID) do
 end
 DEFAULTS.letterboxOffInCombat = true -- (the bars slide away for fights)
 DEFAULTS.tintOffInCombat = false
+DEFAULTS.vignetteOffInCombat = false
+-- The grid's Always column: the letterbox, vignette and weather have their own
+-- switches (letterbox, vignette, weatherTint); the tint has this one.
+DEFAULTS.tintOffAlways = false
+DEFAULTS.weatherOffInCombat = false
 -- The same grid's Calm Timer column: <cam>CalmWait, that camera holds off
 -- until the Calm Timer (calmTime) has run out after a fight. By default the
 -- ones you'd walk or run off into after one (RP walking, auto-running), the
@@ -1005,6 +1011,7 @@ local function OffInChanged()
 end
 
 local function ShouldBeCinematic(now)
+	ns.cineOffWhy = "an error (see /cine log)" -- (until a return below says otherwise)
 	local changed = OffInChanged()
 	MovingFor() -- (each tick, so its timer sees every auto-run and stop)
 	-- Switched off, or in a place or group where it's off: once that ends
@@ -1015,6 +1022,13 @@ local function ShouldBeCinematic(now)
 		or GetTime() < snoozeUntil
 		or IsInDisabledZone() or IsInDisabledGroup() then
 		quickStart = false
+		-- (For the log: why CineMode is off. See OnUpdate.)
+		ns.cineOffWhy = (not ns.db.enabled and "switched off")
+			or (not ns.db.fadeUI and not ns.TriggerStartsCine() and ("no CineMode trigger (place %s, moving %s, " ..
+				"auto-run flag %s, auto-running %s, run cam off here %s)"):format(tostring(ns.GetPlaceType()),
+				tostring(ns.playerMoving), tostring(ns.autoRunning), tostring(ns.IsAutoRunning and ns.IsAutoRunning()),
+				tostring(ns.IsCameraOffHere("run"))))
+			or (GetTime() < snoozeUntil and "snoozed") or "turned off here"
 		return false
 	end
 	if changed then
@@ -1026,6 +1040,7 @@ local function ShouldBeCinematic(now)
 		-- busy as it ends waits the full fade delay.
 		quickStart = not ns.db.stayInCombat
 			and (InCombatLockdown() or Flag(UnitAffectingCombat("player"))) and true or false
+		ns.cineOffWhy = "busy (combat, cast, window or cursor)"
 		return false
 	end
 	-- Flights: right away with the option on, or as the flight event's delay ends.
@@ -1040,12 +1055,14 @@ local function ShouldBeCinematic(now)
 	if MovingOff() then
 		lastMovingOff = now
 		offForMoving = true
+		ns.cineOffWhy = "moving (Off while moving)"
 		return false
 	end
 	if instant or not ns.db.offWhileMoving then
 		lastMovingOff = -math.huge
 	elseif now - lastMovingOff < MovingWait() then
 		offForMoving = true
+		ns.cineOffWhy = "just moved (Off while moving)"
 		return false
 	end
 	-- Otherwise things must stay calm (no cast, window or the like) for the
@@ -1055,6 +1072,7 @@ local function ShouldBeCinematic(now)
 		switchedOn = false
 		return true
 	end
+	ns.cineOffWhy = ("waiting out Back into CineMode after (%.0f of %d sec)"):format(now - lastBusy, delay)
 	return false
 end
 
@@ -1295,10 +1313,8 @@ local snapRound = 0
 -- The effects in the Visual Effects page's grid: off where ticked, off in
 -- fights (and until the Calm Timer, db.calmTime, has run out after one), or
 -- only while a camera mode runs.
-local GRID_EFFECTS = {
-	{ key = "letterbox", update = "UpdateLetterbox" },
-	{ key = "tint", update = "UpdateTint" },
-}
+local GRID_EFFECTS = { "letterbox", "tint", "vignette", "weather" }
+local effectWanted = {}
 local lastFightAt = -math.huge
 
 local function OnUpdate(_, elapsed)
@@ -1346,10 +1362,10 @@ local function OnUpdate(_, elapsed)
 		end
 	end
 	if cinematic ~= ns.lastCinematic then
-		ns.Log("state", cinematic and "cinematic" or "normal UI")
+		ns.Log("state", cinematic and "cinematic" or ("normal UI: " .. tostring(ns.cineOffWhy)))
 	end
 	Step(ns.UpdateFrames, cinematic, elapsed)
-	-- The letterbox and tint each show except where their grid row says. One
+	-- The letterbox, tint, vignette and weather each show except where their grid row says. One
 	-- kept out of fights waits out the Calm Timer after one before fading back in.
 	local now = GetTime()
 	local inCombat = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
@@ -1362,13 +1378,15 @@ local function OnUpdate(_, elapsed)
 	-- and while just moving about takes you out of it, with Keep VFX on.
 	local effectsOn = cinematic or (not ns.db.fadeUI and ns.db.enabled and ns.ProfileChosen())
 		or (offForMoving and ns.db.movingKeepVFX) or false
-	for _, effect in ipairs(GRID_EFFECTS) do
-		local key = effect.key
-		local wanted = not ns.db[key .. "OffIn" .. place]
+	for _, key in ipairs(GRID_EFFECTS) do
+		effectWanted[key] = effectsOn and ns.db.visualEffects and not ns.db[key .. "OffIn" .. place]
 			and not (ns.db[key .. "OffInCombat"] and fighting)
 			and not (ns.db[key .. "OnlyInCameras"] and not ns.activeCam)
-		Step(ns[effect.update], effectsOn and wanted and ns.db.visualEffects and true or false, elapsed)
+			and not ns.db[key .. "OffAlways"] or false
 	end
+	Step(ns.UpdateLetterbox, effectWanted.letterbox, elapsed)
+	-- (The vignette and weather share the tint's overlay, each fading on its own.)
+	Step(ns.UpdateTint, effectWanted.tint, elapsed, effectWanted.vignette, effectWanted.weather)
 	Step(ns.UpdateCVars, cinematic)
 	Step(ns.UpdateMusic, cinematic, elapsed)
 	Step(ns.UpdatePlates, cinematic, elapsed)
@@ -2292,6 +2310,25 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		CarryOver(ns.db)
 		for _, saved in pairs(ns.db.profiles or {}) do
 			if type(saved) == "table" then CarryOver(saved) end
+		end
+		-- The vignette and weather went with the tint's row of the Visual
+		-- Effects grid: rows of their own now, starting as the tint's was. Once.
+		if not ns.db.effectGridV2 then
+			local function SplitTintRow(settings)
+				for _, effect in ipairs({ "vignette", "weather" }) do
+					for _, column in ipairs({ "OffInCities", "OffInInstances", "OffInBGs", "OffInWorld",
+						"OffInCombat", "OnlyInCameras" }) do
+						if settings["tint" .. column] ~= nil and settings[effect .. column] == nil then
+							settings[effect .. column] = settings["tint" .. column]
+						end
+					end
+				end
+			end
+			SplitTintRow(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then SplitTintRow(saved) end
+			end
+			ns.db.effectGridV2 = true
 		end
 		-- "Always show your target's nameplate" (plateTarget) was split into a
 		-- switch each for enemy and friendly targets, then into Enemy Target and

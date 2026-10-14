@@ -520,6 +520,12 @@ local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "mus
 local EVENT_MUSIC_CAMS = { cozy = true, vista = true, fish = true }
 
 local function CameraMusicOn(mode)
+	local key = ns.ActiveEvent and ns.ActiveEvent()
+	-- (A camera started from its key binding is a trigger you pulled: it
+	-- starts music, as it brings CineMode on.)
+	if key == "Manual" and mode ~= "flight" and mode ~= "walk" and mode ~= "run" then
+		return true
+	end
 	if mode == "idle" then
 		if ns.Flag(UnitIsAFK("player")) then
 			return ns.db.eventAFKMusic or false
@@ -527,7 +533,6 @@ local function CameraMusicOn(mode)
 		return StillMusicOn() or false
 	end
 	if EVENT_MUSIC_CAMS[mode] then
-		local key = ns.ActiveEvent and ns.ActiveEvent()
 		return key ~= nil and ns.db["event" .. key .. "Music"] or false
 	end
 	return MUSIC_CAM[mode] ~= nil and ns.db[MUSIC_CAM[mode]] or false

@@ -709,6 +709,10 @@ function ns.HandleSlash(msg)
 			mode = "moving the camera"
 		end
 		ns.Print(("camera mode: %s; walk mode %s"):format(mode, ns.walking and "on" or "off"))
+		-- (And why CineMode is off, if it is: with Start in CineMode off, the trigger's state.)
+		ns.Print(("CineMode %s; place %s, auto-run flag %s, auto-run cam off here %s, trigger %s"):format(
+			ns.lastCinematic and "on" or ("off: " .. tostring(ns.cineOffWhy)), tostring(ns.GetPlaceType()),
+			tostring(ns.autoRunning), tostring(ns.IsCameraOffHere("run")), tostring(ns.TriggerStartsCine())))
 	elseif cmd == "zoomtest" then
 		-- Zooms out by N yards (default 6) over 10 seconds with the same tiny
 		-- per-frame steps the slow zoom uses, then reports how far it really went.

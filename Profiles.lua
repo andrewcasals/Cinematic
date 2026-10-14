@@ -125,17 +125,20 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Camera Only",
-		tip = "The UI fades and the camera modes run. The letterbox and tint show only while a " ..
-			"camera mode runs; no soft edges.",
+		tip = "The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), " ..
+			"then CineMode until it ends. The letterbox, tint, vignette and weather show only while a " ..
+			"camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music.",
 		apply = function(set)
-			-- The letterbox and tint just for the camera modes (Visual Effects
+			-- The visual effects just for the camera modes (Visual Effects
 			-- page's "Outside camera modes" column).
-			set("letterboxOnlyInCameras", true)
-			set("tintOnlyInCameras", true)
+			for _, effect in ipairs(ns.EFFECT_GRID) do
+				set(effect .. "OnlyInCameras", true)
+			end
 			set("depthOfField", false)
 			set("deathScreen", false)
-			-- Every camera brings CineMode on (Camera Triggers page's CineMode
-			-- column), for when "Start in CineMode" is off.
+			-- The normal UI until a camera starts: every camera brings CineMode
+			-- on (Camera Triggers page's CineMode column).
+			set("fadeUI", false)
 			for _, event in ipairs(ns.EVENTS or {}) do
 				if ns.DEFAULTS["event" .. event.key .. "Cine"] ~= nil then
 					set("event" .. event.key .. "Cine", true)
@@ -143,6 +146,17 @@ ns.BUILTIN_PROFILES = {
 			end
 			set("walkCine", true)
 			set("runCine", true)
+			set("deathCine", true)
+			-- Every camera starting can bring music back, however recently it played.
+			set("musicFatigue", 0)
+			-- Standing still starts the AFK camera, and every camera can start music.
+			set("eventStillCamera", "afk")
+			for _, event in ipairs({ "AFK", "Still", "Chair", "Kneel", "Sleep", "Dance", "Weapon", "Campfire",
+				"Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
+				set("event" .. event .. "Music", true)
+			end
+			set("musicCamWalk", true)
+			set("musicCamRun", true)
 		end,
 	},
 	{

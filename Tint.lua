@@ -208,6 +208,9 @@ local DRIFT_REFRESH = 0.25 -- seconds between drift updates
 local VIGNETTE_SIZE = 0.25 -- fraction of the screen each edge gradient covers
 local tintFrame, tintTexture, vignetteEdges
 local tintLevel = 0
+-- The vignette's and weather's own levels: they share the tint's overlay but
+-- have their own rows in the Visual Effects page's grid.
+local layerLevel = { vignette = 0, weather = 0 }
 local tintDirty = false
 local tintPreview = false
 local menuPreviewHour, menuPreviewUntil = -1, 0
@@ -574,7 +577,7 @@ local function CreateTint()
 	end
 end
 
-local function ApplyTint(level)
+local function ApplyTint(level, vignetteLevel, weatherLevel)
 	local preset = TINT_BY_KEY[shownPreset] or TINT_BY_KEY.none
 	local isZone = preset.key == "zone" or preset.key == "zonetime"
 	local strength = math.min(1, (isZone and zoneStrength or db.tintStrength) * DriftFactor())
@@ -636,7 +639,7 @@ local function ApplyTint(level)
 
 	local weather = { 1, 1, 1, 1 }
 	for c = 1, 3 do
-		weather[c] = 1 - (1 - weatherColor[c]) * level
+		weather[c] = 1 - (1 - weatherColor[c]) * weatherLevel
 	end
 	if weather[1] < 1 or weather[2] < 1 or weather[3] < 1 then
 		SetGradient(weatherTexture, "VERTICAL", weather, weather)
@@ -645,7 +648,7 @@ local function ApplyTint(level)
 		weatherTexture:Hide()
 	end
 
-	local vignetteAlpha = db.vignette and db.vignetteStrength * level or 0
+	local vignetteAlpha = db.vignette and db.vignetteStrength * vignetteLevel or 0
 	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
 	for _, edge in pairs(vignetteEdges) do
 		edge:SetShown(vignetteAlpha > 0)
@@ -662,7 +665,7 @@ local function ApplyTint(level)
 		SetGradient(vignetteEdges.right, "HORIZONTAL", clear, dark)
 	end
 
-	tintFrame:SetShown(level > 0)
+	tintFrame:SetShown(level > 0 or vignetteLevel > 0 or weatherLevel > 0)
 end
 
 -- cinematic: already false outside the situations ticked for the tint (see Core).
@@ -823,7 +826,7 @@ local function UpdateWeather(elapsed)
 	for c = 1, 3 do
 		if weatherColor[c] ~= weatherTarget[c] then
 			-- While the tint is hidden, just jump.
-			weatherColor[c] = tintLevel == 0 and weatherTarget[c]
+			weatherColor[c] = layerLevel.weather == 0 and weatherTarget[c]
 				or Approach(weatherColor[c], weatherTarget[c], elapsed, WEATHER_BLEND_TIME)
 			changed = true
 		end
@@ -861,9 +864,18 @@ local function UpdatePresetSwap(elapsed)
 	return false
 end
 
-local function UpdateTint(cinematic, elapsed)
+-- A level (the tint's, vignette's or weather's) one step toward wanted (0 or 1).
+local function FadeLevel(level, wanted, elapsed)
+	local duration = wanted > level and ns.FadeOutTime() or ns.FadeInTime()
+	return Previewing() and wanted or Approach(level, wanted, elapsed, duration)
+end
+
+-- cinematic, vignetteOn, weatherOn: whether each is wanted now (see Core).
+local function UpdateTint(cinematic, elapsed, vignetteOn, weatherOn)
 	UpdateDeathScreen(elapsed)
 	local target = TintWanted(cinematic) and 1 or 0
+	local vignetteWant = TintWanted(vignetteOn) and 1 or 0
+	local weatherWant = TintWanted(weatherOn) and 1 or 0
 	if UpdatePresetSwap(elapsed) then
 		tintDirty = true
 	end
@@ -891,13 +903,15 @@ local function UpdateTint(cinematic, elapsed)
 			tintDirty = true
 		end
 	end
-	if tintLevel == target and not tintDirty then
+	if tintLevel == target and layerLevel.vignette == vignetteWant and layerLevel.weather == weatherWant
+		and not tintDirty then
 		return
 	end
 	tintDirty = false
-	local duration = target > tintLevel and ns.FadeOutTime() or ns.FadeInTime()
-	tintLevel = Previewing() and target or Approach(tintLevel, target, elapsed, duration)
-	ApplyTint(tintLevel)
+	tintLevel = FadeLevel(tintLevel, target, elapsed)
+	layerLevel.vignette = FadeLevel(layerLevel.vignette, vignetteWant, elapsed)
+	layerLevel.weather = FadeLevel(layerLevel.weather, weatherWant, elapsed)
+	ApplyTint(tintLevel, layerLevel.vignette, layerLevel.weather)
 end
 
 -- Entry points for Core.lua and the options page

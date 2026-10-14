@@ -104,17 +104,17 @@ ns.DEFAULTS.eventAFKMusic = false
 ns.DEFAULTS.eventQuestMusic = false
 ns.DEFAULTS.eventStillMusic = false
 
--- Each event's CineMode column (event<key>Cine, and walkCine/runCine for
--- auto-walking and auto-running): with "Start in CineMode" off, its camera
+-- Each event's CineMode column (event<key>Cine, and walkCine/runCine/deathCine
+-- for auto-walking, auto-running and dying): with "Start in CineMode" off, its camera
 -- starting brings CineMode on (the UI fades, music, the camera) until it ends.
--- Not the quest camera's: it runs whether or not CineMode is on.
+-- The quest camera runs either way; its switch brings CineMode in around it
+-- (quest windows never fade).
 for _, event in ipairs(ns.EVENTS) do
-	if event.key ~= "Quest" then
-		ns.DEFAULTS["event" .. event.key .. "Cine"] = false
-	end
+	ns.DEFAULTS["event" .. event.key .. "Cine"] = false
 end
 ns.DEFAULTS.walkCine = false
 ns.DEFAULTS.runCine = false
+ns.DEFAULTS.deathCine = false
 
 -- Whether a camera ticked in the CineMode column is running (or, for the
 -- standing-still events, due to start).
@@ -123,14 +123,30 @@ function ns.TriggerStartsCine()
 	if ns.FlightCameraOn() and db.eventFlightCine then
 		return true
 	end
-	if db.walkCine and db.walkCamera ~= "none" and ns.IsRPWalking and ns.IsRPWalking() then
+	if db.eventQuestCine and ns.QuestCamActive and ns.QuestCamActive() then
 		return true
 	end
-	if db.runCine and db.runCamera ~= "none" and ns.IsAutoRunning and ns.IsAutoRunning() then
+	-- (Dead with the death camera on, CineMode stays: the release popup shows over it.)
+	if db.deathCine and ns.IsDeathCinematic() then
 		return true
 	end
+	-- Auto-walking and auto-running start it as their camera would. Strafing
+	-- mid auto-run (a movement key held) holds their camera off but doesn't
+	-- end the auto-run: CineMode stays on through it.
+	local travel = (ns.IsRPWalking and ns.IsRPWalking() and "walk")
+		or (ns.IsAutoRunning and ns.IsAutoRunning() and "run") or nil
+	if travel then
+		ns.travelCine = db[travel .. "Cine"] and db[travel .. "Camera"] ~= "none"
+			and not ns.IsCameraOffHere(travel) or false
+	elseif not (ns.autoRunning and ns.playerMoving and not UnitOnTaxi("player")) then
+		ns.travelCine = false
+	end
+	if ns.travelCine then
+		return true
+	end
+	-- (A camera started from its key binding always does: you asked for it.)
 	local key = ns.ActiveEvent()
-	return key ~= nil and db["event" .. key .. "Cine"] == true
+	return key == "Manual" or (key ~= nil and db["event" .. key .. "Cine"] == true)
 end
 
 -- Taking a flight: the flight camera runs, unless the event is set to no camera.
@@ -2926,7 +2942,7 @@ end
 -- look back past you, hold, then turn it back behind you. Each step is one
 -- move that starts and ends at rest, eased in and out (EaseShape), and sent
 -- the way the flight camera sends its sways. Turning only: tilting as well
--- kept snapping the turn. Started with /cine flyby or its key, or at random
+-- kept snapping the turn. Started with /cine flyby, or at random
 -- in the middle of flights (taxiFlyBy). Settings: flyByAngle (degrees),
 -- flyByTurnTime, flyByHold, flyByBackTime (seconds).
 --

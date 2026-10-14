@@ -889,7 +889,7 @@ local function CreateRevealPanel()
 	calm:SetPoint("TOPLEFT", combatFadeOut, "BOTTOMLEFT", 0, -34)
 	Tooltip(calm, "How long things take to settle back into CineMode after a fight. " ..
 		"Nameplates and names ticked In combat stay up this long (so they don't drop away " ..
-		"between pulls), and the letterbox and tint, if they step aside for fights, wait this " ..
+		"between pulls), and visual effects that step aside for fights wait this " ..
 		"long before fading back in. Your portrait and buffs, if they only show after combat, " ..
 		"count a fight as recent for this long too, the RP walk, auto-run and cozy cameras " ..
 		"wait this long before starting, and music muted for fights comes back after it. 0 " ..
@@ -1847,6 +1847,7 @@ local function CreateEventsPanel()
 			tip = "Auto-running. The camera's settings are on the Auto-run Cam page; Camera Modes turns " ..
 				"it off in some places." },
 		{ label = "Die", cameraKey = "deathOrbit", choices = DEATH_CAMERAS, off = false, key = "deathSong",
+			cineKey = "deathCine",
 			deathSong = true,
 			tip = "Dying, until you release or are resurrected. The camera's settings are on the Death " ..
 				"Cam page; Camera Modes turns it off in some places.",
@@ -1911,7 +1912,7 @@ local function CreateFlightPanel()
 				"Now and then in the middle of a flight, the camera slowly turns round to look back " ..
 				"past you, holds there, then turns back behind you. On a route's first flight (its " ..
 				"length not known yet), just one, early on. Dragging the camera stops it. /cine flyby " ..
-				"or its key starts one whenever you like. Once you move the camera yourself on a flight, " ..
+				"starts one whenever you like. Once you move the camera yourself on a flight, " ..
 				"there are no more for that flight."), "check")
 			stack:Add(Check(content, "flyByLook", "Do /look as a fly-by starts",
 				"Your character looks around as the camera starts turning, as if they'd spotted " ..
@@ -2439,26 +2440,39 @@ local function CreateTintPanel()
 	master:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 	RegisterPageSwitch(content, "visualEffects", master)
 
-	-- Turn off in: a grid of the letterbox and tint (rows) by place, fights
+	-- Turn off in: a grid of the letterbox, tint, vignette and weather (rows) by place, fights
 	-- and camera modes (columns), like the Camera Modes page's.
 	local gridHeader = Header(content, "Turn off in", master, -18)
 	gridHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
 	local gridNote = Label(content, "GameFontHighlightSmall",
-		"Ticked, that effect doesn't show there. Combat: it goes for fights, and comes back once the " ..
+		"Ticked, that effect doesn't show there. Always: not at all. Combat: it goes for fights, and comes back once the " ..
 		"Calm Timer (CineMode page) has run out after. Outside camera modes: it only shows while a " ..
 		"camera mode runs (flights, AFK, cozy and the rest).")
 	gridNote:SetPoint("TOPLEFT", gridHeader, "BOTTOMLEFT", 0, -6)
 	gridNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	gridNote:SetJustifyH("LEFT")
 	gridNote:SetJustifyV("TOP")
-	local EFFECT_ROWS = { letterbox = "Letterbox", tint = "Tint" }
+	local EFFECT_ROWS = { letterbox = "Letterbox", tint = "Tint", vignette = "Vignette", weather = "Weather" }
+	-- (What the tooltips call them, where the row name alone would mislead.)
+	local EFFECT_TIP_NAMES = { weather = "weather tint" }
+	-- The Always column: an effect's own on/off switch, ticked when off (the
+	-- tint's is tintOffAlways). A row's other boxes grey while it's ticked.
+	local EFFECT_SWITCHES = { letterbox = "letterbox", vignette = "vignette", weather = "weatherTint" }
+	local function EffectOff(db, effect)
+		local switch = EFFECT_SWITCHES[effect]
+		if switch then
+			return not db[switch]
+		end
+		return db[effect .. "OffAlways"]
+	end
 	local PLACE_NAMES = {
 		Cities = { "Cities", "in capital cities" },
 		Instances = { "Instances", "in dungeons, scenarios and raids" },
 		BGs = { "BGs & Arenas", "in battlegrounds and arenas" },
 		World = { "Open World", "out in the world (not in a capital city or an instance), inns included" },
 	}
-	local EFFECT_COLUMNS = {}
+	local EFFECT_COLUMNS = { { key = "OffAlways", heading = "Always",
+		tip = function(name) return ("No %s at all."):format(name) end } }
 	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
 		EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OffIn" .. where, heading = PLACE_NAMES[where][1],
 			tip = function(name) return ("No %s %s."):format(name, PLACE_NAMES[where][2]) end }
@@ -2471,9 +2485,10 @@ local function CreateTintPanel()
 	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OnlyInCameras", heading = "Outside camera modes",
 		tip = function(name) return ("The %s only shows while a camera mode runs: flights, AFK, cozy and " ..
 			"the rest."):format(name) end }
-	local NAME_WIDTH, COLUMN_WIDTH, GAP, HEADING_HEIGHT = 90, 72, 10, 26
+	local NAME_WIDTH, COLUMN_WIDTH, GAP, HEADING_HEIGHT = 90, 66, 10, 26
 	local function ColumnX(c)
-		return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= firstApart and GAP or 0)
+		-- (Always set apart from the places too.)
+		return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= 2 and GAP or 0) + (c >= firstApart and GAP or 0)
 	end
 	local gridTop = CreateFrame("Frame", nil, content)
 	gridTop:SetSize(ColumnX(#EFFECT_COLUMNS) + COLUMN_WIDTH, HEADING_HEIGHT)
@@ -2492,14 +2507,23 @@ local function CreateTintPanel()
 		Label(row, "GameFontHighlight", EFFECT_ROWS[effect]):SetPoint("LEFT", row, "LEFT", 0, 0)
 		for c, column in ipairs(EFFECT_COLUMNS) do
 			local key = effect .. column.key
-			local check = Check(content, key, "", column.tip(EFFECT_ROWS[effect]:lower()), function(value)
-				ns.GetDB()[key] = value
+			local tipName = EFFECT_TIP_NAMES[effect] or EFFECT_ROWS[effect]:lower()
+			local switch = column.key == "OffAlways" and EFFECT_SWITCHES[effect]
+			local check = Check(content, switch or key, "", column.tip(tipName), function(value)
+				if switch then
+					ns.GetDB()[switch] = not value
+				else
+					ns.GetDB()[key] = value
+				end
 				ns.letterboxDirty = true
 				if ns.RefreshTint then ns.RefreshTint() end
+				Refresh() -- grey out / enable the row and its settings below
 			end)
 			check:SetPoint("CENTER", row, "LEFT", ColumnX(c) + COLUMN_WIDTH / 2, 0)
-			if effect == "letterbox" then
-				GreyUnless(check, function(db) return db.letterbox end)
+			if switch then
+				check.Refresh = function(self) self:SetChecked(not ns.GetDB()[switch]) end
+			elseif column.key ~= "OffAlways" then
+				GreyUnless(check, function(db) return not EffectOff(db, effect) end)
 			end
 		end
 		lastGridRow = row
@@ -2509,19 +2533,15 @@ local function CreateTintPanel()
 	local letterboxHeader = Header(content, "Letterbox", lastGridRow, -20)
 	letterboxHeader:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -20)
 
-	local letterbox = Check(content, "letterbox", "Show letterbox bars",
-		"Black bars slide in at the top and bottom of the screen.", function(value)
-			ns.GetDB().letterbox = value
-			ns.RefreshLetterbox()
-			Refresh() -- grey out / enable when they show
-		end)
-	letterbox:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", -2, -6)
-
+	-- (Switched on and off in the grid's Always column, as are the vignette and weather.)
 	local size = Slider(content, "letterboxSize", "Bar height", 0, 25, 1, "%d%%", 100, ns.RefreshLetterbox)
-	size:SetPoint("TOPLEFT", letterbox, "BOTTOMLEFT", 4, -30)
+	size:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", 2, -26)
+	Tooltip(size, "Black bars slide in at the top and bottom of the screen.")
+	GreyUnless(size, function(db) return db.letterbox end)
 
 	local opacity = Slider(content, "letterboxAlpha", "Bar opacity", 10, 100, 5, "%d%%", 100, ns.RefreshLetterbox)
 	opacity:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -34)
+	GreyUnless(opacity, function(db) return db.letterbox end)
 
 	local lookHeader = Header(content, "Tint", opacity, -24)
 	lookHeader:SetPoint("TOPLEFT", opacity, "BOTTOMLEFT", -2, -24)
@@ -3045,16 +3065,11 @@ local function CreateTintPanel()
 	local vignetteHeader = Header(content, "Vignette", gapGround, -24)
 	vignetteHeader:SetPoint("TOPLEFT", gapGround, "BOTTOMLEFT", -2, -24)
 
-	local vignette = Check(content, "vignette", "Darken the screen edges",
-		"Soft dark edges that draw the eye to the middle. Works with any tint.", function(value)
-			ns.GetDB().vignette = value
-			ns.RefreshTint()
-		end)
-	vignette:SetPoint("TOPLEFT", vignetteHeader, "BOTTOMLEFT", -2, -6)
-
 	local vignetteStrength = Slider(content, "vignetteStrength", "Vignette strength", 10, 100, 5, "%d%%", 100,
 		ns.RefreshTint)
-	vignetteStrength:SetPoint("TOPLEFT", vignette, "BOTTOMLEFT", 4, -26)
+	vignetteStrength:SetPoint("TOPLEFT", vignetteHeader, "BOTTOMLEFT", 2, -26)
+	Tooltip(vignetteStrength, "Soft dark edges that draw the eye to the middle. Works with any tint.")
+	GreyUnless(vignetteStrength, function(db) return db.vignette end)
 
 	-- Inns
 	local innHeader = Header(content, "Inns", vignetteStrength, -24)
@@ -3071,7 +3086,7 @@ local function CreateTintPanel()
 		end)
 	innGlow:SetPoint("TOPLEFT", innHeader, "BOTTOMLEFT", -2, -6)
 
-	local innGlowStrength = Slider(content, "innGlowAmount", "Glow amount", 0, 25, 1, "%d%%", 100,
+	local innGlowStrength = Slider(content, "innGlowAmount", "Inn glow amount", 0, 100, 1, "%d%%", 100,
 		ns.RefreshTint)
 	Tooltip(innGlowStrength, "How much light the glow adds at its brightest, low on the screen.")
 	innGlowStrength:SetPoint("TOPLEFT", innGlow, "BOTTOMLEFT", 4, -26)
@@ -3081,21 +3096,13 @@ local function CreateTintPanel()
 	local weatherHeader = Header(content, "Weather", innGlowStrength, -24)
 	weatherHeader:SetPoint("TOPLEFT", innGlowStrength, "BOTTOMLEFT", -2, -24)
 
-	local weatherTint = Check(content, "weatherTint", "Tint for the weather",
-		"Rain greys and cools the scene, snow turns it pale blue and a sandstorm gives it a dusty " ..
-		"orange haze, more strongly the heavier the weather. Works with any tint (None included), " ..
-		"lifts under a roof and blends in as a storm builds. Needs a game version that reports " ..
-		"the weather.",
-		function(value)
-			ns.GetDB().weatherTint = value
-			Refresh() -- grey out / enable the strength slider
-			ns.RefreshTint()
-		end)
-	weatherTint:SetPoint("TOPLEFT", weatherHeader, "BOTTOMLEFT", -2, -6)
-
 	local weatherTintStrength = Slider(content, "weatherTintStrength", "Weather strength", 10, 100, 5, "%d%%", 100,
 		ns.RefreshTint)
-	weatherTintStrength:SetPoint("TOPLEFT", weatherTint, "BOTTOMLEFT", 4, -26)
+	weatherTintStrength:SetPoint("TOPLEFT", weatherHeader, "BOTTOMLEFT", 2, -26)
+	Tooltip(weatherTintStrength, "Rain greys and cools the scene, snow turns it pale blue and a sandstorm " ..
+		"gives it a dusty orange haze, more strongly the heavier the weather. Works with any tint (None " ..
+		"included), lifts under a roof and blends in as a storm builds. Needs a game version that " ..
+		"reports the weather.")
 	GreyUnless(weatherTintStrength, function(db) return db.weatherTint end)
 
 	-- Depth of field
