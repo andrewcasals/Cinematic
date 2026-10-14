@@ -82,7 +82,7 @@ local DEFAULTS = {
 	timeTintStrength = 0.5,-- how strongly the time-of-day colour applies (both time presets)
 	tintPreviewHour = -1,  -- options-page preview of the time-of-day tint at this hour (-1 = now)
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
-	alwaysShowWaypoint = false, -- keep retail's quest waypoint visible in cinematic mode
+	alwaysShowWaypoint = true, -- keep retail's quest waypoint visible in cinematic mode
 	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (not retail)
 	durabilityShow = true,     -- keep the durability figure visible in cinematic mode while gear is damaged
 	-- Swing timer page (not retail), in CineMode and out:

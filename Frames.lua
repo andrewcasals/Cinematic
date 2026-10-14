@@ -1119,6 +1119,10 @@ ns.COMBAT_SHOW = {
 		handledBy = "handleMinimap" },
 	{ key = "quests", label = "Quest tracker", default = false, frames = FRAME_GROUPS.quests,
 		morePage = "Quest tracker", handledBy = "handleQuests" },
+	-- Retail's quest waypoint: its Always tick is the Minimap page's "Always
+	-- show the quest waypoint" (CINE_SHOW_SETTING).
+	{ key = "waypoint", label = "Quest waypoint", default = false, retail = true, groups = { "waypoint" },
+		morePage = "Minimap", handledBy = "handleQuests" },
 	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs", handledBy = "handleBuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
 	{ key = "swing", label = "Swing timer", default = true, retail = false, handledBy = "handleSwing",
@@ -1190,7 +1194,7 @@ local ROW_SECTIONS = {
 	buffs = "combat", swing = "combat", castbar = "combat", cooldowns = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
-	minimap = "interface", quests = "interface", micro = "interface", xp = "interface",
+	minimap = "interface", quests = "interface", waypoint = "interface", micro = "interface", xp = "interface",
 }
 for _, item in ipairs(ns.COMBAT_SHOW) do
 	item.page = item.page or ROW_SECTIONS[item.key]
@@ -1408,7 +1412,7 @@ end
 
 -- Standard Frames page's Always column (cineShow): ticked, a row's frames stay shown all through CineMode.
 -- Some rows' Always tick is an option elsewhere too (the same setting).
-ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap" }
+ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWaypoint" }
 -- Rows ticked there until changed (no profile lists them, so none hides them).
 local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true,
