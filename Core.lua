@@ -591,6 +591,7 @@ end
 function ns.NPCWindowOpen()
 	return AnyShown(NPC_WINDOWS)
 end
+ns.NPCWindowOpen = ns.Profiled("NPCWindowOpen", ns.NPCWindowOpen)
 
 -- Menus and game windows (the Escape menu, options, spellbook, character
 -- sheet, map...). The camera modes wait while one is open. The barbershop's
@@ -605,6 +606,7 @@ for _, name in ipairs(REVEAL_WHILE_SHOWN) do MENU_WINDOWS[#MENU_WINDOWS + 1] = n
 function ns.MenuWindowOpen()
 	return AnyShown(MENU_WINDOWS)
 end
+ns.MenuWindowOpen = ns.Profiled("MenuWindowOpen", ns.MenuWindowOpen)
 
 local function AnyRevealFrameShown()
 	return (not ns.db.stayWithWindows and AnyShown(REVEAL_WHILE_SHOWN))
@@ -827,6 +829,7 @@ function ns.GetPlaceType()
 		return "inn"
 	end
 end
+ns.GetPlaceType = ns.Profiled("GetPlaceType", ns.GetPlaceType)
 
 -- Flagged for PvP (or free-for-all PvP).
 local function IsPvPFlagged()
@@ -908,6 +911,7 @@ function ns.IsCameraOffHere(cam)
 	end
 	return db[cam .. "OffIn" .. place] or false
 end
+ns.IsCameraOffHere = ns.Profiled("IsCameraOffHere", ns.IsCameraOffHere)
 
 function ns.IsMusicBlocked()
 	local place = ns.PlaceSuffix()
@@ -1063,9 +1067,9 @@ local function CheckHeldCVar(name)
 end
 
 if C_CVar and C_CVar.SetCVar then
-	hooksecurefunc(C_CVar, "SetCVar", CheckHeldCVar)
+	hooksecurefunc(C_CVar, "SetCVar", ns.Profiled("SetCVar hook", CheckHeldCVar))
 end
-hooksecurefunc("SetCVar", CheckHeldCVar)
+hooksecurefunc("SetCVar", ns.Profiled("SetCVar hook", CheckHeldCVar))
 -- Changes made outside Lua (console commands) only show up as this event.
 local heldWatcher = CreateFrame("Frame")
 heldWatcher:RegisterEvent("CVAR_UPDATE") -- (its script is below)
@@ -1105,13 +1109,13 @@ local function WriteBackOverridden()
 	end
 end
 heldWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
-heldWatcher:SetScript("OnEvent", function(_, event, name)
+heldWatcher:SetScript("OnEvent", ns.Profiled("CVAR_UPDATE event", function(_, event, name)
 	if event == "PLAYER_REGEN_ENABLED" then
 		WriteBackOverridden()
 	else
 		CheckHeldCVar(name)
 	end
-end)
+end))
 
 -- Runs fn(...), an addon setting the game's settings of its own accord (not
 -- the player's doing): settings held meanwhile stay held and are written back
@@ -1226,7 +1230,14 @@ local function Step(fn, a, b)
 		return nil -- stopped by an earlier step this tick: leave the rest
 	end
 	stepFn, stepA, stepB = fn, a, b
+	local started, memory
+	if ns.profiling then
+		started, memory = ns.ProfileMark()
+	end
 	local ok, result = xpcall(RunStep, StepHandler)
+	if started then
+		ns.ProfileStep(fn, started, memory) -- (/cine debug cpu)
+	end
 	stepFn, stepA, stepB = nil, nil, nil
 	if not ok then
 		ns.ReportError(result, stepStack, true)
@@ -1241,6 +1252,7 @@ ns.orbitFrame = CreateFrame("Frame")
 local function OnOrbitUpdate(_, elapsed)
 	Step(ns.UpdateOrbit, ns.lastCinematic, elapsed)
 end
+OnOrbitUpdate = ns.Profiled("Orbit camera (every frame)", OnOrbitUpdate)
 
 -- Set at login (and on turning it on) when cinematic mode starts at once: the first cinematic tick
 -- within this window snaps straight to cinematic. Expires so a busy login
@@ -1339,6 +1351,9 @@ local function OnUpdate(_, elapsed)
 		ns.lastCinematic = cinematic
 	end
 end
+OnUpdate = ns.Profiled("Update tick", OnUpdate)
+ns.ProfileName(UpdateDroppedTarget, "UpdateDroppedTarget")
+ns.ProfileName(ShouldBeCinematic, "ShouldBeCinematic")
 
 -- The safety net: put everything the addon changes back as it was, each part
 -- on its own so one that fails doesn't stop the rest. Used when an error keeps
@@ -1706,7 +1721,7 @@ ticker:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 ticker:RegisterEvent("PLAYER_STARTED_MOVING")
 ticker:RegisterEvent("PLAYER_LEVEL_UP")
 ticker:RegisterEvent("PLAYER_STOPPED_MOVING")
-ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
+ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg1, arg2)
 	if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
 		ns.newInstall = CinematicDB == nil -- (for the welcome window: Welcome.lua)
 		CinematicDB = CinematicDB or {}
@@ -2449,7 +2464,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 		Hook("MoveForwardStart", function() ns.autoRunning = false end)
 		Hook("MoveBackwardStart", function() ns.autoRunning = false end)
 		ns.HookTaxiRoutes()
-		GameTooltip:HookScript("OnShow", ns.OnTooltipShow)
+		GameTooltip:HookScript("OnShow", ns.Profiled("Tooltip shown", ns.OnTooltipShow))
 		GameTooltip:HookScript("OnHide", ns.OnTooltipHide)
 		-- The minimap button first, so the fade list picks it up straight away
 		-- (otherwise it stays visible until the next scan).
@@ -2542,7 +2557,7 @@ ticker:SetScript("OnEvent", function(self, event, arg1, arg2)
 			end
 		end
 	end
-end)
+end))
 
 -- The development copy (CinematicDev) wins over the released Cinematic: with
 -- both enabled (a new character starts with every addon on) they'd run twice

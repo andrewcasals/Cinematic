@@ -781,7 +781,7 @@ for _, name in ipairs({ "MoveViewLeftStart", "MoveViewLeftStop", "MoveViewRightS
 		end)
 	end
 end
-frame:SetScript("OnUpdate", OnUpdate)
+frame:SetScript("OnUpdate", ns.Profiled("Quest cam", OnUpdate))
 
 -- Whether the quest cam is zooming back out to your distance (the RP walk
 -- and auto-run cameras' own zoom waits for it, rather than starting from close in).

@@ -331,7 +331,7 @@ do
 			local bar = _G[name]
 			if bar and bar.HookScript and not hookedBars[bar] then
 				hookedBars[bar] = true
-				bar:HookScript("OnEvent", UpdateCastBar)
+				bar:HookScript("OnEvent", ns.Profiled("Cast bar hook", UpdateCastBar))
 				bar:HookScript("OnShow", UpdateCastBar)
 				UpdateCastBar(bar)
 			end
@@ -519,7 +519,7 @@ do
 		return (x - objectX) ^ 2 + (y - objectY) ^ 2 < OBJECT_REACH ^ 2
 	end
 
-	recastWatcher:SetScript("OnUpdate", function()
+	recastWatcher:SetScript("OnUpdate", ns.Profiled("Right-click cast watch", function()
 		if not castButton then
 			return
 		end
@@ -571,7 +571,7 @@ do
 			local padWant = ready and ns.db.fishGamepadCast and ns.IsGamePadOn() and (fishCam or poleReady)
 			SetRecast(padKey, padWant and true or false)
 		end
-	end)
+	end))
 end
 
 -- Sitting on a chair or bench: there's no event for it, so it's pieced
@@ -669,7 +669,7 @@ function ns.HookCameraInput()
 		end
 	end)
 	-- The snap may not send a movement event: watch your position instead.
-	seatWatcher:SetScript("OnUpdate", function()
+	seatWatcher:SetScript("OnUpdate", ns.Profiled("Seat watch", function()
 		if GetTime() - seatClickAt > SEAT_SNAP_WINDOW or not seatX then
 			return
 		end
@@ -677,7 +677,7 @@ function ns.HookCameraInput()
 		if x and ((x - seatX) ^ 2 + (y - seatY) ^ 2) > SEAT_SNAP_MOVE ^ 2 and not ns.playerMoving then
 			Seated("snap (moved onto it)")
 		end
-	end)
+	end))
 	-- Emotes: whichever emote function this client uses, plus typed commands
 	-- (see below), all end up here with the emote's token ("DANCE", "SIT", ...).
 	local function OnEmote(token, via)
@@ -962,7 +962,7 @@ local function CheckIdleBuffs()
 	end
 	atCampfire = found
 end
-campfireWatcher:SetScript("OnEvent", CheckIdleBuffs)
+campfireWatcher:SetScript("OnEvent", ns.Profiled("UNIT_AURA (campfire)", CheckIdleBuffs))
 ns.CheckIdleBuffs = CheckIdleBuffs -- after the list changes
 function ns.IsAtCampfire() return atCampfire end
 
@@ -1196,6 +1196,7 @@ function ns.ActiveEvent()
 	end
 	return key, camera
 end
+ns.ActiveEvent = ns.Profiled("ActiveEvent", ns.ActiveEvent)
 
 -- For /cine debug emote: the event happening now.
 function ns.GetEventDebug()

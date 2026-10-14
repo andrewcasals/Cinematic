@@ -73,7 +73,7 @@ haze:SetBlendMode("BLEND")
 haze:SetAlpha(0)
 haze:Hide()
 
-frame:SetScript("OnUpdate", OnUpdate)
+frame:SetScript("OnUpdate", ns.Profiled("Depth of field", OnUpdate))
 
 -- Shows the haze for a while (default 30 seconds), at `value` (0-1) or the
 -- demo strength. Returns false if a demo was already showing and has now

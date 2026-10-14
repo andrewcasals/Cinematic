@@ -145,7 +145,7 @@ local function HookFrame(frame)
 	frame.cinematicHooked = true
 	local alpha = frame:GetAlpha()
 	frame.cinematicOwnAlpha = Known(alpha) and alpha or nil
-	hooksecurefunc(frame, "SetAlpha", function(self, own)
+	hooksecurefunc(frame, "SetAlpha", ns.Profiled("Plater SetAlpha hook", function(self, own)
 		if applying then
 			return
 		end
@@ -153,7 +153,7 @@ local function HookFrame(frame)
 		if self.cinematicPlateAlpha then
 			Apply(self)
 		end
-	end)
+	end))
 	if frame.SetAlphaFromBoolean then
 		hooksecurefunc(frame, "SetAlphaFromBoolean", function(self)
 			self.cinematicOwnAlpha = nil

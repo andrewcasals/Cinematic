@@ -723,7 +723,7 @@ ns.plates = { level = 1, off = false }
 local fadedPlates = {} -- [plate unit frame] = true while it has a cinematicAlpha
 local plateKeeper = CreateFrame("Frame")
 plateKeeper:Hide()
-plateKeeper:SetScript("OnUpdate", function(self)
+plateKeeper:SetScript("OnUpdate", ns.Profiled("Plate keeper", function(self)
 	for frame in pairs(fadedPlates) do
 		local wanted = frame.cinematicAlpha
 		if wanted then
@@ -737,7 +737,7 @@ plateKeeper:SetScript("OnUpdate", function(self)
 	if not next(fadedPlates) then
 		self:Hide()
 	end
-end)
+end))
 
 -- The interact prompt on a plate (gamepad mode's button, over a bobber or
 -- someone you can talk to: the plate's SoftTargetFrame) stays up while the
@@ -1108,6 +1108,7 @@ local function RefreshAllPlates()
 		ns.SetPlateAlpha(plate, PlateAlpha(unit, plate))
 	end
 end
+RefreshAllPlates = ns.Profiled("RefreshAllPlates", RefreshAllPlates)
 
 -- For /cine debug plates: the game's plate settings, the fade, and how each
 -- visible plate (and the target) is sorted.
@@ -1726,7 +1727,7 @@ local function StartFade(to)
 	fader:Show()
 end
 
-fader:SetScript("OnUpdate", function(self)
+fader:SetScript("OnUpdate", ns.Profiled("Tooltip fade", function(self)
 	-- Reused for the next unit while fading out: finishing the fade would hide
 	-- the new one, and nothing would bring it back until the mouseover changed.
 	-- Treat it as newly shown instead.
@@ -1745,7 +1746,7 @@ fader:SetScript("OnUpdate", function(self)
 		GameTooltip:Hide()
 	end
 	GameTooltip:SetAlpha(1)
-end)
+end))
 
 -- Optional trace for /cine debug tooltip: what the tooltip did and why.
 local function Trace(what, ...)

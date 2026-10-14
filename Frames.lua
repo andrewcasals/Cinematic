@@ -248,6 +248,9 @@ local function ApplyAlpha(entry)
 	entry.settingAlpha = true
 	entry.frame:SetAlpha(entry.applied)
 	entry.settingAlpha = false
+	if ns.profiling then
+		ns.ProfileCount("SetAlpha on faded frames")
+	end
 	if LOOSE_PART_GROUPS[entry.group] then
 		FadeLooseParts(entry, visual)
 	end
@@ -267,7 +270,7 @@ end
 -- for a frame no longer faded does nothing.
 local alphaHooked = {} -- frame -> its entry while managed (false once not)
 
-local function OnOwnSetAlpha(frame, alpha)
+local OnOwnSetAlpha = ns.Profiled("Own SetAlpha hook", function(frame, alpha)
 	local entry = alphaHooked[frame]
 	if not entry or entry.settingAlpha then
 		return
@@ -280,7 +283,7 @@ local function OnOwnSetAlpha(frame, alpha)
 	end
 	entry.applied = alpha -- (so ApplyAlpha doesn't take it again)
 	ApplyAlpha(entry)
-end
+end)
 
 local function HookOwnAlpha(entry)
 	if alphaHooked[entry.frame] == nil then
@@ -910,6 +913,7 @@ function ns.IsEntryHovered(entry)
 	end
 	return IsInside(MouseFocus(), entry.frame)
 end
+ns.IsEntryHovered = ns.Profiled("IsEntryHovered", ns.IsEntryHovered)
 
 -- Frames the player can choose to show while fighting when staying cinematic
 -- in combat (db.combatShow[key], missing = the default here).
@@ -1351,6 +1355,7 @@ local function GetCombatShownFrames()
 	end
 	return shown
 end
+GetCombatShownFrames = ns.Profiled("GetCombatShownFrames", GetCombatShownFrames)
 
 -- Power types that sit empty at rest (rage, runic power) don't count: leftover
 -- rage draining after a fight isn't recovering, so only health matters.
@@ -1608,7 +1613,7 @@ end
 do
 	local auraWatcher = CreateFrame("Frame")
 	auraWatcher:RegisterUnitEvent("UNIT_AURA", "player")
-	auraWatcher:SetScript("OnEvent", function(_, _, _, updateInfo)
+	auraWatcher:SetScript("OnEvent", ns.Profiled("UNIT_AURA (peeks)", function(_, _, _, updateInfo)
 		-- (Removals count here: the last debuff going lets them fade.)
 		if debuffHeld and not (ns.db and ns.db.debuffPeekUntilGone and HasDebuff()) then
 			debuffHeld = false
@@ -1638,7 +1643,7 @@ do
 			-- (a short buff peek doesn't cut a longer debuff one short)
 			buffPeekUntil = math.max(buffPeekUntil, GetTime() + hold)
 		end
-	end)
+	end))
 end
 
 do
@@ -1646,7 +1651,7 @@ do
 	vitalsWatcher:RegisterUnitEvent("UNIT_HEALTH", "player")
 	vitalsWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
 	vitalsWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-	vitalsWatcher:SetScript("OnEvent", function(_, event)
+	vitalsWatcher:SetScript("OnEvent", ns.Profiled("Health/power events", function(_, event)
 		local now = GetTime()
 		if event == "UNIT_SPELLCAST_SUCCEEDED" then
 			lastCastAt = now
@@ -1659,7 +1664,7 @@ do
 			lastFallDamageAt = now
 		end
 		lastVitalsChange = now
-	end)
+	end))
 end
 
 local function IsPlayerRecovering()
@@ -1897,7 +1902,7 @@ local padMoveHeld = false
 function ns.PadMovementHeld()
 	return padMoveHeld
 end
-padWatcher:SetScript("OnUpdate", function()
+padWatcher:SetScript("OnUpdate", ns.Profiled("Gamepad watch", function()
 	CheckPendingPress()
 	if not (ns.db and C_GamePad and C_GamePad.GetDeviceMappedState and ns.IsGamePadOn()) then
 		padMoveHeld = false
@@ -1926,7 +1931,7 @@ padWatcher:SetScript("OnUpdate", function()
 		padHeld[index] = down or nil
 	end
 	padMoveHeld = moving
-end)
+end))
 
 -- A quest timer running (Classic clients; retail has no quest timer box).
 -- Clients without GetQuestTimers go by the box: the game only shows it while

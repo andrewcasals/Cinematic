@@ -8,6 +8,7 @@
 ## SavedVariablesPerCharacter: CinematicCharDB
 
 Diagnostics.lua
+Profiler.lua
 Core.lua
 HideUI.lua
 AddonSupport.lua

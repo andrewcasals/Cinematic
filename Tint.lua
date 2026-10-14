@@ -1247,7 +1247,7 @@ function ns.TestTimeChangeTitle(text)
 	ShowChangeTitle(text or TimeTitleAt((GetClockTime())))
 end
 
-C_Timer.NewTicker(CHANGE_CHECK, function()
+C_Timer.NewTicker(CHANGE_CHECK, ns.Profiled("Time of day check", function()
 	db = db or ns.GetDB()
 	if not db then
 		return
@@ -1259,4 +1259,4 @@ C_Timer.NewTicker(CHANGE_CHECK, function()
 		ShowChangeTitle(title)
 	end
 	lastTitle = title
-end)
+end))

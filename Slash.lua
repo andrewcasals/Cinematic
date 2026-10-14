@@ -56,6 +56,7 @@ local function PrintDebugHelp()
 	logPrints = false
 	print("  /cine log - copy the log for a bug report: what's printed below goes in it too")
 	print("  /cine debug record - also log game setting changes and music in detail (again to stop)")
+	print("  /cine debug cpu [seconds|stop] - time what the addon spends its time on (30 seconds), report in the log")
 	print("  /cine debug frame <name> - how faded frames with <name> in their name stand")
 	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
@@ -122,6 +123,19 @@ function ns.HandleSlash(msg)
 		end
 	elseif cmd == "resume" then
 		ns.Print(ns.Resume() and "started again" or "isn't stopped")
+	elseif cmd == "debug" and arg:find("^cpu") then
+		local seconds = tonumber(arg:match("^cpu%s+(%d+)"))
+		if arg == "cpu stop" then
+			if not ns.StopProfile() then
+				ns.Print("no cpu profile running")
+			end
+		elseif ns.IsProfiling() then
+			ns.Print("a cpu profile is already running: /cine debug cpu stop ends it early")
+		else
+			seconds = seconds or 30
+			ns.StartProfile(seconds)
+			ns.Print(("cpu profile for %d seconds (/cine debug cpu stop ends it early): play as usual"):format(seconds))
+		end
 	elseif cmd == "debug" and arg == "record" then
 		ns.db.logDetail = not ns.db.logDetail
 		ns.Print("detailed logging (game settings, music): " .. OnOff(ns.db.logDetail) ..

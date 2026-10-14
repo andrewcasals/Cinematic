@@ -334,7 +334,7 @@ local function WatchServerMessages()
 	end
 	local watcher = CreateFrame("Frame")
 	local sinceCheck = 0
-	watcher:SetScript("OnUpdate", function(_, elapsed)
+	watcher:SetScript("OnUpdate", ns.Profiled("Server message watch", function(_, elapsed)
 		sinceCheck = sinceCheck + elapsed
 		if sinceCheck < SERVER_CHECK_INTERVAL then
 			return
@@ -344,7 +344,7 @@ local function WatchServerMessages()
 		for chatFrame, watch in pairs(serverWatch) do
 			CheckServerLines(chatFrame, watch, peekOn)
 		end
-	end)
+	end))
 end
 
 -- Whisper tabs (the ones the game opens for each conversation) with a whisper
@@ -389,7 +389,7 @@ function ns.RegisterChatPeek()
 		return
 	end
 	for _, event in ipairs(CHAT_PEEK_EVENTS) do
-		addFilter(event, ChatPeekFilter)
+		addFilter(event, ns.Profiled("Chat filter", ChatPeekFilter))
 	end
 	WatchServerMessages()
 end
