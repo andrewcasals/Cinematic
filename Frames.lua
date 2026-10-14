@@ -328,11 +328,24 @@ function castBars.StopFades(frame)
 		end
 	end
 end
+-- A bar finishing while faded doesn't hide itself: it hides at the end of its
+-- fade-out, which the game skips for a bar at alpha 0 (as at every login and
+-- /reload, where it "finishes" the cast you aren't making). It then showed,
+-- full, once the UI came back. So a faded bar with nothing being cast is
+-- hidden, as that fade would have. (Not in Edit Mode, which shows the bar.)
+function castBars.HideIfIdle(frame)
+	if frame.casting or frame.channeling or frame.reverseChanneling or frame.isInEditMode
+		or not ns.Flag(frame:IsShown()) then
+		return
+	end
+	frame:Hide()
+end
 function ns.ReapplyCastBar(frame)
 	local entry = castBars.entries[frame]
 	if entry and entry.alpha < 1 then
 		castBars.StopFades(frame)
 		ApplyAlpha(entry)
+		castBars.HideIfIdle(frame)
 	end
 end
 -- (Camera's Fishing cast bar hiding calls it too, after setting the bar's alpha itself.)
@@ -345,6 +358,7 @@ castBars.onUpdate = ns.Profiled("Cast bar update hook", function(frame)
 	if entry and entry.alpha < 1 then
 		castBars.StopFades(frame)
 		ReapplyIfChanged(entry)
+		castBars.HideIfIdle(frame)
 	end
 end)
 
