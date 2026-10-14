@@ -5402,20 +5402,7 @@ local function CreateMouseoverPanel()
 	end
 	local Layout -- (below)
 
-	local function SmallCheck()
-		local cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
-		cb:SetSize(26, 26)
-		local label = cb.Text or cb.text
-		if not label then
-			label = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-			label:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-		end
-		label:SetFontObject("GameFontHighlightSmall")
-		cb.label = label
-		return cb
-	end
-
-	-- The search results list, shared by every group's add box.
+	-- The search results list, shared by every group's add boxes (frames and events).
 	-- (On the canvas, not the scrolling content, so the scroll frame doesn't clip it.)
 	local results = CreateFrame("Frame", nil, canvas)
 	results:SetFrameStrata("DIALOG")
@@ -5439,6 +5426,15 @@ local function CreateMouseoverPanel()
 		button.text:SetPoint("LEFT", 4, 0)
 		button.tag = Label(button, "GameFontDisableSmall")
 		button.tag:SetPoint("RIGHT", -4, 0)
+		-- (An event's tip says what it is.)
+		button:SetScript("OnEnter", function(self)
+			if self.tip then
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:SetText(self.tip, 1, 1, 1, 1, true)
+				GameTooltip:Show()
+			end
+		end)
+		button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		resultButtons[i] = button
 	end
 	local noMatch = Label(results, "GameFontDisable", "No frames match")
@@ -5488,6 +5484,7 @@ local function CreateMouseoverPanel()
 		list.offset = math.max(0, math.min(list.offset, maxOffset))
 		local shown = math.min(#matches, RESULTS_SHOWN)
 		results:SetHeight(math.max(1, shown) * 20 + 8)
+		noMatch:SetText(list.events and "No events match" or "No frames match")
 		noMatch:SetShown(shown == 0)
 		scrollBar:SetShown(maxOffset > 0)
 		if maxOffset > 0 then
@@ -5502,15 +5499,29 @@ local function CreateMouseoverPanel()
 			local item = matches[i + list.offset]
 			button:SetShown(item ~= nil)
 			if item then
-				local others = GroupsWith(item.key, index)
-				local here = #GroupsWith(item.key) > #others
+				local here, tag
+				if list.events then
+					local group = Groups()[index]
+					here = group and group.triggers and group.triggers[item.key] and true or false
+					tag = ""
+				else
+					local others = GroupsWith(item.key, index)
+					here = #GroupsWith(item.key) > #others
+					tag = #others > 0 and "in " .. table.concat(others, ", ") or item.tag or ""
+				end
 				button.text:SetText(item.label)
 				button.text:SetFontObject(here and "GameFontDisable" or "GameFontHighlight")
-				button.tag:SetText(here and "already here" or (#others > 0 and "in " .. table.concat(others, ", "))
-					or item.tag or "")
+				button.tag:SetText(here and "already here" or tag)
+				button.tip = list.events and item.tip or nil
 				button:SetEnabled(not here)
 				button:SetScript("OnClick", function()
-					AddMember(index, item)
+					if list.events then
+						local editable = Writable()[index]
+						editable.triggers = editable.triggers or {}
+						editable.triggers[item.key] = true
+					else
+						AddMember(index, item)
+					end
 					box:SetText("")
 					box:ClearFocus()
 					results:Hide()
@@ -5538,15 +5549,17 @@ local function CreateMouseoverPanel()
 		end
 	end)
 
-	local function ShowResults(box, index)
+	-- events: search the events that bring a group up instead of the frames.
+	local function ShowResults(box, index, events)
 		local query = box:GetText():lower()
 		local matches = {}
-		for _, item in ipairs(catalog) do
+		for _, item in ipairs(events and triggers or catalog) do
 			if query == "" or item.label:lower():find(query, 1, true) then
 				matches[#matches + 1] = item
 			end
 		end
 		list.matches, list.index, list.box, list.offset = matches, index, box, 0
+		list.events = events
 		results:ClearAllPoints()
 		results:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -2)
 		RenderResults()
@@ -5561,6 +5574,57 @@ local function CreateMouseoverPanel()
 		groups[#groups + 1] = { name = "Group " .. (#groups + 1), members = {}, triggers = {} }
 		Layout()
 	end)
+
+	-- A row in a group: remove button, label, a note after it.
+	local function MemberRow()
+		local frame = CreateFrame("Frame", nil, content)
+		frame:SetSize(WIDTH - 10, ROW)
+		frame.remove = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+		frame.remove:SetSize(22, 22)
+		frame.remove:SetPoint("LEFT", 0, 0)
+		Tooltip(frame.remove, "Take it out of this group.")
+		frame.text = Label(frame, "GameFontHighlight")
+		frame.text:SetPoint("LEFT", frame.remove, "RIGHT", 4, 0)
+		frame.also = Label(frame, "GameFontDisableSmall")
+		frame.also:SetPoint("LEFT", frame.text, "RIGHT", 10, 0)
+		return frame
+	end
+
+	-- A type-to-search box adding to group number index: frames, or with
+	-- events set, the events that bring the group up.
+	local function AddBox(kind, hint, index, events)
+		local add = Take(kind, function()
+			local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+			box:SetSize(260, 20)
+			box:SetAutoFocus(false)
+			box.hint = Label(box, "GameFontDisable", hint)
+			box.hint:SetPoint("LEFT", 2, 0)
+			box:SetScript("OnEscapePressed", function(self) self:SetText("") self:ClearFocus() end)
+			box:SetScript("OnEditFocusLost", function(self)
+				self.hint:SetShown(self:GetText() == "")
+				C_Timer.After(0.2, function()
+					if not self:HasFocus() and not results:IsMouseOver() then results:Hide() end
+				end)
+			end)
+			return box
+		end)
+		add:SetText("")
+		add.hint:Show()
+		add:SetScript("OnEditFocusGained", function(self)
+			if not events then ScanCatalog() end
+			self.hint:Hide()
+			ShowResults(self, index, events)
+		end)
+		add:SetScript("OnTextChanged", function(self)
+			if self:HasFocus() then ShowResults(self, index, events) end
+		end)
+		add:SetScript("OnEnterPressed", function(self)
+			local first = resultButtons[1]
+			if results:IsShown() and first:IsShown() and first:IsEnabled() then first:Click() end
+			self:ClearFocus()
+		end)
+		return add
+	end
 
 	function Layout()
 		for _, pool in pairs(pools) do
@@ -5584,7 +5648,7 @@ local function CreateMouseoverPanel()
 			end)
 			At(line, LEFT)
 			line:SetWidth(WIDTH)
-			y = y + 10
+			y = y + 20
 
 			local nameBox = Take("name", function()
 				local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
@@ -5627,19 +5691,7 @@ local function CreateMouseoverPanel()
 				local item = byKey[key]
 				if item or key:find("^extra:") then
 					listed = listed + 1
-					local row = Take("member", function()
-						local frame = CreateFrame("Frame", nil, content)
-						frame:SetSize(WIDTH - 10, ROW)
-						frame.remove = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-						frame.remove:SetSize(22, 22)
-						frame.remove:SetPoint("LEFT", 0, 0)
-						Tooltip(frame.remove, "Take it out of this group.")
-						frame.text = Label(frame, "GameFontHighlight")
-						frame.text:SetPoint("LEFT", frame.remove, "RIGHT", 4, 0)
-						frame.also = Label(frame, "GameFontDisableSmall")
-						frame.also:SetPoint("LEFT", frame.text, "RIGHT", 10, 0)
-						return frame
-					end)
+					local row = Take("member", MemberRow)
 					At(row, LEFT + 4)
 					row.text:SetText(item and item.label or key:gsub("^extra:", ""))
 					local others = GroupsWith(key, index)
@@ -5662,64 +5714,32 @@ local function CreateMouseoverPanel()
 			end
 
 			-- Add a frame: type to search the list.
-			local add = Take("add", function()
-				local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
-				box:SetSize(260, 20)
-				box:SetAutoFocus(false)
-				box.hint = Label(box, "GameFontDisable", "Add a frame: type to search...")
-				box.hint:SetPoint("LEFT", 2, 0)
-				box:SetScript("OnEscapePressed", function(self) self:SetText("") self:ClearFocus() end)
-				box:SetScript("OnEditFocusLost", function(self)
-					self.hint:SetShown(self:GetText() == "")
-					C_Timer.After(0.2, function()
-						if not self:HasFocus() and not results:IsMouseOver() then results:Hide() end
-					end)
-				end)
-				return box
-			end)
-			At(add, LEFT + 34, 4)
-			add:SetText("")
-			add.hint:Show()
-			add:SetScript("OnEditFocusGained", function(self)
-				ScanCatalog()
-				self.hint:Hide()
-				ShowResults(self, index)
-			end)
-			add:SetScript("OnTextChanged", function(self)
-				if self:HasFocus() then ShowResults(self, index) end
-			end)
-			add:SetScript("OnEnterPressed", function(self)
-				local first = resultButtons[1]
-				if results:IsShown() and first:IsShown() and first:IsEnabled() then first:Click() end
-				self:ClearFocus()
-			end)
+			At(AddBox("add", "Add a frame: type to search...", index), LEFT + 34, 4)
 			y = y + 30
 
-			-- The events that bring the group up besides the mouse.
+			-- The events that bring the group up besides the mouse: one row
+			-- each, then a box to add more.
 			local alsoLabel = Take("alsoLabel", function()
 				return Label(content, "GameFontNormalSmall", "Also bring this group up for:")
 			end)
 			At(alsoLabel, LEFT + 10, 2)
-			y = y + 16
-			local x = LEFT + 6
+			y = y + 18
 			for _, trigger in ipairs(triggers) do
-				local cb = Take("trigger", SmallCheck)
-				cb.label:SetText(trigger.label)
-				Tooltip(cb, trigger.tip)
-				local width = 30 + cb.label:GetStringWidth() + 14
-				if x + width > LEFT + WIDTH then -- (wraps onto another line)
-					x, y = LEFT + 6, y + 24
+				if group.triggers and group.triggers[trigger.key] then
+					local row = Take("member", MemberRow)
+					At(row, LEFT + 4)
+					row.text:SetText(trigger.label)
+					row.also:SetText("")
+					row.remove:SetScript("OnClick", function()
+						local editable = Writable()[index]
+						if editable.triggers then editable.triggers[trigger.key] = nil end
+						Layout()
+					end)
+					y = y + ROW
 				end
-				At(cb, x)
-				cb:SetChecked(group.triggers and group.triggers[trigger.key] or false)
-				cb:SetScript("OnClick", function(self)
-					local editable = Writable()[index]
-					editable.triggers = editable.triggers or {}
-					editable.triggers[trigger.key] = self:GetChecked() or nil
-				end)
-				x = x + width
 			end
-			y = y + 36
+			At(AddBox("addEvent", "Add an event: type to search...", index, true), LEFT + 34, 4)
+			y = y + 48
 		end
 
 		newGroup:ClearAllPoints()
