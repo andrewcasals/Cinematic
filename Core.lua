@@ -37,6 +37,7 @@ local DEFAULTS = {
 	tooltipOffDeath = true,   -- the death camera
 	tooltipOffQuest = true,   -- the quest camera
 	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
+	hideWorldText = false,    -- no floating world text at all (XP gained, damage and healing numbers): a blank font, from the next game start
 	visualEffects = true,     -- the Visual Effects page's master switch (off: none of its effects)
 	timeOfDayMessage = true,  -- "Dusk" under the zone name on login and /reload, and when it
 	                          -- changes, with a fitting sound (rooster, bells, frogs, owl, wolf)
@@ -1758,6 +1759,12 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		MigrateProfile("taxiOrbit")
 		-- Rotation settings used to be shared; start the standing-still profile
 		-- from the player's existing (flight) values.
+		-- Floating world text (the XP gained over you, and damage numbers with it:
+		-- one font) drawn in a font whose letters are specks too small to see.
+		-- The game keeps the font it first loaded, so changes need a game restart.
+		if ns.db.hideWorldText then
+			DAMAGE_TEXT_FONT = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Fonts\\Blank.ttf"
+		end
 		for _, key in ipairs(ORBIT_PROFILE_KEYS) do
 			if ns.db["idleOrbit" .. key] == nil then
 				ns.db["idleOrbit" .. key] = ns.db["taxiOrbit" .. key]

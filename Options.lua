@@ -952,8 +952,19 @@ local function CreateRevealPanel()
 		"combat text settings are put back when the UI returns.")
 	combatText:SetPoint("TOPLEFT", combatTextHeader, "BOTTOMLEFT", -2, -6)
 
-	local yoursHeader = Header(content, "Your portrait", combatText, -24)
-	yoursHeader:SetPoint("TOPLEFT", combatText, "BOTTOMLEFT", 2, -24)
+	local worldText = Check(content, "hideWorldText", "Hide all floating text: XP, damage, healing (restart required)",
+		"The game has no way to hide just the XP you gain over your character: it draws that, " ..
+		"the damage and healing numbers, misses and the like all in one font. This blanks that " ..
+		"font, so they all go, always (not just in CineMode). Takes effect after you fully " ..
+		"restart the game; /reload isn't enough.")
+	worldText:SetPoint("TOPLEFT", combatText, "BOTTOMLEFT", 0, -2)
+	worldText:HookScript("OnClick", function()
+		ns.Print("restart the game (not just /reload) for floating text to be " ..
+			(ns.db.hideWorldText and "hidden" or "shown"))
+	end)
+
+	local yoursHeader = Header(content, "Your portrait", worldText, -24)
+	yoursHeader:SetPoint("TOPLEFT", worldText, "BOTTOMLEFT", 2, -24)
 
 	local portrait = Check(content, "portraitWhenNotFull", "Show your portrait until health and power are full",
 		"Keeps your player portrait up while you're recovering. Rage and runic power don't " ..
