@@ -27,17 +27,17 @@ local DEFAULTS = {
 	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, over the normal UI)
 	minimapButton = true,     -- show the minimap button
 	minimapAngle = 225,       -- its position around the minimap, in degrees
-	-- Show hidden tooltips anyway in each camera mode:
-	tooltipShowInFlight = false,
-	tooltipShowInIdle = false,  -- standing still
-	tooltipShowInCozy = false,
-	tooltipShowInVista = false, -- /stare
-	tooltipShowInFish = false,  -- fishing
-	tooltipShowInWalk = false,  -- RP walking
-	tooltipShowInRun = false,   -- auto-running
-	tooltipShowInTele = false,  -- Hearthstone and teleports
-	tooltipShowInDeath = false, -- the death camera
-	tooltipShowInQuest = false, -- the quest camera
+	-- Hide tooltips in each camera mode (with tooltipHideInModes):
+	tooltipHideInFlight = true,
+	tooltipHideInIdle = false,  -- standing still
+	tooltipHideInCozy = false,
+	tooltipHideInVista = false, -- /stare
+	tooltipHideInFish = false,  -- fishing
+	tooltipHideInWalk = false,  -- RP walking
+	tooltipHideInRun = false,   -- auto-running
+	tooltipHideInTele = false,  -- Hearthstone and teleports
+	tooltipHideInDeath = false, -- the death camera
+	tooltipHideInQuest = false, -- the quest camera
 	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
 	hideWorldText = false,    -- no floating world text at all (XP gained, damage and healing numbers): a blank font, from the next game start
 	visualEffects = true,     -- the Visual Effects page's master switch (off: none of its effects)
@@ -85,6 +85,10 @@ local DEFAULTS = {
 	alwaysShowWaypoint = false, -- keep retail's quest waypoint visible in cinematic mode
 	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (not retail)
 	durabilityShow = true,     -- keep the durability figure visible in cinematic mode while gear is damaged
+	-- Swing timer page (not retail), in CineMode and out:
+	swingSmartShow = true,     -- melee and ranged bars only while that weapon is in use
+	swingHideAfter = 5,        -- ...seconds after its last swing or shot (and the bar running down) it fades
+	swingHideOffHand = false,  -- never show the off-hand bar
 	questRevealOnAccept = true, -- accepting a quest shows the quest tracker as a mouseover would
 	questRevealOnProgress = true, -- quest objective progress shows the quest tracker the same way
 	minimapRevealOnPing = true, -- a group member pinging the minimap shows it as a mouseover would
@@ -152,17 +156,17 @@ local DEFAULTS = {
 	tooltipWarmTime = 5,     -- once one's shown, the rest show at once until none has been up this long (0: off)
 	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
 	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
-	tooltipHide = true,       -- always hide world tooltips and unit frames'...
-	tooltipShowEnemy = false,   -- ...except a unit you can attack
+	tooltipHideInCine = false,  -- hide world tooltips and unit frames' in CineMode...
+	tooltipHideInModes = true,  -- ...or in the camera modes ticked above (tooltipHideIn*)
+	tooltipHideOutsideCine = false, -- ...or outside CineMode
+	tooltipShowEnemy = true,    -- but still show a unit you can attack
 	tooltipShowFriendly = false, -- ...or one you can't
 	tooltipShowGather = true,   -- ...or something gatherable (herb, ore, skinnable)
 	tooltipShowQuest = true,    -- ...or one showing a quest objective
-	tooltipShowInCombat = false, -- ...or in combat, these (the UI's too):
-	tooltipCombatShowEnemy = false,
+	tooltipShowInCombat = true,  -- ...or in combat, these instead (the UI's too):
+	tooltipCombatShowEnemy = true,
 	tooltipCombatShowFriendly = false,
-	tooltipCombatShowElse = true, -- objects in the world, action bars, bags, menus
-	tooltipShowOutsideCine = true, -- ...or outside CineMode
-	tooltipShowInModes = false, -- ...or in the camera modes ticked above (tooltipShowIn*)
+	tooltipCombatShowElse = false, -- objects in the world, action bars, bags, menus
 	musicFadeTime = 3,        -- seconds for music to fade in or out
 	musicFatigue = 2,         -- minutes: don't start music again within this long of the last start
 	-- Which cameras can start music as they start (when music fatigue allows).
@@ -434,12 +438,17 @@ end
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 	DEFAULTS[cam[1] .. "HideMinimap"] = false
 end
--- No RP walk or auto-run camera in capital cities or instances.
+-- No auto-run camera in capital cities or instances. RP walking is
+-- deliberate, so its camera runs everywhere.
 -- RP walk and auto-run start their cameras by themselves: "none" turns one
 -- off everywhere (Camera Triggers page), as the events' "No camera" does.
 DEFAULTS.walkCamera = "walk"
 DEFAULTS.runCamera = "run"
-DEFAULTS.walkOffInCities, DEFAULTS.walkOffInInstances = true, true
+-- Seconds of auto-walking or auto-running before its camera starts (and its
+-- CineMode column with it); 0 is straight away.
+DEFAULTS.walkCameraDelay = 0
+DEFAULTS.runCameraDelay = 5
+DEFAULTS.walkOffInCities, DEFAULTS.walkOffInInstances = false, false
 DEFAULTS.runOffInCities, DEFAULTS.runOffInInstances = true, true
 DEFAULTS.flightHideMinimap = true
 DEFAULTS.idleHideMinimap = true
@@ -502,6 +511,7 @@ DEFAULTS.handleMinimap = true
 DEFAULTS.handleQuests = true -- Quest tracker
 DEFAULTS.handleBuffs = true -- Buffs/debuffs
 DEFAULTS.handleChat = true
+DEFAULTS.handleSwing = true -- Swing timer
 DEFAULTS.handleFishing = true -- right-click casting and the cast bar
 DEFAULTS.plateTarget = true
 -- And your party or raid members' plates (their pets' too), likewise.
@@ -928,11 +938,27 @@ function ns.EffectPlace()
 	return CAMERA_OFF_PLACE[ns.GetPlaceType()] or "World"
 end
 local SWITCHED_CAMS = { walk = "walkCamera", run = "runCamera" }
+-- When this auto-walk and auto-run started, for their cameras' delays: noted
+-- every frame by the orbit (ns.NoteTravel), and on first asking.
+ns.travelSince = {}
+function ns.NoteTravel(walking, autoRunning)
+	local now = GetTime()
+	ns.travelSince.walk = walking and (ns.travelSince.walk or now) or nil
+	ns.travelSince.run = autoRunning and (ns.travelSince.run or now) or nil
+end
 function ns.IsCameraOffHere(cam)
 	local db = ns.db
 	if not db then return false end
 	if SWITCHED_CAMS[cam] and db[SWITCHED_CAMS[cam]] == "none" then
 		return true
+	end
+	-- Not auto-walking or auto-running long enough yet (the delay sliders).
+	if SWITCHED_CAMS[cam] and (db[cam .. "CameraDelay"] or 0) > 0 then
+		local since = ns.travelSince[cam] or GetTime()
+		ns.travelSince[cam] = since
+		if GetTime() - since < db[cam .. "CameraDelay"] then
+			return true
+		end
 	end
 	local place
 	if cam == "flight" and UnitOnTaxi("player") then
@@ -2112,6 +2138,13 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			if ns.db.cozyOrbitBackArc == 15 then ns.db.cozyOrbitBackArc = nil end
 			ns.db.cozySettingsV7 = true
 		end
+		-- RP walking is deliberate: its camera now runs in cities and instances
+		-- too. Once, unless changed.
+		if not ns.db.walkSettingsV1 then
+			if ns.db.walkOffInCities == true then ns.db.walkOffInCities = nil end
+			if ns.db.walkOffInInstances == true then ns.db.walkOffInInstances = nil end
+			ns.db.walkSettingsV1 = true
+		end
 		if not ns.db.runSettingsV6 then -- auto-run rises less (looks ahead more)
 			if ns.db.runOrbitPitchUp == 10 then ns.db.runOrbitPitchUp = nil end
 			ns.db.runSettingsV6 = true
@@ -2284,6 +2317,58 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 		end
+		-- Then the other way round: Hide tooltips in CineMode, in these camera
+		-- modes or outside CineMode, but still show the kinds ticked. Always hide
+		-- with Except outside CineMode is In CineMode; Except in these camera
+		-- modes is In these camera modes with the others ticked (so plain
+		-- CineMode, in no camera mode, no longer hides). Saved profiles too. Once,
+		-- and only with the page's switch on: with it off, the page's never been
+		-- used (or was left), so it starts over from the new defaults.
+		local tooltipModes = { "Flight", "Idle", "Cozy", "Tele", "Vista", "Fish", "Walk", "Run", "Death", "Quest" }
+		local function TooltipsTheOtherWay(t)
+			if t.tooltipHide == nil and t.tooltipShowOutsideCine == nil and t.tooltipShowInModes == nil then
+				return
+			end
+			local hide = t.tooltipHide ~= false
+			local inModes = false
+			if t.tooltipShowInModes then
+				for _, mode in ipairs(tooltipModes) do
+					if not t["tooltipShowIn" .. mode] then inModes = true end
+				end
+			end
+			if t.tooltipHideInCine == nil then
+				t.tooltipHideInCine = hide and not inModes
+				t.tooltipHideInModes = hide and inModes
+				t.tooltipHideOutsideCine = hide and t.tooltipShowOutsideCine == false
+				for _, mode in ipairs(tooltipModes) do
+					t["tooltipHideIn" .. mode] = inModes and not t["tooltipShowIn" .. mode]
+				end
+			end
+			t.tooltipHide, t.tooltipShowOutsideCine, t.tooltipShowInModes = nil, nil, nil
+			for _, mode in ipairs(tooltipModes) do
+				t["tooltipShowIn" .. mode] = nil
+			end
+		end
+		if not ns.db.tooltipsTheOtherWayV1 then
+			if ns.db.handleTooltips then
+				TooltipsTheOtherWay(ns.db)
+			else
+				for _, key in ipairs({ "tooltipHideInCine", "tooltipHideInModes", "tooltipHideOutsideCine",
+					"tooltipShowEnemy", "tooltipShowFriendly", "tooltipShowGather", "tooltipShowQuest",
+					"tooltipShowInCombat", "tooltipCombatShowEnemy", "tooltipCombatShowFriendly",
+					"tooltipCombatShowElse", "tooltipReveal", "tooltipRevealDelay", "tooltipWarmTime",
+					"tooltipFadeTime", "tooltipHide", "tooltipShowOutsideCine", "tooltipShowInModes" }) do
+					ns.db[key] = nil
+				end
+				for _, mode in ipairs(tooltipModes) do
+					ns.db["tooltipHideIn" .. mode], ns.db["tooltipShowIn" .. mode] = nil, nil
+				end
+			end
+			for _, saved in pairs(type(ns.db.profiles) == "table" and ns.db.profiles or {}) do
+				if type(saved) == "table" then TooltipsTheOtherWay(saved) end
+			end
+			ns.db.tooltipsTheOtherWayV1 = true
+		end
 		-- The cozy and vista triggers used to be switches on those cameras' pages;
 		-- they're events now, each picking its camera. A switched-off trigger
 		-- becomes "no camera".
@@ -2382,6 +2467,15 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then SplitTintRow(saved) end
 			end
 			ns.db.effectGridV2 = true
+		end
+		-- The auto-run camera now waits 5 seconds by default: into every profile
+		-- too, whatever it had. Once.
+		if not ns.db.runCameraDelayV1 then
+			ns.db.runCameraDelay = 5
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then saved.runCameraDelay = 5 end
+			end
+			ns.db.runCameraDelayV1 = true
 		end
 		-- "Always show your target's nameplate" (plateTarget) was split into a
 		-- switch each for enemy and friendly targets, then into Enemy Target and

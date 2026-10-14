@@ -2559,6 +2559,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- Auto-running (not walking) gets the auto-run camera, set up the same way.
 	local walking = not onTaxi and ns.IsRPWalking and ns.IsRPWalking()
 	local autoRunning = not onTaxi and not walking and ns.IsAutoRunning and ns.IsAutoRunning()
+	ns.NoteTravel(walking, autoRunning) -- (for the cameras' delays)
 	local travel = (walking and not ns.IsCameraOffHere("walk") and "walk")
 		or (autoRunning and not ns.IsCameraOffHere("run") and "run") or nil
 	if travel == "walk" and ns.IsCozy() then

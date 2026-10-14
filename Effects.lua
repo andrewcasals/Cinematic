@@ -1499,13 +1499,13 @@ local function IsWorldTooltip()
 	return WorldOwned() and not OverMinimap()
 end
 
--- Tooltips show anyway in the camera modes ticked (tooltipShowInModes, then
--- each chosen on its own: tooltipShowIn*).
-local TOOLTIP_SHOW_IN = {
-	flight = "tooltipShowInFlight", idle = "tooltipShowInIdle", cozy = "tooltipShowInCozy",
-	tele = "tooltipShowInTele", walk = "tooltipShowInWalk", run = "tooltipShowInRun",
-	vista = "tooltipShowInVista", fish = "tooltipShowInFish", death = "tooltipShowInDeath",
-	quest = "tooltipShowInQuest",
+-- Tooltips hide in the camera modes ticked (tooltipHideInModes, then each
+-- chosen on its own: tooltipHideIn*).
+local TOOLTIP_HIDE_IN = {
+	flight = "tooltipHideInFlight", idle = "tooltipHideInIdle", cozy = "tooltipHideInCozy",
+	tele = "tooltipHideInTele", walk = "tooltipHideInWalk", run = "tooltipHideInRun",
+	vista = "tooltipHideInVista", fish = "tooltipHideInFish", death = "tooltipHideInDeath",
+	quest = "tooltipHideInQuest",
 }
 
 -- The camera mode running now, for the tooltip settings: the death, quest and
@@ -1555,23 +1555,26 @@ local function InCombat()
 	return InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 end
 
--- Always hide tooltips (tooltipHide): world ones and unit frames' are
--- hidden, but for the page's exceptions. These ones show everything for now:
--- outside CineMode (tooltipShowOutsideCine) and in the camera modes ticked.
--- The rest go by the tooltip (ShowsAnyway, after hovering).
-local function ShowingAnyway()
+-- Hide tooltips: world ones and unit frames' are hidden in CineMode
+-- (tooltipHideInCine), in the camera modes ticked, or outside CineMode
+-- (tooltipHideOutsideCine), but for the page's But still show list (by the
+-- tooltip: ShowsAnyway, after hovering).
+local function HidingNow()
 	if not ns.lastCinematic then
-		return ns.db.tooltipShowOutsideCine and true or false
+		return ns.db.tooltipHideOutsideCine and true or false
 	end
-	if not ns.db.tooltipShowInModes then
+	if ns.db.tooltipHideInCine then
+		return true
+	end
+	if not ns.db.tooltipHideInModes then
 		return false
 	end
 	local mode = TooltipCameraMode()
-	return mode ~= nil and ns.db[TOOLTIP_SHOW_IN[mode]] and true or false
+	return mode ~= nil and ns.db[TOOLTIP_HIDE_IN[mode]] and true or false
 end
 
 local function Hiding()
-	return Handling() and ns.db.tooltipHide and not ShowingAnyway() or false
+	return Handling() and HidingNow()
 end
 
 -- Whether world tooltips are hidden right now (not whether one is up). They
@@ -1592,7 +1595,7 @@ end
 
 -- The UI's tooltips. Unit frames' (a UI element's tooltip for a unit:
 -- hovering a unit frame makes it the mouseover) hide like world ones; any
--- other UI element's only in a fight, with Except in combat ticked and
+-- other UI element's only in a fight, with In combat, these instead ticked and
 -- Everything else not. World ones go the world way above, so they come back
 -- after hovering; these only with the key held.
 -- The owner SetUnit was last called for: a unit frame's tooltip appears
@@ -1805,7 +1808,7 @@ local function ShowsFriend(tooltip)
 	return TooltipUnitIsEnemy(tooltip) == false
 end
 
--- Hidden tooltips that show at once anyway (Except when it's ...): db key ->
+-- Hidden tooltips that show at once anyway (But still show): db key ->
 -- test.
 local SHOW_KINDS = {
 	{ key = "tooltipShowQuest", test = ShowsQuestObjective, why = "quest objective" },
@@ -1814,7 +1817,7 @@ local SHOW_KINDS = {
 	{ key = "tooltipShowFriendly", test = ShowsFriend, why = "friendly" },
 }
 
--- In a fight, with Except in combat and hovering these ticked, that list
+-- In a fight, with In combat, these instead ticked, that list
 -- decides instead: enemies, friends, or everything else (objects, and units
 -- the game won't say about).
 function ShowsAnyway(tooltip)
@@ -2168,7 +2171,7 @@ end
 function ns.UpdateTooltip()
 	-- The UI's: one already up as hiding starts (or as the key's let go)
 	-- goes; one hidden comes back while the key's down.
-	if Handling() and ns.db.tooltipHide then
+	if Handling() then
 		if ns.Flag(GameTooltip:IsShown()) and UIHides(GameTooltip) then
 			HideUITooltip(GameTooltip)
 			return

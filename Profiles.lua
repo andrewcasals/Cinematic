@@ -210,15 +210,13 @@ ns.BUILTIN_PROFILES = {
 				"Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
 				set("event" .. event .. "Music", true)
 			end
-			-- The cameras don't wait for things to calm down after a fight, and RP
-			-- walk and auto-run carry on in cities and instances.
+			-- The cameras don't wait for things to calm down after a fight, and
+			-- auto-run carries on in cities and instances (as RP walk always does).
 			for _, cam in ipairs({ "walk", "run", "tele", "quest" }) do
 				set(cam .. "CalmWait", false)
 			end
-			for _, cam in ipairs({ "walk", "run" }) do
-				set(cam .. "OffInCities", false)
-				set(cam .. "OffInInstances", false)
-			end
+			set("runOffInCities", false)
+			set("runOffInInstances", false)
 			-- No minimap for tracking, nor hiding it on flights or while AFK; no
 			-- quest timer box.
 			set("minimapForTracking", false)

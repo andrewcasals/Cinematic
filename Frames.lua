@@ -447,13 +447,13 @@ end
 -- top. The 3rd Party Frames page's covers other addons' and added frames.
 local GROUP_SWITCH = {
 	minimap = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
-	buffs = "handleBuffs", cooldowns = "handleCooldowns", chat = "handleChat",
+	buffs = "handleBuffs", cooldowns = "handleCooldowns", chat = "handleChat", swing = "handleSwing",
 	gamepadbars = "handleGamepad", gamepadlegend = "handleGamepad", gamepadreticle = "handleGamepad",
 }
 local OWN_PAGE_GROUPS = { chat = true, gamepadbars = true, gamepadlegend = true, gamepadreticle = true }
 ns.HANDLE_SWITCHES = {
 	"handleFrames", "handleAddonFrames", "handleGamepad", "handleMinimap", "handleQuests", "handleBuffs",
-	"handleCooldowns", "handleChat",
+	"handleCooldowns", "handleChat", "handleSwing",
 }
 local function GroupHandled(group)
 	local db = ns.db
@@ -1121,8 +1121,9 @@ ns.COMBAT_SHOW = {
 		morePage = "Quest tracker", handledBy = "handleQuests" },
 	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs", handledBy = "handleBuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
-	{ key = "swing", label = "Swing timer", default = true, retail = false,
-		frames = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
+	{ key = "swing", label = "Swing timer", default = true, retail = false, handledBy = "handleSwing",
+		tip = "The Swing timer page can fade out the bars of weapons you aren't using, and the off-hand's.",
+		frames ={ "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
 	-- Always ticked to start with (CINE_SHOW_DEFAULT), as before it had a row:
 	-- untick it to hide your cast bar in CineMode but for fights.
 	{ key = "castbar", label = "Cast bar", default = true, frames = FRAME_GROUPS.castbar },
@@ -2728,6 +2729,89 @@ end
 -- for the game's: see ns.AddPortraitFrame).
 local PORTRAIT_FRAMES = { PlayerFrame = true }
 
+-- Swing timer page (Classic clients' own swing timer): a bar fades out once
+-- its weapon hasn't been used for a while, and the off-hand's can go for
+-- good. Melee counts as used while auto-attack is on, ranged while Auto Shot
+-- or a wand repeats, and on single shots (a warrior's Shoot Bow or Throw).
+-- Each holds on past its last use for the bar to run down to 0 and the
+-- swingHideAfter seconds after.
+-- (In a do block: the file is near Lua's 200 locals.)
+do
+	local BAR_WEAPON = {
+		SwingTimerMainHandFrame = "melee", SwingTimerOffHandFrame = "melee", SwingTimerRangedFrame = "ranged",
+	}
+	-- Auto Shot, Shoot (wands; and Shoot as later clients name every ranged weapon's), Throw,
+	-- Shoot Bow, Shoot Gun, Shoot Crossbow.
+	local RANGED_SHOTS = { [75] = true, [5019] = true, [3018] = true, [2764] = true, [2480] = true,
+		[7918] = true, [7919] = true }
+	local usedAt = { melee = -math.huge, ranged = -math.huge }
+	local inUse = { melee = false, ranged = false }
+
+	local function Number(value)
+		if type(value) ~= "number" or (issecretvalue and issecretvalue(value)) then
+			return nil
+		end
+		return value
+	end
+
+	-- Seconds the weapon's bar takes to run down.
+	local function Speed(weapon)
+		local speed
+		if weapon == "ranged" then
+			speed = UnitRangedDamage and Number((UnitRangedDamage("player")))
+		else
+			speed = UnitAttackSpeed and Number((UnitAttackSpeed("player")))
+		end
+		return math.min(speed or 2, 5)
+	end
+
+	local function SetInUse(weapon, on)
+		if inUse[weapon] and not on then
+			usedAt[weapon] = GetTime()
+		end
+		inUse[weapon] = on
+	end
+
+	if not ns.isRetail then
+		local watcher = CreateFrame("Frame")
+		watcher:RegisterEvent("PLAYER_ENTER_COMBAT") -- (auto-attack on)
+		watcher:RegisterEvent("PLAYER_LEAVE_COMBAT")
+		watcher:RegisterEvent("START_AUTOREPEAT_SPELL")
+		watcher:RegisterEvent("STOP_AUTOREPEAT_SPELL")
+		watcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+		watcher:SetScript("OnEvent", function(_, event, _, _, spellID)
+			if event == "PLAYER_ENTER_COMBAT" or event == "PLAYER_LEAVE_COMBAT" then
+				SetInUse("melee", event == "PLAYER_ENTER_COMBAT")
+			elseif event == "START_AUTOREPEAT_SPELL" or event == "STOP_AUTOREPEAT_SPELL" then
+				SetInUse("ranged", event == "START_AUTOREPEAT_SPELL")
+			elseif Number(spellID) and RANGED_SHOTS[spellID] then
+				usedAt.ranged = GetTime()
+			end
+		end)
+		-- (Auto-attack already on after a /reload.)
+		local ok, attacking = pcall(IsCurrentSpell, 6603)
+		inUse.melee = ok and attacking == true
+	end
+
+	-- Whether the swing timer frame is to be faded out (it fades at the usual speed).
+	function ns.IsSwingBarUnused(name)
+		local weapon = BAR_WEAPON[name]
+		if not weapon then
+			return false
+		end
+		if not ns.db.handleSwing then
+			return false
+		end
+		if name == "SwingTimerOffHandFrame" and ns.db.swingHideOffHand then
+			return true
+		end
+		if not ns.db.swingSmartShow or inUse[weapon] then
+			return false
+		end
+		return GetTime() - usedAt[weapon] > Speed(weapon) + ns.db.swingHideAfter
+	end
+end
+
 function ns.UpdateFrames(cinematic, elapsed)
 	local now = GetTime()
 	UpdateReadyOnly(elapsed, now)
@@ -2879,6 +2963,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 			target = 0
 		end
 		if deathFade and not (typing and entry.group == "chat") then
+			target = 0
+		end
+		-- (Swing timer page: in CineMode and out, hovering included.)
+		if entry.group == "swing" and ns.IsSwingBarUnused(entry.name) then
 			target = 0
 		end
 		local follows = followsRow[entry.frame]
