@@ -10,6 +10,13 @@
 --
 -- To try another language from the .toc instead, add a line such as
 -- "## X-Cinematic-Locale: esES" and /reload.
+--
+-- Fonts: text uses the game's font objects (GameFontHighlight and the like),
+-- never a font file. Those hold one font per alphabet (Latin, Cyrillic,
+-- Korean, Chinese) and the game picks the one the text needs as it's set, so
+-- 한국어, 简体中文 or Русский show on any client. Copying a font by file
+-- (SetFont) keeps only the Latin one and shows boxes, and so does swapping the
+-- font object after the text is set (Options.lua's SetLabelFont sets it again).
 local ADDON_NAME, ns = ...
 
 ns.LANGUAGES = {} -- locale -> { English = translation }, from Locales/<locale>.lua

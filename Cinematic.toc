@@ -5,7 +5,12 @@
 ## Notes-esES: Desvanece la interfaz y añade franjas de cine entre combates para un aire más cinematográfico.
 ## Notes-esMX: Desvanece la interfaz y añade franjas de cine entre combates para un aire más cinematográfico.
 ## Notes-frFR: Estompe l'interface et ajoute des bandes noires entre les combats pour une ambiance plus cinématographique.
+## Notes-itIT: Dissolve l'interfaccia e aggiunge bande nere tra un combattimento e l'altro per un'atmosfera più cinematografica.
+## Notes-koKR: 전투 사이에 UI를 흐리게 하고 레터박스 바를 추가해 더욱 영화 같은 분위기를 만듭니다.
+## Notes-ptBR: Esmaece a interface e adiciona faixas de cinema entre os combates para um clima mais cinematográfico.
 ## Notes-ruRU: Скрывает интерфейс и добавляет черные полосы кадра между боями для более кинематографичной атмосферы.
+## Notes-zhCN: 在战斗间隙淡出界面并加上宽银幕黑边，营造更具电影感的氛围。
+## Notes-zhTW: 在戰鬥之間淡出介面並加上電影黑邊，營造更有電影感的氛圍。
 ## Author: Andrew Casals
 ## Category: UI
 ## Version: @project-version@
@@ -17,7 +22,12 @@ Locales\Locales.lua
 Locales\deDE.lua
 Locales\esES.lua
 Locales\frFR.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
 Locales\ruRU.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
 Diagnostics.lua
 Profiler.lua
 Core.lua

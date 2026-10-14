@@ -751,7 +751,12 @@ local function CreatePanel()
 		{ value = "deDE", text = "Deutsch" },
 		{ value = "esES", text = "Español" },
 		{ value = "frFR", text = "Français" },
+		{ value = "itIT", text = "Italiano" },
+		{ value = "koKR", text = "한국어" },
+		{ value = "ptBR", text = "Português (Brasil)" },
 		{ value = "ruRU", text = "Русский" },
+		{ value = "zhCN", text = "简体中文" },
+		{ value = "zhTW", text = "繁體中文" },
 	}
 	local function CurrentLanguage()
 		return (CinematicDB and CinematicDB.language) or "auto"
