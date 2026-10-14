@@ -5417,6 +5417,25 @@ local function CreateProfilesPanel()
 	end)
 	reset:SetPoint("LEFT", delete, "RIGHT", 8, 0)
 
+	-- Sharing (Share.lua): the active profile as text, or one pasted in.
+	local share = CreateFrame("Frame", nil, buttons)
+	share:SetSize(540, 22)
+	share:SetPoint("TOPLEFT", buttons, "BOTTOMLEFT", 0, -10)
+	local export = Button(L["Export"], 120, L["The active profile as a line of text to copy and paste " ..
+		"wherever your friends will see it, so they can import it (your own ones only: everyone has the built-in ones)."], function()
+		ns.ShowExport()
+	end)
+	export:SetParent(share)
+	export:SetPoint("LEFT", share, "LEFT", 0, 0)
+	local import = Button(L["Import"], 100, L["Add a profile someone shared with you, from the text they " ..
+		"gave you. Your own profiles stay as they are."], function()
+		ns.ShowImport()
+	end)
+	import:SetParent(share)
+	import:SetPoint("LEFT", export, "RIGHT", 8, 0)
+	local shareNote = Label(share, "GameFontHighlightSmall", L["Share a profile with friends."])
+	shareNote:SetPoint("LEFT", import, "RIGHT", 12, 0)
+
 	local function Layout()
 		if not ns.GetDB() then return end
 		-- (None ticked until a new player picks one; Cinematic does nothing till then.)
@@ -5451,6 +5470,7 @@ local function CreateProfilesPanel()
 		rename:SetEnabled(own)
 		note:SetEnabled(own)
 		delete:SetEnabled(own)
+		export:SetEnabled(own)
 		FitContentHeight(content)
 	end
 	controls[#controls + 1] = { Refresh = function()

@@ -49,6 +49,7 @@ Focus.lua
 Tracking.lua
 Slash.lua
 Profiles.lua
+Share.lua
 Welcome.lua
 Options.lua
 MinimapButton.lua

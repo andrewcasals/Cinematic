@@ -38,6 +38,8 @@ local function PrintHelp()
 	Command("/cine button", L["show or hide the minimap button"])
 	Command("/cine reset", L["put the active profile back to how it started"])
 	Command("/cine profile", L["list the profiles (/cine profile <name> switches to one)"])
+	Command("/cine export", L["share the active profile as text to copy"])
+	Command("/cine import", L["add a profile someone shared with you"])
 	Command("/cine welcome", L["the welcome window, to pick a profile"])
 	Heading(L["Frames (hover over one first)"])
 	Command("/cine add", L["fade it too (or /cine add <FrameName>)"])
@@ -847,6 +849,10 @@ function ns.HandleSlash(msg)
 	elseif cmd == "reset" then
 		ns.ResetSettings()
 		ns.Print(L["profile %s reset"]:format(ns.ActiveProfile()))
+	elseif cmd == "export" then
+		ns.ShowExport()
+	elseif cmd == "import" then
+		ns.ShowImport()
 	elseif cmd == "welcome" then
 		ns.ShowWelcome()
 	elseif cmd == "profile" or cmd == "profiles" then

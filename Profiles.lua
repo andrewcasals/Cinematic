@@ -451,6 +451,49 @@ function ns.ProfileChanged()
 	return false
 end
 
+-- A profile's settings for sharing (Share.lua): what differs from the
+-- defaults, and its lists. (Against the defaults, not a built-in's values,
+-- so it comes out the same on a version whose built-ins have changed.)
+function ns.ProfileForSharing(name)
+	if name == ns.ActiveProfile() then ns.SaveProfile() end
+	local saved, base = ns.db.profiles[name] or {}, ns.ProfileBase(name)
+	local shared = {}
+	for k, default in pairs(ns.DEFAULTS) do
+		if IsProfileKey(k) then
+			local value = saved[k]
+			if value == nil then value = base[k] end
+			if value ~= default then shared[k] = CopyTable(value) end
+		end
+	end
+	for _, k in ipairs(PROFILE_TABLES) do
+		local list = saved[k] or base[k]
+		if type(list) == "table" and next(list) ~= nil then shared[k] = CopyTable(list) end
+	end
+	return shared
+end
+
+-- Whether a shared setting is one this version has: a list, or a setting
+-- of the same kind as its default. (The rest are skipped on import.)
+function ns.KnownProfileSetting(key, value)
+	if type(key) ~= "string" then return false end
+	for _, k in ipairs(PROFILE_TABLES) do
+		if k == key then return type(value) == "table" end
+	end
+	local default = ns.DEFAULTS[key]
+	return default ~= nil and IsProfileKey(key) and type(value) == type(default)
+end
+
+-- A new profile of your own from shared settings (stored against the
+-- defaults, as your own are), switched to.
+function ns.AddSharedProfile(name, settings, note)
+	if ns.ProfileExists(name) then return false end
+	ns.db.profiles[name] = settings
+	ns.db.profileNotes[name] = note
+	ns.SetProfile(name)
+	ns.Log("state", "profile imported: " .. name)
+	return true
+end
+
 -- Ticked: this character keeps the profile it's on as its own, and
 -- switching changes only its. Unticked: back to the account's profile.
 function ns.SetCharacterProfile(own)
