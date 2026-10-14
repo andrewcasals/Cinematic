@@ -5,12 +5,17 @@ Immerse yourself in the World of Warcraft. Cinematic quietly fades your UI away 
 ## The UI gets out of the way
 
 * Fades the UI between fights, with letterbox bars sliding in. Combat, targeting an enemy or opening a window brings it straight back.
-* **Smart reveals:** hover over anything to see it. Chat pops up when a message arrives (you choose which message types and channels), your portrait shows while you're recovering, and buffs flash up when you gain one.
-* **Stay cinematic in combat** if you like, showing only the frames you choose for fights, enemy targets and friendly targets. The letterbox and tint can each stay or step aside during fights.
+* **Smart reveals:** hover over anything to see it, and hovering one frame can bring up a whole group with it. Chat pops up when a message arrives in a window you can see (you choose which message types and channels), your portrait shows while you're recovering, buffs and debuffs flash up when you gain one, your durability shows while your gear is damaged, and the quest tracker comes up as you make progress or pick up a quest.
+* **Stay cinematic in combat** if you like, showing only the frames you choose for fights, enemy targets and friendly targets, and keeping them up for a while after the fight. The letterbox and tint can each stay or step aside during fights. Party and raid frames fade part by part (role icons, names, the threat glow), and the cast bar can stay hidden outside fights.
+* **Cooldown Manager:** in fights, show spells only when they're ready, or pick spells to show early as they come off cooldown.
+* **Swing timer** (Classic clients): choose which bars show, with the ranged bar on top for classes that use it.
 * **Names and nameplates:** hide unit names and nameplates in CineMode. You decide per kind (mobs, NPCs, your faction, the other faction, pets, totems) what shows in fights, what stays up in the open world, cities, inns, dungeons, raids and PvP (flagged, or in battlegrounds and arenas), and which names stay. Outside CineMode, nameplates are left to the game.
 * **Hide the UI, keep the look:** a keybind that works like Alt+Z but leaves the tint, letterbox and other effects on screen. It's made for screenshots.
 * **The minimap stays up while tracking** herbs, minerals, treasure or fish.
-* **Your call on every frame:** keep any frame always visible, or fade extra ones from other addons. The Cooldown Manager and Forever Enhanced Cooldown Manager fade out of the box, and show again in fights.
+* **Hide all floating text** (XP, damage, healing) if you'd like a clean screen. It takes a game restart.
+* **Tooltips** (advanced, off by default): hide tooltips in CineMode, in fights or in the camera modes, with a list of the ones that still show, and keybinds to hold for a peek or to switch the hiding off.
+* **Chat bubbles:** hide them by place, show just the text floating over the speaker, and set the text size.
+* **Your call on every frame:** keep any frame always visible, or fade extra ones from other addons. Details!, Bartender4, Plater, EllesmereUI, the Cooldown Manager and Forever Enhanced Cooldown Manager are handled out of the box. For anything else, **Add mode** (or `/cine add`) lets you click a frame to pick it.
 * **Turns itself off where you'd rather have the full UI:** the open world, inns, cities, dungeons, raids, PvP (flagged, or in battlegrounds and arenas), parties or raid groups. Each camera mode can be turned off in those places too (all but the open world), from one grid on the Camera Modes page.
 
 ## A camera with a mind of its own
@@ -27,7 +32,7 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Fish Cam:** cast Fishing and the camera settles behind you with the bobber in view. Right-click (or a gamepad button) to cast again.
 * **Quest Cam:** talk to a quest giver and the camera eases in close and comes round to a dialogue shot past your shoulder. It goes back when you close the window.
 * **Death Cam:** when you die, the camera rises and circles slowly round your body over a cold, dimmed screen, with a song of its own.
-* **Camera Triggers page:** pick which camera each event starts (or none). It starts right away, and moving ends it.
+* **Camera Triggers page:** pick which camera each event starts (or none), and whether it starts music. It starts right away, and moving ends it. With CineMode off, an event can bring CineMode on for as long as its camera runs: tick Stand still and Go AFK for a screensaver that only takes over once you've been idle.
 * **Depth of field:** a soft haze round the screen edges in the camera modes, set separately for each one.
 * **Indoor limits** keep the camera out of walls in buildings and caves.
 
@@ -49,12 +54,20 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Music fatigue** keeps music from starting again too soon after the last time.
 * **Your own sound and game settings are always restored**, even after a crash.
 
+## Quality of life (WoW Forever)
+
+* **Campfire Sit button:** hover a campfire and click the icon at your cursor to sit down by the fire, no `/sit` needed. It has its own camera trigger.
+* **Stand up with Camp Benefits:** once the buff arrives, you stand up again, ready to go.
+* **Fishing:** cast with right-click or a gamepad button, in CineMode or not.
+
 ## Easy to tweak
 
-* **Profiles** to switch the whole setup at once: Immersive (everything, as the developer plays), Lite (just a few cameras), VFX Only (the look without fading anything), Camera Only, Solo Explorer and Pure Cinema, or make and name your own. New players pick one the first time they log in.
+* **Profiles** to switch the whole setup at once: Immersive (everything, as the developer plays), Immersive (CDM) for the Cooldown Manager, Lite (just a few cameras), VFX Only (the look without fading anything), Camera Only (the normal UI until a camera starts), Solo Explorer and Pure Cinema, or make and name your own. New players pick one the first time they log in.
+* **Share profiles:** export your setup as a string and import a friend's.
 * **A minimap button** with quick switches for tint strength, music and combat.
-* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus Profiles, CineMode, Minimap, Buffs/debuffs, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Nameplates, Chat, Fishing, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds.
-* **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, or start any camera on demand.
+* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus Profiles, CineMode, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Mouseover, Minimap, Quest tracker, Swing timer, Cooldown Manager, Tooltips, Buffs/debuffs, Nameplates, Chat, Chat bubbles, Fishing, Quality of life, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds. Each settings page has its own Reset button for just that page.
+* **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, start any camera on demand, or show hidden tooltips.
+* **In your language:** English, Deutsch, Español, Français, Italiano, Português, Русский, 한국어, 简体中文 and 繁體中文, picked on the main settings page.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.
 
 ## Which game?
