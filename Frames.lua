@@ -1706,6 +1706,41 @@ do
 	end)
 end
 
+-- Gear damaged (yellow) or broken (red): the game shows the durability
+-- figure then, and it stays up in CineMode while it does (durabilityShow).
+-- Asked of each equipped slot when durability changes, not every tick. (A
+-- secret status counts as fine.)
+do
+	local alert = false
+	local function Check()
+		alert = false
+		if not GetInventoryAlertStatus then
+			local frame = _G.DurabilityFrame
+			alert = frame ~= nil and ns.Flag(frame:IsShown())
+			return
+		end
+		for slot = 1, 19 do
+			local status = GetInventoryAlertStatus(slot)
+			if type(status) == "number" and status > 0 then
+				alert = true
+				return
+			end
+		end
+	end
+	local durabilityWatcher = CreateFrame("Frame")
+	for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UPDATE_INVENTORY_DURABILITY", "UNIT_INVENTORY_CHANGED" }) do
+		pcall(durabilityWatcher.RegisterEvent, durabilityWatcher, event)
+	end
+	durabilityWatcher:SetScript("OnEvent", function(_, event, unit)
+		if event ~= "UNIT_INVENTORY_CHANGED" or unit == "player" then
+			Check()
+		end
+	end)
+	function ns.HasDurabilityAlert()
+		return alert
+	end
+end
+
 -- A group member pinging the minimap brings it up the same way
 -- (minimapRevealOnPing), even in a camera mode that hides it. Your own pings don't.
 local pingRevealUntil = 0
@@ -2554,6 +2589,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local fadeChat = not (place and ns.db[ns.CHAT_IN[place]])
 	local keepMinimapForTracking = ns.IsKeepingMinimapForTracking(now)
 	local questTimerUp = ns.db.questTimerShow and HasQuestTimer()
+	local durabilityUp = ns.db.durabilityShow and ns.HasDurabilityAlert()
 	local questReveal = questRevealUntil > now
 	local padReveal = padRevealUntil > now
 	local pingReveal = pingRevealUntil > now
@@ -2649,6 +2685,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		local tracking = ((ns.db.alwaysShowMinimap or keepIndoors) and entry.group == "minimap")
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
 			or (questTimerUp and entry.group == "questtimer")
+			or (durabilityUp and entry.group == "misc")
 			or triggered[entry.row]
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown["group:" .. entry.group])

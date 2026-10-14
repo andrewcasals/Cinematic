@@ -80,6 +80,7 @@ local DEFAULTS = {
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
 	alwaysShowWaypoint = false, -- keep retail's quest waypoint visible in cinematic mode
 	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (not retail)
+	durabilityShow = true,     -- keep the durability figure visible in cinematic mode while gear is damaged
 	questRevealOnAccept = true, -- accepting a quest shows the quest tracker as a mouseover would
 	questRevealOnProgress = true, -- quest objective progress shows the quest tracker the same way
 	minimapRevealOnPing = true, -- a group member pinging the minimap shows it as a mouseover would

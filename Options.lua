@@ -976,6 +976,16 @@ local function CreateRevealPanel()
 	afterResurrect:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(afterResurrect, function(db) return db.portraitWhenNotFull and db.portraitAfterCombat end)
 
+	-- (Back at the column edge, out from under the indented options above.)
+	local gearHeader = Header(content, "Your gear", afterResurrect, -24)
+	gearHeader:SetPoint("TOPLEFT", afterResurrect, "BOTTOMLEFT", 2 - 2 * PORTRAIT_INDENT, -24)
+
+	local durability = Check(content, "durabilityShow", "Show the durability figure when gear is damaged",
+		"Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: " ..
+		"some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, " ..
+		"it fades with the rest of the UI.")
+	durability:SetPoint("TOPLEFT", gearHeader, "BOTTOMLEFT", -2, -6)
+
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "CineMode")
