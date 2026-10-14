@@ -186,11 +186,12 @@ local function ReportOwnAlpha(entry, alpha, how)
 		entry.group, shown, entry.applied or -1, how))
 end
 
+-- (Second result: the alpha it set reads back secret.)
 local function TakeOwnAlpha(entry)
 	local alpha = entry.frame:GetAlpha()
 	if issecretvalue and issecretvalue(alpha) then
 		ReportOwnAlpha(entry, alpha, "seen")
-		return true
+		return true, true
 	elseif math.abs(alpha - entry.applied) > ALPHA_SLACK then
 		ReportOwnAlpha(entry, alpha, "seen")
 		entry.baseAlpha = alpha
@@ -240,16 +241,22 @@ local function FadeLooseParts(entry, alpha)
 end
 
 local function ApplyAlpha(entry)
+	local secret
 	if entry.ownAlpha then
-		TakeOwnAlpha(entry)
+		secret = select(2, TakeOwnAlpha(entry))
 	end
 	local visual = VisualAlpha(entry)
-	entry.applied = visual * (entry.baseAlpha or 1)
-	entry.settingAlpha = true
-	entry.frame:SetAlpha(entry.applied)
-	entry.settingAlpha = false
-	if ns.profiling then
-		ns.ProfileCount("SetAlpha on faded frames")
+	-- The raid frames dim members out of range with an alpha that reads back
+	-- secret on retail: it can't be faded relative to, but while they're
+	-- fully up it's left as it is (written over, every member looked in range).
+	if not (secret and visual == 1 and LOOSE_PART_GROUPS[entry.group]) then
+		entry.applied = visual * (entry.baseAlpha or 1)
+		entry.settingAlpha = true
+		entry.frame:SetAlpha(entry.applied)
+		entry.settingAlpha = false
+		if ns.profiling then
+			ns.ProfileCount("SetAlpha on faded frames")
+		end
 	end
 	if LOOSE_PART_GROUPS[entry.group] then
 		FadeLooseParts(entry, visual)
