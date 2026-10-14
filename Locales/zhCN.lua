@@ -605,6 +605,7 @@ L["Their pets too, and yours."] = "也包括他们的宠物，以及你的宠物
 L["Show while PvP flagged, outside battlegrounds and arenas."] = "在战场和竞技场之外处于PvP状态时显示。"
 L["Show in battlegrounds and arenas."] = "在战场和竞技场中显示。"
 L["Show everywhere else, cities and inns included."] = "在其他所有地方显示，包括城市和旅店。"
+L["Show everywhere, in fights and out. The rest of the row keeps its ticks for when you untick this."] = "在任何地方显示，战斗中和战斗外都是。取消勾选此项时，该行其余的勾选仍会保留。"
 L["Show in dungeons, scenarios and raids."] = "在地下城、场景战役和团队副本中显示。"
 L["In Combat"] = "战斗中"
 L["In PvP Combat"] = "PvP战斗中"

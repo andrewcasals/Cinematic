@@ -546,12 +546,15 @@ DEFAULTS.nameInPvPEnemyMinions = true
 DEFAULTS.nameInBGsEnemies = true
 DEFAULTS.nameInBGsEnemyMinions = true
 -- Both grids' Grouped column: the row stays up in a party or raid, in fights
--- and out, whatever its other boxes say. Friendly players and their minions by default.
+-- and out, whatever its other boxes say. Friendly players and their minions by
+-- default. Their Always column likewise, everywhere (none by default).
 for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateGroup" .. kind] = kind == "Friends" or kind == "FriendlyMinions"
+	DEFAULTS["plateAlways" .. kind] = false
 end
 for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
 	DEFAULTS["nameGroup" .. key] = false
+	DEFAULTS["nameAlways" .. key] = false
 end
 -- Slow zoom settings likewise: idleZoom* for standing still, taxiZoom* for
 -- flights, with the flight defaults copying the standing-still ones.
@@ -2519,9 +2522,9 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		end
 		-- The Nameplates page's Cities column joined Open world (ticked there
 		-- wherever either was), and Dungeons and Raids became one column
-		-- (ticked wherever either was). Its Always column is gone: a row it
-		-- kept up is now ticked In combat and everywhere. Its BGs column came
-		-- back from PvP: ticked where PvP is, to start with.
+		-- (ticked wherever either was). Its BGs column came back from PvP:
+		-- ticked where PvP is, to start with. (Its Always column, gone for a
+		-- while, is back as its own setting.)
 		local plateRows = {}
 		for _, kind in ipairs(ns.PLATE_KINDS) do
 			plateRows[#plateRows + 1] = { "plate", "plateCinematic", kind }
@@ -2542,13 +2545,6 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				ns.db[head .. "Instances" .. key] = (dungeons or raids) and true or false
 			end
 			ns.db[head .. "Dungeons" .. key], ns.db[head .. "Raids" .. key] = nil, nil
-			if ns.db[prefix .. "Always" .. key] then
-				ns.db[prefix .. "Combat" .. key], ns.db[open .. key] = true, true
-				for _, suffix in ipairs(ns.PLATE_PLACES) do
-					ns.db[head .. suffix .. key] = true
-				end
-			end
-			ns.db[prefix .. "Always" .. key] = nil
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.

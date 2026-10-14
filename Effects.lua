@@ -83,8 +83,8 @@ local function SetOwnValue(cvar, value)
 end
 
 -- Whether any box in a names row is ticked.
-local NAME_ROW_PREFIXES = { "nameGroup", "nameCombat", "nameCombatPvP", "nameKeep", "nameInInstances",
-	"nameInPvP", "nameInBGs" }
+local NAME_ROW_PREFIXES = { "nameAlways", "nameGroup", "nameCombat", "nameCombatPvP", "nameKeep",
+	"nameInInstances", "nameInPvP", "nameInBGs" }
 local function NameRowTicked(group)
 	for _, prefix in ipairs(NAME_ROW_PREFIXES) do
 		if ns.db[prefix .. group.key] then
@@ -145,10 +145,10 @@ local pvpNamesFight = false
 
 -- Names ticked In combat (or In PvP combat, in such fights) stay up through
 -- the fight and for the Calm Timer (calmTime) after it, like the plates.
--- (Grouped on the Nameplates page keeps a row up in a party or raid, whatever
--- its other boxes say.)
+-- (Always on the Nameplates page keeps a row up everywhere, and Grouped in a
+-- party or raid, whatever its other boxes say.)
 local function NameKeptHere(key, inCombat)
-	if ns.db["nameGroup" .. key] and ns.InGroup() then
+	if ns.db["nameAlways" .. key] or (ns.db["nameGroup" .. key] and ns.InGroup()) then
 		return true
 	end
 	local fightKept = ns.db["nameCombat" .. key] or (pvpNamesFight and ns.db["nameCombatPvP" .. key])
@@ -844,18 +844,20 @@ end
 ns.InPvPFight = InPvPFight
 
 -- Whether a kind shows in fights in cinematic mode (plateCombat<kind>,
--- plateCombatPvP<kind> while flagged for PvP, or Grouped on the Nameplates
--- page, which keeps a row up in a party or raid whatever its other boxes say).
+-- plateCombatPvP<kind> while flagged for PvP, or Always or Grouped on the
+-- Nameplates page, which keep a row up everywhere / in a party or raid
+-- whatever its other boxes say).
 local function ShownInFights(kind)
-	return (ns.db["plateCombat" .. kind] or (ns.db["plateGroup" .. kind] and ns.InGroup())
-		or (ns.db["plateCombatPvP" .. kind] and InPvPFight())) and true or false
+	return (ns.db["plateCombat" .. kind] or ns.db["plateAlways" .. kind]
+		or (ns.db["plateGroup" .. kind] and ns.InGroup()) or (ns.db["plateCombatPvP" .. kind] and InPvPFight())) and true or false
 end
 
 -- Whether a kind stays up in cinematic mode out of combat where you are:
 -- plateCinematic<kind> in the open world, plateIn<place><kind> elsewhere.
 local function KeptHere(kind)
 	local key = placeSuffix and ("plateIn" .. placeSuffix .. kind) or ("plateCinematic" .. kind)
-	return (ns.db[key] or (ns.db["plateGroup" .. kind] and ns.InGroup())) and true or false
+	return (ns.db[key] or ns.db["plateAlways" .. kind] or (ns.db["plateGroup" .. kind] and ns.InGroup()))
+		and true or false
 end
 
 -- How far each kind is held up by KeptHere, faded so moving between places
@@ -1280,8 +1282,8 @@ function ns.EnsurePlateRows()
 		if groupKept then
 			ns.EnablePlateRow(kind)
 		end
-		for _, prefix in ipairs({ "plateGroup", "plateCombat", "plateCombatPvP", "plateCinematic",
-			"plateInInstances", "plateInPvP", "plateInBGs" }) do
+		for _, prefix in ipairs({ "plateAlways", "plateGroup", "plateCombat", "plateCombatPvP",
+			"plateCinematic", "plateInInstances", "plateInPvP", "plateInBGs" }) do
 			if ns.db[prefix .. kind] then
 				ns.EnablePlateRow(kind)
 				break

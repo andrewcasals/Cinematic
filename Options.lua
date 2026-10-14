@@ -3696,8 +3696,11 @@ local function CreatePlatesPanel()
 		end
 		return rowLabel
 	end
-	-- Both grids' column tooltips (each box adds its row's note). Grouped keeps
-	-- its row up in a party or raid, in fights and out, whatever the rest says.
+	-- Both grids' column tooltips (each box adds its row's note). Always keeps
+	-- its row up everywhere, and Grouped in a party or raid, in fights and out,
+	-- whatever the rest says. (The rest grey while Always is ticked, keeping
+	-- their ticks.)
+	local ALWAYS_TIP = L["Show everywhere, in fights and out. The rest of the row keeps its ticks for when you untick this."]
 	local COMBAT_TIP = L["Show in fights, and for the Calm Timer after."]
 	local PVP_COMBAT_TIP = L["Show in fights while you're PvP flagged, and for the Calm Timer after."]
 	local GROUP_TIP = L["Always show while you're in a party or raid."]
@@ -3744,9 +3747,11 @@ local function CreatePlatesPanel()
 		end)
 	minionsCheck:SetPoint("TOPLEFT", membersCheck, "BOTTOMLEFT", 16, -2)
 	GreyUnless(minionsCheck, function(db) return db.plateGroupMembers end)
-	-- The columns: In Combat, In PvP Combat, PvP and BGs & Arenas, the other
-	-- places, and Grouped (not a place) beside Instances.
+	-- The columns: Always (set apart: it stands for the rest of its row), In
+	-- Combat, In PvP Combat, PvP and BGs & Arenas, the other places, and
+	-- Grouped (not a place) beside Instances.
 	local PLACE_COLUMNS = {
+		{ always = true },
 		{ combat = true },
 		{ pvpCombat = true },
 		{ "PvP", L["PvP"], L["Show while PvP flagged, outside battlegrounds and arenas."] },
@@ -3757,10 +3762,10 @@ local function CreatePlatesPanel()
 	}
 	local headings = {}
 	for _, place in ipairs(PLACE_COLUMNS) do
-		headings[#headings + 1] = (place.combat and L["In Combat"]) or (place.pvpCombat and L["In PvP Combat"])
+		headings[#headings + 1] = (place.always and L["Always"]) or (place.combat and L["In Combat"]) or (place.pvpCombat and L["In PvP Combat"])
 			or (place.group and L["Grouped"]) or place[2]
 	end
-	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 0
+	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 10
 	local columnTop = TableTop(minionsCheck, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 	-- (Lined up with the switches' left edge, not the indented child.)
 	columnTop:ClearAllPoints()
@@ -3791,8 +3796,11 @@ local function CreatePlatesPanel()
 		local combatKey = "plateCombat" .. kind[1]
 		local checks = {}
 		local pvpCheck
+		local alwaysKey = "plateAlways" .. kind[1]
 		for _, place in ipairs(PLACE_COLUMNS) do
-			if place.combat then
+			if place.always then
+				checks[#checks + 1] = Check(content, alwaysKey, "", ALWAYS_TIP .. tip, Ticked(alwaysKey))
+			elseif place.combat then
 				checks[#checks + 1] = Check(content, combatKey, "", COMBAT_TIP .. tip, Ticked(combatKey))
 			elseif place.pvpCombat then
 				pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "", PVP_COMBAT_TIP .. tip,
@@ -3808,11 +3816,14 @@ local function CreatePlatesPanel()
 			end
 		end
 		-- Greyed out where this client has no such setting.
+		-- (The rest also while Always is ticked.)
 		local function Available()
 			return ns.HasPlateSettings(kind[1])
 		end
-		for _, check in ipairs(checks) do
-			GreyUnless(check, Available)
+		for c, check in ipairs(checks) do
+			GreyUnless(check, function(db)
+				return Available() and (c == 1 or not db[alwaysKey])
+			end)
 		end
 		lastLabel = PlaceRow(columnTop, r, kind[2], kind[3], unpack(checks))
 	end
@@ -3834,8 +3845,11 @@ local function CreatePlatesPanel()
 		local combatKey = "nameCombat" .. group.key
 		local checks = {}
 		local pvpCheck
+		local alwaysKey = "nameAlways" .. group.key
 		for _, place in ipairs(PLACE_COLUMNS) do
-			if place.combat then
+			if place.always then
+				checks[#checks + 1] = Check(content, alwaysKey, "", ALWAYS_TIP .. nameTip, Ticked(alwaysKey))
+			elseif place.combat then
 				checks[#checks + 1] = Check(content, combatKey, "", COMBAT_TIP .. nameTip, Ticked(combatKey))
 			elseif place.pvpCombat then
 				-- Names can't change mid-fight: they go by how the fight started.
@@ -3853,8 +3867,11 @@ local function CreatePlatesPanel()
 			end
 		end
 		-- Greyed out where this client has no such setting.
-		for _, check in ipairs(checks) do
-			GreyUnless(check, function() return ns.HasNameSettings(group) end)
+		-- (The rest also while Always is ticked.)
+		for c, check in ipairs(checks) do
+			GreyUnless(check, function(db)
+				return ns.HasNameSettings(group) and (c == 1 or not db[alwaysKey])
+			end)
 		end
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
