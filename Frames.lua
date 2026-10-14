@@ -32,6 +32,13 @@ local FRAME_GROUPS = {
 		"MultiCastActionPage1", "MultiCastActionPage2", "MultiCastActionPage3",
 	},
 	target = { "TargetFrame", "TargetFrameToT", "FocusFrame" },
+	-- The party frames when they aren't raid-style (portraits down the left,
+	-- their pets' with them): Classic's by name; retail's are found in
+	-- PartyFrame (see ScanPartyFrames).
+	party = {
+		"PartyMemberFrame1", "PartyMemberFrame2", "PartyMemberFrame3", "PartyMemberFrame4",
+		"PartyMemberBackground",
+	},
 	-- In a group, the tab at the left edge and the panel it opens. (The raid
 	-- frames themselves, raidplayers and raidpets, are found by ScanRaidFrames.)
 	raidmanager = { "CompactRaidFrameManager" },
@@ -123,14 +130,22 @@ function ns.IsAddonFramesOn(key)
 end
 
 -- Groups whose frames set their own alpha (see AddFrame).
-local OWN_ALPHA = { chat = true, waypoint = true, cooldowns = true, raidplayers = true, raidpets = true }
+-- (The party frames dim members out of range.)
+local OWN_ALPHA = {
+	chat = true, waypoint = true, cooldowns = true, raidplayers = true, raidpets = true, party = true,
+}
 -- Parts of the raid frames with rows of their own (role icons, names, group
 -- titles, buffs and debuffs). They sit inside the frames they're part of but
 -- fade apart from them (not nested), and they don't take the mouse: hovering
 -- the raid frames brings them up (their Mouseover group).
 local PART_GROUPS = {
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true,
+	partyroles = true, partynames = true,
 }
+-- Parts that go only while a row's frames are up (part -> row): the "Party"
+-- title sits in no faded frame (the party members fade one by one), so its
+-- Always tick would leave it alone on screen.
+local followsRow = {}
 
 ns.managed = {}       -- { frame, name, group, alpha, baseAlpha }
 local seen = {}
@@ -946,6 +961,12 @@ ns.COMBAT_SHOW = {
 	{ key = "target", label = "Target", default = true, frames = { "TargetFrame" } },
 	{ key = "tot", label = "Target of target", default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = "Focus", default = true, frames = { "FocusFrame" } },
+	-- The Standard Frames page's Party frames section (page = "party"); the
+	-- raid-style ones are the Raid frames section's.
+	{ key = "party", label = "Party frames", default = true, page = "party", groups = { "party" } },
+	-- Their parts, Always ticked to start with (CINE_SHOW_DEFAULT), as the raid frames' are.
+	{ key = "partyroles", label = "Role icons", default = true, page = "party", groups = { "partyroles" }, part = true },
+	{ key = "partynames", label = "Names", default = true, page = "party", groups = { "partynames" }, part = true },
 	-- The raid frames (raid-style party frames too), members and pets apart,
 	-- and the Raid Frame Manager (the tab at the left edge): the Standard
 	-- Frames page's Raid frames section (page = "raid").
@@ -955,18 +976,19 @@ ns.COMBAT_SHOW = {
 		page = "raid", groups = { "raidpets" } },
 	-- Parts of them, Always ticked to start with (CINE_SHOW_DEFAULT): untick
 	-- one to hide it in CineMode (names and role icons while you heal, say).
+	-- (part: Always means whenever its frame shows, over its Mouseover groups.)
 	{ key = "raidroles", label = "Role icons", default = true, addon = "Blizzard_CompactRaidFrames",
-		page = "raid", groups = { "raidroles" } },
+		page = "raid", groups = { "raidroles" }, part = true },
 	{ key = "raidnames", label = "Player names", default = true, addon = "Blizzard_CompactRaidFrames",
-		page = "raid", groups = { "raidnames" } },
+		page = "raid", groups = { "raidnames" }, part = true },
 	{ key = "raidpetnames", label = "Pet names", default = true, addon = "Blizzard_CompactRaidFrames",
-		page = "raid", groups = { "raidpetnames" } },
+		page = "raid", groups = { "raidpetnames" }, part = true },
 	{ key = "raidtitles", label = "Group titles", default = true, addon = "Blizzard_CompactRaidFrames",
-		page = "raid", groups = { "raidtitles" } },
+		page = "raid", groups = { "raidtitles" }, part = true },
 	{ key = "raidbuffs", label = "Buffs", default = true, addon = "Blizzard_CompactRaidFrames",
-		page = "raid", groups = { "raidbuffs" } },
+		page = "raid", groups = { "raidbuffs" }, part = true },
 	{ key = "raiddebuffs", label = "Debuffs", default = true, addon = "Blizzard_CompactRaidFrames",
-		page = "raid", groups = { "raiddebuffs" } },
+		page = "raid", groups = { "raiddebuffs" }, part = true },
 	{ key = "raidmanager", label = "Raid Frame Manager", default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", frames = { "CompactRaidFrameManager" } },
 	-- The battlegrounds' flag carriers: its Battlegrounds section (page = "bg").
@@ -1092,8 +1114,10 @@ end
 -- addon's or added frame's row is its fade group ("addon:<key>", "extra:<name>").
 local HOVER_ROW_BY_GROUP = {
 	bars = "mainbar", sidebars = "right1", player = "player", prd = "prd", totems = "totems", target = "target",
+	party = "party",
 	raidplayers = "raidplayers", raidpets = "raidpets", raidmanager = "raidmanager", flags = "flags",
 	raidroles = "raidroles", raidnames = "raidnames", raidpetnames = "raidpetnames", raidtitles = "raidtitles",
+	partyroles = "partyroles", partynames = "partynames",
 	raidbuffs = "raidbuffs", raiddebuffs = "raiddebuffs",
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
@@ -1135,10 +1159,12 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ name = "Side bars", members = { "right1", "right2" } },
 	{ name = "Player", members = { "player", "prd", "totemtimers" } },
 	{ name = "Target and focus", members = { "target", "tot", "focus" } },
-	-- (Not the Raid Frame Manager: healers have the mouse on the raid frames
-	-- all the time, and the manager comes up only when it's hovered itself.)
+	-- (Raid-style party frames are the raid frames; the Raid Frame Manager
+	-- goes with both.)
 	{ name = "Raid frames", members = { "raidplayers", "raidpets", "raidroles", "raidnames",
-		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs" }, triggers = { roster = true } },
+		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
+	{ name = "Party frames", members = { "party", "partyroles", "partynames", "raidmanager" },
+		triggers = { roster = true } },
 	{ name = "Minimap", members = { "minimap" }, triggers = { ping = true, tracking = true } },
 	{ name = "Buffs", members = { "buffs" }, triggers = { aura = true } },
 	{ name = "Quest tracker", members = { "quests" }, triggers = { quest = true } },
@@ -1194,7 +1220,7 @@ end
 local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
-	player = true, prd = true, raidroles = true, raidnames = true,
+	player = true, prd = true, raidroles = true, raidnames = true, partyroles = true, partynames = true,
 	raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
 	gamepadbars = true, gamepadreticle = true,
@@ -1262,7 +1288,8 @@ end
 ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap" }
 -- Rows ticked there until changed (no profile lists them, so none hides them).
 local CINE_SHOW_DEFAULT = {
-	flags = true, raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
+	flags = true, partyroles = true, partynames = true,
+	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
 	raiddebuffs = true,
 }
 function ns.IsCineShowOn(key)
@@ -1297,11 +1324,11 @@ ns.PLACE_SHOW = {
 		tip = "Show all through CineMode in dungeons, scenarios and raids." },
 }
 local NO_DEFAULTS = {}
--- Ticked to start with: the raid frames in battlegrounds, arenas, dungeons
--- and raids, where you're always in a group.
+-- Ticked to start with: the raid and party frames in battlegrounds, arenas,
+-- dungeons and raids, where you're always in a group.
 local PLACE_SHOW_DEFAULTS = {
-	bgShow = { raidplayers = true, raidpets = true },
-	instanceShow = { raidplayers = true, raidpets = true },
+	bgShow = { raidplayers = true, raidpets = true, party = true },
+	instanceShow = { raidplayers = true, raidpets = true, party = true },
 }
 local function PlaceDefaults(list)
 	return PLACE_SHOW_DEFAULTS[list] or NO_DEFAULTS
@@ -2732,6 +2759,11 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if deathFade and not (typing and entry.group == "chat") then
 			target = 0
 		end
+		local follows = followsRow[entry.frame]
+		if follows and cinematic and not hovered[follows] and not triggered[follows]
+			and not (combatShown and combatShown["group:" .. follows]) then
+			target = 0
+		end
 		-- (/cine debug pad: why the gamepad bars come up, as they start to.)
 		if ns.padDebug and entry.group == "gamepadbars" then
 			local up = target > 0 and cinematic
@@ -3209,7 +3241,11 @@ do
 			local holder = _G[holderName]
 			if holder and not IsForbidden(holder) then
 				if holderName == "CompactPartyFrame" then
-					SortRaidPart(GroupTitle(holder), "raidtitles") -- ("Party")
+					local title = GroupTitle(holder) -- ("Party")
+					SortRaidPart(title, "raidtitles")
+					if title then
+						followsRow[title] = "raidplayers"
+					end
 				end
 				for _, child in ipairs({ holder:GetChildren() }) do
 					if not IsForbidden(child) then
@@ -3231,6 +3267,39 @@ do
 		end
 	end
 	ns.AddScanner(ScanRaidFrames)
+
+	-- A party member's frame, with its role icon and name (retail's are
+	-- parent keys, Classic's named after the frame).
+	local function SortPartyFrame(frame)
+		if not frame or IsForbidden(frame) then
+			return
+		end
+		AddFrame(frame, "party")
+		local name = frame:GetName()
+		local overlay = frame.PartyMemberOverlay
+		SortRaidPart((overlay and overlay.RoleIcon) or frame.RoleIcon or (name and _G[name .. "RoleIcon"]),
+			"partyroles")
+		SortRaidPart(frame.Name or (name and _G[name .. "Name"]), "partynames")
+	end
+
+	-- Retail's party frames (unnamed, from a pool) are in PartyFrame, and so
+	-- are the raid-style ones (CompactPartyFrame): fading the holder would
+	-- fade those too, so its members fade instead.
+	local function ScanPartyFrames()
+		for i = 1, 4 do
+			SortPartyFrame(_G["PartyMemberFrame" .. i])
+		end
+		local holder = _G.PartyFrame
+		if not holder or IsForbidden(holder) then
+			return
+		end
+		for _, child in ipairs({ holder:GetChildren() }) do
+			if child ~= _G.CompactPartyFrame then
+				SortPartyFrame(child)
+			end
+		end
+	end
+	ns.AddScanner(ScanPartyFrames)
 
 	local rosterWatcher = CreateFrame("Frame")
 	rosterWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")

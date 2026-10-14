@@ -3257,9 +3257,11 @@ local function ShowTable(content, anchor, rows)
 		end
 		for c, column in ipairs(COLUMNS) do
 			local isOn, tableKey, needsStay = column[2], column[3], column[4]
-			local check = Check(content, tableKey, "", c == 1 and
-				"Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)"
-				or column[5], function(value)
+			local alwaysTip = item.part
+				and "Show it whenever its frame shows. This overrides its Mouseover groups: untick it to " ..
+				"hide it in CineMode except when hovered or brought up by the other columns."
+				or "Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)"
+			local check = Check(content, tableKey, "", c == 1 and alwaysTip or column[5], function(value)
 				local setting = c == 1 and ns.CINE_SHOW_SETTING[item.key]
 				if setting then
 					ns.GetDB()[setting] = value
@@ -3325,6 +3327,7 @@ local function CreateCombatPanel()
 	Section("combat", "Combat")
 	Section("bars", "Action bars")
 	Section("interface", "Interface")
+	Section("party", "Party frames (not raid-style)")
 	Section("raid", "Raid frames")
 	Section("bg", "Battlegrounds")
 	Section(nil, "Other") -- (any row not given a section)
