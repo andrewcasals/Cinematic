@@ -4430,15 +4430,38 @@ local function CreateTooltipPanel()
 	local hideLabel = Label(content, "GameFontNormalSmall", "When they're hidden")
 	hideLabel:SetPoint("TOPLEFT", cineMode, "BOTTOMLEFT", 12, -10)
 
-	local tooltip = Check(content, "fadeTooltip", "Throughout CineMode",
-		"Hides world tooltips whenever CineMode is on. To hide them only in some camera " ..
-		"modes, untick this and tick those modes under Hide below.")
-	tooltip:SetPoint("TOPLEFT", hideLabel, "BOTTOMLEFT", -2, -6)
-	tooltip:HookScript("OnClick", Refresh) -- grey out / enable the camera modes below
-	GreyUnless(tooltip, function(db) return db.tooltipCineMode end)
+	-- Throughout CineMode, or only in the camera modes ticked (fadeTooltip
+	-- true or false), the modes listed under the second.
+	local throughout = Choice(content, "fadeTooltip", true, "Throughout CineMode",
+		"Hides world tooltips whenever CineMode is on.")
+	throughout:SetPoint("TOPLEFT", hideLabel, "BOTTOMLEFT", -2, -6)
+	GreyUnless(throughout, function(db) return db.tooltipCineMode end)
+	local onlyModes = Choice(content, "fadeTooltip", false, "Only in these camera modes",
+		"Hides world tooltips only while one of the camera modes ticked below is running.")
+	onlyModes:SetPoint("TOPLEFT", throughout, "BOTTOMLEFT", 0, -2)
+	GreyUnless(onlyModes, function(db) return db.tooltipCineMode end)
+	local tooltipModes = onlyModes
+	for i, mode in ipairs({
+		{ "Flight", "On flights" },
+		{ "Idle", "AFK camera (standing still or AFK)" },
+		{ "Cozy", "Cozy (campfire, sitting, emotes)" },
+		{ "Tele", "Tele (Hearthstone, teleports)" },
+		{ "Vista", "Vista (/stare)" },
+		{ "Fish", "Fish (fishing)" },
+		{ "Walk", "RP walking" },
+		{ "Run", "Auto-running" },
+		{ "Death", "Death camera" },
+		{ "Quest", "Quest camera (talking to quest givers)" },
+	}) do
+		local hide = Check(content, "tooltipOff" .. mode[1], mode[2],
+			"Hide world tooltips while this camera is running.")
+		hide:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", i == 1 and 20 or 0, -2)
+		GreyUnless(hide, Cine(function(db) return not db.fadeTooltip end))
+		tooltipModes = hide
+	end
 
 	local backLabel = Label(content, "GameFontNormalSmall", "Showing them again")
-	backLabel:SetPoint("TOPLEFT", tooltip, "BOTTOMLEFT", 2, -14)
+	backLabel:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", -16, -14)
 
 	local tooltipReveal = Check(content, "tooltipReveal", "After hovering",
 		"A hidden world tooltip appears once you've kept the mouse on the same player, NPC or " ..
@@ -4486,30 +4509,6 @@ local function CreateTooltipPanel()
 	GreyUnless(tooltipFade, Cine(function(db) return db.tooltipReveal end))
 	Tooltip(tooltipFade, "How long a tooltip takes to fade in once it's shown, and to fade out " ..
 		"when you move off. 0 shows and hides it at once.")
-
-	-- A row per camera mode: hide there (when not hidden throughout).
-	local tooltipLabel = Label(content, "GameFontNormalSmall", "Or in camera modes")
-	tooltipLabel:SetPoint("TOPLEFT", tooltipFade, "BOTTOMLEFT", -2, -14)
-	local tooltipModes = tooltipLabel
-	for i, mode in ipairs({
-		{ "Flight", "On flights" },
-		{ "Idle", "AFK camera (standing still or AFK)" },
-		{ "Cozy", "Cozy (campfire, sitting, emotes)" },
-		{ "Tele", "Tele (Hearthstone, teleports)" },
-		{ "Vista", "Vista (/stare)" },
-		{ "Fish", "Fish (fishing)" },
-		{ "Walk", "RP walking" },
-		{ "Run", "Auto-running" },
-		{ "Death", "Death camera" },
-		{ "Quest", "Quest camera (talking to quest givers)" },
-	}) do
-		local hide = Check(content, "tooltipOff" .. mode[1], mode[2],
-			"Hide world tooltips while this camera is running. (Not needed while \"Throughout " ..
-			"CineMode\" above hides them everywhere.)")
-		hide:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
-		GreyUnless(hide, Cine(function(db) return not db.fadeTooltip end))
-		tooltipModes = hide
-	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
