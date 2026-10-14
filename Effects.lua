@@ -1521,9 +1521,8 @@ local function Handling()
 	return ns.db.enabled and ns.db.handleTooltips and true or false
 end
 
--- Holding the page's key (tooltipShowKey), or the Show hidden tooltips
--- keybind, shows tooltips it would hide, in combat and in CineMode alike.
-local SHOW_KEYS = { shift = IsShiftKeyDown, ctrl = IsControlKeyDown, alt = IsAltKeyDown }
+-- Holding the Show hidden tooltips keybind shows tooltips the page would
+-- hide, in combat and in CineMode alike.
 local bindHeld = false
 
 -- The keybind (Bindings.xml, runOnUp): held from its press to its release.
@@ -1544,11 +1543,7 @@ function Cinematic_ToggleTooltips()
 end
 
 local function ShowKeyDown()
-	if bindHeld then
-		return true
-	end
-	local down = SHOW_KEYS[ns.db.tooltipShowKey]
-	return down ~= nil and down() and true or false
+	return bindHeld
 end
 
 -- Whether world tooltips are hidden in CineMode right now (not whether one is up).

@@ -4386,13 +4386,13 @@ local function CreateTooltipPanel()
 		"On: tooltips are hidden in combat and in CineMode as this page says. Off: every tooltip " ..
 		"shows as the game has it.", title)
 
-	-- In combat: which kinds, then the key that shows them anyway.
+	-- In combat: which kinds.
 	local combatLabel = Label(content, "GameFontNormalSmall", "In combat")
 	combatLabel:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -14)
 
 	local combat = Check(content, "tooltipCombat", "Hide tooltips in combat",
 		"Hides the kinds of tooltip ticked below while you're in combat, in CineMode or not. Hold " ..
-		"the key below to see one anyway.")
+		"the Show hidden tooltips key (Keybinds page) to see one anyway.")
 	combat:SetPoint("TOPLEFT", combatLabel, "BOTTOMLEFT", -2, -6)
 	combat:HookScript("OnClick", Refresh) -- grey out / enable the kinds below
 	local kinds = combat
@@ -4411,36 +4411,12 @@ local function CreateTooltipPanel()
 		kinds = check
 	end
 
-	local keyLabel = Label(content, "GameFontNormalSmall", "Show them anyway while holding")
-	keyLabel:SetPoint("TOPLEFT", kinds, "BOTTOMLEFT", -8, -14)
-	local KEY_TIP = "While this key's held, tooltips this page would hide show as usual, in combat and " ..
-		"in CineMode. Pressing it while you're on a unit or something in the world brings its " ..
-		"tooltip up; anything else, hover it again with the key held."
-	local keys = keyLabel
-	for i, choice in ipairs({
-		{ "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" }, { "none", "No key" },
-	}) do
-		local check = Choice(content, "tooltipShowKey", choice[1], choice[2], KEY_TIP)
-		if i == 1 then
-			check:SetPoint("TOPLEFT", keys, "BOTTOMLEFT", -2, -6)
-		else
-			check:SetPoint("LEFT", keys, "RIGHT", 70, 0)
-		end
-		keys = check
-	end
-	local bindNote = Label(content, "GameFontHighlightSmall",
-		"Or hold a key of your own: Show hidden tooltips on the Keybinds page (or Key Bindings > AddOns).")
-	bindNote:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", 0, -38)
-	bindNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	bindNote:SetJustifyH("LEFT")
-	keys = bindNote
-
 	-- In CineMode: when world tooltips are hidden (throughout CineMode or
 	-- only in the camera modes ticked Hide), then how they come back after
 	-- hovering.
 	local cineLabel = Label(content, "GameFontNormalSmall", "In CineMode")
 	cineLabel:SetPoint("LEFT", combatLabel, "LEFT")
-	cineLabel:SetPoint("TOP", keys, "BOTTOM", 0, -14)
+	cineLabel:SetPoint("TOP", kinds, "BOTTOM", 0, -14)
 
 	local cineMode = Check(content, "tooltipCineMode", "Hide world tooltips in CineMode",
 		"Hides the tooltips for players, NPCs and objects you mouse over in the world while " ..
@@ -4851,8 +4827,9 @@ local KEYBINDS = {
 		tip = "Pretends you're dead for 30 seconds so the death camera runs. Press again to stop. " ..
 			"Like /cine deathtest." },
 	{ action = "CINEMATIC_SHOWTOOLTIPS", label = "Show hidden tooltips",
-		tip = "Hold to see the tooltips the Tooltips page hides (in combat and in CineMode), " ..
-			"like that page's Shift, Ctrl or Alt choice." },
+		tip = "Hold to see the tooltips the Tooltips page hides, in combat and in CineMode. Pressing it " ..
+			"while you're on a unit or something in the world brings its tooltip up; anything else, " ..
+			"hover it again with the key held." },
 	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = "Toggle tooltip hiding",
 		tip = "Turns the Tooltips page's \"Let CineMode hide tooltips\" on or off." },
 }
