@@ -314,22 +314,85 @@ end
 -- nothing. Once fully shown they're left alone, so their own fade-out as a
 -- cast ends still plays.
 -- (One local for all of it: the file is near Lua's 200 locals.)
-local castBars = { entries = {} } -- entries: frame -> its entry while managed (false once not)
+-- entries: frame -> its entry while managed (false once not); fades: frame -> its fade animations.
+local castBars = { entries = {}, fades = {}, none = {} }
+-- A fade animation can't be stopped as it starts (see onFadeAnim): one left
+-- over would carry on once the bar shows again, and a cast started soon after
+-- another was stopped flashed up. So they're stopped after the bar's own
+-- events, as it shows and as it updates.
+function castBars.StopFades(frame)
+	for _, group in ipairs(castBars.fades[frame] or castBars.none) do
+		if ns.Flag(group:IsPlaying()) then
+			group:Stop()
+		end
+	end
+end
 function ns.ReapplyCastBar(frame)
 	local entry = castBars.entries[frame]
 	if entry and entry.alpha < 1 then
+		castBars.StopFades(frame)
 		ApplyAlpha(entry)
 	end
 end
 -- (Camera's Fishing cast bar hiding calls it too, after setting the bar's alpha itself.)
 castBars.onScript = ns.Profiled("Cast bar fade hook", ns.ReapplyCastBar)
+-- And after each of their updates while shown, before they're drawn: a bar
+-- can be shown and set to full alpha by something other than its own events
+-- (it flashed up as some casts started until the next tick).
+castBars.onUpdate = ns.Profiled("Cast bar update hook", function(frame)
+	local entry = castBars.entries[frame]
+	if entry and entry.alpha < 1 then
+		castBars.StopFades(frame)
+		ReapplyIfChanged(entry)
+	end
+end)
+
+-- Their fade-out as a cast ends, or is interrupted (held a moment first), is
+-- an alpha animation, which shows them whatever alpha they're set to: an
+-- interrupted cast stayed up. While faded the bar is hidden instead, as at the
+-- animation's end, and the animation stopped once its start is over (see
+-- StopFades). (Not in Edit Mode, which shows the bar.)
+castBars.onFadeAnim = ns.Profiled("Cast bar fade animation", function(group)
+	local frame = group:GetParent()
+	local entry = castBars.entries[frame]
+	if not entry or entry.alpha >= 1 then
+		return
+	end
+	local editMode = _G.EditModeManagerFrame
+	if editMode and editMode.IsEditModeActive and ns.Flag(editMode:IsEditModeActive()) then
+		return
+	end
+	frame:Hide()
+end)
+
+-- Whether an animation group fades the bar itself (not its spark, glow and the like).
+function castBars.FadesFrame(group, frame)
+	for _, anim in ipairs({ group:GetAnimations() }) do
+		if anim:GetObjectType() == "Alpha" and (anim:GetTarget() or group:GetParent()) == frame then
+			return true
+		end
+	end
+	return false
+end
 
 function castBars.Hook(entry)
-	if castBars.entries[entry.frame] == nil and entry.frame.HookScript then
-		entry.frame:HookScript("OnEvent", castBars.onScript)
-		entry.frame:HookScript("OnShow", castBars.onScript)
+	local frame = entry.frame
+	if castBars.entries[frame] == nil and frame.HookScript then
+		frame:HookScript("OnEvent", castBars.onScript)
+		frame:HookScript("OnShow", castBars.onScript)
+		frame:HookScript("OnUpdate", castBars.onUpdate)
+		if frame.GetAnimationGroups then
+			for _, group in ipairs({ frame:GetAnimationGroups() }) do
+				local ok, fades = pcall(castBars.FadesFrame, group, frame)
+				if ok and fades then
+					group:HookScript("OnPlay", castBars.onFadeAnim)
+					castBars.fades[frame] = castBars.fades[frame] or {}
+					table.insert(castBars.fades[frame], group)
+				end
+			end
+		end
 	end
-	castBars.entries[entry.frame] = entry
+	castBars.entries[frame] = entry
 end
 
 -- Some addons set their own frames' alpha all the time (EllesmereUI: target
