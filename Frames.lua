@@ -1505,13 +1505,22 @@ local function HasAnyTarget()
 	return ns.HasTarget()
 end
 
+-- When the player was last in combat (for "only after combat").
+local lastCombatAt = -math.huge
+
 -- Frame names to show right now, from the Standard Frames page's column that
--- applies: In combat (while staying cinematic), Tar Enemy (out of combat with
--- a living enemy targeted) or Tar Friendly (anything else targeted: friends,
--- NPCs, dead enemies).
+-- applies: In combat (while staying cinematic, and with combatShowCalm on
+-- until the Calm Timer has run out after the fight), Tar Enemy (out of combat
+-- with a living enemy targeted) or Tar Friendly (anything else targeted:
+-- friends, NPCs, dead enemies).
 -- Rows with Always ticked are always in it: they don't fade in CineMode at all.
+-- Rows with a Calm Timer option of their own on their page: their In combat
+-- tick lasts until the Calm Timer runs out even with combatShowCalm off.
+local CALM_ROW_SETTING = { quests = "questCombatCalm" }
 local function GetCombatShownFrames()
-	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+	local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+	local calm = not fighting and GetTime() - lastCombatAt < (ns.db.calmTime or 0)
+	local inCombat = fighting or (calm and ns.db.combatShowCalm)
 	local isOn
 	if inCombat then
 		if ns.db.stayInCombat then
@@ -1539,7 +1548,9 @@ local function GetCombatShownFrames()
 	local gamepad = ns.IsGamePadOn()
 	for _, item in ipairs(ns.COMBAT_SHOW) do
 		local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
-		if applies and (ns.IsCineShowOn(item.key) or KeptHere(item.key) or (isOn and isOn(item.key))) then
+		local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
+			and ns.IsCombatShowOn(item.key)
+		if applies and (ns.IsCineShowOn(item.key) or KeptHere(item.key) or (isOn and isOn(item.key)) or calmRow) then
 			for _, name in ipairs(item.frames or {}) do
 				shown[name] = true
 			end
@@ -1616,8 +1627,6 @@ local buffPeekUntil = 0
 -- debuffs left (bar ignored ones).
 local debuffHeld = false
 
--- When the player was last in combat (for "only after combat").
-local lastCombatAt = -math.huge
 local COMBAT_END_AURA_GRACE = 1 -- seconds after a fight its aura changes don't bring the buffs up
 
 -- In combat the update details are secret: lists can't be looked into and the

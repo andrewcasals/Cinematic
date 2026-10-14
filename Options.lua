@@ -3400,7 +3400,12 @@ local function CreateCombatPanel()
 		L["On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
 		"alone, the minimap, quest tracker, buffs and Cooldown Manager included (their pages' " ..
 		"switches only count while this is on)."], subtitle)
-	local lastRow = switch
+	local calm = Check(content, "combatShowCalm", L["In combat rows stay for the Calm Timer"],
+		L["Frames ticked In combat (here and on the 3rd Party Frames page) stay up after a fight " ..
+		"until the Calm Timer (CineMode page) has run out, then fade. Off: they fade as soon as the fight ends."])
+	calm:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -2)
+	GreyUnless(calm, function(db) return db.stayInCombat end)
+	local lastRow = calm
 	local function Section(page, heading)
 		local sectionRows = {}
 		for _, item in ipairs(ns.COMBAT_SHOW) do
@@ -3411,7 +3416,7 @@ local function CreateCombatPanel()
 		if #sectionRows == 0 then
 			return
 		end
-		lastRow = ShowTable(content, Header(content, heading, lastRow, lastRow == switch and -16 or -28),
+		lastRow = ShowTable(content, Header(content, heading, lastRow, lastRow == calm and -16 or -28),
 			sectionRows)
 	end
 	Section("units", L["Unit frames"])
@@ -4270,12 +4275,18 @@ local function CreateQuestTrackerPanel()
 		"tracker the same way."])
 	revealProgress:SetPoint("TOPLEFT", reveal, "BOTTOMLEFT", 0, -2)
 
+	local combatCalm = Check(content, "questCombatCalm", L["Stay up for the Calm Timer after a fight"],
+		L["With the quest tracker ticked In combat (Standard Frames page), it stays up after a fight " ..
+		"until the Calm Timer (CineMode page) has run out, then fades. Off: it fades as soon as the fight ends."])
+	combatCalm:SetPoint("TOPLEFT", revealProgress, "BOTTOMLEFT", 0, -2)
+	GreyUnless(combatCalm, function(db) return db.stayInCombat end)
+
 	-- Classic's quest timer box (retail shows timers in the tracker itself).
 	if ns.OptionAvailable({ retail = false }) then
 		local timer = Check(content, "questTimerShow", L["Show the quest timer while one is running"],
 			L["Keeps the quest timer box up in CineMode, and in fights, while a timed quest " ..
 			"counts down. Just the timer: the quest tracker stays faded."])
-		timer:SetPoint("TOPLEFT", revealProgress, "BOTTOMLEFT", 0, -2)
+		timer:SetPoint("TOPLEFT", combatCalm, "BOTTOMLEFT", 0, -2)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

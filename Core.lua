@@ -97,6 +97,7 @@ local DEFAULTS = {
 	swingHideOffHand = false,  -- never show the off-hand bar
 	questRevealOnAccept = true, -- accepting a quest shows the quest tracker as a mouseover would
 	questRevealOnProgress = true, -- quest objective progress shows the quest tracker the same way
+	questCombatCalm = false,  -- ticked In combat (Standard Frames), it stays up until the Calm Timer runs out
 	minimapRevealOnPing = true, -- a group member pinging the minimap shows it as a mouseover would
 	cooldownWhileRecharging = false, -- the Cooldown Manager stays up while a cooldown recharges (Mouseover groups
 	                                 -- with Cooldown recharging ticked: the Cooldowns group by default)
@@ -113,6 +114,7 @@ local DEFAULTS = {
 	trackingOffInRaids = true,
 	trackingOffInPvP = true,
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
+	combatShowCalm = false, -- Standard Frames' In combat rows stay up until the Calm Timer runs out after a fight
 	revealOnCast = false,   -- casting or channeling brings the UI back
 	revealAtNPCs = false,     -- vendor/bank/mail/trainer/trade/auction windows bring the UI back
 	revealOnDrag = false,     -- bring the UI back while something's held on the cursor (dragging)
