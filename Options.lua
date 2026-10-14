@@ -736,6 +736,7 @@ local function CreatePanel()
 	local LANGUAGES = {
 		{ value = "auto", text = L["Game language"] },
 		{ value = "enUS", text = "English" },
+		{ value = "deDE", text = "Deutsch" },
 		{ value = "esES", text = "Español" },
 	}
 	local function CurrentLanguage()
@@ -2521,8 +2522,10 @@ local function CreateTintPanel()
 	gridNote:SetJustifyH("LEFT")
 	gridNote:SetJustifyV("TOP")
 	local EFFECT_ROWS = { letterbox = L["Letterbox"], tint = L["Tint"], vignette = L["Vignette"], weather = L["Weather"] }
-	-- (What the tooltips call them, where the row name alone would mislead.)
-	local EFFECT_TIP_NAMES = { weather = L["weather tint"] }
+	-- What the tooltips call them, mid-sentence (lower case in English; each
+	-- language has its own, since some capitalise nouns).
+	local EFFECT_TIP_NAMES = { letterbox = L["letterbox"], tint = L["tint"], vignette = L["vignette"],
+		weather = L["weather tint"] }
 	-- The Always column: an effect's own on/off switch, ticked when off (the
 	-- tint's is tintOffAlways). A row's other boxes grey while it's ticked.
 	local EFFECT_SWITCHES = { letterbox = "letterbox", vignette = "vignette", weather = "weatherTint" }
@@ -2575,7 +2578,7 @@ local function CreateTintPanel()
 		Label(row, "GameFontHighlight", EFFECT_ROWS[effect]):SetPoint("LEFT", row, "LEFT", 0, 0)
 		for c, column in ipairs(EFFECT_COLUMNS) do
 			local key = effect .. column.key
-			local tipName = EFFECT_TIP_NAMES[effect] or EFFECT_ROWS[effect]:lower()
+			local tipName = EFFECT_TIP_NAMES[effect]
 			local switch = column.key == "OffAlways" and EFFECT_SWITCHES[effect]
 			local check = Check(content, switch or key, "", column.tip(tipName), function(value)
 				if switch then
@@ -3251,9 +3254,10 @@ local function CreateAudioPanel()
 	DependsOnMusic(movingMusic)
 
 	local muteStack = Stack(movingMusic, "check")
+	-- (Each its own text: languages differ in how they'd join "In" and the place.)
+	local MUTE_LABELS = { Cities = L["In cities"], Dungeons = L["In dungeons"], Raids = L["In raids"], PvP = L["In PvP"] }
 	for _, place in ipairs(PLACES) do
-		DependsOnMusic(muteStack:Add(Check(content, "musicOffIn" .. place[1],
-			L["In %s"]:format(place[1] == "PvP" and L["PvP"] or place[2]:lower()),
+		DependsOnMusic(muteStack:Add(Check(content, "musicOffIn" .. place[1], MUTE_LABELS[place[1]],
 			(place[1] == "PvP" and (PVP_TIP .. " ") or "") ..
 			L["Music fades out here (your own game music too) and back in when you leave."]), "check"))
 	end

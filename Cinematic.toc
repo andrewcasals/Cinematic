@@ -1,6 +1,7 @@
 ## Interface: 120100, 50504, 40402, 38000, 20506, 16001, 11509, 11508
 ## Title: Cinematic
 ## Notes: Fades the UI and adds letterbox bars between fights for a more cinematic feel.
+## Notes-deDE: Blendet zwischen Kämpfen das UI aus und fügt Kinobalken für ein filmischeres Gefühl hinzu.
 ## Notes-esES: Desvanece la interfaz y añade franjas de cine entre combates para un aire más cinematográfico.
 ## Notes-esMX: Desvanece la interfaz y añade franjas de cine entre combates para un aire más cinematográfico.
 ## Author: Andrew Casals
@@ -11,6 +12,7 @@
 ## SavedVariablesPerCharacter: CinematicCharDB
 
 Locales\Locales.lua
+Locales\deDE.lua
 Locales\esES.lua
 Diagnostics.lua
 Profiler.lua
