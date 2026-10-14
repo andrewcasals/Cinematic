@@ -2043,7 +2043,7 @@ local function CreateAutoRunPanel()
 		description = L["While you're auto-running (the auto-run key). Pressing forward or back, or " ..
 			"stopping, ends it; stop and stand, and the AFK camera takes over. Auto-" ..
 			"walking counts as RP walk instead."],
-		instantKey = "runInstant", instantWhen = "auto-run",
+		instantKey = "runInstant", instantWhen = L["auto-run"],
 		inputPauseKey = "runInputPause",
 		orbitPrefix = "runOrbit", style = "back",
 		rotateLabel = L["Sway behind you"],
@@ -2137,7 +2137,7 @@ local function CreateWalkPanel()
 		description = L["While you're auto-walking (auto-run in walk mode). Walking by hand cancels " ..
 			"the camera, as all moving by hand does. Stop and stand, and the AFK camera takes over. " ..
 			"Walking is recognised from your speed; /cine walk shows what the addon thinks."],
-		instantKey = "walkInstant", instantWhen = "walk",
+		instantKey = "walkInstant", instantWhen = L["walk"],
 		inputPauseKey = "walkInputPause",
 		inputPauseTip = L["Keep it short, so it's back in time if you need to steer."],
 		orbitPrefix = "walkOrbit", style = "back",
