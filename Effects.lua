@@ -1325,6 +1325,34 @@ end
 
 local platesWereFiltered = false
 
+-- While plates are filtered (each at its own alpha) and none of the fades is
+-- moving, they're refreshed only when what decides their alphas changes: a
+-- fight, a group, the place or PvP flag (filteredKey), a unit changing sides
+-- or joining your group (the events below), and every FILTERED_REFRESH
+-- seconds for anything else (a setting changed, say). Every tick was a lot
+-- of work with a city's worth of plates.
+local FILTERED_REFRESH = 0.5
+local filteredKey, filteredPlace, filteredRefreshAt = nil, nil, 0
+local platesDirty = false
+local plateChangeWatcher = CreateFrame("Frame")
+for _, event in ipairs({ "UNIT_FACTION", "UNIT_FLAGS", "UNIT_PET", "GROUP_ROSTER_UPDATE" }) do
+	pcall(plateChangeWatcher.RegisterEvent, plateChangeWatcher, event)
+end
+plateChangeWatcher:SetScript("OnEvent", function()
+	platesDirty = true
+end)
+
+local function FilteredInputsChanged(now)
+	local key = (platesActive and 1 or 0) + (InCombatLockdown() and 2 or 0) + (ns.InGroup() and 4 or 0)
+		+ (InPvPFight() and 8 or 0)
+	if platesDirty or key ~= filteredKey or placeSuffix ~= filteredPlace or now >= filteredRefreshAt then
+		platesDirty, filteredKey, filteredPlace = false, key, placeSuffix
+		filteredRefreshAt = now + FILTERED_REFRESH
+		return true
+	end
+	return false
+end
+
 -- The Nameplates page's master switch off (handlePlates): every plate back to
 -- full, the game's plate settings put back, then nothing more until it's on
 -- again. Tried each tick until done (settings can't change in a fight).
@@ -1431,9 +1459,10 @@ function ns.UpdatePlates(cinematic, elapsed)
 			changed = true
 		end
 	end
-	-- One more pass after filtering stops, to put every plate back.
+	-- One more pass after filtering stops, to put every plate back. (Filtered
+	-- with nothing moving: see FilteredInputsChanged.)
 	local filtered = PlatesFiltered()
-	if changed or filtered or platesWereFiltered then
+	if changed or filtered ~= platesWereFiltered or (filtered and FilteredInputsChanged(GetTime())) then
 		RefreshAllPlates()
 	end
 	platesWereFiltered = filtered
