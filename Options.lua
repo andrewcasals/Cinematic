@@ -4384,76 +4384,109 @@ local function CreateCooldownPanel()
 	RegisterSubpage(canvas, "Cooldown Manager")
 end
 
--- Sub-page: tooltips. Hidden in combat (any kind, in CineMode or not), and
--- world tooltips (units and objects under the cursor) in CineMode.
+-- Sub-page: tooltips. World tooltips and unit frames' are always hidden, but
+-- show anyway as the exceptions under that say (by kind, in combat, outside
+-- CineMode, after hovering, in the camera modes ticked).
 local function CreateTooltipPanel()
 	local canvas, content = CreateScrollPage()
 
 	local title = Label(content, "GameFontNormalLarge", "Tooltips")
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleTooltips", "Hide tooltips",
-		"On: Cinematic hides tooltips as this page says. Off: every tooltip shows as normal.", title)
+	local switch = PageSwitch(content, "handleTooltips", "Let CineMode handle tooltips",
+		"On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal.", title)
 
-	-- In combat: which kinds.
-	local combatLabel = Label(content, "GameFontNormalSmall", "In combat")
-	combatLabel:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -14)
+	-- Always hide tooltips, then each exception on a line of its own.
+	local hide = Check(content, "tooltipHide", "Always hide tooltips",
+		"Hides the tooltips for players, NPCs and objects you mouse over in the world, and for " ..
+		"units on unit frames, except as ticked below. Hold your Show hidden tooltips key (set " ..
+		"it on the Keybinds page) to see one anyway.")
+	hide:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -14)
+	hide:HookScript("OnClick", Refresh) -- grey out / enable the exceptions
+	local function Hiding(test)
+		return function(db) return db.tooltipHide and (not test or test(db)) end
+	end
 
-	local combat = Check(content, "tooltipCombat", "Hide tooltips in combat",
-		"In a fight, hides the kinds of tooltip ticked below, whether CineMode is on or not. To " ..
-		"see one anyway, hold your Show hidden tooltips key (set it on the Keybinds page).")
-	combat:SetPoint("TOPLEFT", combatLabel, "BOTTOMLEFT", -2, -6)
+	-- Kinds that show at once anyway.
+	local previous = hide
+	local function Except(key, label, tip, x)
+		local check = Check(content, key, label, tip)
+		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", x or 0, -2)
+		GreyUnless(check, Hiding())
+		previous = check
+		return check
+	end
+	Except("tooltipShowEnemy", "Except when it's an enemy",
+		"Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems, " ..
+		"show at once. In combat, the list under Except in combat decides instead, while it's ticked.", 10)
+	Except("tooltipShowFriendly", "Except when it's friendly",
+		"Players and NPCs you can't attack, and their pets, minions and totems, show at once. In " ..
+		"combat, the list under Except in combat decides instead, while it's ticked.")
+	Except("tooltipShowGather", "Except when it's gatherable",
+		"Herbs, ore and creatures you can skin show at once, so you can see whether you can " ..
+		"gather them.")
+	Except("tooltipShowQuest", "Except when it shows a quest objective",
+		"Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\") show at " ..
+		"once, so you can check your progress.")
+
+	-- In combat, the kinds ticked under it show (and nothing else does).
+	local combat = Except("tooltipShowInCombat", "Except in combat and hovering these",
+		"In a fight, only the kinds ticked below show; the rest stay hidden, CineMode or not.")
 	combat:HookScript("OnClick", Refresh) -- grey out / enable the kinds below
 	local kinds = combat
 	for i, kind in ipairs({
-		{ "tooltipCombatWorld", "Players, NPCs and objects in the world",
-			"Players, NPCs and objects you mouse over in the world. Tooltips for things on the " ..
-			"minimap still show." },
-		{ "tooltipCombatUnits", "Unit frames",
-			"Your own and your target's frames, party and raid frames, and most other addons' " ..
-			"unit frames." },
-		{ "tooltipCombatUI", "Everything else",
-			"Every other tooltip: action bars, buffs and debuffs, bags, menus and the rest of the UI." },
+		{ "tooltipCombatShowEnemy", "Enemies",
+			"Players and NPCs you can attack, and their pets, minions and totems." },
+		{ "tooltipCombatShowFriendly", "Friendlies",
+			"Players and NPCs you can't attack, and their pets, minions and totems." },
+		{ "tooltipCombatShowElse", "Everything else",
+			"Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus " ..
+			"and the rest. Off: they're hidden in combat, and the UI's only come back while you hold " ..
+			"your Show hidden tooltips key." },
 	}) do
 		local check = Check(content, kind[1], kind[2], kind[3])
-		check:SetPoint("TOPLEFT", kinds, "BOTTOMLEFT", i == 1 and 10 or 0, i == 1 and -2 or -2)
-		GreyUnless(check, function(db) return db.tooltipCombat end)
+		check:SetPoint("TOPLEFT", kinds, "BOTTOMLEFT", i == 1 and 20 or 0, -2)
+		GreyUnless(check, Hiding(function(db) return db.tooltipShowInCombat end))
 		kinds = check
 	end
+	previous = combat
+	local outside = Except("tooltipShowOutsideCine", "Except outside CineMode",
+		"Every tooltip shows as normal while CineMode is off.")
+	outside:ClearAllPoints()
+	outside:SetPoint("TOPLEFT", kinds, "BOTTOMLEFT", -20, -2)
 
-	-- In CineMode: when world tooltips are hidden (throughout CineMode or
-	-- only in the camera modes ticked Hide), then how they come back after
-	-- hovering.
-	local cineLabel = Label(content, "GameFontNormalSmall", "In CineMode")
-	cineLabel:SetPoint("LEFT", combatLabel, "LEFT")
-	cineLabel:SetPoint("TOP", kinds, "BOTTOM", 0, -14)
+	-- After hovering: the wait, then warm, and the fade.
+	local tooltipReveal = Except("tooltipReveal", "Except after hovering",
+		"A hidden world tooltip shows once you've kept the mouse on the same player, NPC or " ..
+		"object for the time below.")
+	tooltipReveal:HookScript("OnClick", Refresh) -- grey out / enable the sliders
+	local function Revealing(db) return db.tooltipReveal end
 
-	local cineMode = Check(content, "tooltipCineMode", "Hide world tooltips in CineMode",
-		"While CineMode is on, hides the tooltips for players, NPCs and objects you mouse over " ..
-		"in the world, as set below. Tooltips for the UI still show. In fights, Hide tooltips " ..
-		"in combat above decides instead, while it's ticked.")
-	cineMode:SetPoint("TOPLEFT", cineLabel, "BOTTOMLEFT", -2, -6)
-	cineMode:HookScript("OnClick", Refresh) -- grey out / enable the rest of the page
-	local function Cine(test)
-		return function(db) return db.tooltipCineMode and test(db) end
-	end
+	local tooltipRevealDelay = Slider(content, "tooltipRevealDelay", "After hovering for", 0, 10, 0.5, "%.1f sec")
+	tooltipRevealDelay:SetPoint("TOPLEFT", tooltipReveal, "BOTTOMLEFT", 24, -26)
+	GreyUnless(tooltipRevealDelay, Hiding(Revealing))
+	Tooltip(tooltipRevealDelay, "How long to keep the mouse on something before its tooltip shows.")
 
-	local hideLabel = Label(content, "GameFontNormalSmall", "When they're hidden")
-	hideLabel:SetPoint("TOPLEFT", cineMode, "BOTTOMLEFT", 12, -10)
+	local tooltipWarm = Slider(content, "tooltipWarmTime", "Then show at once until none for", 0, 15, 0.5, "%.1f sec")
+	tooltipWarm:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", 0, -26)
+	GreyUnless(tooltipWarm, Hiding(Revealing))
+	Tooltip(tooltipWarm, "Once one tooltip has shown, whatever you hover next shows at once too, " ..
+		"until no world tooltip has been up for this long. 0: every tooltip waits.")
 
-	-- Throughout CineMode, or only in the camera modes ticked (fadeTooltip
-	-- true or false), the modes listed under the second.
-	local throughout = Choice(content, "fadeTooltip", true, "Throughout CineMode",
-		"Hides world tooltips the whole time CineMode is on.")
-	throughout:SetPoint("TOPLEFT", hideLabel, "BOTTOMLEFT", -2, -6)
-	GreyUnless(throughout, function(db) return db.tooltipCineMode end)
-	local onlyModes = Choice(content, "fadeTooltip", false, "Only in these camera modes",
-		"Hides world tooltips only while one of the camera modes ticked below is running, and " ..
-		"shows them the rest of the time.")
-	onlyModes:SetPoint("TOPLEFT", throughout, "BOTTOMLEFT", 0, -2)
-	GreyUnless(onlyModes, function(db) return db.tooltipCineMode end)
-	-- In two columns of five, down the first then the second.
-	local tooltipModes, firstOfColumn, endOfFirst = onlyModes, nil, nil
+	local tooltipFade = Slider(content, "tooltipFadeTime", "Fade in and out over", 0, 2, 0.05, "%.2f sec")
+	tooltipFade:SetPoint("TOPLEFT", tooltipWarm, "BOTTOMLEFT", 0, -26)
+	GreyUnless(tooltipFade, Hiding(Revealing))
+	Tooltip(tooltipFade, "How long a tooltip that waited takes to fade in, and to fade out when " ..
+		"you move off. 0: no fade.")
+
+	-- The camera modes, in two columns of five, down the first then the second.
+	local inModes = Except("tooltipShowInModes", "Except in these camera modes",
+		"Every tooltip shows as normal while one of the camera modes ticked below is running.")
+	inModes:ClearAllPoints()
+	inModes:SetPoint("LEFT", tooltipReveal, "LEFT")
+	inModes:SetPoint("TOP", tooltipFade, "BOTTOM", 0, -20)
+	inModes:HookScript("OnClick", Refresh) -- grey out / enable the modes below
+	local tooltipModes, firstOfColumn = nil, nil
 	for i, mode in ipairs({
 		{ "Flight", "On flights" },
 		{ "Idle", "AFK camera (standing still or AFK)" },
@@ -4466,73 +4499,19 @@ local function CreateTooltipPanel()
 		{ "Death", "Death camera" },
 		{ "Quest", "Quest camera (talking to quest givers)" },
 	}) do
-		local hide = Check(content, "tooltipOff" .. mode[1], mode[2],
-			"Hides world tooltips while this camera mode is running.")
+		local show = Check(content, "tooltipShowIn" .. mode[1], mode[2],
+			"Every tooltip shows as normal while this camera mode is running.")
 		if i == 1 then
-			hide:SetPoint("TOPLEFT", onlyModes, "BOTTOMLEFT", 20, -2)
-			firstOfColumn = hide
+			show:SetPoint("TOPLEFT", inModes, "BOTTOMLEFT", 20, -2)
+			firstOfColumn = show
 		elseif i == 6 then
-			hide:SetPoint("TOPLEFT", firstOfColumn, "TOPLEFT", 280, 0)
+			show:SetPoint("TOPLEFT", firstOfColumn, "TOPLEFT", 280, 0)
 		else
-			hide:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", 0, -2)
+			show:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", 0, -2)
 		end
-		GreyUnless(hide, Cine(function(db) return not db.fadeTooltip end))
-		tooltipModes = hide
-		if i == 5 then
-			endOfFirst = hide -- (the page carries on under the first column)
-		end
+		GreyUnless(show, Hiding(function(db) return db.tooltipShowInModes end))
+		tooltipModes = show
 	end
-
-	local backLabel = Label(content, "GameFontNormalSmall", "Showing them again")
-	backLabel:SetPoint("TOPLEFT", endOfFirst, "BOTTOMLEFT", -16, -14)
-
-	local tooltipReveal = Check(content, "tooltipReveal", "After hovering",
-		"A hidden world tooltip shows once you've kept the mouse on the same player, NPC or " ..
-		"object for the time below. Off: it stays hidden, unless you hold your Show hidden " ..
-		"tooltips key.")
-	tooltipReveal:SetPoint("TOPLEFT", backLabel, "BOTTOMLEFT", -2, -6)
-	tooltipReveal:HookScript("OnClick", Refresh) -- grey out / enable the sliders
-	GreyUnless(tooltipReveal, function(db) return db.tooltipCineMode end)
-
-	local tooltipRevealDelay = Slider(content, "tooltipRevealDelay", "After hovering for", 0, 10, 0.5, "%.1f sec")
-	tooltipRevealDelay:SetPoint("TOPLEFT", tooltipReveal, "BOTTOMLEFT", 4, -26)
-	GreyUnless(tooltipRevealDelay, Cine(function(db) return db.tooltipReveal end))
-	Tooltip(tooltipRevealDelay, "How long to keep the mouse on something before its tooltip shows.")
-
-	-- Tooltips that skip the wait (more may join this list).
-	local exceptWhen = Label(content, "GameFontHighlight", "Except when")
-	exceptWhen:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", -2, -14)
-	local exceptions = exceptWhen
-	for i, rule in ipairs({
-		{ "tooltipQuestAtOnce", "It shows a quest objective",
-			"Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\") " ..
-			"show at once, so you can check your progress." },
-		{ "tooltipGatherAtOnce", "It's gatherable",
-			"Herbs, ore and creatures you can skin show at once, so you can see whether you " ..
-			"can gather them." },
-		{ "tooltipEnemyAtOnce", "It's an enemy",
-			"Players and NPCs you can attack (neutral mobs too), and their pets, minions and " ..
-			"totems, show at once." },
-		{ "tooltipFriendlyAtOnce", "It's friendly",
-			"Players and NPCs you can't attack, and their pets, minions and totems, show at once." },
-	}) do
-		local check = Check(content, rule[1], rule[2], rule[3])
-		check:SetPoint("TOPLEFT", exceptions, "BOTTOMLEFT", i == 1 and 10 or 0, i == 1 and -4 or -2)
-		GreyUnless(check, Cine(function(db) return db.tooltipReveal end))
-		exceptions = check
-	end
-
-	local tooltipWarm = Slider(content, "tooltipWarmTime", "Then show at once until none for", 0, 15, 0.5, "%.1f sec")
-	tooltipWarm:SetPoint("TOPLEFT", exceptions, "BOTTOMLEFT", -8, -26)
-	GreyUnless(tooltipWarm, Cine(function(db) return db.tooltipReveal end))
-	Tooltip(tooltipWarm, "Once one tooltip has shown, whatever you hover next shows at once too, " ..
-		"until no world tooltip has been up for this long. 0: every tooltip waits.")
-
-	local tooltipFade = Slider(content, "tooltipFadeTime", "Fade in and out over", 0, 2, 0.05, "%.2f sec")
-	tooltipFade:SetPoint("TOPLEFT", tooltipWarm, "BOTTOMLEFT", 0, -26)
-	GreyUnless(tooltipFade, Cine(function(db) return db.tooltipReveal end))
-	Tooltip(tooltipFade, "How long a tooltip that waited takes to fade in, and to fade out when " ..
-		"you move off. 0: no fade.")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()

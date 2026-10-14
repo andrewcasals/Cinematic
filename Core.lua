@@ -27,17 +27,17 @@ local DEFAULTS = {
 	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, over the normal UI)
 	minimapButton = true,     -- show the minimap button
 	minimapAngle = 225,       -- its position around the minimap, in degrees
-	-- Hide world tooltips in each camera mode:
-	tooltipOffFlight = true,
-	tooltipOffIdle = true,    -- standing still
-	tooltipOffCozy = true,
-	tooltipOffVista = true,   -- /stare
-	tooltipOffFish = true,    -- fishing
-	tooltipOffWalk = true,    -- RP walking
-	tooltipOffRun = true,      -- auto-running
-	tooltipOffTele = true,    -- Hearthstone and teleports (counted as cozy before they had their own)
-	tooltipOffDeath = true,   -- the death camera
-	tooltipOffQuest = true,   -- the quest camera
+	-- Show hidden tooltips anyway in each camera mode:
+	tooltipShowInFlight = false,
+	tooltipShowInIdle = false,  -- standing still
+	tooltipShowInCozy = false,
+	tooltipShowInVista = false, -- /stare
+	tooltipShowInFish = false,  -- fishing
+	tooltipShowInWalk = false,  -- RP walking
+	tooltipShowInRun = false,   -- auto-running
+	tooltipShowInTele = false,  -- Hearthstone and teleports
+	tooltipShowInDeath = false, -- the death camera
+	tooltipShowInQuest = false, -- the quest camera
 	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
 	hideWorldText = false,    -- no floating world text at all (XP gained, damage and healing numbers): a blank font, from the next game start
 	visualEffects = true,     -- the Visual Effects page's master switch (off: none of its effects)
@@ -147,21 +147,22 @@ local DEFAULTS = {
 	nameKeepFriendlyMinions = false,
 	nameKeepEnemies = false,
 	nameKeepEnemyMinions = false,
-	fadeTooltip = true,       -- hide tooltips for units/objects in the world
 	tooltipReveal = true,     -- a hidden world tooltip comes back after hovering the same thing...
 	tooltipRevealDelay = 1,   -- ...for this many seconds
-	tooltipQuestAtOnce = true, -- ...except at once when it shows a quest objective
-	tooltipGatherAtOnce = true, -- ...or it's gatherable (herb, ore, skinnable)
-	tooltipEnemyAtOnce = true,  -- ...or it's a unit you can attack
-	tooltipFriendlyAtOnce = false, -- ...or a unit you can't
 	tooltipWarmTime = 5,     -- once one's shown, the rest show at once until none has been up this long (0: off)
 	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
 	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
-	tooltipCineMode = false,  -- hide world tooltips in CineMode (fadeTooltip, tooltipOff* and the reveal above)
-	tooltipCombat = true,     -- hide tooltips in combat (in CineMode or not), these kinds:
-	tooltipCombatWorld = true,  -- players, NPCs and objects in the world
-	tooltipCombatUnits = true,  -- unit frames: player, target, party and raid frames (other addons' too)
-	tooltipCombatUI = false,    -- everything else: action bars, buffs, bags, menus
+	tooltipHide = true,       -- always hide world tooltips and unit frames'...
+	tooltipShowEnemy = false,   -- ...except a unit you can attack
+	tooltipShowFriendly = false, -- ...or one you can't
+	tooltipShowGather = true,   -- ...or something gatherable (herb, ore, skinnable)
+	tooltipShowQuest = true,    -- ...or one showing a quest objective
+	tooltipShowInCombat = false, -- ...or in combat, these (the UI's too):
+	tooltipCombatShowEnemy = false,
+	tooltipCombatShowFriendly = false,
+	tooltipCombatShowElse = true, -- objects in the world, action bars, bags, menus
+	tooltipShowOutsideCine = true, -- ...or outside CineMode
+	tooltipShowInModes = false, -- ...or in the camera modes ticked above (tooltipShowIn*)
 	musicFadeTime = 3,        -- seconds for music to fade in or out
 	musicFatigue = 2,         -- minutes: don't start music again within this long of the last start
 	-- Which cameras can start music as they start (when music fatigue allows).
@@ -1620,6 +1621,7 @@ function ns.EnsureTables()
 	ns.db.cooldownEarlyOff = nil -- (a test build's, when Show Early started ticked)
 	ns.db.gamepadPressButtons = ns.db.gamepadPressButtons or {} -- Gamepad page: button -> reveals the bars
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
+	ns.db.tooltipCineMode = nil -- (a test build's: the Tooltips page's master switch decides now)
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode
 	-- The frames pages' place columns (ns.PLACE_SHOW): row -> true, shown all through CineMode there.
 	for _, place in ipairs(ns.PLACE_SHOW) do
@@ -2248,6 +2250,39 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				ns.db[key] = ns.db.tooltipOffInCameraModes
 			end
 			ns.db.tooltipOffInCameraModes = nil
+		end
+		-- They could also hide the whole time in CineMode (fadeTooltip); now
+		-- it's only ever per camera mode.
+		ns.db.fadeTooltip = nil
+		-- Then tooltips were always hidden, with exceptions: each camera mode's
+		-- Hide (tooltipOff*) became its Show anyway (tooltipShowIn*), and
+		-- hiding in combat (tooltipCombat and its kinds) went.
+		for _, mode in ipairs({ "Flight", "Idle", "Cozy", "Tele", "Vista", "Fish", "Walk", "Run", "Death", "Quest" }) do
+			local old = ns.db["tooltipOff" .. mode]
+			if old ~= nil and ns.db["tooltipShowIn" .. mode] == nil then
+				ns.db["tooltipShowIn" .. mode] = not old
+			end
+			ns.db["tooltipOff" .. mode] = nil
+		end
+		ns.db.tooltipCombat, ns.db.tooltipCombatWorld = nil, nil
+		ns.db.tooltipCombatUnits, ns.db.tooltipCombatUI = nil, nil
+		-- Then Always hide tooltips, with each exception its own line: the
+		-- kinds that showed at once after hovering show at once by themselves,
+		-- and the camera modes went under one Except in these camera modes.
+		ns.db.tooltipHideWorld, ns.db.tooltipHideUnits, ns.db.tooltipHideUI = nil, nil, nil
+		for old, new in pairs({ tooltipQuestAtOnce = "tooltipShowQuest", tooltipGatherAtOnce = "tooltipShowGather",
+			tooltipEnemyAtOnce = "tooltipShowEnemy", tooltipFriendlyAtOnce = "tooltipShowFriendly" }) do
+			if ns.db[old] ~= nil and ns.db[new] == nil then
+				ns.db[new] = ns.db[old]
+			end
+			ns.db[old] = nil
+		end
+		if ns.db.tooltipShowInModes == nil then
+			for _, mode in ipairs({ "Flight", "Idle", "Cozy", "Tele", "Vista", "Fish", "Walk", "Run", "Death", "Quest" }) do
+				if ns.db["tooltipShowIn" .. mode] then
+					ns.db.tooltipShowInModes = true
+				end
+			end
 		end
 		-- The cozy and vista triggers used to be switches on those cameras' pages;
 		-- they're events now, each picking its camera. A switched-off trigger
