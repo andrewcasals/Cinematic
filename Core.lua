@@ -578,6 +578,20 @@ local function AnyShown(names)
 	return false
 end
 
+-- fn's answer kept for the rest of the frame: for lookups asked many times a
+-- frame (the camera modes ask a dozen) whose answer only changes with events,
+-- which come between frames.
+local function OncePerFrame(fn)
+	local at, value = -1, nil
+	return function()
+		local now = GetTime()
+		if now ~= at then
+			at, value = now, fn()
+		end
+		return value
+	end
+end
+
 -- Talking to an NPC: their windows, plus quest givers, gossip and the flight
 -- map. The camera modes wait while one is open.
 local NPC_WINDOWS = {
@@ -592,7 +606,7 @@ end
 function ns.NPCWindowOpen()
 	return AnyShown(NPC_WINDOWS)
 end
-ns.NPCWindowOpen = ns.Profiled("NPCWindowOpen", ns.NPCWindowOpen)
+ns.NPCWindowOpen = ns.Profiled("NPCWindowOpen", OncePerFrame(ns.NPCWindowOpen))
 
 -- Menus and game windows (the Escape menu, options, spellbook, character
 -- sheet, map...). The camera modes wait while one is open. The barbershop's
@@ -607,7 +621,7 @@ for _, name in ipairs(REVEAL_WHILE_SHOWN) do MENU_WINDOWS[#MENU_WINDOWS + 1] = n
 function ns.MenuWindowOpen()
 	return AnyShown(MENU_WINDOWS)
 end
-ns.MenuWindowOpen = ns.Profiled("MenuWindowOpen", ns.MenuWindowOpen)
+ns.MenuWindowOpen = ns.Profiled("MenuWindowOpen", OncePerFrame(ns.MenuWindowOpen))
 
 local function AnyRevealFrameShown()
 	return (not ns.db.stayWithWindows and AnyShown(REVEAL_WHILE_SHOWN))
@@ -830,7 +844,7 @@ function ns.GetPlaceType()
 		return "inn"
 	end
 end
-ns.GetPlaceType = ns.Profiled("GetPlaceType", ns.GetPlaceType)
+ns.GetPlaceType = ns.Profiled("GetPlaceType", OncePerFrame(ns.GetPlaceType))
 
 -- Flagged for PvP (or free-for-all PvP).
 local function IsPvPFlagged()

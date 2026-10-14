@@ -1189,11 +1189,26 @@ end
 -- drawn weapon and a campfire buff; one set to no camera is passed over, and
 -- one whose camera is turned off here (Camera Modes page) doesn't count.
 local EVENT_CAM = { cozy = "cozy", vista = "vista", fish = "fish", afk = "idle", tele = "tele" }
+-- Asked a dozen times a frame (the tick, the orbit, the focus haze...), so
+-- worked out once a frame. What it goes by changes with events and key
+-- presses, which come between frames, or by the orbit within one (the
+-- standing-still time, an emote or key binding's camera ended by moving):
+-- those are checked too. (CurrentEvent's own changes come out the same
+-- however often it's called in a frame.)
+local activeEventCache = { at = -1 }
 function ns.ActiveEvent()
+	local cache, now = activeEventCache, GetTime()
+	if cache.at == now and cache.still == ns.stillSince and cache.emote == emoteEvent
+		and cache.manual == ns.manualCam and cache.moving == ns.playerMoving and cache.campfire == atCampfire then
+		return cache.key, cache.camera
+	end
 	local key, camera = CurrentEvent()
 	if camera and EVENT_CAM[camera] and ns.IsCameraOffHere(EVENT_CAM[camera]) then
-		return nil
+		key, camera = nil, nil
 	end
+	-- (Noted after: working it out can end an emote.)
+	cache.at, cache.still, cache.emote, cache.manual = now, ns.stillSince, emoteEvent, ns.manualCam
+	cache.moving, cache.campfire, cache.key, cache.camera = ns.playerMoving, atCampfire, key, camera
 	return key, camera
 end
 ns.ActiveEvent = ns.Profiled("ActiveEvent", ns.ActiveEvent)
