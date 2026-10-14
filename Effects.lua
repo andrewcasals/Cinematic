@@ -1,6 +1,7 @@
 -- Cinematic: effects that follow cinematic mode. Hidden names, music,
 -- nameplates, world tooltips and the letterbox bars.
 local _, ns = ...
+local L = ns.L
 
 local letterboxProgress = 0
 ns.letterboxDirty = false
@@ -14,25 +15,26 @@ ns.letterboxDirty = false
 -- nameIn<place><key> elsewhere, like the plates. Minions rows (indent) sit
 -- under their players' rows and cover pets, guardians and totems too.
 ns.NAME_GROUPS = {
-	{ key = "Self", label = "My Name", cvars = { "UnitNameOwn" } },
+	{ key = "Self", label = L["My Name"], cvars = { "UnitNameOwn" } },
 	-- The game's NPC Names choice (None, quest NPCs... all NPCs) is these
 	-- together; switched on, it only changes from None (to all).
-	{ key = "NPCs", label = "NPC Names", anyOn = true,
+	{ key = "NPCs", label = L["NPC Names"], anyOn = true,
 		cvars = { "UnitNameNPC", "UnitNameHostleNPC", "UnitNameInteractiveNPC", "UnitNameFriendlySpecialNPCName" } },
-	{ key = "Critters", label = "Critters and Companions", cvars = { "UnitNameNonCombatCreatureName" } },
-	{ key = "Friends", label = "Friendly Players", cvars = { "UnitNameFriendlyPlayerName" } },
-	{ key = "FriendlyMinions", label = "Minions", indent = true,
+	{ key = "Critters", label = L["Critters and Companions"], cvars = { "UnitNameNonCombatCreatureName" } },
+	{ key = "Friends", label = L["Friendly Players"], cvars = { "UnitNameFriendlyPlayerName" } },
+	{ key = "FriendlyMinions", label = L["Minions"], indent = true,
 		cvars = {
 			"UnitNameFriendlyMinionName", "UnitNameFriendlyPetName", "UnitNameFriendlyGuardianName",
 			"UnitNameFriendlyTotemName",
 		} },
-	{ key = "Enemies", label = "Enemy Players", cvars = { "UnitNameEnemyPlayerName" } },
-	{ key = "EnemyMinions", label = "Minions", indent = true,
+	{ key = "Enemies", label = L["Enemy Players"], cvars = { "UnitNameEnemyPlayerName" } },
+	{ key = "EnemyMinions", label = L["Minions"], indent = true,
 		cvars = {
 			"UnitNameEnemyMinionName", "UnitNameEnemyPetName", "UnitNameEnemyGuardianName",
 			"UnitNameEnemyTotemName",
 		} },
 }
+ns.OnLanguage(function() ns.TranslateFields(ns.NAME_GROUPS, "label") end)
 
 local CVAR_SETS = {}
 for _, group in ipairs(ns.NAME_GROUPS) do
@@ -692,8 +694,8 @@ function ns.UpdateMusic(cinematic, elapsed)
 		-- It fades in to your own volume, so with that at 0 nothing is heard.
 		if ns.music.volume <= 0 and not ns.music.warnedSilent then
 			ns.music.warnedSilent = true
-			ns.Print("your game music volume is 0, so cinematic music can't be heard. " ..
-				"Turn Music up in the game's Sound settings.")
+			ns.Print(L["your game music volume is 0, so cinematic music can't be heard. " ..
+				"Turn Music up in the game's Sound settings."])
 		end
 		SetMusicVolume(0)
 		SetCVar("Sound_EnableMusic", 1)
@@ -1541,7 +1543,7 @@ function Cinematic_ToggleTooltips()
 		return
 	end
 	ns.db.handleTooltips = not ns.db.handleTooltips
-	ns.Print("tooltip hiding " .. (ns.db.handleTooltips and "on" or "off"))
+	ns.Print(ns.db.handleTooltips and L["tooltip hiding on"] or L["tooltip hiding off"])
 	if ns.RefreshOptions then
 		ns.RefreshOptions()
 	end

@@ -1,5 +1,6 @@
 -- Cinematic settings: a panel under Options > AddOns, also opened with /cine config
 local _, ns = ...
+local L = ns.L
 
 -- Each page is a canvas (registered with the Settings panel) holding a scroll
 -- frame; the panel/cameraPanel/extrasPanel variables are the scrolling content
@@ -46,8 +47,8 @@ local function Tooltip(widget, tip)
 end
 
 -- What the PvP column or box covers, wherever it appears.
-local PVP_TIP = "While you're flagged for PvP (not in dungeons or raids, nor on flights), and in " ..
-	"battlegrounds and arenas."
+local PVP_TIP = L["While you're flagged for PvP (not in dungeons or raids, nor on flights), and in " ..
+	"battlegrounds and arenas."]
 
 local function Label(parent, font, text)
 	local fs = parent:CreateFontString(nil, "OVERLAY", font)
@@ -356,7 +357,7 @@ local function ResetPage(content)
 end
 
 StaticPopupDialogs.CINEMATIC_RESET_PAGE = {
-	text = "Put this page's settings back to the profile's own?",
+	text = L["Put this page's settings back to the profile's own?"],
 	button1 = YES, button2 = NO,
 	OnAccept = function(_, content) ResetPage(content) end,
 	timeout = 0, whileDead = true, hideOnEscape = true,
@@ -381,10 +382,10 @@ local function CreateScrollPage(noReset)
 	local reset = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	reset:SetSize(100, 22)
 	reset:SetPoint("TOPRIGHT", content, "TOPRIGHT", -8, -8)
-	reset:SetText("Reset page")
+	reset:SetText(L["Reset page"])
 	reset.searchSkip = true
-	Tooltip(reset, "Put this page's settings back to the active profile's own values (the defaults, " ..
-		"or a built-in profile's).")
+	Tooltip(reset, L["Put this page's settings back to the active profile's own values (the defaults, " ..
+		"or a built-in profile's)."])
 	reset:SetScript("OnClick", function()
 		StaticPopup_Show("CINEMATIC_RESET_PAGE", nil, nil, content)
 	end)
@@ -548,7 +549,7 @@ end
 
 -- Opens a match's page, scrolled to it and highlighted.
 local function ShowMatch(entry)
-	ns.OpenOptions(entry.page.name)
+	ns.OpenOptions(entry.page.key)
 	if not entry.edges then return end
 	local canvas = entry.page.canvas
 	-- (once the page has shown and sized itself)
@@ -573,7 +574,7 @@ local function CreateSearch(canvas, parent)
 	box:SetSize(260, 20)
 	box:SetAutoFocus(false)
 	box.searchSkip = true
-	if box.Instructions then box.Instructions:SetText("Search Cinematic's settings") end
+	if box.Instructions then box.Instructions:SetText(L["Search Cinematic's settings"]) end
 
 	local list = CreateFrame("Frame", nil, parent)
 	list.searchSkip = true
@@ -632,8 +633,8 @@ local function CreateSearch(canvas, parent)
 			lines = lines + 1
 			local row = Row(lines)
 			row.entry = nil
-			row.text:SetText(#matches == 0 and "|cff808080Nothing found|r" or
-				("|cff808080Scroll for " .. below .. " more|r"))
+			row.text:SetText(#matches == 0 and L["|cff808080Nothing found|r"] or
+				("|cff808080" .. L["Scroll for %d more"]:format(below) .. "|r"))
 			row:Show()
 		end
 		for i = lines + 1, #rows do rows[i]:Hide() end
@@ -694,10 +695,10 @@ local function CreatePanel()
 	versionLabel:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 6, 1)
 
 	local subtitle = Label(panel, "GameFontHighlightSmall",
-		"Fades the UI and adds letterbox bars between fights. Combat, casting " ..
+		L["Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
 		"pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, " ..
-		"Chat), visual effects and sound, the camera modes and triggers, and keybinds.")
+		"Chat), visual effects and sound, the camera modes and triggers, and keybinds."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -706,36 +707,93 @@ local function CreatePanel()
 	searchBox:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 6, -14)
 
 	-- Left column: general
-	local general = Header(panel, "General", subtitle, -54)
+	local general = Header(panel, L["General"], subtitle, -54)
 
-	local enabled = Check(panel, "enabled", "Enable Cinematic",
-		"Also toggled with /cine or the keybind under Key Bindings > AddOns.", ns.SetEnabled)
+	local enabled = Check(panel, "enabled", L["Enable Cinematic"],
+		L["Also toggled with /cine or the keybind under Key Bindings > AddOns."], ns.SetEnabled)
 	enabled:SetPoint("TOPLEFT", general, "BOTTOMLEFT", -2, -6)
 
-	local fadeUI = Check(panel, "fadeUI", "Start in CineMode (Fade UI, Queue Music, etc.)",
-		"Off: the UI stays as it is and the camera's left to you, with just the visual effects " ..
+	local fadeUI = Check(panel, "fadeUI", L["Start in CineMode (Fade UI, Queue Music, etc.)"],
+		L["Off: the UI stays as it is and the camera's left to you, with just the visual effects " ..
 		"over it (as the Visual Effects page says), as in the VFX Only profile. Events ticked in " ..
 		"the Camera Triggers page's CineMode column still bring CineMode on while their camera " ..
-		"runs: standing still or going AFK, say, for a screensaver.")
+		"runs: standing still or going AFK, say, for a screensaver."])
 	fadeUI:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -2)
 
-	local minimapButton = Check(panel, "minimapButton", "Show minimap button",
-		"Left-click it for quick options (combat, music, tint), right-click for " ..
-		"these settings, drag to move it.", function(value)
+	local minimapButton = Check(panel, "minimapButton", L["Show minimap button"],
+		L["Left-click it for quick options (combat, music, tint), right-click for " ..
+		"these settings, drag to move it."], function(value)
 			ns.GetDB().minimapButton = value
 			if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
 		end)
 	minimapButton:SetPoint("TOPLEFT", fadeUI, "BOTTOMLEFT", 0, -2)
 
+	-- The language Cinematic's text is in: for the account, not a profile, and
+	-- set as the addon loads (Locales.lua), so a change asks to reload. Each
+	-- language is named in itself.
+	local languageLabel = Label(panel, "GameFontHighlight", L["Language"])
+	languageLabel:SetPoint("TOPLEFT", minimapButton, "BOTTOMLEFT", 4, -14)
+	local LANGUAGES = {
+		{ value = "auto", text = L["Game language"] },
+		{ value = "enUS", text = "English" },
+		{ value = "esES", text = "Español" },
+	}
+	local function CurrentLanguage()
+		return (CinematicDB and CinematicDB.language) or "auto"
+	end
+	local function ChooseLanguage(value)
+		if not CinematicDB or value == CurrentLanguage() then
+			return
+		end
+		CinematicDB.language = value ~= "auto" and value or nil
+		StaticPopup_Show("CINEMATIC_LANGUAGE_RELOAD")
+	end
+	local language
+	local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+	if ok and dropdown and dropdown.SetupMenu then
+		language = dropdown
+		language:SetWidth(180)
+		language:SetupMenu(function(_, root)
+			for _, choice in ipairs(LANGUAGES) do
+				root:CreateRadio(choice.text, function() return CurrentLanguage() == choice.value end,
+					function() ChooseLanguage(choice.value) end)
+			end
+		end)
+		language.Refresh = function(self) self:GenerateMenu() end
+	else
+		-- (No modern dropdown on this client: a button that steps through them.)
+		language = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+		language:SetSize(180, 22)
+		language:SetScript("OnClick", function()
+			for i, choice in ipairs(LANGUAGES) do
+				if choice.value == CurrentLanguage() then
+					ChooseLanguage(LANGUAGES[i % #LANGUAGES + 1].value)
+					break
+				end
+			end
+			language:Refresh()
+		end)
+		language.Refresh = function(self)
+			for _, choice in ipairs(LANGUAGES) do
+				if choice.value == CurrentLanguage() then self:SetText(choice.text) end
+			end
+		end
+	end
+	language.searchSkip = true -- (it shows the current choice, not a label)
+	language:SetPoint("TOPLEFT", languageLabel, "BOTTOMLEFT", -4, -6)
+	Tooltip(language, L["The language Cinematic's text is in, for all your characters. Game language " ..
+		"follows the game's (English where Cinematic has no translation yet). A change needs a reload."])
+	controls[#controls + 1] = language
+
 	-- Right column: places
-	local placesHeader = Label(panel, "GameFontNormal", "Turn off in")
+	local placesHeader = Label(panel, "GameFontNormal", L["Turn off in"])
 	placesHeader:SetPoint("TOPLEFT", general, "TOPLEFT", 320, 0)
 
 	-- Stored the other way round (stayInCombat), as the Standard Frames page's lists apply while staying.
-	local combat = Check(panel, "stayInCombat", "Combat",
-		"Being in combat brings the UI back. Unticked, CineMode stays on in fights: only the frames " ..
+	local combat = Check(panel, "stayInCombat", L["Combat"],
+		L["Being in combat brings the UI back. Unticked, CineMode stays on in fights: only the frames " ..
 		"ticked under In combat on the Standard Frames page show. (Targeting an enemy only ever shows " ..
-		"the frames chosen for it there.)", function(value)
+		"the frames chosen for it there.)"], function(value)
 			ns.GetDB().stayInCombat = not value
 			Refresh()
 		end)
@@ -743,37 +801,37 @@ local function CreatePanel()
 	combat:SetPoint("TOPLEFT", placesHeader, "BOTTOMLEFT", -2, -6)
 
 	-- Places in the same order as every other place list (PlaceList).
-	local world = Check(panel, "offInWorld", "Open world",
-		"Anywhere outside cities, dungeons and raids (inns too), while you're not PvP flagged. " ..
-		"Flights still go cinematic.")
+	local world = Check(panel, "offInWorld", L["Open world"],
+		L["Anywhere outside cities, dungeons and raids (inns too), while you're not PvP flagged. " ..
+		"Flights still go cinematic."])
 	world:SetPoint("TOPLEFT", combat, "BOTTOMLEFT", 0, -2)
 
-	local cities = Check(panel, "offInCities", "Cities",
-		"Capital cities, including Dalaran. Flights leaving a city still go cinematic.")
+	local cities = Check(panel, "offInCities", L["Cities"],
+		L["Capital cities, including Dalaran. Flights leaving a city still go cinematic."])
 	cities:SetPoint("TOPLEFT", world, "BOTTOMLEFT", 0, -2)
 
-	local dungeons = Check(panel, "offInDungeons", "Dungeons",
-		"Keep the normal UI in dungeons and scenarios.")
+	local dungeons = Check(panel, "offInDungeons", L["Dungeons"],
+		L["Keep the normal UI in dungeons and scenarios."])
 	dungeons:SetPoint("TOPLEFT", cities, "BOTTOMLEFT", 0, -2)
 
-	local raids = Check(panel, "offInRaids", "Raids")
+	local raids = Check(panel, "offInRaids", L["Raids"])
 	raids:SetPoint("TOPLEFT", dungeons, "BOTTOMLEFT", 0, -2)
 
-	local pvp = Check(panel, "offInPvP", "PvP", PVP_TIP)
+	local pvp = Check(panel, "offInPvP", L["PvP"], PVP_TIP)
 	pvp:SetPoint("TOPLEFT", raids, "BOTTOMLEFT", 0, -2)
 
-	local party = Check(panel, "offInParty", "Party",
-		"Keep the normal UI while you're in a party (but not a raid group).")
+	local party = Check(panel, "offInParty", L["Party"],
+		L["Keep the normal UI while you're in a party (but not a raid group)."])
 	party:SetPoint("TOPLEFT", pvp, "BOTTOMLEFT", 0, -2)
 
-	local raidGroup = Check(panel, "offInRaidGroup", "Raid group",
-		"Keep the normal UI while you're in a raid group, wherever you are.")
+	local raidGroup = Check(panel, "offInRaidGroup", L["Raid group"],
+		L["Keep the normal UI while you're in a raid group, wherever you are."])
 	raidGroup:SetPoint("TOPLEFT", party, "BOTTOMLEFT", 0, -2)
 
-	local moving = Check(panel, "offWhileMoving", "Moving",
-		"Walking or riding about yourself brings the UI back (names too), say to look for an NPC " ..
+	local moving = Check(panel, "offWhileMoving", L["Moving"],
+		L["Walking or riding about yourself brings the UI back (names too), say to look for an NPC " ..
 		"in a city. CineMode comes back once you've stood still, or kept moving, for the time " ..
-		"below. Auto-run, RP walking and flights stay in CineMode.",
+		"below. Auto-run, RP walking and flights stay in CineMode."],
 		function(value)
 			ns.GetDB().offWhileMoving = value
 			Refresh()
@@ -781,26 +839,26 @@ local function CreatePanel()
 	moving:SetPoint("TOPLEFT", raidGroup, "BOTTOMLEFT", 0, -2)
 
 	-- (Indented under Moving, as its sub-options.)
-	local movingVFX = Check(panel, "movingKeepVFX", "Keep VFX on",
-		"The visual effects (letterbox, tint and the rest on the Visual Effects page) stay on " ..
-		"while moving brings the UI back.")
+	local movingVFX = Check(panel, "movingKeepVFX", L["Keep VFX on"],
+		L["The visual effects (letterbox, tint and the rest on the Visual Effects page) stay on " ..
+		"while moving brings the UI back."])
 	movingVFX:SetPoint("TOPLEFT", moving, "BOTTOMLEFT", 24, -2)
 	GreyUnless(movingVFX, function(db) return db.offWhileMoving end)
 
-	local movingBack = Slider(panel, "movingBackAfter", "Back after", 1, 60, 1, "%d sec")
+	local movingBack = Slider(panel, "movingBackAfter", L["Back after"], 1, 60, 1, L["%d sec"])
 	movingBack:SetPoint("TOPLEFT", movingVFX, "BOTTOMLEFT", 4, -26)
 	movingBack:SetWidth(176)
-	Tooltip(movingBack, "CineMode comes back once you've stood still this long, or kept moving " ..
-		"this long without stopping (a long walk or ride).")
+	Tooltip(movingBack, L["CineMode comes back once you've stood still this long, or kept moving " ..
+		"this long without stopping (a long walk or ride)."])
 	GreyUnless(movingBack, function(db) return db.offWhileMoving end)
 
 	local defaults = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	defaults:SetSize(140, 22)
 	defaults:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -16, -12)
-	defaults:SetText("Reset profile")
+	defaults:SetText(L["Reset profile"])
 	defaults.searchSkip = true
-	Tooltip(defaults, "Put the active profile's settings back to how it started (a built-in profile's " ..
-		"own values, or the defaults). Frames you added or stopped fading are kept.")
+	Tooltip(defaults, L["Put the active profile's settings back to how it started (a built-in profile's " ..
+		"own values, or the defaults). Frames you added or stopped fading are kept."])
 	defaults:SetScript("OnClick", function()
 		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ActiveProfile())
 	end)
@@ -810,11 +868,11 @@ local function CreatePanel()
 	profileLabel:SetJustifyH("RIGHT")
 	controls[#controls + 1] = { Refresh = function()
 		if not ns.ProfileChosen() then
-			profileLabel:SetText("Profile: |cffff8000none yet|r (pick one on the Profiles page)")
+			profileLabel:SetText(L["Profile: |cffff8000none yet|r (pick one on the Profiles page)"])
 			return
 		end
-		profileLabel:SetText("Profile: |cffffd100" .. ns.ActiveProfile() .. "|r" ..
-			(ns.IsCharacterProfile() and " (this character)" or ""))
+		profileLabel:SetText(L["Profile: %s"]:format("|cffffd100" .. ns.ActiveProfile() .. "|r") ..
+			(ns.IsCharacterProfile() and L[" (this character)"] or ""))
 	end }
 
 	mainCanvas:SetScript("OnShow", PageShown(Refresh, panel))
@@ -832,13 +890,14 @@ end
 -- Each sub-page by name, for ns.OpenOptions: its category, or its frame on
 -- clients with the old options window.
 local subpages = {}
+-- (name in English, as ns.OpenOptions takes it; shown in the game's language.)
 local function RegisterSubpage(subpanel, name)
-	subpanel.name = name
+	subpanel.name = L[name]
 	subpanel.parent = "Cinematic"
 	subpages[name] = subpanel
-	searchPages[#searchPages + 1] = { name = name, canvas = subpanel }
+	searchPages[#searchPages + 1] = { name = L[name], key = name, canvas = subpanel }
 	if category and Settings and Settings.RegisterCanvasLayoutSubcategory then
-		local sub = Settings.RegisterCanvasLayoutSubcategory(category, subpanel, name)
+		local sub = Settings.RegisterCanvasLayoutSubcategory(category, subpanel, L[name])
 		Settings.RegisterAddOnCategory(sub)
 		subpages[name] = sub
 	elseif InterfaceOptions_AddCategory then
@@ -854,46 +913,46 @@ local function CreateRevealPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"How fast the UI fades, what brings it (or parts of it) back while CineMode " ..
+		L["How fast the UI fades, what brings it (or parts of it) back while CineMode " ..
 		"is on, and combat text. Fights and targeting are on the Standard Frames page, names and " ..
 		"nameplates on the Nameplates page, buffs on the " ..
 		"Buffs/debuffs page, the minimap on the Minimap page, the quest tracker on the Quest tracker page, " ..
-		"chat on the Chat page.")
+		"chat on the Chat page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	-- Fading (full width): how fast the UI goes and comes back
-	local fadingHeader = Header(content, "Fading", subtitle, -20)
+	local fadingHeader = Header(content, L["Fading"], subtitle, -20)
 
-	local fadeIn = Slider(content, "fadeInTime", "Fade in time", 0, 10, 0.1, "%.1f sec")
+	local fadeIn = Slider(content, "fadeInTime", L["Fade in time"], 0, 10, 0.1, L["%.1f sec"])
 	fadeIn:SetPoint("TOPLEFT", fadingHeader, "BOTTOMLEFT", 2, -26)
 
-	local fadeOut = Slider(content, "fadeOutTime", "Fade out time", 0, 10, 0.1, "%.1f sec")
+	local fadeOut = Slider(content, "fadeOutTime", L["Fade out time"], 0, 10, 0.1, L["%.1f sec"])
 	fadeOut:SetPoint("TOPLEFT", fadeIn, "BOTTOMLEFT", 0, -34)
-	Tooltip(fadeOut, "How long the UI takes to fade out. The mouseover time (Mouseover page) includes it: " ..
-		"a time shorter than the fade just fades straight away.")
+	Tooltip(fadeOut, L["How long the UI takes to fade out. The mouseover time (Mouseover page) includes it: " ..
+		"a time shorter than the fade just fades straight away."])
 
-	local combatFadeIn = Slider(content, "combatFadeInTime", "Combat fade in time", 0, 10, 0.1, "%.1f sec")
+	local combatFadeIn = Slider(content, "combatFadeInTime", L["Combat fade in time"], 0, 10, 0.1, L["%.1f sec"])
 	combatFadeIn:SetPoint("TOPLEFT", fadeOut, "BOTTOMLEFT", 0, -34)
-	Tooltip(combatFadeIn, "How long things take to fade in during a fight: the UI coming back as " ..
-		"one starts, and anything else that shows mid-fight. Other times use the Fade in time.")
+	Tooltip(combatFadeIn, L["How long things take to fade in during a fight: the UI coming back as " ..
+		"one starts, and anything else that shows mid-fight. Other times use the Fade in time."])
 
-	local combatFadeOut = Slider(content, "combatFadeOutTime", "Combat fade out time", 0, 10, 0.1, "%.1f sec")
+	local combatFadeOut = Slider(content, "combatFadeOutTime", L["Combat fade out time"], 0, 10, 0.1, L["%.1f sec"])
 	combatFadeOut:SetPoint("TOPLEFT", combatFadeIn, "BOTTOMLEFT", 0, -34)
-	Tooltip(combatFadeOut, "How long things take to fade out after a fight: whatever starts fading " ..
+	Tooltip(combatFadeOut, L["How long things take to fade out after a fight: whatever starts fading " ..
 		"within the Calm Timer below (the UI going back to CineMode, nameplates and names letting " ..
-		"go). Other times use the Fade out time.")
+		"go). Other times use the Fade out time."])
 
-	local calm = Slider(content, "calmTime", "Calm Timer", 0, 120, 5, "%d sec after a fight")
+	local calm = Slider(content, "calmTime", L["Calm Timer"], 0, 120, 5, L["%d sec after a fight"])
 	calm:SetPoint("TOPLEFT", combatFadeOut, "BOTTOMLEFT", 0, -34)
-	Tooltip(calm, "How long things take to settle back into CineMode after a fight. " ..
+	Tooltip(calm, L["How long things take to settle back into CineMode after a fight. " ..
 		"Nameplates and names ticked In combat stay up this long (so they don't drop away " ..
 		"between pulls), and visual effects that step aside for fights wait this " ..
 		"long before fading back in. Your portrait and buffs, if they only show after combat, " ..
 		"count a fight as recent for this long too, the RP walk, auto-run and cozy cameras " ..
 		"wait this long before starting, and music muted for fights comes back after it. 0 " ..
-		"settles at once.")
+		"settles at once."])
 
 	-- Set aside for now (hidden, their settings kept as they are): the Exit
 	-- CineMode section. (Mouseover has its own page.)
@@ -901,39 +960,39 @@ local function CreateRevealPanel()
 
 	-- One column of sections, each below the last: what brings the UI back,
 	-- combat text, your portrait.
-	local revealHeader = Header(content, "Exit CineMode", calm, -24)
+	local revealHeader = Header(content, L["Exit CineMode"], calm, -24)
 	revealHeader:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", -2, -24)
 
-	local cast = Check(content, "revealOnCast", "While casting",
-		"Includes mounting and hearthstone casts.")
+	local cast = Check(content, "revealOnCast", L["While casting"],
+		L["Includes mounting and hearthstone casts."])
 	cast:SetPoint("TOPLEFT", revealHeader, "BOTTOMLEFT", -2, -6)
 
-	local npcs = Check(content, "revealAtNPCs", "At vendors, banks, mail and trainers",
-		"Exit CineMode while a vendor, bank, mailbox, class trainer, trade or auction " ..
-		"house window is open. When off, the window still shows but the rest stays hidden.")
+	local npcs = Check(content, "revealAtNPCs", L["At vendors, banks, mail and trainers"],
+		L["Exit CineMode while a vendor, bank, mailbox, class trainer, trade or auction " ..
+		"house window is open. When off, the window still shows but the rest stays hidden."])
 	npcs:SetPoint("TOPLEFT", cast, "BOTTOMLEFT", 0, -2)
 
 	-- Stored the other way round (stayWithWindows), like the rest of this
 	-- section reading as what brings the UI back.
-	local windows = Check(content, "stayWithWindows", "Opening windows",
-		"Exit CineMode while the spellbook, character sheet, talents, macros, key " ..
+	local windows = Check(content, "stayWithWindows", L["Opening windows"],
+		L["Exit CineMode while the spellbook, character sheet, talents, macros, key " ..
 		"bindings or these options are open. When off, the window still shows but the rest " ..
-		"stays hidden.", function(value)
+		"stays hidden."], function(value)
 			ns.GetDB().stayWithWindows = not value
 		end)
 	windows.Refresh = function(self) self:SetChecked(not ns.GetDB().stayWithWindows) end
 	windows:SetPoint("TOPLEFT", npcs, "BOTTOMLEFT", 0, -2)
 
-	local drag = Check(content, "revealOnDrag", "While dragging something",
-		"Picking up an item or spell (to drag it to your action bars, say) brings the UI back " ..
+	local drag = Check(content, "revealOnDrag", L["While dragging something"],
+		L["Picking up an item or spell (to drag it to your action bars, say) brings the UI back " ..
 		"until you put it down. Off: picking things up never does; mouse over a faded bar to " ..
-		"see it when dragging there.")
+		"see it when dragging there."])
 	drag:SetPoint("TOPLEFT", windows, "BOTTOMLEFT", 0, -2)
 
-	local returnDelay = Slider(content, "returnDelay", "Back into CineMode after", 0, 60, 1, "%d sec")
+	local returnDelay = Slider(content, "returnDelay", L["Back into CineMode after"], 0, 60, 1, L["%d sec"])
 	returnDelay:SetPoint("TOPLEFT", drag, "BOTTOMLEFT", 4, -26)
-	Tooltip(returnDelay, "How long things must stay calm (no cast, window, dragging and the like) " ..
-		"before CineMode comes back. After a fight it comes back at once instead. 0 returns at once.")
+	Tooltip(returnDelay, L["How long things must stay calm (no cast, window, dragging and the like) " ..
+		"before CineMode comes back. After a fight it comes back at once instead. 0 returns at once."])
 
 	for _, control in ipairs({ revealHeader, cast, npcs, windows, drag, returnDelay }) do
 		setAside[#setAside + 1] = control
@@ -942,33 +1001,33 @@ local function CreateRevealPanel()
 		control:Hide()
 	end
 
-	local combatTextHeader = Header(content, "Combat text", calm, -24)
+	local combatTextHeader = Header(content, L["Combat text"], calm, -24)
 	combatTextHeader:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", -2, -24)
 
-	local combatText = Check(content, "hideCombatText", "Hide combat text out of combat",
-		"No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
+	local combatText = Check(content, "hideCombatText", L["Hide combat text out of combat"],
+		L["No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
 		"mode while you're out of combat. They come back the moment a fight starts and stay for the " ..
 		"Calm Timer after it, and your " ..
-		"combat text settings are put back when the UI returns.")
+		"combat text settings are put back when the UI returns."])
 	combatText:SetPoint("TOPLEFT", combatTextHeader, "BOTTOMLEFT", -2, -6)
 
-	local worldText = Check(content, "hideWorldText", "Hide all floating text: XP, damage, healing (restart required)",
-		"The game has no way to hide just the XP you gain over your character: it draws that, " ..
+	local worldText = Check(content, "hideWorldText", L["Hide all floating text: XP, damage, healing (restart required)"],
+		L["The game has no way to hide just the XP you gain over your character: it draws that, " ..
 		"the damage and healing numbers, misses and the like all in one font. This blanks that " ..
 		"font, so they all go, always (not just in CineMode). Takes effect after you fully " ..
-		"restart the game; /reload isn't enough.")
+		"restart the game; /reload isn't enough."])
 	worldText:SetPoint("TOPLEFT", combatText, "BOTTOMLEFT", 0, -2)
 	worldText:HookScript("OnClick", function()
-		ns.Print("restart the game (not just /reload) for floating text to be " ..
-			(ns.db.hideWorldText and "hidden" or "shown"))
+		ns.Print(ns.db.hideWorldText and L["restart the game (not just /reload) for floating text to be hidden"]
+			or L["restart the game (not just /reload) for floating text to be shown"])
 	end)
 
-	local yoursHeader = Header(content, "Your portrait", worldText, -24)
+	local yoursHeader = Header(content, L["Your portrait"], worldText, -24)
 	yoursHeader:SetPoint("TOPLEFT", worldText, "BOTTOMLEFT", 2, -24)
 
-	local portrait = Check(content, "portraitWhenNotFull", "Show your portrait until health and power are full",
-		"Keeps your player portrait up while you're recovering. Rage and runic power don't " ..
-		"count, so a warrior's portrait hides once their health is full.")
+	local portrait = Check(content, "portraitWhenNotFull", L["Show your portrait until health and power are full"],
+		L["Keeps your player portrait up while you're recovering. Rage and runic power don't " ..
+		"count, so a warrior's portrait hides once their health is full."])
 	portrait:SetPoint("TOPLEFT", yoursHeader, "BOTTOMLEFT", -2, -6)
 	portrait:HookScript("OnClick", Refresh) -- grey out / enable the options below
 
@@ -976,27 +1035,27 @@ local function CreateRevealPanel()
 	local PORTRAIT_INDENT = 16
 	local function IfPortrait(db) return db.portraitWhenNotFull end
 
-	local afterCombat = Check(content, "portraitAfterCombat", "Only after combat",
-		"Only keep the portrait up if you've been in combat (or taken fall damage) within the " ..
-		"Calm Timer above, so things like casting a buff in town don't bring it up.")
+	local afterCombat = Check(content, "portraitAfterCombat", L["Only after combat"],
+		L["Only keep the portrait up if you've been in combat (or taken fall damage) within the " ..
+		"Calm Timer above, so things like casting a buff in town don't bring it up."])
 	afterCombat:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(afterCombat, IfPortrait)
 	afterCombat:HookScript("OnClick", Refresh) -- grey out / enable the option below
 
-	local afterResurrect = Check(content, "portraitAfterResurrect", "Or after you resurrect",
-		"After you come back to life, keep the portrait up until your health and power are full, " ..
-		"however long that takes.")
+	local afterResurrect = Check(content, "portraitAfterResurrect", L["Or after you resurrect"],
+		L["After you come back to life, keep the portrait up until your health and power are full, " ..
+		"however long that takes."])
 	afterResurrect:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(afterResurrect, function(db) return db.portraitWhenNotFull and db.portraitAfterCombat end)
 
 	-- (Back at the column edge, out from under the indented options above.)
-	local gearHeader = Header(content, "Your gear", afterResurrect, -24)
+	local gearHeader = Header(content, L["Your gear"], afterResurrect, -24)
 	gearHeader:SetPoint("TOPLEFT", afterResurrect, "BOTTOMLEFT", 2 - 2 * PORTRAIT_INDENT, -24)
 
-	local durability = Check(content, "durabilityShow", "Show the durability figure when gear is damaged",
-		"Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: " ..
+	local durability = Check(content, "durabilityShow", L["Show the durability figure when gear is damaged"],
+		L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: " ..
 		"some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, " ..
-		"it fades with the rest of the UI.")
+		"it fades with the rest of the UI."])
 	durability:SetPoint("TOPLEFT", gearHeader, "BOTTOMLEFT", -2, -6)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
@@ -1008,20 +1067,20 @@ end
 local function CreateBuffsPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Buffs/debuffs")
+	local title = Label(content, "GameFontNormalLarge", L["Buffs/debuffs"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local note = Label(content, "GameFontHighlightSmall",
-		"Your buff and debuff icons. They fade with the UI in CineMode; these bring them back.")
+		L["Your buff and debuff icons. They fade with the UI in CineMode; these bring them back."])
 	note:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 
-	local buffPeek = Check(content, "buffPeek", "Show buffs when you gain or refresh one",
-		"Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on flights.")
+	local buffPeek = Check(content, "buffPeek", L["Show buffs when you gain or refresh one"],
+		L["Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on flights."])
 	buffPeek:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -48)
-	PageSwitch(content, "handleBuffs", "Let CineMode handle buffs and debuffs",
-		"On: CineMode fades your buffs and debuffs as this page and their Standard Frames row say. " ..
-		"Off: it leaves them alone, with no peeks.", note)
+	PageSwitch(content, "handleBuffs", L["Let CineMode handle buffs and debuffs"],
+		L["On: CineMode fades your buffs and debuffs as this page and their Standard Frames row say. " ..
+		"Off: it leaves them alone, with no peeks."], note)
 	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
 
 	local BUFF_INDENT = 16
@@ -1029,45 +1088,45 @@ local function CreateBuffsPanel()
 	local function IfDebuffPeek(db) return db.debuffPeek end
 	local function IfAnyPeek(db) return db.buffPeek or db.debuffPeek end
 
-	local buffAfterCombat = Check(content, "buffPeekAfterCombat", "Only after combat",
-		"Only within the Calm Timer after a fight, so buffing up in town doesn't count.")
+	local buffAfterCombat = Check(content, "buffPeekAfterCombat", L["Only after combat"],
+		L["Only within the Calm Timer after a fight, so buffing up in town doesn't count."])
 	buffAfterCombat:SetPoint("TOPLEFT", buffPeek, "BOTTOMLEFT", BUFF_INDENT, -2)
 	GreyUnless(buffAfterCombat, IfBuffPeek)
 
-	local buffIgnoreSelf = Check(content, "buffPeekIgnoreSelf", "Not ones you cast on yourself",
-		"Your own buffs on yourself (Power Word: Fortitude, Arcane Intellect, a self-cast shield...) " ..
-		"and your pet's don't bring them up; ones from other players and the world still do.")
+	local buffIgnoreSelf = Check(content, "buffPeekIgnoreSelf", L["Not ones you cast on yourself"],
+		L["Your own buffs on yourself (Power Word: Fortitude, Arcane Intellect, a self-cast shield...) " ..
+		"and your pet's don't bring them up; ones from other players and the world still do."])
 	buffIgnoreSelf:SetPoint("TOPLEFT", buffAfterCombat, "BOTTOMLEFT", 0, -2)
 	GreyUnless(buffIgnoreSelf, IfBuffPeek)
 
-	local debuffPeek = Check(content, "debuffPeek", "Show debuffs when you gain or refresh one",
-		"Gaining or refreshing a debuff briefly shows your buffs and debuffs. Not on flights.")
+	local debuffPeek = Check(content, "debuffPeek", L["Show debuffs when you gain or refresh one"],
+		L["Gaining or refreshing a debuff briefly shows your buffs and debuffs. Not on flights."])
 	debuffPeek:SetPoint("TOPLEFT", buffIgnoreSelf, "BOTTOMLEFT", -BUFF_INDENT, -2)
 	debuffPeek:HookScript("OnClick", Refresh)
 
-	local debuffAfterCombat = Check(content, "debuffPeekAfterCombat", "Only after combat",
-		"Only within the Calm Timer after a fight. Off: debuffs like Hunter's Mark show any time.")
+	local debuffAfterCombat = Check(content, "debuffPeekAfterCombat", L["Only after combat"],
+		L["Only within the Calm Timer after a fight. Off: debuffs like Hunter's Mark show any time."])
 	debuffAfterCombat:SetPoint("TOPLEFT", debuffPeek, "BOTTOMLEFT", BUFF_INDENT, -2)
 	GreyUnless(debuffAfterCombat, IfDebuffPeek)
 
-	local debuffUntilGone = Check(content, "debuffPeekUntilGone", "Keep them up until the debuff is gone",
-		"A debuff that brings them up keeps them up while you have any debuff (bar the ones listed below), " ..
-		"however long that is. Combat still takes over.")
+	local debuffUntilGone = Check(content, "debuffPeekUntilGone", L["Keep them up until the debuff is gone"],
+		L["A debuff that brings them up keeps them up while you have any debuff (bar the ones listed below), " ..
+		"however long that is. Combat still takes over."])
 	debuffUntilGone:SetPoint("TOPLEFT", debuffAfterCombat, "BOTTOMLEFT", 0, -2)
 	GreyUnless(debuffUntilGone, IfDebuffPeek)
 
-	local buffPeekTime = Slider(content, "buffPeekTime", "Show buffs for", 0.5, 30, 0.5, "%.1f sec")
+	local buffPeekTime = Slider(content, "buffPeekTime", L["Show buffs for"], 0.5, 30, 0.5, L["%.1f sec"])
 	buffPeekTime:SetPoint("TOPLEFT", debuffUntilGone, "BOTTOMLEFT", 4 - BUFF_INDENT, -30)
 	GreyUnless(buffPeekTime, IfBuffPeek)
 
-	local debuffPeekTime = Slider(content, "debuffPeekTime", "Show debuffs for", 0.5, 30, 0.5, "%.1f sec")
+	local debuffPeekTime = Slider(content, "debuffPeekTime", L["Show debuffs for"], 0.5, 30, 0.5, L["%.1f sec"])
 	debuffPeekTime:SetPoint("TOPLEFT", buffPeekTime, "BOTTOMLEFT", 0, -34)
 	GreyUnless(debuffPeekTime, IfDebuffPeek)
 
 	-- Buffs and debuffs that never bring the buffs up: a row each (icon, name,
 	-- Remove), then a box to add one. Still saved as one comma-separated list
 	-- (buffPeekIgnore), which is what Frames.lua reads.
-	local ignoreLabel = Label(content, "GameFontHighlightSmall", "Except for these buffs and debuffs:")
+	local ignoreLabel = Label(content, "GameFontHighlightSmall", L["Except for these buffs and debuffs:"])
 	ignoreLabel:SetPoint("TOPLEFT", debuffPeekTime, "BOTTOMLEFT", -2, -22)
 
 	local function IgnoreEntries()
@@ -1116,7 +1175,7 @@ local function CreateBuffsPanel()
 			row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
 			row.remove:SetSize(70, 20)
 			row.remove:SetPoint("RIGHT", 0, 0)
-			row.remove:SetText("Remove")
+			row.remove:SetText(L["Remove"])
 			row.remove:SetScript("OnClick", function(self)
 				local entries = IgnoreEntries()
 				table.remove(entries, self:GetParent().index)
@@ -1133,7 +1192,7 @@ local function CreateBuffsPanel()
 	local addButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	addButton:SetSize(70, 20)
 	addButton:SetPoint("LEFT", addBox, "RIGHT", 8, 0)
-	addButton:SetText("Add")
+	addButton:SetText(L["Add"])
 	local function AddEntry()
 		local entry = addBox:GetText():gsub(",", ""):match("^%s*(.-)%s*$")
 		addBox:SetText("")
@@ -1152,9 +1211,9 @@ local function CreateBuffsPanel()
 	addBox:SetScript("OnEnterPressed", AddEntry)
 	addBox:SetScript("OnEscapePressed", function(self) self:SetText("") self:ClearFocus() end)
 	addButton:SetScript("OnClick", AddEntry)
-	local ADD_TIP = "Gaining or stacking this doesn't bring your buffs up. Type a spell ID or a " ..
+	local ADD_TIP = L["Gaining or stacking this doesn't bring your buffs up. Type a spell ID or a " ..
 		"name. Names must match your game language; spell IDs work in any language (2479 is " ..
-		"Honorless Target, 8326 and 20584 are Ghost)."
+		"Honorless Target, 8326 and 20584 are Ghost)."]
 	Tooltip(addBox, ADD_TIP)
 	Tooltip(addButton, ADD_TIP)
 
@@ -1194,41 +1253,41 @@ end
 local function BuildZoomControls(parent, prefix, anchor)
 	local function key(name) return prefix .. name end
 
-	local zoomRandom = Check(parent, key("Random"), "Random zoom in and out",
-		"After the first pull-back, keep drifting to new random distances (within the " ..
-		"limits below), pausing between each. Off: a single pull-back that then holds.")
+	local zoomRandom = Check(parent, key("Random"), L["Random zoom in and out"],
+		L["After the first pull-back, keep drifting to new random distances (within the " ..
+		"limits below), pausing between each. Off: a single pull-back that then holds."])
 	zoomRandom:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
 
-	local zoomDistance = Slider(parent, key("Distance"), "Zoom out up to", 1, 40, 1, "%d yards")
+	local zoomDistance = Slider(parent, key("Distance"), L["Zoom out up to"], 1, 40, 1, L["%d yards"])
 	zoomDistance:SetPoint("TOPLEFT", zoomRandom, "BOTTOMLEFT", 4, -26)
-	Tooltip(zoomDistance, "How far past your own zoom the camera pulls back (the first move always " ..
-		"goes this far).")
+	Tooltip(zoomDistance, L["How far past your own zoom the camera pulls back (the first move always " ..
+		"goes this far)."])
 
-	local zoomIn = Slider(parent, key("In"), "Zoom in up to", 0, 10, 1, "%d yards")
+	local zoomIn = Slider(parent, key("In"), L["Zoom in up to"], 0, 10, 1, L["%d yards"])
 	zoomIn:SetPoint("TOPLEFT", zoomDistance, "BOTTOMLEFT", 0, -34)
-	Tooltip(zoomIn, "Random zoom only. How much closer than your own zoom it may come.")
+	Tooltip(zoomIn, L["Random zoom only. How much closer than your own zoom it may come."])
 
-	local zoomTime = Slider(parent, key("Time"), "Each zoom takes", 5, 60, 1, "%d sec")
+	local zoomTime = Slider(parent, key("Time"), L["Each zoom takes"], 5, 60, 1, L["%d sec"])
 	zoomTime:SetPoint("TOPLEFT", zoomIn, "BOTTOMLEFT", 0, -34)
 
-	local zoomEase = Slider(parent, key("Ease"), "Zoom ease in/out", 10, 50, 5, "%d%%", 100)
+	local zoomEase = Slider(parent, key("Ease"), L["Zoom ease in/out"], 10, 50, 5, "%d%%", 100)
 	zoomEase:SetPoint("TOPLEFT", zoomTime, "BOTTOMLEFT", 0, -34)
-	Tooltip(zoomEase, "How much of each zoom is spent speeding up, and again slowing down. " ..
-		"50% is one smooth swell; lower gets moving sooner and glides in the middle.")
+	Tooltip(zoomEase, L["How much of each zoom is spent speeding up, and again slowing down. " ..
+		"50% is one smooth swell; lower gets moving sooner and glides in the middle."])
 
-	local zoomPause = Slider(parent, key("Pause"), "Pause between zooms", 0, 60, 1, "%d sec")
+	local zoomPause = Slider(parent, key("Pause"), L["Pause between zooms"], 0, 60, 1, L["%d sec"])
 	zoomPause:SetPoint("TOPLEFT", zoomEase, "BOTTOMLEFT", 0, -34)
-	Tooltip(zoomPause, "Random zoom only.")
+	Tooltip(zoomPause, L["Random zoom only."])
 
-	local zoomPauseVary = Slider(parent, key("PauseVary"), "Pause varies by up to", 0, 30, 0.5, "%.1f sec")
+	local zoomPauseVary = Slider(parent, key("PauseVary"), L["Pause varies by up to"], 0, 30, 0.5, L["%.1f sec"])
 	zoomPauseVary:SetPoint("TOPLEFT", zoomPause, "BOTTOMLEFT", 0, -34)
-	Tooltip(zoomPauseVary, "Random zoom only. Each pause is picked at random this much shorter or " ..
+	Tooltip(zoomPauseVary, L["Random zoom only. Each pause is picked at random this much shorter or " ..
 		"longer than the pause above: 3 sec with a 10 sec pause waits anywhere from 7 to 13 sec. " ..
-		"0 keeps every pause the same.")
+		"0 keeps every pause the same."])
 
-	local zoomPastMax = Check(parent, key("PastMax"), "Allow zooming past your maximum",
-		"Raises the game's max camera distance (to 2.6) while pulled back, so the zoom " ..
-		"isn't cut short. Your own maximum comes back once you've zoomed in again.")
+	local zoomPastMax = Check(parent, key("PastMax"), L["Allow zooming past your maximum"],
+		L["Raises the game's max camera distance (to 2.6) while pulled back, so the zoom " ..
+		"isn't cut short. Your own maximum comes back once you've zoomed in again."])
 	zoomPastMax:SetPoint("TOPLEFT", zoomPauseVary, "BOTTOMLEFT", -4, -14)
 	return zoomPastMax
 end
@@ -1238,49 +1297,49 @@ local function CreateCameraPanel()
 	local cameraCanvas
 	cameraCanvas, cameraPanel = CreateScrollPage()
 
-	local title = Label(cameraPanel, "GameFontNormalLarge", "Camera Modes")
+	local title = Label(cameraPanel, "GameFontNormalLarge", L["Camera Modes"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(cameraPanel, "GameFontHighlightSmall",
-		"While CineMode is on, the camera comes alive in eight situations: Flight (on " ..
+		L["While CineMode is on, the camera comes alive in eight situations: Flight (on " ..
 		"flight paths), AFK (once you've stood still a while, or go AFK), Cozy (campfires and " ..
 		"emotes), Tele (casting your Hearthstone or a teleport), Vista (/stare), Fish (fishing), " ..
 		"RP Walk (auto-walking) and Auto-run. Moving by hand cancels them all. Death Cam turns " ..
 		"round your body when you die, and Quest Cam swings behind you at quest givers. The Camera Triggers page picks which camera each emote or " ..
 		"event starts. Everything goes back to normal when the UI returns. The settings here apply " ..
-		"to all of them.")
+		"to all of them."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", cameraPanel, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	local holdNote = Label(cameraPanel, "GameFontHighlightSmall",
-		"In the camera modes, the minimap and quest tracker hover holds and the buff and chat " ..
-		"peeks use their short default times, so they clear the view quickly.")
+		L["In the camera modes, the minimap and quest tracker hover holds and the buff and chat " ..
+		"peeks use their short default times, so they clear the view quickly."])
 	holdNote:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -12)
 	holdNote:SetWidth(520)
 	holdNote:SetJustifyV("TOP")
 
 	-- Turn off in: a grid of each camera (rows) by place or group (columns).
-	local offHeader = Header(cameraPanel, "Turn off in", holdNote, -24)
+	local offHeader = Header(cameraPanel, L["Turn off in"], holdNote, -24)
 	offHeader:SetPoint("TOPLEFT", holdNote, "BOTTOMLEFT", -2, -24)
 	local offNote = Label(cameraPanel, "GameFontHighlightSmall",
-		"Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
+		L["Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
 		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back " ..
 		"as usual. To keep the normal UI somewhere instead, use Turn off in on the main page. " ..
 		"For flights, Cities means taking off from one, " ..
 		"and Open World taking off anywhere else. " ..
 		"Calm Timer, on the right: ticked, that camera waits until the Calm Timer (CineMode page) " ..
-		"has run out after a fight before it starts.")
+		"has run out after a fight before it starts."])
 	offNote:SetPoint("TOPLEFT", offHeader, "BOTTOMLEFT", 0, -6)
 	offNote:SetWidth(520)
 	offNote:SetJustifyV("TOP")
 	local GRID_NAME_WIDTH, GRID_COLUMN, GRID_GAP = 90, 72, 10
 	local GRID_PLACES = GRID_NAME_WIDTH
 	local WHERE = {
-		Cities = { "Cities", "in capital cities" },
-		Instances = { "Instances", "in dungeons, scenarios and raids" },
-		BGs = { "BGs & Arenas", "in battlegrounds and arenas" },
-		World = { "Open World", "out in the world (not in a capital city or an instance), inns included" },
+		Cities = { L["Cities"], L["in capital cities"] },
+		Instances = { L["Instances"], L["in dungeons, scenarios and raids"] },
+		BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
+		World = { L["Open World"], L["out in the world (not in a capital city or an instance), inns included"] },
 	}
 	-- Calm Timer last, set apart too: it isn't a place.
 	local GRID_CALM = GRID_PLACES + GRID_COLUMN * #ns.CAMERA_OFF_WHERE + GRID_GAP
@@ -1298,10 +1357,10 @@ local function CreateCameraPanel()
 	end
 	for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
 		ColumnHeader(GRID_PLACES + GRID_COLUMN * (i - 1), WHERE[where][1],
-			"Tick a camera here to turn it off " .. WHERE[where][2] .. ".")
+			L["Tick a camera here to turn it off %s."]:format(WHERE[where][2]))
 	end
-	ColumnHeader(GRID_CALM, "Calm Timer", "Tick a camera here to have it wait until the Calm " ..
-		"Timer (CineMode page) has run out after a fight before it starts.")
+	ColumnHeader(GRID_CALM, L["Calm Timer"], L["Tick a camera here to have it wait until the Calm " ..
+		"Timer (CineMode page) has run out after a fight before it starts."])
 	local lastRow = gridTop
 	for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 		local row = CreateFrame("Frame", nil, cameraPanel)
@@ -1318,13 +1377,13 @@ local function CreateCameraPanel()
 				cell:SetPoint("CENTER", row, "LEFT", x, 0)
 				local cross = Label(cell, "GameFontDisable", "x")
 				cross:SetPoint("CENTER")
-				Tooltip(cell, "Flights don't start " .. WHERE[where][2] .. ".")
+				Tooltip(cell, L["Flights don't start %s."]:format(WHERE[where][2]))
 			else
 				local tip = (cam[1] == "flight" and where == "Cities")
-					and "No Flight Cam on flights taking off from a capital city."
+					and L["No Flight Cam on flights taking off from a capital city."]
 					or (cam[1] == "flight" and where == "World")
-					and "No Flight Cam on flights taking off anywhere but a capital city."
-					or ("No " .. cam[2] .. " Cam " .. WHERE[where][2] .. ".")
+					and L["No Flight Cam on flights taking off anywhere but a capital city."]
+					or L["No %s Cam %s."]:format(cam[2], WHERE[where][2])
 				local cb = Check(row, cam[1] .. "OffIn" .. where, "", tip)
 				cb:SetPoint("CENTER", row, "LEFT", x, 0)
 			end
@@ -1336,10 +1395,9 @@ local function CreateCameraPanel()
 			cell:SetPoint("CENTER", row, "LEFT", calmX, 0)
 			local cross = Label(cell, "GameFontDisable", "x")
 			cross:SetPoint("CENTER")
-			Tooltip(cell, "You die in a fight: the Death Cam can't wait for one to be over.")
+			Tooltip(cell, L["You die in a fight: the Death Cam can't wait for one to be over."])
 		else
-			local calm = Check(row, cam[1] .. "CalmWait", "", "The " .. cam[2] .. " Cam waits until the " ..
-				"Calm Timer has run out after a fight.")
+			local calm = Check(row, cam[1] .. "CalmWait", "", L["The %s Cam waits until the Calm Timer has run out after a fight."]:format(cam[2]))
 			calm:SetPoint("CENTER", row, "LEFT", calmX, 0)
 		end
 		lastRow = row
@@ -1349,37 +1407,37 @@ local function CreateCameraPanel()
 	-- at their values.
 	local SHOW_INDOOR_SETTINGS = false
 	if SHOW_INDOOR_SETTINGS then
-		local indoorHeader = Header(cameraPanel, "Indoors", lastRow, -24)
-		local indoorLimits = Check(cameraPanel, "indoorLimits", "Limit the camera indoors",
-			"Inside buildings and caves, the camera modes zoom out less and swing less, so the " ..
-			"camera doesn't keep pushing into walls and ceilings. Uses the game's own indoor check.")
+		local indoorHeader = Header(cameraPanel, L["Indoors"], lastRow, -24)
+		local indoorLimits = Check(cameraPanel, "indoorLimits", L["Limit the camera indoors"],
+			L["Inside buildings and caves, the camera modes zoom out less and swing less, so the " ..
+			"camera doesn't keep pushing into walls and ceilings. Uses the game's own indoor check."])
 		indoorLimits:SetPoint("TOPLEFT", indoorHeader, "BOTTOMLEFT", -2, -6)
 		indoorLimits:HookScript("OnClick", Refresh) -- grey out / enable the options below
 		local function IfIndoorLimits(db) return db.indoorLimits end
 
-		local indoorZoom = Slider(cameraPanel, "indoorZoomOut", "Zoom out indoors up to", 0, 10, 0.5, "%.1f yards")
+		local indoorZoom = Slider(cameraPanel, "indoorZoomOut", L["Zoom out indoors up to"], 0, 10, 0.5, L["%.1f yards"])
 		indoorZoom:SetPoint("TOPLEFT", indoorLimits, "BOTTOMLEFT", 4, -26)
-		Tooltip(indoorZoom, "How far past your own distance the slow zoom may pull back indoors. It " ..
+		Tooltip(indoorZoom, L["How far past your own distance the slow zoom may pull back indoors. It " ..
 			"also never raises the max zoom distance indoors. Walking in pulled back, the camera " ..
-			"glides in to this.")
+			"glides in to this."])
 		GreyUnless(indoorZoom, IfIndoorLimits)
 
-		local indoorSwing = Slider(cameraPanel, "indoorSwing", "Swing indoors up to", 0, 90, 5, "%d°")
+		local indoorSwing = Slider(cameraPanel, "indoorSwing", L["Swing indoors up to"], 0, 90, 5, "%d°")
 		indoorSwing:SetPoint("TOPLEFT", indoorZoom, "BOTTOMLEFT", 0, -34)
-		Tooltip(indoorSwing, "How far either side of behind the flight, RP walk and auto-run cameras " ..
-			"may swing indoors.")
+		Tooltip(indoorSwing, L["How far either side of behind the flight, RP walk and auto-run cameras " ..
+			"may swing indoors."])
 		GreyUnless(indoorSwing, IfIndoorLimits)
 
-		local indoorSweep = Check(cameraPanel, "indoorNoSweep", "No AFK camera sweep indoors",
-			"The AFK camera sweeps right round your character, which can bump into walls " ..
-			"in tight rooms. Its zoom still runs (within the limit above).")
+		local indoorSweep = Check(cameraPanel, "indoorNoSweep", L["No AFK camera sweep indoors"],
+			L["The AFK camera sweeps right round your character, which can bump into walls " ..
+			"in tight rooms. Its zoom still runs (within the limit above)."])
 		indoorSweep:SetPoint("TOPLEFT", indoorSwing, "BOTTOMLEFT", -4, -14)
 		GreyUnless(indoorSweep, IfIndoorLimits)
 	end
 
 	cameraCanvas:SetScript("OnShow", PageShown(Refresh, cameraPanel))
 	cameraCanvas:Hide()
-	RegisterSubpage(cameraCanvas, "Camera Modes")
+	RegisterSubpage(cameraCanvas, L["Camera Modes"])
 end
 
 -- A checkbox for one entry of a table setting (db[tableKey][subKey]), where a
@@ -1405,15 +1463,15 @@ local function BuildRotationControls(container, prefix, style)
 
 	local last
 	if style == "sweep" then
-		local orbitRight = Check(container, key("Right"), "Turn clockwise",
-			"Sweeps turn the other way round.")
+		local orbitRight = Check(container, key("Right"), L["Turn clockwise"],
+			L["Sweeps turn the other way round."])
 		orbitRight:SetPoint("TOPLEFT", container, "TOPLEFT", -2, 0)
 		local lastCheck = orbitRight
 
 		if prefix == "idleOrbit" then
-			local randomDir = Check(container, key("RandomDir"), "Random direction",
-				"Each time the camera starts, it picks clockwise or anticlockwise at random " ..
-				"(and keeps to it until it stops).", function(value)
+			local randomDir = Check(container, key("RandomDir"), L["Random direction"],
+				L["Each time the camera starts, it picks clockwise or anticlockwise at random " ..
+				"(and keeps to it until it stops)."], function(value)
 					ns.GetDB()[key("RandomDir")] = value
 					Refresh()
 				end)
@@ -1422,75 +1480,75 @@ local function BuildRotationControls(container, prefix, style)
 			lastCheck = randomDir
 		end
 
-		local orbitStep = Slider(container, key("Step"), "Turn per sweep", 10, 90, 5, "%d°")
+		local orbitStep = Slider(container, key("Step"), L["Turn per sweep"], 10, 90, 5, "%d°")
 		orbitStep:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 4, -26)
-		Tooltip(orbitStep, "How far each sweep turns, always the same way, staying level.")
+		Tooltip(orbitStep, L["How far each sweep turns, always the same way, staying level."])
 
-		local orbitSpeed = Slider(container, key("Speed"), "Turn speed", 1, 45, 1, "%d°/sec")
+		local orbitSpeed = Slider(container, key("Speed"), L["Turn speed"], 1, 45, 1, "%d°/sec")
 		orbitSpeed:SetPoint("TOPLEFT", orbitStep, "BOTTOMLEFT", 0, -34)
-		Tooltip(orbitSpeed, "Top speed in the middle of a sweep. At 6°/sec with 50% ease, a 30° " ..
-			"sweep takes 10 seconds.")
+		Tooltip(orbitSpeed, L["Top speed in the middle of a sweep. At 6°/sec with 50% ease, a 30° " ..
+			"sweep takes 10 seconds."])
 		last = orbitSpeed
 	else
-		local minChange = Slider(container, key("MinChange"), "Minimum change", 10, 120, 5, "%d°")
+		local minChange = Slider(container, key("MinChange"), L["Minimum change"], 10, 120, 5, "%d°")
 		minChange:SetPoint("TOPLEFT", container, "TOPLEFT", 2, -20)
-		Tooltip(minChange, "The new angle is never within this many degrees of the current " ..
-			"one, either way. Keep it below the swing for varied moves.")
+		Tooltip(minChange, L["The new angle is never within this many degrees of the current " ..
+			"one, either way. Keep it below the swing for varied moves."])
 
 		local backArc = Slider(container, key("BackArc"),
-			prefix == "cozyOrbit" and "Swing either side of the front" or "Swing either side of behind",
+			prefix == "cozyOrbit" and L["Swing either side of the front"] or L["Swing either side of behind"],
 			0, 90, 5, "%d°")
 		backArc:SetPoint("TOPLEFT", minChange, "BOTTOMLEFT", 0, -34)
-		Tooltip(backArc, "How far the camera may swing to either side of directly behind your " ..
-			"character. 90° reaches side-on; smaller keeps it closer behind.")
+		Tooltip(backArc, L["How far the camera may swing to either side of directly behind your " ..
+			"character. 90° reaches side-on; smaller keeps it closer behind."])
 
-		local pitchUp = Slider(container, key("PitchUp"), "Tilt up as far as", 0, 45, 5, "%d°")
+		local pitchUp = Slider(container, key("PitchUp"), L["Tilt up as far as"], 0, 45, 5, "%d°")
 		pitchUp:SetPoint("TOPLEFT", backArc, "BOTTOMLEFT", 0, -34)
-		Tooltip(pitchUp, "Each move also tilts the camera to a random angle between the down " ..
-			"and up limits. 0 on both keeps it level.")
+		Tooltip(pitchUp, L["Each move also tilts the camera to a random angle between the down " ..
+			"and up limits. 0 on both keeps it level."])
 
-		local pitchDown = Slider(container, key("PitchDown"), "Tilt down as far as", 0, 45, 5, "%d°")
+		local pitchDown = Slider(container, key("PitchDown"), L["Tilt down as far as"], 0, 45, 5, "%d°")
 		pitchDown:SetPoint("TOPLEFT", pitchUp, "BOTTOMLEFT", 0, -34)
-		Tooltip(pitchDown, "How far below level a move may tilt.")
+		Tooltip(pitchDown, L["How far below level a move may tilt."])
 		local lastPitch = pitchDown
 
 		if prefix == "runOrbit" then
-			local pitchFloor = Slider(container, key("PitchFloor"), "Lowest tilt", 0, 45, 1, "%d°")
+			local pitchFloor = Slider(container, key("PitchFloor"), L["Lowest tilt"], 0, 45, 1, "%d°")
 			pitchFloor:SetPoint("TOPLEFT", pitchDown, "BOTTOMLEFT", 0, -34)
-			Tooltip(pitchFloor, "The camera never tilts more than this far below where it was " ..
-				"when auto-run started, even when it lowers while you steer.")
+			Tooltip(pitchFloor, L["The camera never tilts more than this far below where it was " ..
+				"when auto-run started, even when it lowers while you steer."])
 			lastPitch = pitchFloor
 		end
 
-		local moveTime = Slider(container, key("MoveTime"), "Each move takes", 1, 20, 0.5, "%.1f sec")
+		local moveTime = Slider(container, key("MoveTime"), L["Each move takes"], 1, 20, 0.5, L["%.1f sec"])
 		moveTime:SetPoint("TOPLEFT", lastPitch, "BOTTOMLEFT", 0, -34)
-		Tooltip(moveTime, "How long each move takes, however far it goes.")
+		Tooltip(moveTime, L["How long each move takes, however far it goes."])
 		last = moveTime
 	end
 
-	local ease = Slider(container, key("Ease"), "Ease in/out", 10, 50, 5, "%d%%", 100)
+	local ease = Slider(container, key("Ease"), L["Ease in/out"], 10, 50, 5, "%d%%", 100)
 	ease:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -34)
-	Tooltip(ease, "How much of each move is spent speeding up, and again slowing down. " ..
+	Tooltip(ease, L["How much of each move is spent speeding up, and again slowing down. " ..
 		"50% is one smooth swell, gentlest at the ends. Lower values get up to speed " ..
-		"quicker and cruise in the middle.")
+		"quicker and cruise in the middle."])
 
-	local orbitPause = Slider(container, key("Pause"), "Pause between moves", 0, 60, 0.5, "%.1f sec")
+	local orbitPause = Slider(container, key("Pause"), L["Pause between moves"], 0, 60, 0.5, L["%.1f sec"])
 	orbitPause:SetPoint("TOPLEFT", ease, "BOTTOMLEFT", 0, -34)
 	if style == "sweep" then
-		Tooltip(orbitPause, "How long the camera rests between sweeps. 0 keeps it turning " ..
-			"continuously at the turn speed, without slowing between sweeps.")
+		Tooltip(orbitPause, L["How long the camera rests between sweeps. 0 keeps it turning " ..
+			"continuously at the turn speed, without slowing between sweeps."])
 	else
-		Tooltip(orbitPause, "How long the camera rests between moves.")
+		Tooltip(orbitPause, L["How long the camera rests between moves."])
 	end
 
-	local drift = Check(container, key("Drift"), "Keep drifting during pauses",
+	local drift = Check(container, key("Drift"), L["Keep drifting during pauses"],
 		style == "sweep"
-			and "Instead of stopping between sweeps, the camera keeps creeping slowly the same way."
-			or "Instead of stopping between moves, the camera keeps creeping slowly back toward " ..
-				"the middle.")
+			and L["Instead of stopping between sweeps, the camera keeps creeping slowly the same way."]
+			or L["Instead of stopping between moves, the camera keeps creeping slowly back toward " ..
+				"the middle."])
 	drift:SetPoint("TOPLEFT", orbitPause, "BOTTOMLEFT", -4, -14)
 
-	local driftSpeed = Slider(container, key("DriftSpeed"), "Drift speed", 0.5, 5, 0.5, "%.1f°/sec")
+	local driftSpeed = Slider(container, key("DriftSpeed"), L["Drift speed"], 0.5, 5, 0.5, "%.1f°/sec")
 	driftSpeed:SetPoint("TOPLEFT", drift, "BOTTOMLEFT", 4, -26)
 	return driftSpeed
 end
@@ -1500,8 +1558,8 @@ end
 -- same names everywhere: Open world (where a list has it), Cities, Dungeons,
 -- Raids, PvP, then the groups (Party, Raid group).
 local PLACES = {
-	{ "Cities", "Cities" }, { "Dungeons", "Dungeons" },
-	{ "Raids", "Raids" }, { "PvP", "PvP" },
+	{ "Cities", L["Cities"] }, { "Dungeons", L["Dungeons"] },
+	{ "Raids", L["Raids"] }, { "PvP", L["PvP"] },
 }
 
 -- Every camera mode's page is laid out the same way:
@@ -1514,15 +1572,15 @@ local PLACES = {
 --   Right column: Zoom (and opts.zoomExtras), Depth of field.
 -- The opts functions take (content, stack) and add their controls to it.
 -- The Death Cam and Quest Cam pages follow the same layout by hand.
-local ZOOM_TIP = "The camera slowly pulls back, then (with random zoom) drifts in and out. Moving " ..
-	"glides it back to your distance; zooming yourself keeps your new distance."
-local INPUT_PAUSE_TIP = "After you drag the camera, use camera keys or zoom, this camera waits " ..
-	"this long, then carries on from your new view."
+local ZOOM_TIP = L["The camera slowly pulls back, then (with random zoom) drifts in and out. Moving " ..
+	"glides it back to your distance; zooming yourself keeps your new distance."]
+local INPUT_PAUSE_TIP = L["After you drag the camera, use camera keys or zoom, this camera waits " ..
+	"this long, then carries on from your new view."]
 
 local function CreateCameraModePanel(opts)
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", opts.name)
+	local title = Label(content, "GameFontNormalLarge", L[opts.name])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall", opts.description)
@@ -1535,20 +1593,20 @@ local function CreateCameraModePanel(opts)
 		opts.top(content, stack)
 	end
 
-	stack:Header(content, "Starting")
+	stack:Header(content, L["Starting"])
 	if opts.instantKey then
-		stack:Add(Check(content, opts.instantKey, "Start CineMode as soon as you " .. opts.instantWhen,
-			"Skips the wait before fading, so the UI fades and the camera starts moving straight away."), "check")
+		stack:Add(Check(content, opts.instantKey, L["Start CineMode as soon as you %s"]:format(opts.instantWhen),
+			L["Skips the wait before fading, so the UI fades and the camera starts moving straight away."]), "check")
 	end
 	if opts.start then
 		opts.start(content, stack)
 	end
-	local inputPause = stack:Add(Slider(content, opts.inputPauseKey, "Pause after you move the camera",
-		0, 60, 0.5, "%.1f sec"), "slider")
+	local inputPause = stack:Add(Slider(content, opts.inputPauseKey, L["Pause after you move the camera"],
+		0, 60, 0.5, L["%.1f sec"]), "slider")
 	Tooltip(inputPause, INPUT_PAUSE_TIP .. (opts.inputPauseTip and (" " .. opts.inputPauseTip) or ""))
 
 	-- Left column: rotation, then the mode's own sections
-	local rotationHeader = stack:Header(content, "Rotation")
+	local rotationHeader = stack:Header(content, L["Rotation"])
 	local rotate = stack:Add(Check(content, opts.orbitPrefix, opts.rotateLabel, opts.rotateTip), "check")
 	local container = CreateFrame("Frame", nil, content)
 	container:SetPoint("TOPLEFT", rotate, "BOTTOMLEFT", 2, -14)
@@ -1562,22 +1620,22 @@ local function CreateCameraModePanel(opts)
 	end
 
 	-- Right column: zoom, depth of field
-	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
+	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
 	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
 	local right = Stack(zoomHeader)
-	local zoom = right:Add(Check(content, opts.zoomPrefix, "Slowly zoom", opts.zoomTip or ZOOM_TIP), "check")
+	local zoom = right:Add(Check(content, opts.zoomPrefix, L["Slowly zoom"], opts.zoomTip or ZOOM_TIP), "check")
 	right:Continue(BuildZoomControls(content, opts.zoomPrefix, zoom), "check")
 	if opts.zoomExtras then
 		opts.zoomExtras(content, right)
 	end
 
-	right:Header(content, "Depth of field")
-	local dof = right:Add(Slider(content, opts.dofKey, "Edge haze", 0, 100, 2.5, "%.1f%%", 100, function(value)
+	right:Header(content, L["Depth of field"])
+	local dof = right:Add(Slider(content, opts.dofKey, L["Edge haze"], 0, 100, 2.5, "%.1f%%", 100, function(value)
 		if ns.FocusPreview then ns.FocusPreview(value / 100) end
 	end), "slider")
-	Tooltip(dof, "A soft haze around the edges of the screen in this camera mode, as if the " ..
+	Tooltip(dof, L["A soft haze around the edges of the screen in this camera mode, as if the " ..
 		"camera had focused on you. 0% leaves it off. Moving the slider shows it for a moment. " ..
-		"Needs \"Depth of field\" on the Visual Effects page.")
+		"Needs \"Depth of field\" on the Visual Effects page."])
 	GreyUnless(dof, function(db) return db.visualEffects and db.depthOfField end)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
@@ -1588,8 +1646,8 @@ end
 -- The "Height" section of a camera mode's page: how far it lowers the camera.
 local function HeightExtras(key, minV, maxV, tip)
 	return function(content, stack)
-		stack:Header(content, "Height")
-		local level = stack:Add(Slider(content, key, "Lower the camera", minV, maxV, 5, "%d°"), "slider")
+		stack:Header(content, L["Height"])
+		local level = stack:Add(Slider(content, key, L["Lower the camera"], minV, maxV, 5, "%d°"), "slider")
 		Tooltip(level, tip)
 	end
 end
@@ -1597,17 +1655,17 @@ end
 -- The "Turning" section of a travel mode's page (RP walk, auto-run).
 local function TurningExtras(swingKey, delayKey)
 	return function(content, stack)
-		stack:Header(content, "Turning")
-		local swing = stack:Add(Check(content, swingKey, "Glide round gently when you turn",
-			"When you turn left or right, the camera doesn't snap round with you: it carries on " ..
+		stack:Header(content, L["Turning"])
+		local swing = stack:Add(Check(content, swingKey, L["Glide round gently when you turn"],
+			L["When you turn left or right, the camera doesn't snap round with you: it carries on " ..
 			"as it was (sway and all) until you stop turning, then glides gently round to your " ..
 			"new facing, easing in and out. Dragging with either mouse button hands the camera " ..
-			"straight back to you."), "check")
+			"straight back to you."]), "check")
 		swing:HookScript("OnClick", Refresh) -- grey out / enable the wait below
-		local glideDelay = stack:Add(Slider(content, delayKey, "Wait before gliding", 0, 5, 0.5, "%.1f sec"),
+		local glideDelay = stack:Add(Slider(content, delayKey, L["Wait before gliding"], 0, 5, 0.5, L["%.1f sec"]),
 			"slider")
-		Tooltip(glideDelay, "After you stop turning, the view holds this long before gliding round " ..
-			"to your new facing, in case you turn again. Turning again starts the wait over.")
+		Tooltip(glideDelay, L["After you stop turning, the view holds this long before gliding round " ..
+			"to your new facing, in case you turn again. Turning again starts the wait over."])
 		GreyUnless(glideDelay, function(db) return db[swingKey] end)
 	end
 end
@@ -1638,100 +1696,100 @@ end
 
 -- Sub-page: events (emotes, a campfire, going AFK...) and the camera each starts.
 local EVENT_CAMERAS = {
-	{ value = "cozy", text = "Cozy camera" },
-	{ value = "vista", text = "Vista camera" },
-	{ value = "fish", text = "Fish camera" },
-	{ value = "afk", text = "AFK camera" },
-	{ value = "none", text = "No camera" },
+	{ value = "cozy", text = L["Cozy camera"] },
+	{ value = "vista", text = L["Vista camera"] },
+	{ value = "fish", text = L["Fish camera"] },
+	{ value = "afk", text = L["AFK camera"] },
+	{ value = "none", text = L["No camera"] },
 }
 local FLIGHT_CAMERAS = {
-	{ value = "flight", text = "Flight camera" },
-	{ value = "none", text = "No camera" },
+	{ value = "flight", text = L["Flight camera"] },
+	{ value = "none", text = L["No camera"] },
 }
 local WALK_CAMERAS = {
-	{ value = "walk", text = "RP walk camera" },
-	{ value = "none", text = "No camera" },
+	{ value = "walk", text = L["RP walk camera"] },
+	{ value = "none", text = L["No camera"] },
 }
 local RUN_CAMERAS = {
-	{ value = "run", text = "Auto-run camera" },
-	{ value = "none", text = "No camera" },
+	{ value = "run", text = L["Auto-run camera"] },
+	{ value = "none", text = L["No camera"] },
 }
 local DEATH_CAMERAS = {
-	{ value = true, text = "Death camera" },
-	{ value = false, text = "No camera" },
+	{ value = true, text = L["Death camera"] },
+	{ value = false, text = L["No camera"] },
 }
 local QUEST_CAMERAS = {
-	{ value = "quest", text = "Quest camera" },
-	{ value = "none", text = "No camera" },
+	{ value = "quest", text = L["Quest camera"] },
+	{ value = "none", text = L["No camera"] },
 }
 local TELE_CAMERAS = {
-	{ value = "tele", text = "Tele camera" },
-	{ value = "none", text = "No camera" },
+	{ value = "tele", text = L["Tele camera"] },
+	{ value = "none", text = L["No camera"] },
 }
 local EVENT_TIPS = {
-	Campfire = "Standing or sitting still with any of the buffs listed below (like Welcoming Campfire).",
-	Sit = "Doing the emote (or pressing the sit key). Moving, jumping or another emote ends it.",
-	Sleep = "Doing the emote. Moving, jumping or another emote ends it.",
-	Dance = "Doing the emote. Moving, jumping or another emote ends it.",
-	Kneel = "Doing the emote. Moving, jumping or another emote ends it.",
-	Chair = "Right-clicking a seat to sit on it; standing up ends it. Seats are recognised by name, " ..
-		"using the words below.",
-	Weapon = "Unsheathing your weapon with your Sheathe/Unsheathe key out of combat, for a \"hero shot\" " ..
+	Campfire = L["Standing or sitting still with any of the buffs listed below (like Welcoming Campfire)."],
+	Sit = L["Doing the emote (or pressing the sit key). Moving, jumping or another emote ends it."],
+	Sleep = L["Doing the emote. Moving, jumping or another emote ends it."],
+	Dance = L["Doing the emote. Moving, jumping or another emote ends it."],
+	Kneel = L["Doing the emote. Moving, jumping or another emote ends it."],
+	Chair = L["Right-clicking a seat to sit on it; standing up ends it. Seats are recognised by name, " ..
+		"using the words below."],
+	Weapon = L["Unsheathing your weapon with your Sheathe/Unsheathe key out of combat, for a \"hero shot\" " ..
 		"(not when it comes out from attacking or casting). Putting it away, running or " ..
 		"combat ends it. With the cozy camera it carries on while you auto-walk (the camera " ..
-		"swings round in front as you walk, even with Stop on move).",
-	Hearth = "Casting your Hearthstone (or Astral Recall, or any spell with \"Hearthstone\" in its " ..
+		"swings round in front as you walk, even with Stop on move)."],
+	Hearth = L["Casting your Hearthstone (or Astral Recall, or any spell with \"Hearthstone\" in its " ..
 		"name). The tele camera swings round in front of you and spins faster and faster as it " ..
 		"zooms in, until you go. The cast doesn't bring the UI back " ..
-		"or pause the camera.",
-	Teleport = "Casting a teleport (a mage's \"Teleport: Stormwind\" and the like, or a druid's " ..
-		"Teleport: Moonglade). The tele camera, as for the Hearthstone.",
-	Logout = "Logging out or quitting where the game counts down 20 seconds first (out in the " ..
+		"or pause the camera."],
+	Teleport = L["Casting a teleport (a mage's \"Teleport: Stormwind\" and the like, or a druid's " ..
+		"Teleport: Moonglade). The tele camera, as for the Hearthstone."],
+	Logout = L["Logging out or quitting where the game counts down 20 seconds first (out in the " ..
 		"world). In an inn or a city, logging out is instant, so there's nothing to see. Moving, " ..
 		"jumping, casting or Cancel ends it. It comes before any other event (a Hearthstone or " ..
-		"teleport cast calls it off).",
-	Stare = "Doing the emote while standing still. Moving, jumping or another emote ends it.",
-	Fishing = "Casting Fishing. It carries on after the cast ends (looting, casting again) until " ..
-		"you move or jump. The cast doesn't bring the UI back or pause the camera.",
-	AFK = "Being flagged AFK (/afk, or away long enough). With \"No camera\", Stand still below " ..
-		"still applies once you've stood still for its time.",
-	Still = "Standing still for the time below with nothing else going on (no emote, no other event). " ..
-		"\"No camera\": standing still starts nothing, though going AFK and the other events still do.",
-	Flight = "Taking off on a flight path. With \"No camera\", the camera is left to you for " ..
-		"the whole flight.",
-	Quest = "Talking to a quest giver (a quest to pick up or hand in). Works whether or not " ..
-		"CineMode is on.",
+		"teleport cast calls it off)."],
+	Stare = L["Doing the emote while standing still. Moving, jumping or another emote ends it."],
+	Fishing = L["Casting Fishing. It carries on after the cast ends (looting, casting again) until " ..
+		"you move or jump. The cast doesn't bring the UI back or pause the camera."],
+	AFK = L["Being flagged AFK (/afk, or away long enough). With \"No camera\", Stand still below " ..
+		"still applies once you've stood still for its time."],
+	Still = L["Standing still for the time below with nothing else going on (no emote, no other event). " ..
+		"\"No camera\": standing still starts nothing, though going AFK and the other events still do."],
+	Flight = L["Taking off on a flight path. With \"No camera\", the camera is left to you for " ..
+		"the whole flight."],
+	Quest = L["Talking to a quest giver (a quest to pick up or hand in). Works whether or not " ..
+		"CineMode is on."],
 }
 local function CreateEventsPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Camera Triggers")
+	local title = Label(content, "GameFontNormalLarge", L["Camera Triggers"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; a " ..
+		L["What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; a " ..
 		"Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a " ..
 		"drawn weapon, a campfire, and standing still last. Taking a flight has the flight " ..
 		"camera, talking to a quest giver the quest camera, and auto-walking, auto-running and " ..
-		"dying their own.")
+		"dying their own."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	local CAMERA_X, MUSIC_X, CINE_X = 250, 425, 490
-	local header = Header(content, "Event", subtitle, -20)
-	local cameraHeader = Label(content, "GameFontNormal", "Camera")
+	local header = Header(content, L["Event"], subtitle, -20)
+	local cameraHeader = Label(content, "GameFontNormal", L["Camera"])
 	cameraHeader:SetPoint("LEFT", header, "LEFT", CAMERA_X, 0)
-	local musicHeader = Label(content, "GameFontNormal", "Music")
+	local musicHeader = Label(content, "GameFontNormal", L["Music"])
 	musicHeader:SetPoint("LEFT", header, "LEFT", MUSIC_X, 0)
-	local MUSIC_TIP = "Music starts as this event's camera starts, unless the addon started music " ..
+	local MUSIC_TIP = L["Music starts as this event's camera starts, unless the addon started music " ..
 		"within the fatigue time (Audio page). Music already playing just carries on. Off: this " ..
-		"camera never starts music. Needs \"Allow CineMode to queue Music\" on the Audio page."
+		"camera never starts music. Needs \"Allow CineMode to queue Music\" on the Audio page."]
 	local cineHeader = Label(content, "GameFontNormal", "CineMode")
 	cineHeader:SetPoint("LEFT", header, "LEFT", CINE_X, 0)
-	local CINE_TIP = "With \"Start in CineMode\" off (Cinematic's main page), this event's camera " ..
+	local CINE_TIP = L["With \"Start in CineMode\" off (Cinematic's main page), this event's camera " ..
 		"starting brings CineMode on (the UI fades, music, visual effects), and it ends with the " ..
 		"camera. Tick Stand still and Go AFK for a screensaver: the normal UI while you play, " ..
-		"CineMode once you've been idle a while."
+		"CineMode once you've been idle a while."]
 	-- A CineMode column switch: only with "Start in CineMode" off and a camera picked.
 	local function CineCheck(cineKey, label, hasCamera)
 		local cine = Check(content, cineKey, "", CINE_TIP)
@@ -1741,9 +1799,9 @@ local function CreateEventsPanel()
 		end)
 	end
 	local MUSIC_EXTRA_TIPS = {
-		AFK = " While you're flagged AFK, whatever the camera. Off also keeps music from coming back " ..
-			"after a pause while you're away.",
-		Still = " Off also keeps music from coming back after a pause while you stand still.",
+		AFK = L[" While you're flagged AFK, whatever the camera. Off also keeps music from coming back " ..
+			"after a pause while you're away."],
+		Still = L[" Off also keeps music from coming back after a pause while you stand still."],
 	}
 
 	-- A camera choice: a dropdown, or on a client without the modern one a
@@ -1809,27 +1867,27 @@ local function CreateEventsPanel()
 		previous, dx = label, 0
 
 		if event.key == "Campfire" then
-			local buffBox = ListBox(content, "cozyBuffs", 420, "Buff names or spell IDs, separated " ..
-				"by commas. Names must match your game language; spell IDs work in any language.",
+			local buffBox = ListBox(content, "cozyBuffs", 420, L["Buff names or spell IDs, separated " ..
+				"by commas. Names must match your game language; spell IDs work in any language."],
 				function() if ns.CheckIdleBuffs then ns.CheckIdleBuffs() end end)
 			buffBox:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 26, -8)
-			local note = Label(content, "GameFontHighlightSmall", "Buffs, separated by commas.")
+			local note = Label(content, "GameFontHighlightSmall", L["Buffs, separated by commas."])
 			note:SetPoint("TOPLEFT", buffBox, "BOTTOMLEFT", -4, -4)
 			previous, dx = note, -22
 		elseif event.key == "Chair" then
-			local seatBox = ListBox(content, "cozyChairWords", 420, "Words that mark a seat when " ..
+			local seatBox = ListBox(content, "cozyChairWords", 420, L["Words that mark a seat when " ..
 				"they're in an object's name (\"Wooden Chair\"), separated by commas. Use words in " ..
-				"your game language.")
+				"your game language."])
 			seatBox:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 26, -8)
-			local note = Label(content, "GameFontHighlightSmall", "Seat words, separated by commas.")
+			local note = Label(content, "GameFontHighlightSmall", L["Seat words, separated by commas."])
 			note:SetPoint("TOPLEFT", seatBox, "BOTTOMLEFT", -4, -4)
 			previous, dx = note, -22
 		elseif event.key == "Still" then
-			local delay = Slider(content, "idleOrbitDelay", "After standing still for", 5, 120, 5, "%d sec")
+			local delay = Slider(content, "idleOrbitDelay", L["After standing still for"], 5, 120, 5, L["%d sec"])
 			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
-			Tooltip(delay, "How long you stand still before this row's camera starts (an event set to " ..
+			Tooltip(delay, L["How long you stand still before this row's camera starts (an event set to " ..
 				"the AFK camera, like going AFK, skips the wait). Also used by the other options that " ..
-				"mention standing still (tint, tracking, music, tooltips).")
+				"mention standing still (tint, tracking, music, tooltips)."])
 			previous, dx = delay, -30
 		end
 	end
@@ -1838,22 +1896,22 @@ local function CreateEventsPanel()
 	-- "No camera" value), and Music. (Dying's is the death song, which needs
 	-- only game music.)
 	for _, cam in ipairs({
-		{ label = "Auto-walk (RP walk)", cameraKey = "walkCamera", choices = WALK_CAMERAS, off = "none",
+		{ label = L["Auto-walk (RP walk)"], cameraKey = "walkCamera", choices = WALK_CAMERAS, off = "none",
 			key = "musicCamWalk", cineKey = "walkCine", delayKey = "walkCameraDelay",
-			delayLabel = "After auto-walking for",
-			tip = "Auto-walking (auto-run in walk mode). The camera's settings are on the RP Walk Cam " ..
-				"page; Camera Modes turns it off in some places." },
-		{ label = "Auto-run", cameraKey = "runCamera", choices = RUN_CAMERAS, off = "none", key = "musicCamRun",
-			cineKey = "runCine", delayKey = "runCameraDelay", delayLabel = "After auto-running for",
-			tip = "Auto-running. The camera's settings are on the Auto-run Cam page; Camera Modes turns " ..
-				"it off in some places." },
-		{ label = "Die", cameraKey = "deathOrbit", choices = DEATH_CAMERAS, off = false, key = "deathSong",
+			delayLabel = L["After auto-walking for"],
+			tip = L["Auto-walking (auto-run in walk mode). The camera's settings are on the RP Walk Cam " ..
+				"page; Camera Modes turns it off in some places."] },
+		{ label = L["Auto-run"], cameraKey = "runCamera", choices = RUN_CAMERAS, off = "none", key = "musicCamRun",
+			cineKey = "runCine", delayKey = "runCameraDelay", delayLabel = L["After auto-running for"],
+			tip = L["Auto-running. The camera's settings are on the Auto-run Cam page; Camera Modes turns " ..
+				"it off in some places."] },
+		{ label = L["Die"], cameraKey = "deathOrbit", choices = DEATH_CAMERAS, off = false, key = "deathSong",
 			cineKey = "deathCine",
 			deathSong = true,
-			tip = "Dying, until you release or are resurrected. The camera's settings are on the Death " ..
-				"Cam page; Camera Modes turns it off in some places.",
-			musicTip = "A song of its own plays while the death camera runs, in place of the zone music " ..
-				"(pick the songs on the Death Cam page). Needs game music on, not CineMode's music." },
+			tip = L["Dying, until you release or are resurrected. The camera's settings are on the Death " ..
+				"Cam page; Camera Modes turns it off in some places."],
+			musicTip = L["A song of its own plays while the death camera runs, in place of the zone music " ..
+				"(pick the songs on the Death Cam page). Needs game music on, not CineMode's music."] },
 	}) do
 		local label = Label(content, "GameFontHighlight", cam.label)
 		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -20)
@@ -1875,86 +1933,86 @@ local function CreateEventsPanel()
 		end
 		previous, dx = label, 0
 		if cam.delayKey then
-			local delay = Slider(content, cam.delayKey, cam.delayLabel, 0, 60, 1, "%d sec")
+			local delay = Slider(content, cam.delayKey, cam.delayLabel, 0, 60, 1, L["%d sec"])
 			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
-			Tooltip(delay, "How long you keep going before this row's camera starts (and CineMode, " ..
+			Tooltip(delay, L["How long you keep going before this row's camera starts (and CineMode, " ..
 				"if its CineMode box is ticked). 0: straight away. Stopping or moving by hand first " ..
-				"starts the count over.")
+				"starts the count over."])
 			GreyUnless(delay, function(db) return db[cam.cameraKey] ~= cam.off end)
 			previous, dx = delay, -30
 		end
 	end
 
 	local note = Label(content, "GameFontHighlightSmall",
-		"An event set to the AFK camera starts it without waiting out Stand still's time.")
+		L["An event set to the AFK camera starts it without waiting out Stand still's time."])
 	note:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -28)
 	note:SetWidth(520)
 	note:SetJustifyV("TOP")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Camera Triggers")
+	RegisterSubpage(canvas, L["Camera Triggers"])
 end
 
 local function CreateFlightPanel()
 	CreateCameraModePanel({
-		name = "Flight Cam",
-		description = "On flight paths. The camera swings round behind you as you take off, sways " ..
-			"behind you on the way and settles behind you before landing.",
-		instantKey = "taxiInstant", instantWhen = "take off",
+		name = L["Flight Cam"],
+		description = L["On flight paths. The camera swings round behind you as you take off, sways " ..
+			"behind you on the way and settles behind you before landing."],
+		instantKey = "taxiInstant", instantWhen = L["take off"],
 		start = function(content, stack)
-			stack:Add(Check(content, "dropTargetOnFlights", "Drop your target at takeoff",
-				"Your target's frames fade as if nothing were targeted, until you pick a new target " ..
-				"or land. (Addons can't clear the target itself; the game doesn't allow it.)"), "check")
-			stack:Add(Check(content, "taxiCenter", "Swing round behind you at takeoff",
-				"Slowly swings the camera round behind your character as you take off, ready for " ..
-				"the sway behind you. Also once the pause after you move the camera mid-flight is up."),
+			stack:Add(Check(content, "dropTargetOnFlights", L["Drop your target at takeoff"],
+				L["Your target's frames fade as if nothing were targeted, until you pick a new target " ..
+				"or land. (Addons can't clear the target itself; the game doesn't allow it.)"]), "check")
+			stack:Add(Check(content, "taxiCenter", L["Swing round behind you at takeoff"],
+				L["Slowly swings the camera round behind your character as you take off, ready for " ..
+				"the sway behind you. Also once the pause after you move the camera mid-flight is up."]),
 				"check")
 		end,
 		inputPauseKey = "taxiInputPause",
 		orbitPrefix = "taxiOrbit", style = "back",
-		rotateLabel = "Sway behind you",
-		rotateTip = "The camera swings from side to side behind your character, pausing between " ..
-			"moves. Dragging the camera pauses it.",
+		rotateLabel = L["Sway behind you"],
+		rotateTip = L["The camera swings from side to side behind your character, pausing between " ..
+			"moves. Dragging the camera pauses it."],
 		extras = function(content, stack)
-			stack:Header(content, "Fly-bys")
-			stack:Add(Check(content, "taxiFlyBy", "Random fly-bys",
-				"Now and then in the middle of a flight, the camera slowly turns round to look back " ..
+			stack:Header(content, L["Fly-bys"])
+			stack:Add(Check(content, "taxiFlyBy", L["Random fly-bys"],
+				L["Now and then in the middle of a flight, the camera slowly turns round to look back " ..
 				"past you, holds there, then turns back behind you. On a route's first flight (its " ..
 				"length not known yet), just one, early on. Dragging the camera stops it. /cine flyby " ..
 				"starts one whenever you like. Once you move the camera yourself on a flight, " ..
-				"there are no more for that flight."), "check")
-			stack:Add(Check(content, "flyByLook", "Do /look as a fly-by starts",
-				"Your character looks around as the camera starts turning, as if they'd spotted " ..
-				"something. Players nearby see the emote in chat. Fly-bys you start count too."), "check")
-			local every = stack:Add(Slider(content, "taxiFlyByEvery", "About one every", 30, 300, 10, "%d sec"), "slider")
-			Tooltip(every, "Random fly-bys are spread over the part of the flight below: one per this " ..
-				"many seconds of it (at least one), each at a random moment in its share.")
-			local from = stack:Add(Slider(content, "taxiFlyByFrom", "Not before", 0, 100, 5, "%d%% of the way"), "slider")
-			Tooltip(from, "Keeps random fly-bys away from takeoff.")
-			local to = stack:Add(Slider(content, "taxiFlyByTo", "Not after", 0, 100, 5, "%d%% of the way"), "slider")
-			Tooltip(to, "Keeps random fly-bys away from landing (and the settle before it).")
-			local angle = stack:Add(Slider(content, "flyByAngle", "Turn round to", 90, 180, 5, "%d° from behind you"), "slider")
-			Tooltip(angle, "The camera lines up behind you, then turns this far round: 180 looks " ..
-				"straight back at you.")
-			local turnTime = stack:Add(Slider(content, "flyByTurnTime", "Turn round takes", 3, 20, 1, "%d sec"), "slider")
-			Tooltip(turnTime, "How long the turn round takes, easing in and out.")
-			stack:Add(Slider(content, "flyByHold", "Look back for", 0, 20, 1, "%d sec"), "slider")
-			stack:Add(Slider(content, "flyByBackTime", "Turn back takes", 3, 20, 1, "%d sec"), "slider")
+				"there are no more for that flight."]), "check")
+			stack:Add(Check(content, "flyByLook", L["Do /look as a fly-by starts"],
+				L["Your character looks around as the camera starts turning, as if they'd spotted " ..
+				"something. Players nearby see the emote in chat. Fly-bys you start count too."]), "check")
+			local every = stack:Add(Slider(content, "taxiFlyByEvery", L["About one every"], 30, 300, 10, L["%d sec"]), "slider")
+			Tooltip(every, L["Random fly-bys are spread over the part of the flight below: one per this " ..
+				"many seconds of it (at least one), each at a random moment in its share."])
+			local from = stack:Add(Slider(content, "taxiFlyByFrom", L["Not before"], 0, 100, 5, L["%d%% of the way"]), "slider")
+			Tooltip(from, L["Keeps random fly-bys away from takeoff."])
+			local to = stack:Add(Slider(content, "taxiFlyByTo", L["Not after"], 0, 100, 5, L["%d%% of the way"]), "slider")
+			Tooltip(to, L["Keeps random fly-bys away from landing (and the settle before it)."])
+			local angle = stack:Add(Slider(content, "flyByAngle", L["Turn round to"], 90, 180, 5, L["%d° from behind you"]), "slider")
+			Tooltip(angle, L["The camera lines up behind you, then turns this far round: 180 looks " ..
+				"straight back at you."])
+			local turnTime = stack:Add(Slider(content, "flyByTurnTime", L["Turn round takes"], 3, 20, 1, L["%d sec"]), "slider")
+			Tooltip(turnTime, L["How long the turn round takes, easing in and out."])
+			stack:Add(Slider(content, "flyByHold", L["Look back for"], 0, 20, 1, L["%d sec"]), "slider")
+			stack:Add(Slider(content, "flyByBackTime", L["Turn back takes"], 3, 20, 1, L["%d sec"]), "slider")
 
-			stack:Header(content, "Landing")
-			stack:Add(Check(content, "taxiSettle", "Lock the camera behind you before landing",
-				"Shortly before you land, the rotation stops and the camera turns back behind you " ..
+			stack:Header(content, L["Landing"])
+			stack:Add(Check(content, "taxiSettle", L["Lock the camera behind you before landing"],
+				L["Shortly before you land, the rotation stops and the camera turns back behind you " ..
 				"and stays there until you touch down. Needs one flight on a " ..
 				"route to learn how long it takes. Skipped if you've moved the camera yourself on that " ..
-				"flight: it stays how you set it."), "check")
-			stack:Add(Check(content, "taxiLandZoom", "Put the zoom back when you land",
-				"As you land, the camera glides back to the zoom distance you had when you took " ..
-				"off. If you zoomed yourself on the way, it stays where you put it."), "check")
-			local settleLead = stack:Add(Slider(content, "taxiSettleLead", "Behind you by", 2, 20, 1,
-				"%d sec before landing"), "slider")
-			Tooltip(settleLead, "The camera turns back over the 6 seconds before this, so it's settled " ..
-				"behind you this long before you land.")
+				"flight: it stays how you set it."]), "check")
+			stack:Add(Check(content, "taxiLandZoom", L["Put the zoom back when you land"],
+				L["As you land, the camera glides back to the zoom distance you had when you took " ..
+				"off. If you zoomed yourself on the way, it stays where you put it."]), "check")
+			local settleLead = stack:Add(Slider(content, "taxiSettleLead", L["Behind you by"], 2, 20, 1,
+				L["%d sec before landing"]), "slider")
+			Tooltip(settleLead, L["The camera turns back over the 6 seconds before this, so it's settled " ..
+				"behind you this long before you land."])
 		end,
 		zoomPrefix = "taxiZoom", dofKey = "dofFlight",
 	})
@@ -1962,15 +2020,15 @@ end
 
 local function CreateStandingPanel()
 	CreateCameraModePanel({
-		name = "AFK Cam",
-		description = "Once you've stood still for a while with the UI faded, or as soon as you " ..
+		name = L["AFK Cam"],
+		description = L["Once you've stood still for a while with the UI faded, or as soon as you " ..
 			"go AFK, the camera slowly sweeps around your character. Moving stops it. What starts it, " ..
-			"and how long you stand still first, is on the Camera Triggers page.",
+			"and how long you stand still first, is on the Camera Triggers page."],
 		inputPauseKey = "idleInputPause",
 		orbitPrefix = "idleOrbit", style = "sweep",
-		rotateLabel = "Sweep round you",
-		rotateTip = "The camera sweeps around your character, pausing between sweeps. Moving or " ..
-			"dragging the camera stops it.",
+		rotateLabel = L["Sweep round you"],
+		rotateTip = L["The camera sweeps around your character, pausing between sweeps. Moving or " ..
+			"dragging the camera stops it."],
 		zoomPrefix = "idleZoom",
 		dofKey = "dofIdle",
 	})
@@ -1978,48 +2036,48 @@ end
 
 local function CreateAutoRunPanel()
 	CreateCameraModePanel({
-		name = "Auto-run Cam",
-		description = "While you're auto-running (the auto-run key). Pressing forward or back, or " ..
+		name = L["Auto-run Cam"],
+		description = L["While you're auto-running (the auto-run key). Pressing forward or back, or " ..
 			"stopping, ends it; stop and stand, and the AFK camera takes over. Auto-" ..
-			"walking counts as RP walk instead.",
+			"walking counts as RP walk instead."],
 		instantKey = "runInstant", instantWhen = "auto-run",
 		inputPauseKey = "runInputPause",
 		orbitPrefix = "runOrbit", style = "back",
-		rotateLabel = "Sway behind you",
-		rotateTip = "The camera swings gently from side to side behind your character, pausing " ..
-			"between moves.",
+		rotateLabel = L["Sway behind you"],
+		rotateTip = L["The camera swings gently from side to side behind your character, pausing " ..
+			"between moves."],
 		extras = TurningExtras("runSwingBehind", "runGlideDelay"),
 		zoomPrefix = "runZoom",
-		zoomTip = "The camera eases out a little, then drifts in and out around your own distance. " ..
-			"When you stop it glides back.",
+		zoomTip = L["The camera eases out a little, then drifts in and out around your own distance. " ..
+			"When you stop it glides back."],
 		dofKey = "dofRun",
 	})
 end
 
 local function CreateCozyPanel()
 	CreateCameraModePanel({
-		name = "Cozy Cam",
-		description = "Resting at a campfire, sitting, sleeping, dancing and the like (whichever " ..
+		name = L["Cozy Cam"],
+		description = L["Resting at a campfire, sitting, sleeping, dancing and the like (whichever " ..
 			"events pick it on the Camera Triggers page): the camera swings slowly round to face you, then " ..
 			"sways gently from side to side in front of you, and eases in close. Moving (or standing " ..
-			"up) ends it.",
+			"up) ends it."],
 		inputPauseKey = "cozyInputPause",
 		orbitPrefix = "cozyOrbit", style = "back",
-		rotateLabel = "Sway in front of you",
-		rotateTip = "Once it has swung round to face you, the camera sways gently from side to side " ..
-			"in front of your character, pausing between moves.",
-		extras = HeightExtras("cozyLevel", -30, 80, "As it swings round, the camera also comes down " ..
+		rotateLabel = L["Sway in front of you"],
+		rotateTip = L["Once it has swung round to face you, the camera sways gently from side to side " ..
+			"in front of your character, pausing between moves."],
+		extras = HeightExtras("cozyLevel", -30, 80, L["As it swings round, the camera also comes down " ..
 			"this much toward the ground, so it feels low and close rather than looking down from " ..
 			"above. It stops at the ground, so a big number just means \"as low as it goes\". 0 " ..
-			"keeps your angle."),
+			"keeps your angle."]),
 		zoomPrefix = "cozyZoom",
-		zoomTip = "A close, gentle zoom: it starts by easing in to the close-up distance below, then " ..
-			"drifts a little in and out around it.",
+		zoomTip = L["A close, gentle zoom: it starts by easing in to the close-up distance below, then " ..
+			"drifts a little in and out around it."],
 		zoomExtras = function(content, stack)
-			local close = stack:Add(Slider(content, "cozyZoomClose", "Zoom in to about", 2, 20, 0.5,
-				"%.1f yards"), "slider")
-			Tooltip(close, "The close-up distance the cozy camera zooms in to, if you're further out. " ..
-				"The zoom settings above then work around it. Your own distance comes back afterwards.")
+			local close = stack:Add(Slider(content, "cozyZoomClose", L["Zoom in to about"], 2, 20, 0.5,
+				L["%.1f yards"]), "slider")
+			Tooltip(close, L["The close-up distance the cozy camera zooms in to, if you're further out. " ..
+				"The zoom settings above then work around it. Your own distance comes back afterwards."])
 		end,
 		dofKey = "dofCozy",
 	})
@@ -2027,66 +2085,66 @@ end
 
 local function CreateVistaPanel()
 	CreateCameraModePanel({
-		name = "Vista Cam",
-		description = "Stop and /stare out at the view (or any event set to it on the Camera Triggers page): " ..
+		name = L["Vista Cam"],
+		description = L["Stop and /stare out at the view (or any event set to it on the Camera Triggers page): " ..
 			"the camera glides round behind you and sways very gently there, looking out the way " ..
 			"you're facing. Like the RP walk camera, only slower and softer. Moving, jumping or " ..
-			"another emote ends it.",
+			"another emote ends it."],
 		inputPauseKey = "vistaInputPause",
-		inputPauseTip = "It glides back behind you first.",
+		inputPauseTip = L["It glides back behind you first."],
 		orbitPrefix = "vistaOrbit", style = "back",
-		rotateLabel = "Sway behind you",
-		rotateTip = "The camera swings very gently from side to side behind your character, " ..
-			"pausing between moves.",
-		extras = HeightExtras("vistaLevel", -30, 45, "The camera sways this much lower than where " ..
+		rotateLabel = L["Sway behind you"],
+		rotateTip = L["The camera swings very gently from side to side behind your character, " ..
+			"pausing between moves."],
+		extras = HeightExtras("vistaLevel", -30, 45, L["The camera sways this much lower than where " ..
 			"it lines up behind you, so it looks out across the view rather than down at it. 0 " ..
-			"keeps your angle."),
+			"keeps your angle."]),
 		zoomPrefix = "vistaZoom",
-		zoomTip = "The camera eases out a little, then drifts slowly in and out around your own " ..
-			"distance. Your own distance comes back afterwards.",
+		zoomTip = L["The camera eases out a little, then drifts slowly in and out around your own " ..
+			"distance. Your own distance comes back afterwards."],
 		dofKey = "dofVista",
 	})
 end
 
 local function CreateFishPanel()
 	CreateCameraModePanel({
-		name = "Fish Cam",
-		description = "Cast Fishing (or any event set to it on the Camera Triggers page): the vista camera, " ..
+		name = L["Fish Cam"],
+		description = L["Cast Fishing (or any event set to it on the Camera Triggers page): the vista camera, " ..
 			"made for fishing. The camera glides round behind you and sways only a little either " ..
-			"side, so your bobber stays in view. It carries on after the cast until you move or jump.",
+			"side, so your bobber stays in view. It carries on after the cast until you move or jump."],
 		inputPauseKey = "fishInputPause",
-		inputPauseTip = "It glides back behind you first.",
+		inputPauseTip = L["It glides back behind you first."],
 		orbitPrefix = "fishOrbit", style = "back",
-		rotateLabel = "Sway behind you",
-		rotateTip = "The camera swings a little from side to side behind your character, " ..
-			"pausing between moves. Narrower than the vista camera's sway.",
-		extras = HeightExtras("fishLevel", -30, 45, "The camera sways this much lower than where " ..
+		rotateLabel = L["Sway behind you"],
+		rotateTip = L["The camera swings a little from side to side behind your character, " ..
+			"pausing between moves. Narrower than the vista camera's sway."],
+		extras = HeightExtras("fishLevel", -30, 45, L["The camera sways this much lower than where " ..
 			"it lines up behind you, so it looks out across the water rather than down at it. 0 " ..
-			"keeps your angle."),
+			"keeps your angle."]),
 		zoomPrefix = "fishZoom",
-		zoomTip = "The camera eases out a little, then drifts slowly in and out around your own " ..
-			"distance. Your own distance comes back afterwards.",
+		zoomTip = L["The camera eases out a little, then drifts slowly in and out around your own " ..
+			"distance. Your own distance comes back afterwards."],
 		dofKey = "dofFish",
 	})
 end
 
 local function CreateWalkPanel()
 	CreateCameraModePanel({
-		name = "RP Walk Cam",
-		description = "While you're auto-walking (auto-run in walk mode). Walking by hand cancels " ..
+		name = L["RP Walk Cam"],
+		description = L["While you're auto-walking (auto-run in walk mode). Walking by hand cancels " ..
 			"the camera, as all moving by hand does. Stop and stand, and the AFK camera takes over. " ..
-			"Walking is recognised from your speed; /cine walk shows what the addon thinks.",
+			"Walking is recognised from your speed; /cine walk shows what the addon thinks."],
 		instantKey = "walkInstant", instantWhen = "walk",
 		inputPauseKey = "walkInputPause",
-		inputPauseTip = "Keep it short, so it's back in time if you need to steer.",
+		inputPauseTip = L["Keep it short, so it's back in time if you need to steer."],
 		orbitPrefix = "walkOrbit", style = "back",
-		rotateLabel = "Sway behind you",
-		rotateTip = "The camera swings gently from side to side behind your character, pausing " ..
-			"between moves.",
+		rotateLabel = L["Sway behind you"],
+		rotateTip = L["The camera swings gently from side to side behind your character, pausing " ..
+			"between moves."],
 		extras = TurningExtras("walkSwingBehind", "walkGlideDelay"),
 		zoomPrefix = "walkZoom",
-		zoomTip = "The camera eases out a little, then drifts in and out around your own distance. " ..
-			"When you stop walking it glides back.",
+		zoomTip = L["The camera eases out a little, then drifts in and out around your own distance. " ..
+			"When you stop walking it glides back."],
 		dofKey = "dofWalk",
 	})
 end
@@ -2096,68 +2154,68 @@ end
 local function CreateDeathPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Death Cam")
+	local title = Label(content, "GameFontNormalLarge", L["Death Cam"])
 	title:SetPoint("TOPLEFT", 16, -16)
-	local subtitle = Label(content, "GameFontHighlightSmall", "When you die, the camera turns " ..
+	local subtitle = Label(content, "GameFontHighlightSmall", L["When you die, the camera turns " ..
 		"slowly round your body until you release or are resurrected. CineMode stays on " ..
 		"(straight away), with the release button (and any soulstone or Reincarnation " ..
-		"button) still showing.")
+		"button) still showing."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 	local function IfOn(db) return db.deathOrbit end
 
 	local stack = Stack(subtitle, "label")
-	stack:Header(content, "Starting")
-	local on = stack:Add(Check(content, "deathOrbit", "Use the death camera",
-		"The camera turns steadily round your character while you're dead. Moving the camera " ..
+	stack:Header(content, L["Starting"])
+	local on = stack:Add(Check(content, "deathOrbit", L["Use the death camera"],
+		L["The camera turns steadily round your character while you're dead. Moving the camera " ..
 		"yourself (dragging, camera keys, zooming) hands it back to you: it stops where it is " ..
-		"and doesn't move again until your next death."), "check")
+		"and doesn't move again until your next death."]), "check")
 	on:HookScript("OnClick", Refresh) -- grey out / enable everything below
-	local delay = stack:Add(Slider(content, "deathOrbitDelay", "Start after", 0, 10, 0.5, "%.1f sec"), "slider")
-	Tooltip(delay, "How long after you die before the camera starts turning.")
+	local delay = stack:Add(Slider(content, "deathOrbitDelay", L["Start after"], 0, 10, 0.5, L["%.1f sec"]), "slider")
+	Tooltip(delay, L["How long after you die before the camera starts turning."])
 	GreyUnless(delay, IfOn)
 
 	-- Left column: rotation, height
-	local rotationHeader = stack:Header(content, "Rotation")
-	local right = stack:Add(Check(content, "deathOrbitRight", "Turn clockwise"), "check")
+	local rotationHeader = stack:Header(content, L["Rotation"])
+	local right = stack:Add(Check(content, "deathOrbitRight", L["Turn clockwise"]), "check")
 	GreyUnless(right, function(db) return IfOn(db) and not db.deathOrbitRandomDir end)
-	local randomDir = stack:Add(Check(content, "deathOrbitRandomDir", "Random direction",
-		"Each death, the camera picks clockwise or anticlockwise at random."), "check")
+	local randomDir = stack:Add(Check(content, "deathOrbitRandomDir", L["Random direction"],
+		L["Each death, the camera picks clockwise or anticlockwise at random."]), "check")
 	randomDir:HookScript("OnClick", Refresh)
 	GreyUnless(randomDir, IfOn)
-	local speed = stack:Add(Slider(content, "deathOrbitSpeed", "Turn speed", 1, 20, 1, "%d°/sec"), "slider")
+	local speed = stack:Add(Slider(content, "deathOrbitSpeed", L["Turn speed"], 1, 20, 1, "%d°/sec"), "slider")
 	GreyUnless(speed, IfOn)
-	stack:Header(content, "Height")
-	local level = stack:Add(Slider(content, "deathLevel", "Raise the camera", 0, 90, 5, "%d°"), "slider")
-	Tooltip(level, "As it starts, the camera rises this much to look down on your body; it comes " ..
+	stack:Header(content, L["Height"])
+	local level = stack:Add(Slider(content, "deathLevel", L["Raise the camera"], 0, 90, 5, "%d°"), "slider")
+	Tooltip(level, L["As it starts, the camera rises this much to look down on your body; it comes " ..
 		"back down afterwards. The game stops it just short of straight down, so a big number " ..
-		"means \"as high as it goes\". 0 keeps your angle.")
+		"means \"as high as it goes\". 0 keeps your angle."])
 	GreyUnless(level, IfOn)
 
 	-- Right column: zoom, screen, music
-	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
+	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
 	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
 	local rightStack = Stack(zoomHeader)
-	local zoom = rightStack:Add(Slider(content, "deathZoom", "Zoom out by", 0, 15, 0.5, "%.1f yards"), "slider")
-	Tooltip(zoom, "Meanwhile the camera pulls back this far, and returns to your own distance " ..
-		"afterwards. Zooming yourself leaves it where you put it.")
+	local zoom = rightStack:Add(Slider(content, "deathZoom", L["Zoom out by"], 0, 15, 0.5, L["%.1f yards"]), "slider")
+	Tooltip(zoom, L["Meanwhile the camera pulls back this far, and returns to your own distance " ..
+		"afterwards. Zooming yourself leaves it where you put it."])
 	GreyUnless(zoom, IfOn)
 
-	rightStack:Header(content, "Screen")
-	local screen = rightStack:Add(Check(content, "deathScreen", "Darken the screen",
-		"The world dims and goes cold and grey-blue, with a heavy vignette closing in from the " ..
-		"edges. It clears when you release or come back."), "check")
+	rightStack:Header(content, L["Screen"])
+	local screen = rightStack:Add(Check(content, "deathScreen", L["Darken the screen"],
+		L["The world dims and goes cold and grey-blue, with a heavy vignette closing in from the " ..
+		"edges. It clears when you release or come back."]), "check")
 	screen:HookScript("OnClick", Refresh) -- grey out / enable the strength below
 	GreyUnless(screen, IfOn)
-	local screenStrength = rightStack:Add(Slider(content, "deathScreenStrength", "Strength", 10, 100, 5,
+	local screenStrength = rightStack:Add(Slider(content, "deathScreenStrength", L["Strength"], 10, 100, 5,
 		"%d%%", 100), "slider")
 	GreyUnless(screenStrength, function(db) return IfOn(db) and db.deathScreen end)
 
-	rightStack:Header(content, "Music")
-	local song = rightStack:Add(Check(content, "deathSong", "Play a death song",
-		"While the death camera runs, a song picked at random from the list below plays in place " ..
-		"of the zone music. Needs game music on. It stops when you release or come back."), "check")
+	rightStack:Header(content, L["Music"])
+	local song = rightStack:Add(Check(content, "deathSong", L["Play a death song"],
+		L["While the death camera runs, a song picked at random from the list below plays in place " ..
+		"of the zone music. Needs game music on. It stops when you release or come back."]), "check")
 	song:HookScript("OnClick", Refresh) -- grey out / enable the file box below
 	GreyUnless(song, IfOn)
 	local songBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
@@ -2177,73 +2235,73 @@ local function CreateDeathPanel()
 		self:SetEnabled(db.deathOrbit and db.deathSong)
 	end
 	controls[#controls + 1] = songBox
-	Tooltip(songBox, "Music file IDs, separated by commas; one is picked at random each time " ..
-		"you die (Wowhead lists the IDs on each sound's page). Try one with /cine songtest <ID>.")
-	rightStack:Note(content, "Music file IDs, separated by commas. One is picked at random.")
+	Tooltip(songBox, L["Music file IDs, separated by commas; one is picked at random each time " ..
+		"you die (Wowhead lists the IDs on each sound's page). Try one with /cine songtest <ID>."])
+	rightStack:Note(content, L["Music file IDs, separated by commas. One is picked at random."])
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Death Cam")
+	RegisterSubpage(canvas, L["Death Cam"])
 end
 
 -- Not a CreateCameraModePanel page either (QuestCam.lua, started by the quest
 -- giver event), but laid out the same way.
 local QUEST_SIDES = {
-	{ value = "click", text = "Where you clicked them" },
-	{ value = "random", text = "Either side, at random" },
-	{ value = "right", text = "Your right" },
-	{ value = "left", text = "Your left" },
+	{ value = "click", text = L["Where you clicked them"] },
+	{ value = "random", text = L["Either side, at random"] },
+	{ value = "right", text = L["Your right"] },
+	{ value = "left", text = L["Your left"] },
 }
 local function CreateQuestPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Quest Cam")
+	local title = Label(content, "GameFontNormalLarge", L["Quest Cam"])
 	title:SetPoint("TOPLEFT", 16, -16)
-	local subtitle = Label(content, "GameFontHighlightSmall", "Talking to a quest giver, the " ..
+	local subtitle = Label(content, "GameFontHighlightSmall", L["Talking to a quest giver, the " ..
 		"camera zooms in and swings round behind you, looking past you at them. It goes back " ..
 		"once you close the window or move off (your zoom stays if you zoomed yourself meanwhile). Works " ..
 		"whether or not CineMode is on. The \"Talk to a quest giver\" event on the Events " ..
-		"page can also turn it off or make it wait a moment.")
+		"page can also turn it off or make it wait a moment."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 	local function IfOn(db) return db.eventQuestCamera ~= "none" end
 
 	local stack = Stack(subtitle, "label")
-	stack:Header(content, "Starting")
-	local on = stack:Add(Check(content, "eventQuestCamera", "Use the quest camera",
-		"Same as setting the \"Talk to a quest giver\" event to the quest camera (on) or no " ..
-		"camera (off) on the Camera Triggers page.",
+	stack:Header(content, L["Starting"])
+	local on = stack:Add(Check(content, "eventQuestCamera", L["Use the quest camera"],
+		L["Same as setting the \"Talk to a quest giver\" event to the quest camera (on) or no " ..
+		"camera (off) on the Camera Triggers page."],
 		function(value)
 			ns.GetDB().eventQuestCamera = value and "quest" or "none"
 			Refresh()
 		end), "check")
 	on.Refresh = function(self) self:SetChecked(ns.GetDB().eventQuestCamera ~= "none") end
-	local gossip = stack:Add(Check(content, "questCamAllGossip", "Every NPC you talk to",
-		"Also for NPCs with nothing to say about quests (innkeepers, guards...). Off: only when " ..
-		"they have a quest to offer or take in."), "check")
+	local gossip = stack:Add(Check(content, "questCamAllGossip", L["Every NPC you talk to"],
+		L["Also for NPCs with nothing to say about quests (innkeepers, guards...). Off: only when " ..
+		"they have a quest to offer or take in."]), "check")
 	GreyUnless(gossip, IfOn)
 
 	-- Left column: rotation, height, over the shoulder
-	local rotationHeader = stack:Header(content, "Rotation")
-	local duration = stack:Add(Slider(content, "questCamTime", "Swing behind you takes", 1, 6, 0.25, "%.2f sec"), "slider")
-	Tooltip(duration, "The turn to the side starts once the swing is done.")
+	local rotationHeader = stack:Header(content, L["Rotation"])
+	local duration = stack:Add(Slider(content, "questCamTime", L["Swing behind you takes"], 1, 6, 0.25, L["%.2f sec"]), "slider")
+	Tooltip(duration, L["The turn to the side starts once the swing is done."])
 	GreyUnless(duration, IfOn)
-	local angle = stack:Add(Slider(content, "questCamAngle", "Come round to the side", 0, 90, 5, "%d°"), "slider")
-	Tooltip(angle, "After swinging behind you, the camera comes round this far to one side, so " ..
+	local angle = stack:Add(Slider(content, "questCamAngle", L["Come round to the side"], 0, 90, 5, "%d°"), "slider")
+	Tooltip(angle, L["After swinging behind you, the camera comes round this far to one side, so " ..
 		"you see the quest giver past you at an angle rather than straight over your head. " ..
-		"0 stays straight behind you. It turns back behind you as the window closes.")
+		"0 stays straight behind you. It turns back behind you as the window closes."])
 	GreyUnless(angle, IfOn)
-	local turnTime = stack:Add(Slider(content, "questCamTurnTime", "Turn to the side takes", 1, 8, 0.5, "%.1f sec"), "slider")
-	Tooltip(turnTime, "It starts once the swing behind you is done, while the zoom carries on. " ..
-		"The tilt down follows.")
+	local turnTime = stack:Add(Slider(content, "questCamTurnTime", L["Turn to the side takes"], 1, 8, 0.5, L["%.1f sec"]), "slider")
+	Tooltip(turnTime, L["It starts once the swing behind you is done, while the zoom carries on. " ..
+		"The tilt down follows."])
 	GreyUnless(turnTime, IfOn)
-	local SIDE_TIP = "Which side the camera comes round to. On your right, the quest giver is on " ..
+	local SIDE_TIP = L["Which side the camera comes round to. On your right, the quest giver is on " ..
 		"the right of the screen. (The game doesn't tell addons where the quest giver stands, or " ..
 		"what's around you, so it can't pick the open side.) \"Where you clicked them\": the side " ..
 		"of the screen you clicked the quest giver on, and the camera turns toward it; talking " ..
-		"to them with a key instead, the side is picked at random."
-	stack:Add(Label(content, "GameFontHighlight", "Side"), "label")
+		"to them with a key instead, the side is picked at random."]
+	stack:Add(Label(content, "GameFontHighlight", L["Side"]), "label")
 	local side = Dropdown(content, "questCamSide", QUEST_SIDES, 200)
 	if side then
 		stack:Add(side, "dropdown")
@@ -2255,84 +2313,84 @@ local function CreateQuestPanel()
 			GreyUnless(check, IfOn)
 		end
 	end
-	local drift = stack:Add(Slider(content, "questCamDrift", "Drift", 0, 10, 1, "%d°"), "slider")
-	Tooltip(drift, "Once the camera has settled, it drifts slowly to and fro, side to side, " ..
-		"across this many degrees, so the shot isn't stock-still. 0 holds still.")
+	local drift = stack:Add(Slider(content, "questCamDrift", L["Drift"], 0, 10, 1, "%d°"), "slider")
+	Tooltip(drift, L["Once the camera has settled, it drifts slowly to and fro, side to side, " ..
+		"across this many degrees, so the shot isn't stock-still. 0 holds still."])
 	GreyUnless(drift, IfOn)
-	stack:Header(content, "Height")
-	local lower = stack:Add(Slider(content, "questCamLower", "Lower the camera", 0, 45, 5, "%d°"), "slider")
-	Tooltip(lower, "How far the camera comes down toward eye level, from wherever you had it. " ..
+	stack:Header(content, L["Height"])
+	local lower = stack:Add(Slider(content, "questCamLower", L["Lower the camera"], 0, 45, 5, "%d°"), "slider")
+	Tooltip(lower, L["How far the camera comes down toward eye level, from wherever you had it. " ..
 		"Much more and, close up, it can meet the ground or scenery behind you (a small jump). " ..
 		"It goes back up as the window closes (unless you moved the camera yourself meanwhile). " ..
-		"0 keeps your angle.")
+		"0 keeps your angle."])
 	GreyUnless(lower, IfOn)
 
-	stack:Header(content, "Over the shoulder (experimental)")
-	local overShoulder = stack:Add(Check(content, "questCamOverShoulder", "Move over your shoulder",
-		"The camera also moves to your right, putting you on the left of the screen and the " ..
+	stack:Header(content, L["Over the shoulder (experimental)"])
+	local overShoulder = stack:Add(Check(content, "questCamOverShoulder", L["Move over your shoulder"],
+		L["The camera also moves to your right, putting you on the left of the screen and the " ..
 		"quest giver on the right. This uses one of Blizzard's experimental camera settings: the " ..
 		"game shows its experimental camera warning when it's used (Accept keeps it working). " ..
-		"Your own setting comes back as the window closes."), "check")
+		"Your own setting comes back as the window closes."]), "check")
 	overShoulder:HookScript("OnClick", Refresh)
 	GreyUnless(overShoulder, IfOn)
 	local function IfShoulder(db) return IfOn(db) and db.questCamOverShoulder end
-	local shoulder = stack:Add(Slider(content, "questCamShoulder", "Shoulder offset", 0.25, 2, 0.25, "%.2f yards"), "slider")
-	Tooltip(shoulder, "How far the camera moves to your right. The game ignores this while " ..
-		"its Keep Character Centered option (Accessibility) is on: see below.")
+	local shoulder = stack:Add(Slider(content, "questCamShoulder", L["Shoulder offset"], 0.25, 2, 0.25, L["%.2f yards"]), "slider")
+	Tooltip(shoulder, L["How far the camera moves to your right. The game ignores this while " ..
+		"its Keep Character Centered option (Accessibility) is on: see below."])
 	GreyUnless(shoulder, IfShoulder)
-	local uncenter = stack:Add(Check(content, "questCamUncenter", "Turn off Keep Character Centered meanwhile",
-		"The game's Keep Character Centered option (Accessibility, on by default) stops the " ..
+	local uncenter = stack:Add(Check(content, "questCamUncenter", L["Turn off Keep Character Centered meanwhile"],
+		L["The game's Keep Character Centered option (Accessibility, on by default) stops the " ..
 		"camera moving over your shoulder. On: it's turned off while you talk to a quest giver, " ..
 		"and your setting comes back as the window closes. Off: with that option on, the " ..
-		"camera stays straight behind you."), "check")
+		"camera stays straight behind you."]), "check")
 	GreyUnless(uncenter, IfShoulder)
 
 	-- Right column: zoom
-	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
+	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
 	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
 	local right = Stack(zoomHeader)
-	local distance = right:Add(Slider(content, "questCamDistance", "Zoom in to about", 1.5, 10, 0.5, "%.1f yards"), "slider")
-	Tooltip(distance, "If you're further out than this. Closer already, it stays where it is.")
+	local distance = right:Add(Slider(content, "questCamDistance", L["Zoom in to about"], 1.5, 10, 0.5, L["%.1f yards"]), "slider")
+	Tooltip(distance, L["If you're further out than this. Closer already, it stays where it is."])
 	GreyUnless(distance, IfOn)
-	local zoomTime = right:Add(Slider(content, "questCamZoomTime", "Zoom in takes", 1, 10, 0.5, "%.1f sec"), "slider")
-	Tooltip(zoomTime, "The turn to the side happens along the way, then the tilt down.")
+	local zoomTime = right:Add(Slider(content, "questCamZoomTime", L["Zoom in takes"], 1, 10, 0.5, L["%.1f sec"]), "slider")
+	Tooltip(zoomTime, L["The turn to the side happens along the way, then the tilt down."])
 	GreyUnless(zoomTime, IfOn)
-	local zoomOutTime = right:Add(Slider(content, "questCamZoomOutTime", "Zoom back out takes", 1.5, 10, 0.5, "%.1f sec"), "slider")
-	Tooltip(zoomOutTime, "Leaving the quest giver, the camera zooms back out to your own distance " ..
+	local zoomOutTime = right:Add(Slider(content, "questCamZoomOutTime", L["Zoom back out takes"], 1.5, 10, 0.5, L["%.1f sec"]), "slider")
+	Tooltip(zoomOutTime, L["Leaving the quest giver, the camera zooms back out to your own distance " ..
 		"this slowly while you stand still (turning back behind you and tilting back up as it goes). " ..
-		"Walk off and it speeds up, back out in a moment.")
+		"Walk off and it speeds up, back out in a moment."])
 	GreyUnless(zoomOutTime, IfOn)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Quest Cam")
+	RegisterSubpage(canvas, L["Quest Cam"])
 end
 
 local function CreateTelePanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Tele Cam")
+	local title = Label(content, "GameFontNormalLarge", L["Tele Cam"])
 	title:SetPoint("TOPLEFT", 16, -16)
-	local subtitle = Label(content, "GameFontHighlightSmall", "Casting your Hearthstone or a " ..
+	local subtitle = Label(content, "GameFontHighlightSmall", L["Casting your Hearthstone or a " ..
 		"teleport, the camera swings round in front of you, quickly enough to be there before you " ..
 		"go, then spins round you faster and faster as it zooms in. Cancel the cast and it goes " ..
 		"back to where it was; once you're there, it swings round behind you. Its music, haze and " ..
 		"tooltips follow the Cozy Cam's settings. The events on the Camera Triggers page can also make it " ..
-		"wait a moment.")
+		"wait a moment."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 	local function IfOn(db) return db.eventHearthCamera ~= "none" or db.eventTeleportCamera ~= "none" end
 
 	local stack = Stack(subtitle, "label")
-	stack:Header(content, "Starting")
+	stack:Header(content, L["Starting"])
 	for _, event in ipairs({
-		{ key = "eventHearthCamera", label = "When you cast your Hearthstone",
-			tip = "Same as the \"Cast your Hearthstone\" event on the Camera Triggers page. Also Astral Recall, " ..
-				"and any spell with \"Hearthstone\" in its name (Dalaran, Garrison, the toys)." },
-		{ key = "eventTeleportCamera", label = "When you cast a teleport",
-			tip = "Same as the \"Cast a teleport\" event on the Camera Triggers page: a mage's \"Teleport: " ..
-				"Stormwind\" and the like, or a druid's Teleport: Moonglade." },
+		{ key = "eventHearthCamera", label = L["When you cast your Hearthstone"],
+			tip = L["Same as the \"Cast your Hearthstone\" event on the Camera Triggers page. Also Astral Recall, " ..
+				"and any spell with \"Hearthstone\" in its name (Dalaran, Garrison, the toys)."] },
+		{ key = "eventTeleportCamera", label = L["When you cast a teleport"],
+			tip = L["Same as the \"Cast a teleport\" event on the Camera Triggers page: a mage's \"Teleport: " ..
+				"Stormwind\" and the like, or a druid's Teleport: Moonglade."] },
 	}) do
 		local check = stack:Add(Check(content, event.key, event.label, event.tip,
 			function(value)
@@ -2343,56 +2401,56 @@ local function CreateTelePanel()
 	end
 
 	-- Left column: rotation, and after the cast
-	local rotationHeader = stack:Header(content, "Rotation")
-	local early = stack:Add(Slider(content, "teleArriveEarly", "Round in front of you", 0, 6, 0.5,
-		"%.1f sec before you go"), "slider")
-	Tooltip(early, "The swing round to face you is timed to get there this long before the cast " ..
-		"ends. More is a quicker swing.")
+	local rotationHeader = stack:Header(content, L["Rotation"])
+	local early = stack:Add(Slider(content, "teleArriveEarly", L["Round in front of you"], 0, 6, 0.5,
+		L["%.1f sec before you go"]), "slider")
+	Tooltip(early, L["The swing round to face you is timed to get there this long before the cast " ..
+		"ends. More is a quicker swing."])
 	GreyUnless(early, IfOn)
-	local accel = stack:Add(Slider(content, "teleSpinAccel", "Then speeds up by", 0, 30, 1,
-		"%d° per sec, each sec"), "slider")
-	Tooltip(accel, "Once round in front, the spin keeps going and picks up speed until you go. " ..
-		"0 keeps a steady speed.")
+	local accel = stack:Add(Slider(content, "teleSpinAccel", L["Then speeds up by"], 0, 30, 1,
+		L["%d° per sec, each sec"]), "slider")
+	Tooltip(accel, L["Once round in front, the spin keeps going and picks up speed until you go. " ..
+		"0 keeps a steady speed."])
 	GreyUnless(accel, IfOn)
-	local top = stack:Add(Slider(content, "teleSpinMax", "Top speed", 30, 360, 10, "%d° per sec"), "slider")
-	Tooltip(top, "The spin never goes faster than this.")
+	local top = stack:Add(Slider(content, "teleSpinMax", L["Top speed"], 30, 360, 10, L["%d° per sec"]), "slider")
+	Tooltip(top, L["The spin never goes faster than this."])
 	GreyUnless(top, IfOn)
-	local level = stack:Add(Slider(content, "teleLevel", "Bring the camera down", -30, 80, 5, "%d°"), "slider")
-	Tooltip(level, "As it swings round, the camera also comes down toward the ground (negative: up).")
+	local level = stack:Add(Slider(content, "teleLevel", L["Bring the camera down"], -30, 80, 5, "%d°"), "slider")
+	Tooltip(level, L["As it swings round, the camera also comes down toward the ground (negative: up)."])
 	GreyUnless(level, IfOn)
 
 
-	stack:Header(content, "Cancelling and arriving")
-	local back = stack:Add(Check(content, "teleReturn", "Turn back if you cancel",
-		"Moving, jumping or Esc cancels the cast: the spin slows to a stop and turns back to where " ..
-		"the camera was before you started. Off: it stops where it is."), "check")
+	stack:Header(content, L["Cancelling and arriving"])
+	local back = stack:Add(Check(content, "teleReturn", L["Turn back if you cancel"],
+		L["Moving, jumping or Esc cancels the cast: the spin slows to a stop and turns back to where " ..
+		"the camera was before you started. Off: it stops where it is."]), "check")
 	GreyUnless(back, IfOn)
-	local behind = stack:Add(Check(content, "teleBehind", "Swing behind you where you arrive",
-		"Once you're there (after the loading screen, if there is one), the camera swings round " ..
-		"behind you."), "check")
+	local behind = stack:Add(Check(content, "teleBehind", L["Swing behind you where you arrive"],
+		L["Once you're there (after the loading screen, if there is one), the camera swings round " ..
+		"behind you."]), "check")
 	GreyUnless(behind, IfOn)
 
 	-- Right column: zoom
-	local zoomHeader = Label(content, "GameFontNormal", "Zoom")
+	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
 	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
 	local right = Stack(zoomHeader)
-	local zoom = right:Add(Check(content, "teleZoom", "Zoom in over the cast",
-		"The camera starts zooming in as the cast starts, and is still coming in as you go."), "check")
+	local zoom = right:Add(Check(content, "teleZoom", L["Zoom in over the cast"],
+		L["The camera starts zooming in as the cast starts, and is still coming in as you go."]), "check")
 	zoom:HookScript("OnClick", Refresh)
 	GreyUnless(zoom, IfOn)
 	local function IfZoom(db) return IfOn(db) and db.teleZoom end
-	local close = right:Add(Slider(content, "teleZoomClose", "Zoom in to about", 1.5, 20, 0.5, "%.1f yards"), "slider")
-	Tooltip(close, "Where the zoom ends as the cast does, if you're further out. Closer already, it " ..
-		"stays where it is. Arriving, the camera is back at your own distance.")
+	local close = right:Add(Slider(content, "teleZoomClose", L["Zoom in to about"], 1.5, 20, 0.5, L["%.1f yards"]), "slider")
+	Tooltip(close, L["Where the zoom ends as the cast does, if you're further out. Closer already, it " ..
+		"stays where it is. Arriving, the camera is back at your own distance."])
 	GreyUnless(close, IfZoom)
-	local zoomBack = right:Add(Slider(content, "teleZoomBackTime", "If you cancel, zoom back out in",
-		0.5, 3, 0.25, "%.2f sec"), "slider")
-	Tooltip(zoomBack, "Cancelling the cast, the camera zooms back out to your own distance this quickly.")
+	local zoomBack = right:Add(Slider(content, "teleZoomBackTime", L["If you cancel, zoom back out in"],
+		0.5, 3, 0.25, L["%.2f sec"]), "slider")
+	Tooltip(zoomBack, L["Cancelling the cast, the camera zooms back out to your own distance this quickly."])
 	GreyUnless(zoomBack, IfZoom)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Tele Cam")
+	RegisterSubpage(canvas, L["Tele Cam"])
 end
 
 -- Blizzard's colour picker; the setup API changed in newer clients.
@@ -2423,25 +2481,25 @@ ns.OpenColorPicker = OpenColorPicker
 local function CreateTintPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Visual Effects")
+	local title = Label(content, "GameFontNormalLarge", L["Visual Effects"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the " ..
+		L["How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the " ..
 		"main page): letterbox bars, colour " ..
 		"grading, vignette, inn glow and weather. The UI isn't tinted. While this page is open " ..
 		"the tint is previewed behind the options window. Names and nameplates are on the " ..
-		"Nameplates page.")
+		"Nameplates page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	-- The master switch: off, none of this page's effects show (each keeps its
 	-- own setting), and its other controls grey out.
-	local master = Check(content, "visualEffects", "Enable visual effects",
-		"Turns everything on this page on or off at once: the letterbox, tint, time of day, " ..
+	local master = Check(content, "visualEffects", L["Enable visual effects"],
+		L["Turns everything on this page on or off at once: the letterbox, tint, time of day, " ..
 		"zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for when you " ..
-		"turn this back on.", function(value)
+		"turn this back on."], function(value)
 			ns.GetDB().visualEffects = value
 			ns.letterboxDirty = true
 			if ns.RefreshTint then ns.RefreshTint() end
@@ -2452,19 +2510,19 @@ local function CreateTintPanel()
 
 	-- Turn off in: a grid of the letterbox, tint, vignette and weather (rows) by place, fights
 	-- and camera modes (columns), like the Camera Modes page's.
-	local gridHeader = Header(content, "Turn off in", master, -18)
+	local gridHeader = Header(content, L["Turn off in"], master, -18)
 	gridHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
 	local gridNote = Label(content, "GameFontHighlightSmall",
-		"Ticked, that effect doesn't show there. Always: not at all. Combat: it goes for fights, and comes back once the " ..
+		L["Ticked, that effect doesn't show there. Always: not at all. Combat: it goes for fights, and comes back once the " ..
 		"Calm Timer (CineMode page) has run out after. Outside camera modes: it only shows while a " ..
-		"camera mode runs (flights, AFK, cozy and the rest).")
+		"camera mode runs (flights, AFK, cozy and the rest)."])
 	gridNote:SetPoint("TOPLEFT", gridHeader, "BOTTOMLEFT", 0, -6)
 	gridNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	gridNote:SetJustifyH("LEFT")
 	gridNote:SetJustifyV("TOP")
-	local EFFECT_ROWS = { letterbox = "Letterbox", tint = "Tint", vignette = "Vignette", weather = "Weather" }
+	local EFFECT_ROWS = { letterbox = L["Letterbox"], tint = L["Tint"], vignette = L["Vignette"], weather = L["Weather"] }
 	-- (What the tooltips call them, where the row name alone would mislead.)
-	local EFFECT_TIP_NAMES = { weather = "weather tint" }
+	local EFFECT_TIP_NAMES = { weather = L["weather tint"] }
 	-- The Always column: an effect's own on/off switch, ticked when off (the
 	-- tint's is tintOffAlways). A row's other boxes grey while it's ticked.
 	local EFFECT_SWITCHES = { letterbox = "letterbox", vignette = "vignette", weather = "weatherTint" }
@@ -2476,25 +2534,25 @@ local function CreateTintPanel()
 		return db[effect .. "OffAlways"]
 	end
 	local PLACE_NAMES = {
-		Cities = { "Cities", "in capital cities" },
-		Instances = { "Instances", "in dungeons, scenarios and raids" },
-		BGs = { "BGs & Arenas", "in battlegrounds and arenas" },
-		World = { "Open World", "out in the world (not in a capital city or an instance), inns included" },
+		Cities = { L["Cities"], L["in capital cities"] },
+		Instances = { L["Instances"], L["in dungeons, scenarios and raids"] },
+		BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
+		World = { L["Open World"], L["out in the world (not in a capital city or an instance), inns included"] },
 	}
-	local EFFECT_COLUMNS = { { key = "OffAlways", heading = "Always",
-		tip = function(name) return ("No %s at all."):format(name) end } }
+	local EFFECT_COLUMNS = { { key = "OffAlways", heading = L["Always"],
+		tip = function(name) return (L["No %s at all."]):format(name) end } }
 	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
 		EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OffIn" .. where, heading = PLACE_NAMES[where][1],
-			tip = function(name) return ("No %s %s."):format(name, PLACE_NAMES[where][2]) end }
+			tip = function(name) return (L["No %s %s."]):format(name, PLACE_NAMES[where][2]) end }
 	end
 	-- (Fights and camera modes set apart: they aren't places.)
 	local firstApart = #EFFECT_COLUMNS + 1
-	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OffInCombat", heading = "Combat",
-		tip = function(name) return ("The %s goes for fights, and comes back once the Calm Timer " ..
-			"(CineMode page) has run out after one."):format(name) end }
-	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OnlyInCameras", heading = "Outside camera modes",
-		tip = function(name) return ("The %s only shows while a camera mode runs: flights, AFK, cozy and " ..
-			"the rest."):format(name) end }
+	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OffInCombat", heading = L["Combat"],
+		tip = function(name) return (L["The %s goes for fights, and comes back once the Calm Timer " ..
+			"(CineMode page) has run out after one."]):format(name) end }
+	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OnlyInCameras", heading = L["Outside camera modes"],
+		tip = function(name) return (L["The %s only shows while a camera mode runs: flights, AFK, cozy and " ..
+			"the rest."]):format(name) end }
 	local NAME_WIDTH, COLUMN_WIDTH, GAP, HEADING_HEIGHT = 90, 66, 10, 26
 	local function ColumnX(c)
 		-- (Always set apart from the places too.)
@@ -2540,20 +2598,20 @@ local function CreateTintPanel()
 	end
 
 	-- Letterbox
-	local letterboxHeader = Header(content, "Letterbox", lastGridRow, -20)
+	local letterboxHeader = Header(content, L["Letterbox"], lastGridRow, -20)
 	letterboxHeader:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -20)
 
 	-- (Switched on and off in the grid's Always column, as are the vignette and weather.)
-	local size = Slider(content, "letterboxSize", "Bar height", 0, 25, 1, "%d%%", 100, ns.RefreshLetterbox)
+	local size = Slider(content, "letterboxSize", L["Bar height"], 0, 25, 1, "%d%%", 100, ns.RefreshLetterbox)
 	size:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(size, "Black bars slide in at the top and bottom of the screen.")
+	Tooltip(size, L["Black bars slide in at the top and bottom of the screen."])
 	GreyUnless(size, function(db) return db.letterbox end)
 
-	local opacity = Slider(content, "letterboxAlpha", "Bar opacity", 10, 100, 5, "%d%%", 100, ns.RefreshLetterbox)
+	local opacity = Slider(content, "letterboxAlpha", L["Bar opacity"], 10, 100, 5, "%d%%", 100, ns.RefreshLetterbox)
 	opacity:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -34)
 	GreyUnless(opacity, function(db) return db.letterbox end)
 
-	local lookHeader = Header(content, "Tint", opacity, -24)
+	local lookHeader = Header(content, L["Tint"], opacity, -24)
 	lookHeader:SetPoint("TOPLEFT", opacity, "BOTTOMLEFT", -2, -24)
 
 	local choices = {}
@@ -2565,17 +2623,17 @@ local function CreateTintPanel()
 		presetControl:SetPoint("TOPLEFT", lookHeader, "BOTTOMLEFT", 0, -8)
 
 		-- Time of day only: preview the tint at any hour (until you leave the page).
-		local hours = { { value = -1, text = "Current time" } }
+		local hours = { { value = -1, text = L["Current time"] } }
 		for hour = 0, 23 do
 			hours[#hours + 1] = {
 				value = hour,
-				text = ("%02d:00 - %s"):format(hour, ns.GetTimeOfDayPhaseAt(hour)),
+				text = ("%02d:00 - %s"):format(hour, L[ns.GetTimeOfDayPhaseAt(hour)]),
 			}
 		end
 		local previewTime = Dropdown(content, "tintPreviewHour", hours, 200, ns.RefreshTint)
 		if previewTime then
 			previewTime:SetPoint("LEFT", presetControl, "RIGHT", 16, 0)
-			local previewLabel = Label(content, "GameFontHighlightSmall", "Preview time")
+			local previewLabel = Label(content, "GameFontHighlightSmall", L["Preview time"])
 			previewLabel:SetPoint("BOTTOMLEFT", previewTime, "TOPLEFT", 2, 2)
 			local refreshMenu = previewTime.Refresh
 			previewTime.Refresh = function(self)
@@ -2586,8 +2644,8 @@ local function CreateTintPanel()
 				self:SetShown(shown)
 				previewLabel:SetShown(shown)
 			end
-			Tooltip(previewTime, "See how the tint looks at another time of day. Only a preview: " ..
-				"it goes back to the real clock when you leave this page.")
+			Tooltip(previewTime, L["See how the tint looks at another time of day. Only a preview: " ..
+				"it goes back to the real clock when you leave this page."])
 		end
 	else
 		local previous = lookHeader
@@ -2612,22 +2670,22 @@ local function CreateTintPanel()
 				local text = choice.tip
 				-- A zone or area with its own preset: say so, and describe that one.
 				if from then
-					text = text .. ("\n|cffffd100Here: %s (%s's own preset)|r"):format(
+					text = text .. "\n|cffffd100" .. L["Here: %s (%s's own preset)"]:format(
 						ns.GetTintPresetLabel(here),
-						from == "area" and ns.GetAreaTintInfo() or GetRealZoneText() or "?")
+						from == "area" and ns.GetAreaTintInfo() or GetRealZoneText() or "?") .. "|r"
 				end
 				if here == "zone" or here == "zonetime" then
 					local zone, label, isOverride = ns.GetZoneTintInfo()
-					text = text .. ("\n|cffffd100Here: %s (%s%s)|r"):format(
-						label, zone, isOverride and ", your choice" or "")
+					text = text .. "\n|cffffd100" .. L["Here: %s (%s%s)"]:format(
+						label, zone, isOverride and L[", your choice"] or "") .. "|r"
 				end
 				if here == "timeofday" or here == "zonetime" then
 					local phase, hour, minute = ns.GetTimeOfDayInfo()
 					if (db.tintPreviewHour or -1) >= 0 then
-						text = text .. ("\n|cffffd100Previewing: %s (%02d:00)|r"):format(phase, hour)
+						text = text .. "\n|cffffd100" .. L["Previewing: %s (%02d:00)"]:format(L[phase], hour) .. "|r"
 					else
-						text = text .. ("\n|cffffd100Now: %s (%02d:%02d %s time)|r"):format(
-							phase, hour, minute, db.tintClock == "local" and "your" or "game")
+						text = text .. "\n|cffffd100" .. (db.tintClock == "local" and L["Now: %s (%02d:%02d your time)"]
+							or L["Now: %s (%02d:%02d game time)"]):format(L[phase], hour, minute) .. "|r"
 					end
 				end
 				self:SetText(text)
@@ -2636,7 +2694,7 @@ local function CreateTintPanel()
 	end
 	controls[#controls + 1] = presetText
 
-	local strength = Slider(content, "tintStrength", "Strength", 5, 100, 5, "%d%%", 100, ns.RefreshTint)
+	local strength = Slider(content, "tintStrength", L["Strength"], 5, 100, 5, "%d%%", 100, ns.RefreshTint)
 	strength:SetPoint("TOPLEFT", presetText, "BOTTOMLEFT", 2, -30)
 
 	-- Custom colour swatch
@@ -2649,9 +2707,9 @@ local function CreateTintPanel()
 	local swatchColor = swatch:CreateTexture(nil, "ARTWORK")
 	swatchColor:SetPoint("TOPLEFT", 2, -2)
 	swatchColor:SetPoint("BOTTOMRIGHT", -2, 2)
-	local swatchLabel = Label(content, "GameFontHighlight", "Custom colour")
+	local swatchLabel = Label(content, "GameFontHighlight", L["Custom colour"])
 	swatchLabel:SetPoint("LEFT", swatch, "RIGHT", 8, 0)
-	Tooltip(swatch, "Click to choose the colour used by the Custom preset.")
+	Tooltip(swatch, L["Click to choose the colour used by the Custom preset."])
 	swatch.Refresh = function()
 		local db = ns.GetDB()
 		swatchColor:SetColorTexture(db.tintCustomR, db.tintCustomG, db.tintCustomB, 1)
@@ -2667,41 +2725,41 @@ local function CreateTintPanel()
 	end)
 
 	-- Strength drift
-	local drift = Check(content, "tintDrift", "Subtle drift",
-		"The tint's strength slowly wanders up and down over a few minutes, so a still scene " ..
-		"feels a little more alive. Paused while this page is open.")
+	local drift = Check(content, "tintDrift", L["Subtle drift"],
+		L["The tint's strength slowly wanders up and down over a few minutes, so a still scene " ..
+		"feels a little more alive. Paused while this page is open."])
 	drift:SetPoint("TOPLEFT", swatch, "BOTTOMLEFT", -2, -12)
 	drift:HookScript("OnClick", function()
 		Refresh() -- grey out / enable the amount slider
 		ns.RefreshTint()
 	end)
 
-	local driftAmount = Slider(content, "tintDriftAmount", "Drift amount", 2, 15, 1, "+/-%d%%", 100,
+	local driftAmount = Slider(content, "tintDriftAmount", L["Drift amount"], 2, 15, 1, "+/-%d%%", 100,
 		ns.RefreshTint)
 	driftAmount:SetPoint("TOPLEFT", drift, "BOTTOMLEFT", 4, -26)
-	Tooltip(driftAmount, "How far the strength wanders either way, as a share of the strength.")
+	Tooltip(driftAmount, L["How far the strength wanders either way, as a share of the strength."])
 	GreyUnless(driftAmount, function(db) return db.tintDrift end)
 
 	-- Time of day: which clock, strength, your own phases
-	local timeHeader = Header(content, "Time of day", driftAmount, -24)
+	local timeHeader = Header(content, L["Time of day"], driftAmount, -24)
 	timeHeader:SetPoint("TOPLEFT", driftAmount, "BOTTOMLEFT", -4, -24)
 	local timeHelp = Label(content, "GameFontHighlightSmall",
-		"For the Time of day and Zone + time of day presets, and the time of day message.")
+		L["For the Time of day and Zone + time of day presets, and the time of day message."])
 	timeHelp:SetPoint("TOPLEFT", timeHeader, "BOTTOMLEFT", 0, -6)
 
-	local timeMessage = Check(content, "timeOfDayMessage", "Show the time of day",
-		"Dawn, Morning, Midday, Afternoon, Evening, Dusk or Night, under the zone name when " ..
+	local timeMessage = Check(content, "timeOfDayMessage", L["Show the time of day"],
+		L["Dawn, Morning, Midday, Afternoon, Evening, Dusk or Night, under the zone name when " ..
 		"you log in or reload, and on its own when it changes during play (not in combat), " ..
 		"with a fitting sound: a rooster at dawn, a horse in the morning, your faction's bell " ..
 		"at midday, frogs in the evening, an owl at dusk and a wolf at night. Follows the clock " ..
-		"below.")
+		"below."])
 	timeMessage:SetPoint("TOPLEFT", timeHelp, "BOTTOMLEFT", -2, -8)
 
-	local clockLabel = Label(content, "GameFontHighlight", "Follows")
+	local clockLabel = Label(content, "GameFontHighlight", L["Follows"])
 	clockLabel:SetPoint("TOPLEFT", timeMessage, "BOTTOMLEFT", 2, -10)
 	local CLOCKS = {
-		{ value = "game", text = "Game time (matches the game's day and night)" },
-		{ value = "local", text = "Your computer's clock" },
+		{ value = "game", text = L["Game time (matches the game's day and night)"] },
+		{ value = "local", text = L["Your computer's clock"] },
 	}
 	local clockControl = Dropdown(content, "tintClock", CLOCKS, 300, function()
 		ns.RefreshTint()
@@ -2720,13 +2778,13 @@ local function CreateTintPanel()
 	end
 
 	-- Time of day: strength and your own phase colours
-	local timeStrength = Slider(content, "timeTintStrength", "Time of day strength", 0, 100, 5, "%d%%", 100,
+	local timeStrength = Slider(content, "timeTintStrength", L["Time of day strength"], 0, 100, 5, "%d%%", 100,
 		ns.RefreshTint)
 	timeStrength:SetPoint("TOPLEFT", clockControl, "BOTTOMLEFT", 4, -30)
-	Tooltip(timeStrength, "How strongly the time-of-day colour applies, in Time of day and " ..
-		"Zone + time of day. Lower it for softer nights; 0 leaves just the zone mood.")
+	Tooltip(timeStrength, L["How strongly the time-of-day colour applies, in Time of day and " ..
+		"Zone + time of day. Lower it for softer nights; 0 leaves just the zone mood."])
 
-	local phaseLabel = Label(content, "GameFontHighlight", "Phases (click a colour to change it)")
+	local phaseLabel = Label(content, "GameFontHighlight", L["Phases (click a colour to change it)"])
 	phaseLabel:SetPoint("TOPLEFT", timeStrength, "BOTTOMLEFT", -4, -24)
 	local previousPhase = phaseLabel
 	for i, phase in ipairs(ns.GetTimePhases()) do
@@ -2743,7 +2801,7 @@ local function CreateTintPanel()
 		local fill = swatch:CreateTexture(nil, "ARTWORK")
 		fill:SetPoint("TOPLEFT", 2, -2)
 		fill:SetPoint("BOTTOMRIGHT", -2, 2)
-		local text = Label(row, "GameFontHighlightSmall", name)
+		local text = Label(row, "GameFontHighlightSmall", L[name])
 		text:SetPoint("LEFT", swatch, "RIGHT", 8, 0)
 		text:SetWidth(110)
 		text:SetJustifyH("LEFT")
@@ -2755,7 +2813,7 @@ local function CreateTintPanel()
 				return 1
 			end,
 			set = function(value) ns.SetTimePhaseStrength(name, value) end,
-		}, "Strength", 0, 100, 5, "%d%%", 100, function()
+		}, L["Strength"], 0, 100, 5, "%d%%", 100, function()
 			ns.PreviewTintHour(phase.hour) -- show the phase you're adjusting
 		end)
 		strength:SetWidth(150)
@@ -2763,9 +2821,9 @@ local function CreateTintPanel()
 		local reset = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
 		reset:SetSize(60, 20)
 		reset:SetPoint("LEFT", strength, "RIGHT", 16, 0)
-		reset:SetText("Reset")
-		Tooltip(reset, "Back to the built-in colour and strength.")
-		Tooltip(swatch, "Choose your own colour for " .. name .. ".")
+		reset:SetText(L["Reset"])
+		Tooltip(reset, L["Back to the built-in colour and strength."])
+		Tooltip(swatch, L["Choose your own colour for %s."]:format(L[name]))
 		swatch:SetScript("OnClick", function()
 			local color
 			for _, p in ipairs(ns.GetTimePhases()) do
@@ -2794,11 +2852,11 @@ local function CreateTintPanel()
 	end
 
 	-- Per-zone overrides: a preset of its own, and colours for the Zone presets
-	local zoneHeader = Header(content, "Zone tints", previousPhase, -24)
+	local zoneHeader = Header(content, L["Zone tints"], previousPhase, -24)
 	local zoneHelp = Label(content, "GameFontHighlightSmall",
-		"Give the zone you're standing in, or just the area within it (a town, a port), a " ..
+		L["Give the zone you're standing in, or just the area within it (a town, a port), a " ..
 		"preset of its own: it replaces your main preset there. With a Zone preset you can also " ..
-		"choose its colour, which replaces the built-in mood. An area's choices win over its zone's.")
+		"choose its colour, which replaces the built-in mood. An area's choices win over its zone's."])
 	zoneHelp:SetPoint("TOPLEFT", zoneHeader, "BOTTOMLEFT", 0, -6)
 	zoneHelp:SetWidth(420)
 	zoneHelp:SetJustifyV("TOP")
@@ -2812,16 +2870,16 @@ local function CreateTintPanel()
 		local strength, ownStrength = ns.GetZoneTintStrength(zone)
 		local function PresetNote(name)
 			local preset = ns.GetZonePreset(name)
-			return preset and (", |cffffd100%s|r preset"):format(ns.GetTintPresetLabel(preset)) or ""
+			return preset and (L[", |cffffd100%s|r preset"]):format(ns.GetTintPresetLabel(preset)) or ""
 		end
-		local text = ("This zone: |cffffd100%s|r - %s%s, %d%% strength%s%s"):format(
-			zone ~= "" and zone or "?", label, isOverride and " (your choice)" or " (built in)",
-			strength * 100 + 0.5, ownStrength and " (its own)" or "", PresetNote(zone))
+		local text = (L["This zone: |cffffd100%s|r - %s%s, %d%% strength%s%s"]):format(
+			zone ~= "" and zone or "?", label, isOverride and L[" (your choice)"] or L[" (built in)"],
+			strength * 100 + 0.5, ownStrength and L[" (its own)"] or "", PresetNote(zone))
 		local area, areaLabel, areaOwn, _, areaStrength, _, areaOwnStrength = ns.GetAreaTintInfo()
 		if area then
-			text = text .. ("\nThis area: |cffffd100%s|r - %s%s, %d%% strength%s%s"):format(
-				area, areaLabel, areaOwn and " (your choice)" or "", areaStrength * 100 + 0.5,
-				areaOwnStrength and " (its own)" or "", PresetNote(area))
+			text = text .. "\n" .. (L["This area: |cffffd100%s|r - %s%s, %d%% strength%s%s"]):format(
+				area, areaLabel, areaOwn and L[" (your choice)"] or "", areaStrength * 100 + 0.5,
+				areaOwnStrength and L[" (its own)"] or "", PresetNote(area))
 		end
 		self:SetText(text)
 	end
@@ -2844,7 +2902,7 @@ local function CreateTintPanel()
 		local _, _, _, color = ns.GetZoneTintInfo()
 		return color
 	end
-	local targetLabel = Label(content, "GameFontHighlight", "Change:")
+	local targetLabel = Label(content, "GameFontHighlight", L["Change:"])
 	targetLabel:SetPoint("TOPLEFT", zoneText, "BOTTOMLEFT", 0, -10)
 	local targetButtons = {}
 	local function TargetButton(value, x)
@@ -2864,9 +2922,9 @@ local function CreateTintPanel()
 			local area = ns.GetAreaTintInfo()
 			self:SetChecked(tintTarget == value or (value == "zone" and not area))
 			if value == "zone" then
-				self.text:SetText("the zone")
+				self.text:SetText(L["the zone"])
 			else
-				self.text:SetText(area and ("this area (" .. area .. ")") or "this area (none here)")
+				self.text:SetText(area and L["this area (%s)"]:format(area) or L["this area (none here)"])
 				self:SetEnabled(area ~= nil)
 			end
 		end
@@ -2903,7 +2961,7 @@ local function CreateTintPanel()
 				end
 			end
 			local isArea = tintTarget == "area" and ns.GetAreaTintInfo()
-			root:CreateRadio(isArea and "Same as the zone" or "Main preset",
+			root:CreateRadio(isArea and L["Same as the zone"] or L["Main preset"],
 				function() return current() == nil end, function() set(nil) end)
 			for _, preset in ipairs(ns.TINT_PRESETS) do
 				root:CreateRadio(preset.label, function() return current() == preset.key end,
@@ -2913,10 +2971,10 @@ local function CreateTintPanel()
 		presetMenu.Refresh = function(self) self:GenerateMenu() end
 		controls[#controls + 1] = presetMenu
 		presetMenu:SetPoint("TOPLEFT", targetLabel, "BOTTOMLEFT", 0, -10)
-		local presetMenuLabel = Label(content, "GameFontHighlight", "Preset here")
+		local presetMenuLabel = Label(content, "GameFontHighlight", L["Preset here"])
 		presetMenuLabel:SetPoint("LEFT", presetMenu, "RIGHT", 12, 0)
-		Tooltip(presetMenu, "A preset for the zone or area chosen above, used there instead of your " ..
-			"main preset.")
+		Tooltip(presetMenu, L["A preset for the zone or area chosen above, used there instead of your " ..
+			"main preset."])
 	end
 
 	-- Menu of tints for this zone (left out on clients without the dropdown).
@@ -2930,16 +2988,16 @@ local function CreateTintPanel()
 				local db = ns.GetDB()
 				return db and db.zoneTints and db.zoneTints[TargetName()]
 			end
-			root:CreateRadio("Built-in mood", function() return current() == nil end,
+			root:CreateRadio(L["Built-in mood"], function() return current() == nil end,
 				function() SetHere(nil) end)
-			root:CreateRadio("No tint", function() return current() == "none" end,
+			root:CreateRadio(L["No tint"], function() return current() == "none" end,
 				function() SetHere("none") end)
 			for _, mood in ipairs(ns.GetZoneMoods()) do
 				local hex = ("|cff%02x%02x%02x"):format(mood.color[1] * 255, mood.color[2] * 255, mood.color[3] * 255)
 				root:CreateRadio(hex .. mood.label .. "|r", function() return current() == mood.key end,
 					function() SetHere(mood.key) end)
 			end
-			root:CreateRadio("Custom colour", function() return type(current()) == "table" end,
+			root:CreateRadio(L["Custom colour"], function() return type(current()) == "table" end,
 				function()
 					local color = TargetColor()
 					SetHere({ color[1], color[2], color[3] })
@@ -2952,13 +3010,13 @@ local function CreateTintPanel()
 
 	local pickColor = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	pickColor:SetSize(140, 22)
-	pickColor:SetText("Pick a colour...")
+	pickColor:SetText(L["Pick a colour..."])
 	if zoneMenu then
 		pickColor:SetPoint("LEFT", zoneMenu, "RIGHT", 12, 0)
 	else
 		pickColor:SetPoint("TOPLEFT", targetLabel, "BOTTOMLEFT", 0, -10)
 	end
-	Tooltip(pickColor, "Choose your own colour for the zone or area chosen above (for the Zone presets).")
+	Tooltip(pickColor, L["Choose your own colour for the zone or area chosen above (for the Zone presets)."])
 	pickColor:SetScript("OnClick", function()
 		local name = TargetName()
 		if name == "" then
@@ -2973,7 +3031,7 @@ local function CreateTintPanel()
 	end)
 
 	-- Your overrides, each with a reset button.
-	local overridesLabel = Label(content, "GameFontNormalSmall", "Your zone tints")
+	local overridesLabel = Label(content, "GameFontNormalSmall", L["Your zone tints"])
 	overridesLabel:SetPoint("TOPLEFT", zoneMenu or pickColor, "BOTTOMLEFT", 0, -16)
 	local MAX_ZONE_ROWS = 15
 	local zoneRows = {}
@@ -2984,7 +3042,7 @@ local function CreateTintPanel()
 		row.button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
 		row.button:SetSize(70, 20)
 		row.button:SetPoint("LEFT")
-		row.button:SetText("Reset")
+		row.button:SetText(L["Reset"])
 		row.button:SetScript("OnClick", function()
 			if row.zone then
 				ns.SetZoneTint(row.zone, nil)
@@ -3027,8 +3085,8 @@ local function CreateTintPanel()
 				local strength, ownStrength = ns.GetZoneTintStrength(zone)
 				local preset = ns.GetZonePreset(zone)
 				row.text:SetText(("%s: %s%s%s"):format(zone,
-					preset and (ns.GetTintPresetLabel(preset) .. " preset, ") or "", label,
-					ownStrength and (", %d%% strength"):format(strength * 100 + 0.5) or ""))
+					preset and L["%s preset, "]:format(ns.GetTintPresetLabel(preset)) or "", label,
+					ownStrength and (L[", %d%% strength"]):format(strength * 100 + 0.5) or ""))
 			end
 			row:SetShown(zone ~= nil)
 		end
@@ -3036,9 +3094,9 @@ local function CreateTintPanel()
 		self:ClearAllPoints()
 		self:SetPoint("TOPLEFT", overridesLabel, "BOTTOMLEFT", 0, -8 - shownRows * 24)
 		if #zones == 0 then
-			self:SetText("None yet.")
+			self:SetText(L["None yet."])
 		elseif #zones > MAX_ZONE_ROWS then
-			self:SetText(("...and %d more."):format(#zones - MAX_ZONE_ROWS))
+			self:SetText((L["...and %d more."]):format(#zones - MAX_ZONE_ROWS))
 		else
 			self:SetText("")
 		end
@@ -3056,39 +3114,39 @@ local function CreateTintPanel()
 	end)
 
 	-- Crossing a zone border: how the old zone's tint gives way to the new one.
-	local borderLabel = Label(content, "GameFontHighlight", "At zone borders")
+	local borderLabel = Label(content, "GameFontHighlight", L["At zone borders"])
 	borderLabel:SetPoint("TOPLEFT", zoneMore, "BOTTOMLEFT", 0, -18)
-	local zoneFade = Slider(content, "zoneFadeTime", "Fade time", 0.5, 10, 0.5, "%.1f sec")
+	local zoneFade = Slider(content, "zoneFadeTime", L["Fade time"], 0.5, 10, 0.5, L["%.1f sec"])
 	zoneFade:SetPoint("TOPLEFT", borderLabel, "BOTTOMLEFT", 2, -26)
-	Tooltip(zoneFade, "With a Zone tint preset, crossing into a zone with a different mood " ..
+	Tooltip(zoneFade, L["With a Zone tint preset, crossing into a zone with a different mood " ..
 		"fades the old mood out over this long, pauses, then fades the new one in over " ..
-		"this long.")
-	local gapFlying = Slider(content, "zoneGapFlying", "Pause between tints when flying", 0, 20, 1, "%d sec")
+		"this long."])
+	local gapFlying = Slider(content, "zoneGapFlying", L["Pause between tints when flying"], 0, 20, 1, L["%d sec"])
 	gapFlying:SetPoint("TOPLEFT", zoneFade, "BOTTOMLEFT", 0, -34)
-	Tooltip(gapFlying, "Untinted time between the two zones' moods while you're in the air, " ..
-		"where you see the old zone's ground for longer (snow under an ember tint looks red).")
-	local gapGround = Slider(content, "zoneGapTime", "Pause between tints on the ground", 0, 10, 0.5, "%.1f sec")
+	Tooltip(gapFlying, L["Untinted time between the two zones' moods while you're in the air, " ..
+		"where you see the old zone's ground for longer (snow under an ember tint looks red)."])
+	local gapGround = Slider(content, "zoneGapTime", L["Pause between tints on the ground"], 0, 10, 0.5, L["%.1f sec"])
 	gapGround:SetPoint("TOPLEFT", gapFlying, "BOTTOMLEFT", 0, -34)
-	Tooltip(gapGround, "The same pause when you cross a border on foot or riding.")
+	Tooltip(gapGround, L["The same pause when you cross a border on foot or riding."])
 
 	-- Vignette
-	local vignetteHeader = Header(content, "Vignette", gapGround, -24)
+	local vignetteHeader = Header(content, L["Vignette"], gapGround, -24)
 	vignetteHeader:SetPoint("TOPLEFT", gapGround, "BOTTOMLEFT", -2, -24)
 
-	local vignetteStrength = Slider(content, "vignetteStrength", "Vignette strength", 10, 100, 5, "%d%%", 100,
+	local vignetteStrength = Slider(content, "vignetteStrength", L["Vignette strength"], 10, 100, 5, "%d%%", 100,
 		ns.RefreshTint)
 	vignetteStrength:SetPoint("TOPLEFT", vignetteHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(vignetteStrength, "Soft dark edges that draw the eye to the middle. Works with any tint.")
+	Tooltip(vignetteStrength, L["Soft dark edges that draw the eye to the middle. Works with any tint."])
 	GreyUnless(vignetteStrength, function(db) return db.vignette end)
 
 	-- Inns
-	local innHeader = Header(content, "Inns", vignetteStrength, -24)
+	local innHeader = Header(content, L["Inns"], vignetteStrength, -24)
 	innHeader:SetPoint("TOPLEFT", vignetteStrength, "BOTTOMLEFT", -2, -24)
 
-	local innGlow = Check(content, "innGlow", "Light up inns",
-		"Indoors in an inn, the outdoor tint (a gloomy marsh, a moonlit night) partly lifts and a " ..
+	local innGlow = Check(content, "innGlow", L["Light up inns"],
+		L["Indoors in an inn, the outdoor tint (a gloomy marsh, a moonlit night) partly lifts and a " ..
 		"soft firelit glow fades in, coloured by the zone: cooler in the snow, greener in a swamp. " ..
-		"Blends over a few seconds as you go through the door.",
+		"Blends over a few seconds as you go through the door."],
 		function(value)
 			ns.GetDB().innGlow = value
 			Refresh() -- grey out / enable the strength slider
@@ -3096,32 +3154,32 @@ local function CreateTintPanel()
 		end)
 	innGlow:SetPoint("TOPLEFT", innHeader, "BOTTOMLEFT", -2, -6)
 
-	local innGlowStrength = Slider(content, "innGlowAmount", "Inn glow amount", 0, 100, 1, "%d%%", 100,
+	local innGlowStrength = Slider(content, "innGlowAmount", L["Inn glow amount"], 0, 100, 1, "%d%%", 100,
 		ns.RefreshTint)
-	Tooltip(innGlowStrength, "How much light the glow adds at its brightest, low on the screen.")
+	Tooltip(innGlowStrength, L["How much light the glow adds at its brightest, low on the screen."])
 	innGlowStrength:SetPoint("TOPLEFT", innGlow, "BOTTOMLEFT", 4, -26)
 	GreyUnless(innGlowStrength, function(db) return db.innGlow end)
 
 	-- Weather
-	local weatherHeader = Header(content, "Weather", innGlowStrength, -24)
+	local weatherHeader = Header(content, L["Weather"], innGlowStrength, -24)
 	weatherHeader:SetPoint("TOPLEFT", innGlowStrength, "BOTTOMLEFT", -2, -24)
 
-	local weatherTintStrength = Slider(content, "weatherTintStrength", "Weather strength", 10, 100, 5, "%d%%", 100,
+	local weatherTintStrength = Slider(content, "weatherTintStrength", L["Weather strength"], 10, 100, 5, "%d%%", 100,
 		ns.RefreshTint)
 	weatherTintStrength:SetPoint("TOPLEFT", weatherHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(weatherTintStrength, "Rain greys and cools the scene, snow turns it pale blue and a sandstorm " ..
+	Tooltip(weatherTintStrength, L["Rain greys and cools the scene, snow turns it pale blue and a sandstorm " ..
 		"gives it a dusty orange haze, more strongly the heavier the weather. Works with any tint (None " ..
 		"included), lifts under a roof and blends in as a storm builds. Needs a game version that " ..
-		"reports the weather.")
+		"reports the weather."])
 	GreyUnless(weatherTintStrength, function(db) return db.weatherTint end)
 
 	-- Depth of field
-	local dofHeader = Header(content, "Depth of field", weatherTintStrength, -24)
+	local dofHeader = Header(content, L["Depth of field"], weatherTintStrength, -24)
 	dofHeader:SetPoint("TOPLEFT", weatherTintStrength, "BOTTOMLEFT", -2, -24)
 
-	local depthOfField = Check(content, "depthOfField", "Haze the screen edges in the camera modes",
-		"A soft haze around the edges of the screen, as if the camera had focused on you. " ..
-		"Each camera mode's page sets its own strength. /cine doftest shows it on demand.")
+	local depthOfField = Check(content, "depthOfField", L["Haze the screen edges in the camera modes"],
+		L["A soft haze around the edges of the screen, as if the camera had focused on you. " ..
+		"Each camera mode's page sets its own strength. /cine doftest shows it on demand."])
 	depthOfField:SetPoint("TOPLEFT", dofHeader, "BOTTOMLEFT", -2, -6)
 
 	canvas:SetScript("OnShow", PageShown(function()
@@ -3130,74 +3188,74 @@ local function CreateTintPanel()
 	end, content))
 	canvas:SetScript("OnHide", function() ns.SetTintPreview(false) end)
 	canvas:Hide()
-	RegisterSubpage(canvas, "Visual Effects")
+	RegisterSubpage(canvas, L["Visual Effects"])
 end
 
 -- Sub-page for audio: music during cinematic mode.
 local function CreateAudioPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Audio")
+	local title = Label(content, "GameFontNormalLarge", L["Audio"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Sound during CineMode. Your own sound settings are saved first and put " ..
-		"back afterwards, even after a crash. Pick which cameras play music as they start.")
+		L["Sound during CineMode. Your own sound settings are saved first and put " ..
+		"back afterwards, even after a crash. Pick which cameras play music as they start."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	-- Left column: music, fatigue
-	local musicHeader = Header(content, "Music", subtitle, -20)
+	local musicHeader = Header(content, L["Music"], subtitle, -20)
 
-	local music = Check(content, "musicInCinematic", "Enable CineMode music",
-		"With your game music off, a camera starting (the ones ticked under Music on the Camera " ..
+	local music = Check(content, "musicInCinematic", L["Enable CineMode music"],
+		L["With your game music off, a camera starting (the ones ticked under Music on the Camera " ..
 		"Triggers page) switches it on and fades it in, at your music volume; it fades out when " ..
 		"the UI returns and your music is switched off again (logging out too). With your game " ..
-		"music on, it's left alone. Unticked, music is never switched on.")
+		"music on, it's left alone. Unticked, music is never switched on."])
 	music:SetPoint("TOPLEFT", musicHeader, "BOTTOMLEFT", -2, -6)
 	music:HookScript("OnClick", Refresh) -- grey out / enable the options that depend on it
 
-	local musicFade = Slider(content, "musicFadeTime", "Music fade time", 0.5, 10, 0.5, "%.1f sec")
+	local musicFade = Slider(content, "musicFadeTime", L["Music fade time"], 0.5, 10, 0.5, L["%.1f sec"])
 	musicFade:SetPoint("TOPLEFT", music, "BOTTOMLEFT", 4, -26)
-	Tooltip(musicFade, "How long music takes to fade in or out with CineMode.")
+	Tooltip(musicFade, L["How long music takes to fade in or out with CineMode."])
 
-	local fatigueHeader = Header(content, "Fatigue", musicFade, -24)
+	local fatigueHeader = Header(content, L["Fatigue"], musicFade, -24)
 	fatigueHeader:SetPoint("TOPLEFT", musicFade, "BOTTOMLEFT", -2, -24)
 
-	local fatigue = Slider(content, "musicFatigue", "Music fatigue", 0, 30, 1, "%d min")
+	local fatigue = Slider(content, "musicFatigue", L["Music fatigue"], 0, 30, 1, L["%d min"])
 	fatigue:SetPoint("TOPLEFT", fatigueHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(fatigue, "Once a camera has started music, no camera starts it again for this long, " ..
+	Tooltip(fatigue, L["Once a camera has started music, no camera starts it again for this long, " ..
 		"counted from when it started. The first camera after a login or /reload always can. " ..
-		"Music coming back after a mute doesn't count. 0 turns this off.")
+		"Music coming back after a mute doesn't count. 0 turns this off."])
 	DependsOnMusic(fatigue)
 
 	-- Right column: muting, all in one list ("In combat", "In cities"...)
-	local muteHeader = Label(content, "GameFontNormal", "Stop Music")
+	local muteHeader = Label(content, "GameFontNormal", L["Stop Music"])
 	muteHeader:SetPoint("TOPLEFT", musicHeader, "TOPLEFT", 320, 0)
 
-	local combatMusic = Check(content, "musicOffInCombat", "In combat",
-		"Music fades out over about a second when a fight starts, and a fresh track fades back " ..
+	local combatMusic = Check(content, "musicOffInCombat", L["In combat"],
+		L["Music fades out over about a second when a fight starts, and a fresh track fades back " ..
 		"in once the Calm Timer (on the CineMode page) has passed with no new fight. Works on " ..
-		"your own game music too; your volume is put back afterwards.")
+		"your own game music too; your volume is put back afterwards."])
 	combatMusic:SetPoint("TOPLEFT", muteHeader, "BOTTOMLEFT", -2, -6)
 	DependsOnMusic(combatMusic)
 
-	local movingMusic = Check(content, "musicPauseWhenMoving", "Leaving a camera mode",
-		"Music fades out once you leave the camera modes and move on: walking off from the cozy " ..
+	local movingMusic = Check(content, "musicPauseWhenMoving", L["Leaving a camera mode"],
+		L["Music fades out once you leave the camera modes and move on: walking off from the cozy " ..
 		"camera, say. Going from one camera straight to another (vista to cozy) keeps it playing, " ..
 		"as does standing still. A fresh track fades in when the next camera starts (standing " ..
 		"still counts once the AFK camera starts, with Go AFK's music on, Camera Triggers page). " ..
-		"Fades at the music fade time.")
+		"Fades at the music fade time."])
 	movingMusic:SetPoint("TOPLEFT", combatMusic, "BOTTOMLEFT", 0, -2)
 	DependsOnMusic(movingMusic)
 
 	local muteStack = Stack(movingMusic, "check")
 	for _, place in ipairs(PLACES) do
 		DependsOnMusic(muteStack:Add(Check(content, "musicOffIn" .. place[1],
-			"In " .. (place[1] == "PvP" and "PvP" or place[2]:lower()),
+			L["In %s"]:format(place[1] == "PvP" and L["PvP"] or place[2]:lower()),
 			(place[1] == "PvP" and (PVP_TIP .. " ") or "") ..
-			"Music fades out here (your own game music too) and back in when you leave."), "check"))
+			L["Music fades out here (your own game music too) and back in when you leave."]), "check"))
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
@@ -3212,10 +3270,10 @@ end
 -- scrollbar: a heading of two words or more takes two lines, the last lines level.
 local FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, FRAME_HEADING_HEIGHT = 160, 52, 24
 local FRAME_COLUMNS = {
-	{ "Always", ns.IsCineShowOn, "cineShow", false },
-	{ "In combat", ns.IsCombatShowOn, "combatShow", true },
-	{ "Tar Enemy", ns.IsEnemyShowOn, "enemyShow", false },
-	{ "Tar Friendly", ns.IsFriendlyShowOn, "friendlyShow", false },
+	{ L["Always"], ns.IsCineShowOn, "cineShow", false },
+	{ L["In combat"], ns.IsCombatShowOn, "combatShow", true },
+	{ L["Tar Enemy"], ns.IsEnemyShowOn, "enemyShow", false },
+	{ L["Tar Friendly"], ns.IsFriendlyShowOn, "friendlyShow", false },
 }
 for _, place in ipairs(ns.PLACE_SHOW) do
 	FRAME_COLUMNS[#FRAME_COLUMNS + 1] = {
@@ -3259,8 +3317,8 @@ local function ShowTable(content, anchor, rows)
 			local hover = CreateFrame("Frame", nil, content)
 			hover:SetAllPoints(rowLabel)
 			hover:EnableMouse(true)
-			Tooltip(hover, ("More settings on the %s page. They can keep it up beyond what's " ..
-				"ticked here (hovering, tracking, new auras, cooldowns recharging and the like)."):format(item.morePage))
+			Tooltip(hover, (L["More settings on the %s page. They can keep it up beyond what's " ..
+				"ticked here (hovering, tracking, new auras, cooldowns recharging and the like)."]):format(L[item.morePage]))
 		elseif item.tip then
 			local hover = CreateFrame("Frame", nil, content)
 			hover:SetAllPoints(rowLabel)
@@ -3273,9 +3331,9 @@ local function ShowTable(content, anchor, rows)
 		for c, column in ipairs(COLUMNS) do
 			local isOn, tableKey, needsStay = column[2], column[3], column[4]
 			local alwaysTip = item.part
-				and "Show it whenever its frame shows. This overrides its Mouseover groups: untick it to " ..
-				"hide it in CineMode except when hovered or brought up by the other columns."
-				or "Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)"
+				and L["Show it whenever its frame shows. This overrides its Mouseover groups: untick it to " ..
+				"hide it in CineMode except when hovered or brought up by the other columns."]
+				or L["Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)"]
 			local check = Check(content, tableKey, "", c == 1 and alwaysTip or column[5], function(value)
 				local setting = c == 1 and ns.CINE_SHOW_SETTING[item.key]
 				if setting then
@@ -3304,15 +3362,15 @@ end
 local function CreateCombatPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Standard Frames")
+	local title = Label(content, "GameFontNormalLarge", L["Standard Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
+		L["Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
 		"Always shows it the whole time, the next three only while you fight or have something " ..
 		"targeted, and the places the whole time while you're there (Grouped: in a party or raid). " ..
 		"Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
-		"frames are on the 3rd Party Frames page.")
+		"frames are on the 3rd Party Frames page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -3320,10 +3378,10 @@ local function CreateCombatPanel()
 	-- The game's frames this client has, in sections (their page: see
 	-- ROW_SECTIONS), each a table of its own; the gamepad's are on the
 	-- Gamepad page, other addons' frames on the 3rd Party Frames page.
-	local switch = PageSwitch(content, "handleFrames", "Let CineMode handle the game's frames",
-		"On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
+	local switch = PageSwitch(content, "handleFrames", L["Let CineMode handle the game's frames"],
+		L["On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
 		"alone, the minimap, quest tracker, buffs and Cooldown Manager included (their pages' " ..
-		"switches only count while this is on).", subtitle)
+		"switches only count while this is on)."], subtitle)
 	local lastRow = switch
 	local function Section(page, heading)
 		local sectionRows = {}
@@ -3338,87 +3396,87 @@ local function CreateCombatPanel()
 		lastRow = ShowTable(content, Header(content, heading, lastRow, lastRow == switch and -16 or -28),
 			sectionRows)
 	end
-	Section("units", "Unit frames")
-	Section("combat", "Combat")
-	Section("bars", "Action bars")
-	Section("interface", "Interface")
-	Section("party", "Party frames (not raid-style)")
-	Section("raid", "Raid frames")
-	Section("bg", "Battlegrounds")
-	Section(nil, "Other") -- (any row not given a section)
+	Section("units", L["Unit frames"])
+	Section("combat", L["Combat"])
+	Section("bars", L["Action bars"])
+	Section("interface", L["Interface"])
+	Section("party", L["Party frames (not raid-style)"])
+	Section("raid", L["Raid frames"])
+	Section("bg", L["Battlegrounds"])
+	Section(nil, L["Other"]) -- (any row not given a section)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Standard Frames")
+	RegisterSubpage(canvas, L["Standard Frames"])
 end
 
 -- Sub-page: fishing (casting with right-click or a gamepad button, the cast bar).
 local function CreateFishingPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Fishing")
+	local title = Label(content, "GameFontNormalLarge", L["Fishing"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Casting and catching, with the mouse or a gamepad, CineMode or not.")
+		L["Casting and catching, with the mouse or a gamepad, CineMode or not."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	local switch = PageSwitch(content, "handleFishing", "Let CineMode help with fishing",
-		"On: right-click (or a gamepad button) casts again, and the Fishing cast bar hides, as this " ..
+	local switch = PageSwitch(content, "handleFishing", L["Let CineMode help with fishing"],
+		L["On: right-click (or a gamepad button) casts again, and the Fishing cast bar hides, as this " ..
 		"page says. Off: fishing is left to the game. (The fish camera is on the Camera Modes and " ..
-		"Camera Triggers pages.)", subtitle)
+		"Camera Triggers pages.)"], subtitle)
 	local stack = Stack(switch, "check")
-	stack:Header(content, "Casting")
-	stack:Add(Check(content, "hideFishingCastBar", "Hide the Fishing cast bar",
-		"Your cast bar stays hidden while it shows Fishing. Every other spell shows it as usual."),
+	stack:Header(content, L["Casting"])
+	stack:Add(Check(content, "hideFishingCastBar", L["Hide the Fishing cast bar"],
+		L["Your cast bar stays hidden while it shows Fishing. Every other spell shows it as usual."]),
 		"check")
-	local recast = stack:Add(Check(content, "fishRightClickCast", "Right-click to cast again",
-		"While the fish camera is on and no bobber is out, right-clicking in the world casts " ..
+	local recast = stack:Add(Check(content, "fishRightClickCast", L["Right-click to cast again"],
+		L["While the fish camera is on and no bobber is out, right-clicking in the world casts " ..
 		"Fishing again. Each cast still comes from your own click. While the bobber is out, " ..
 		"right-click clicks it as usual; in combat, with the loot window open or with your " ..
 		"mouse on a player or NPC, right-click is left alone. (Meanwhile right-drag doesn't " ..
-		"turn the camera: left-drag still does.)"), "check")
+		"turn the camera: left-drag still does.)"]), "check")
 	recast:HookScript("OnClick", Refresh) -- grey out / enable the options below
 	-- (They apply to the gamepad button too.)
 	local function IfRecast(db) return db.fishRightClickCast or (C_GamePad ~= nil and db.fishGamepadCast) end
-	local pole = stack:Add(Check(content, "fishPoleRightClickCast", "Also the first cast, with a pole equipped",
-		"With a fishing pole in your main hand, standing still, right-clicking in the world " ..
+	local pole = stack:Add(Check(content, "fishPoleRightClickCast", L["Also the first cast, with a pole equipped"],
+		L["With a fishing pole in your main hand, standing still, right-clicking in the world " ..
 		"casts Fishing, so you don't have to start the first cast yourself. Not while your " ..
 		"mouse is on a player, NPC or object (mailbox, corpse...): right-click works on them " ..
-		"as usual. Swap the pole out to have right-click back everywhere."), "check", 24)
+		"as usual. Swap the pole out to have right-click back everywhere."]), "check", 24)
 	GreyUnless(pole, IfRecast)
-	local delay = stack:Add(Slider(content, "fishRecastDelay", "Wait after a cast ends", 0, 3, 0.1,
-		"%.1f sec"), "slider")
-	Tooltip(delay, "How long after a cast ends (a catch looted, or the bobber gone) before " ..
-		"right-click casts again, so the click that loots the fish doesn't cast straight away.")
+	local delay = stack:Add(Slider(content, "fishRecastDelay", L["Wait after a cast ends"], 0, 3, 0.1,
+		L["%.1f sec"]), "slider")
+	Tooltip(delay, L["How long after a cast ends (a catch looted, or the bobber gone) before " ..
+		"right-click casts again, so the click that loots the fish doesn't cast straight away."])
 	GreyUnless(delay, IfRecast)
-	local missPause = stack:Add(Slider(content, "fishMissPause", "Pause after a missed cast", 0, 30, 1,
-		function(value) return value == 0 and "Off" or ("%d sec"):format(value) end), "slider")
-	Tooltip(missPause, "When a cast doesn't land in fishable water (say, a pole left equipped " ..
+	local missPause = stack:Add(Slider(content, "fishMissPause", L["Pause after a missed cast"], 0, 30, 1,
+		function(value) return value == 0 and L["Off"] or (L["%d sec"]):format(value) end), "slider")
+	Tooltip(missPause, L["When a cast doesn't land in fishable water (say, a pole left equipped " ..
 		"away from water), right-click goes back to normal for this long before it casts again. " ..
 		"Moving and then standing still for 1 sec ends it early: you're likely at a new spot to fish from. " ..
-		"Off doesn't pause. (\"Skill not high enough\" always pauses it for 30 sec, moving or not.)")
+		"Off doesn't pause. (\"Skill not high enough\" always pauses it for 30 sec, moving or not.)"])
 	GreyUnless(missPause, IfRecast)
 
 	-- Gamepad mode: a gamepad button does what right-click does.
 	if C_GamePad then
-		local padCast = stack:Add(Check(content, "fishGamepadCast", "Gamepad: a button casts too",
-			"In gamepad mode, the button below casts Fishing whenever right-click would: in the " ..
+		local padCast = stack:Add(Check(content, "fishGamepadCast", L["Gamepad: a button casts too"],
+			L["In gamepad mode, the button below casts Fishing whenever right-click would: in the " ..
 			"fish camera with no bobber out, and (if ticked above) with a pole equipped, standing " ..
 			"still. The rest of the time it does what it usually does. Each cast still comes from " ..
-			"your own press."), "check")
+			"your own press."]), "check")
 		padCast:HookScript("OnClick", Refresh) -- grey out / enable the button choice (and the options above)
 		local function IfPadCast(db) return db.fishGamepadCast end
 		local PAD_BUTTONS = {
 			-- (By where the button sits: pads print different letters there.)
-			{ value = "PAD3", text = "Left face button (Xbox X)" },
-			{ value = "PAD4", text = "Top face button (Xbox Y)" },
-			{ value = "PAD1", text = "Bottom face button (Xbox A)" },
-			{ value = "PAD2", text = "Right face button (Xbox B)" },
+			{ value = "PAD3", text = L["Left face button (Xbox X)"] },
+			{ value = "PAD4", text = L["Top face button (Xbox Y)"] },
+			{ value = "PAD1", text = L["Bottom face button (Xbox A)"] },
+			{ value = "PAD2", text = L["Right face button (Xbox B)"] },
 		}
-		local BUTTON_TIP = "The gamepad button that casts Fishing."
+		local BUTTON_TIP = L["The gamepad button that casts Fishing."]
 		local button = Dropdown(content, "fishGamepadKey", PAD_BUTTONS, 200)
 		if button then
 			stack:Add(button, "dropdown", 24)
@@ -3442,15 +3500,15 @@ end
 local function CreateGamepadPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Gamepad")
+	local title = Label(content, "GameFontNormalLarge", L["Gamepad"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"The frames gamepad mode adds (Options, Controls, Gamepad): its action bars, the button hints " ..
+		L["The frames gamepad mode adds (Options, Controls, Gamepad): its action bars, the button hints " ..
 		"and the reticle (the dot you aim with). As on the Standard Frames page, " ..
 		"each is hidden in CineMode unless ticked: Always shows it the whole time, the next three only " ..
 		"while you fight or have something targeted, and the places while you're there. Rows also on the Standard Frames page (the " ..
-		"experience bars) follow this page in gamepad mode, and that one otherwise.")
+		"experience bars) follow this page in gamepad mode, and that one otherwise."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -3461,24 +3519,24 @@ local function CreateGamepadPanel()
 			rows[#rows + 1] = item
 		end
 	end
-	local switch = PageSwitch(content, "handleGamepad", "Let CineMode handle the gamepad frames",
-		"On: CineMode fades the gamepad's bars, button hints and reticle as this page says. Off: it " ..
-		"leaves them alone.", subtitle)
+	local switch = PageSwitch(content, "handleGamepad", L["Let CineMode handle the gamepad frames"],
+		L["On: CineMode fades the gamepad's bars, button hints and reticle as this page says. Off: it " ..
+		"leaves them alone."], subtitle)
 	local lastRow = ShowTable(content, switch, rows)
 
 	-- The prompt sits on a nameplate, not a frame of its own: a setting for
 	-- the plates' fade rather than a row.
-	local prompt = Check(content, "showInteractPrompt", "Show the interact prompt (X)",
-		"The button prompt over things you can use or talk to (your bobber, an NPC) stays up in " ..
+	local prompt = Check(content, "showInteractPrompt", L["Show the interact prompt (X)"],
+		L["The button prompt over things you can use or talk to (your bobber, an NPC) stays up in " ..
 		"CineMode while the nameplates fade, so you can see what the gamepad can reach: a bobber " ..
-		"showing it can be caught. Unticked, it fades with them.")
+		"showing it can be caught. Unticked, it fades with them."])
 	prompt:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", -2, -16)
-	local press = Check(content, "gamepadPressReveal", "Show the action bars when you press a button",
-		"Gamepad mode's mouseover: pressing any gamepad button brings the action bars up, and " ..
+	local press = Check(content, "gamepadPressReveal", L["Show the action bars when you press a button"],
+		L["Gamepad mode's mouseover: pressing any gamepad button brings the action bars up, and " ..
 		"they fade out again your \"stays after mouseover\" time later (Mouseover page). " ..
 		"Each press starts that time again. Choose the buttons in the list below. Presses that " ..
 		"make you jump don't count (whichever button jumps), nor presses while you fish (the " ..
-		"fish camera on, a cast going, or looting).")
+		"fish camera on, a cast going, or looting)."])
 	press:SetPoint("TOPLEFT", prompt, "BOTTOMLEFT", 0, -2)
 	press:HookScript("OnClick", Refresh) -- grey out / enable the options below
 
@@ -3492,11 +3550,11 @@ local function CreateGamepadPanel()
 	listToggle.icon:SetPoint("LEFT", 0, 0)
 	listToggle.text = listToggle:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	listToggle.text:SetPoint("LEFT", listToggle.icon, "RIGHT", 4, 0)
-	listToggle.text:SetText("Buttons that show them")
+	listToggle.text:SetText(L["Buttons that show them"])
 	listToggle:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight", "ADD")
 	listToggle:GetHighlightTexture():SetAllPoints(listToggle.icon)
-	Tooltip(listToggle, "Click to show or hide the list of buttons: untick one and pressing it " ..
-		"doesn't bring the action bars up.")
+	Tooltip(listToggle, L["Click to show or hide the list of buttons: untick one and pressing it " ..
+		"doesn't bring the action bars up."])
 	-- The list sits in a box that's empty and flat while closed, so what
 	-- comes below moves up.
 	local BUTTON_COLUMN, BUTTON_ROW = 200, 24
@@ -3536,18 +3594,18 @@ local function CreateGamepadPanel()
 	-- check's 2 left and the toggle's 28.)
 	local stack = Stack(list, "label")
 	stack.indent = 26
-	stack:Header(content, "Action bar fading")
-	local stay = stack:Add(Slider(content, "gamepadPressHold", "Stay after a press", 0, 10, 0.5, "%.1f sec"),
+	stack:Header(content, L["Action bar fading"])
+	local stay = stack:Add(Slider(content, "gamepadPressHold", L["Stay after a press"], 0, 10, 0.5, L["%.1f sec"]),
 		"slider")
-	Tooltip(stay, "How long the action bars stay after your last button press, counting their fade out.")
+	Tooltip(stay, L["How long the action bars stay after your last button press, counting their fade out."])
 	GreyUnless(stay, function(db) return db.gamepadPressReveal end)
-	local fadeIn = stack:Add(Slider(content, "gamepadBarsFadeIn", "Fade in time", 0, 3, 0.1, "%.1f sec"),
+	local fadeIn = stack:Add(Slider(content, "gamepadBarsFadeIn", L["Fade in time"], 0, 3, 0.1, L["%.1f sec"]),
 		"slider")
-	Tooltip(fadeIn, "How long the gamepad action bars take to fade in: for button presses, fights and " ..
-		"targets alike. The rest of the UI uses the fade times on the CineMode page.")
-	local fadeOut = stack:Add(Slider(content, "gamepadBarsFadeOut", "Fade out time", 0, 3, 0.1, "%.1f sec"),
+	Tooltip(fadeIn, L["How long the gamepad action bars take to fade in: for button presses, fights and " ..
+		"targets alike. The rest of the UI uses the fade times on the CineMode page."])
+	local fadeOut = stack:Add(Slider(content, "gamepadBarsFadeOut", L["Fade out time"], 0, 3, 0.1, L["%.1f sec"]),
 		"slider")
-	Tooltip(fadeOut, "How long the gamepad action bars take to fade out.")
+	Tooltip(fadeOut, L["How long the gamepad action bars take to fade out."])
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -3559,20 +3617,20 @@ end
 local function CreatePlatesPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Nameplates")
+	local title = Label(content, "GameFontNormalLarge", L["Nameplates"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Which nameplates and names stay up in CineMode: in groups, in fights and in each kind of place.")
+		L["Which nameplates and names stay up in CineMode: in groups, in fights and in each kind of place."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	-- The page's master switch: off, CineMode leaves nameplates and names to
 	-- the game's own options (everything below greys out).
-	local handleCheck = Check(content, "handlePlates", "Let CineMode handle nameplates and names",
-		"On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, " ..
-		"and the game's own options decide, in CineMode and out.",
+	local handleCheck = Check(content, "handlePlates", L["Let CineMode handle nameplates and names"],
+		L["On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, " ..
+		"and the game's own options decide, in CineMode and out."],
 		function(value)
 			ns.GetDB().handlePlates = value
 			if value and ns.EnsurePlateRows then
@@ -3612,33 +3670,33 @@ local function CreatePlatesPanel()
 	end
 	-- Both grids' column tooltips (each box adds its row's note). Grouped keeps
 	-- its row up in a party or raid, in fights and out, whatever the rest says.
-	local COMBAT_TIP = "Show in fights, and for the Calm Timer after."
-	local PVP_COMBAT_TIP = "Show in fights while you're PvP flagged, and for the Calm Timer after."
-	local GROUP_TIP = "Always show while you're in a party or raid."
+	local COMBAT_TIP = L["Show in fights, and for the Calm Timer after."]
+	local PVP_COMBAT_TIP = L["Show in fights while you're PvP flagged, and for the Calm Timer after."]
+	local GROUP_TIP = L["Always show while you're in a party or raid."]
 
-	local showHeader = Header(content, "Nameplates", subtitle, -18)
+	local showHeader = Header(content, L["Nameplates"], subtitle, -18)
 	-- The grid can't keep plates up out of fights while the game's own
 	-- "Always Show Nameplates" is off: say so beside it (checked as the page shows).
 	local showAllWarning = Label(content, "GameFontRedSmall",
-		"Blizzard's Always Show Nameplates is off, so nameplates only show in combat.")
+		L["Blizzard's Always Show Nameplates is off, so nameplates only show in combat."])
 	showAllWarning:SetPoint("LEFT", showHeader, "RIGHT", 10, 0)
 	showAllWarning.Refresh = function(self)
 		self:SetShown(GetCVar("nameplateShowAll") == "0")
 	end
 	controls[#controls + 1] = showAllWarning
 	-- Your target, whatever its own row says (not a game option of its own).
-	local targetCheck = Check(content, "plateTarget", "Always show your target's nameplate",
-		"Your target's nameplate shows in CineMode everywhere, in fights and out, even where its row below is off.",
+	local targetCheck = Check(content, "plateTarget", L["Always show your target's nameplate"],
+		L["Your target's nameplate shows in CineMode everywhere, in fights and out, even where its row below is off."],
 		function(value)
 			ns.GetDB().plateTarget = value
 			Refresh()
 		end)
 	targetCheck:SetPoint("TOPLEFT", showHeader, "BOTTOMLEFT", -2, -6)
 	-- Your party or raid, and (a child option) their pets.
-	local membersCheck = Check(content, "plateGroupMembers", "Always show group members' nameplates",
-		"Your party or raid members' nameplates show in CineMode everywhere, in fights and out, even " ..
+	local membersCheck = Check(content, "plateGroupMembers", L["Always show group members' nameplates"],
+		L["Your party or raid members' nameplates show in CineMode everywhere, in fights and out, even " ..
 		"where Friendly Players is off. In dungeons and raids on retail the game won't let addons pick " ..
-		"them out: there every friendly player's nameplate shows.",
+		"them out: there every friendly player's nameplate shows."],
 		function(value)
 			ns.GetDB().plateGroupMembers = value
 			if value then
@@ -3647,8 +3705,8 @@ local function CreatePlatesPanel()
 			Refresh()
 		end)
 	membersCheck:SetPoint("TOPLEFT", targetCheck, "BOTTOMLEFT", 0, -2)
-	local minionsCheck = Check(content, "plateGroupMemberMinions", "Their minions",
-		"Their pets too, and yours.",
+	local minionsCheck = Check(content, "plateGroupMemberMinions", L["Their minions"],
+		L["Their pets too, and yours."],
 		function(value)
 			ns.GetDB().plateGroupMemberMinions = value
 			if value then
@@ -3663,16 +3721,16 @@ local function CreatePlatesPanel()
 	local PLACE_COLUMNS = {
 		{ combat = true },
 		{ pvpCombat = true },
-		{ "PvP", "PvP", "Show while PvP flagged, outside battlegrounds and arenas." },
-		{ "BGs", "BGs & Arenas", "Show in battlegrounds and arenas." },
-		{ "", "Open World", "Show everywhere else, cities and inns included." },
+		{ "PvP", L["PvP"], L["Show while PvP flagged, outside battlegrounds and arenas."] },
+		{ "BGs", L["BGs & Arenas"], L["Show in battlegrounds and arenas."] },
+		{ "", L["Open World"], L["Show everywhere else, cities and inns included."] },
 		{ group = true },
-		{ "Instances", "Instances", "Show in dungeons, scenarios and raids." },
+		{ "Instances", L["Instances"], L["Show in dungeons, scenarios and raids."] },
 	}
 	local headings = {}
 	for _, place in ipairs(PLACE_COLUMNS) do
-		headings[#headings + 1] = (place.combat and "In Combat") or (place.pvpCombat and "In PvP Combat")
-			or (place.group and "Grouped") or place[2]
+		headings[#headings + 1] = (place.combat and L["In Combat"]) or (place.pvpCombat and L["In PvP Combat"])
+			or (place.group and L["Grouped"]) or place[2]
 	end
 	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 0
 	local columnTop = TableTop(minionsCheck, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
@@ -3682,15 +3740,15 @@ local function CreatePlatesPanel()
 
 	-- The game's own nameplate options, with enemy players and NPCs apart.
 	local KINDS = {
-		{ "Enemies", "Enemy Players" },
-		{ "EnemyMinions", "Minions", true },
-		{ "EnemyNPCs", "Enemy NPCs" },
-		{ "EnemyMinor", "Minor", true },
-		{ "Friends", "Friendly Players" },
-		{ "FriendlyMinions", "Minions", true },
-		{ "FriendlyNPCs", "Friendly NPCs" },
+		{ "Enemies", L["Enemy Players"] },
+		{ "EnemyMinions", L["Minions"], true },
+		{ "EnemyNPCs", L["Enemy NPCs"] },
+		{ "EnemyMinor", L["Minor"], true },
+		{ "Friends", L["Friendly Players"] },
+		{ "FriendlyMinions", L["Minions"], true },
+		{ "FriendlyNPCs", L["Friendly NPCs"] },
 	}
-	local tip = " Also turns these nameplates on in the game's options."
+	local tip = L[" Also turns these nameplates on in the game's options."]
 	local lastLabel
 	for r, kind in ipairs(KINDS) do
 		local function Ticked(key)
@@ -3734,9 +3792,9 @@ local function CreatePlatesPanel()
 
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
-	local namesHeader = Header(content, "Names", lastLabel, -24)
+	local namesHeader = Header(content, L["Names"], lastLabel, -24)
 	local namesTop = TableTop(namesHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
-	local nameTip = " Ticking any box turns these names on in the game's options. Ticking none turns them off."
+	local nameTip = L[" Ticking any box turns these names on in the game's options. Ticking none turns them off."]
 	for r, group in ipairs(ns.NAME_GROUPS) do
 		local function Ticked(key)
 			return function(value)
@@ -3754,7 +3812,7 @@ local function CreatePlatesPanel()
 			elseif place.pvpCombat then
 				-- Names can't change mid-fight: they go by how the fight started.
 				pvpCheck = Check(content, "nameCombatPvP" .. group.key, "",
-					PVP_COMBAT_TIP .. " The game only allows this to be set as the fight starts." .. nameTip,
+					PVP_COMBAT_TIP .. L[" The game only allows this to be set as the fight starts."] .. nameTip,
 					Ticked("nameCombatPvP" .. group.key))
 				checks[#checks + 1] = pvpCheck
 			elseif place.group then
@@ -3826,50 +3884,50 @@ local function CreateChatPanel()
 	local chatCanvas
 	chatCanvas, chatPanel = CreateScrollPage()
 
-	local title = Label(chatPanel, "GameFontNormalLarge", "Chat")
+	local title = Label(chatPanel, "GameFontNormalLarge", L["Chat"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(chatPanel, "GameFontHighlightSmall",
-		"The chat window fades with the rest of the UI in CineMode. Mousing over it or typing " ..
-		"always shows it.")
+		L["The chat window fades with the rest of the UI in CineMode. Mousing over it or typing " ..
+		"always shows it."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", chatPanel, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	-- Left column: the chat window, message types
-	local switch = PageSwitch(chatPanel, "handleChat", "Let CineMode handle chat",
-		"On: CineMode fades the chat windows and tabs as this page says. Off: it leaves them alone.",
+	local switch = PageSwitch(chatPanel, "handleChat", L["Let CineMode handle chat"],
+		L["On: CineMode fades the chat windows and tabs as this page says. Off: it leaves them alone."],
 		subtitle)
-	local windowHeader = Header(chatPanel, "Chat window", switch, -20)
+	local windowHeader = Header(chatPanel, L["Chat window"], switch, -20)
 	windowHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -16)
 
-	local chatPeek = Check(chatPanel, "chatPeek", "Show chat when a message arrives",
-		"While the UI is faded, a new message briefly shows just the chat window it " ..
-		"arrived in, with its tabs. Choose which messages below.", function(value)
+	local chatPeek = Check(chatPanel, "chatPeek", L["Show chat when a message arrives"],
+		L["While the UI is faded, a new message briefly shows just the chat window it " ..
+		"arrived in, with its tabs. Choose which messages below."], function(value)
 			ns.GetDB().chatPeek = value
 			Refresh() -- grey out / enable the time and the messages below
 		end)
 	chatPeek:SetPoint("TOPLEFT", windowHeader, "BOTTOMLEFT", -2, -6)
 	local function IfPeek(db) return db.chatPeek end
 
-	local peekTime = Slider(chatPanel, "chatPeekTime", "Show chat for", 2, 30, 1, "%d sec")
+	local peekTime = Slider(chatPanel, "chatPeekTime", L["Show chat for"], 2, 30, 1, L["%d sec"])
 	peekTime:SetPoint("TOPLEFT", chatPeek, "BOTTOMLEFT", 4, -26)
-	Tooltip(peekTime, "How long chat stays up after a message arrives or after you finish typing.")
+	Tooltip(peekTime, L["How long chat stays up after a message arrives or after you finish typing."])
 	GreyUnless(peekTime, IfPeek)
 
-	local untilRead = Check(chatPanel, "chatUntilWhisperRead", "Keep chat up until whispers are read",
-		"When a whisper arrives in its own tab, the whole chat window stays up in CineMode " ..
+	local untilRead = Check(chatPanel, "chatUntilWhisperRead", L["Keep chat up until whispers are read"],
+		L["When a whisper arrives in its own tab, the whole chat window stays up in CineMode " ..
 		"while that tab flashes, until you click it. Whispers that land in the tab you're " ..
-		"looking at don't flash, so they just show as above.")
+		"looking at don't flash, so they just show as above."])
 	untilRead:SetPoint("TOPLEFT", peekTime, "BOTTOMLEFT", -4, -18)
 
-	local typesHeader = Header(chatPanel, "Show chat for these messages", untilRead, -24)
+	local typesHeader = Header(chatPanel, L["Show chat for these messages"], untilRead, -24)
 	typesHeader:SetPoint("TOPLEFT", untilRead, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
 	local previous, previousIsHeader, section = typesHeader, true, nil
 	for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 		if peekType.section == "game" and section ~= "game" then
 			section = "game"
-			local gameHeader = Label(chatPanel, "GameFontNormal", "Game messages")
+			local gameHeader = Label(chatPanel, "GameFontNormal", L["Game messages"])
 			gameHeader:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 2, -14)
 			previous, previousIsHeader = gameHeader, true
 		end
@@ -3882,33 +3940,33 @@ local function CreateChatPanel()
 	end
 
 	-- Right column: the places chat stays up, then channels the player has joined
-	local keepHeader = Label(chatPanel, "GameFontNormal", "Always show in")
+	local keepHeader = Label(chatPanel, "GameFontNormal", L["Always show in"])
 	keepHeader:SetPoint("TOPLEFT", windowHeader, "TOPLEFT", 320, 0)
-	local CHAT_TIP = "The chat window stays up here while the rest of the UI fades. " ..
-		"Only matters where CineMode isn't turned off."
+	local CHAT_TIP = L["The chat window stays up here while the rest of the UI fades. " ..
+		"Only matters where CineMode isn't turned off."]
 	previous = keepHeader
 	for i, place in ipairs({
-		{ "chatInCities", "Cities", "Capital cities. " },
-		{ "chatInDungeons", "Dungeons", "" },
-		{ "chatInRaids", "Raids", "" },
-		{ "chatInPvP", "PvP", PVP_TIP .. " " },
+		{ "chatInCities", L["Cities"], L["Capital cities. "] },
+		{ "chatInDungeons", L["Dungeons"], "" },
+		{ "chatInRaids", L["Raids"], "" },
+		{ "chatInPvP", L["PvP"], PVP_TIP .. " " },
 	}) do
 		local check = Check(chatPanel, place[1], place[2], place[3] .. CHAT_TIP)
 		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
 		previous = check
 	end
 
-	local channelHeader = Label(chatPanel, "GameFontNormal", "Show chat for these channels")
+	local channelHeader = Label(chatPanel, "GameFontNormal", L["Show chat for these channels"])
 	channelHeader:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 2, -18)
 
 	chatPanel.channelHelp = Label(chatPanel, "GameFontHighlightSmall",
-		"Channels you've joined, like General or Trade. The list updates each time " ..
-		"you open this page.")
+		L["Channels you've joined, like General or Trade. The list updates each time " ..
+		"you open this page."])
 	chatPanel.channelHelp:SetPoint("TOPLEFT", channelHeader, "BOTTOMLEFT", 0, -6)
 	chatPanel.channelHelp:SetWidth(260)
 	chatPanel.channelHelp:SetJustifyV("TOP")
 
-	chatPanel.noChannels = Label(chatPanel, "GameFontDisableSmall", "No channels joined.")
+	chatPanel.noChannels = Label(chatPanel, "GameFontDisableSmall", L["No channels joined."])
 	chatPanel.noChannels:SetPoint("TOPLEFT", chatPanel.channelHelp, "BOTTOMLEFT", 0, -10)
 
 	chatCanvas:SetScript("OnShow", PageShown(function()
@@ -3926,7 +3984,7 @@ local RefreshExtras
 -- custom frames alike: the name, then Always and the Standard Frames
 -- page's columns ({ heading, isOn, list, needs "stay cinematic in combat" }).
 local THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_COLUMN_WIDTH = FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH
-local THIRD_PARTY_COLUMNS = { { "Always" } } -- (its own setting: the frames left alone)
+local THIRD_PARTY_COLUMNS = { { L["Always"] } } -- (its own setting: the frames left alone)
 for c = 2, #FRAME_COLUMNS do
 	THIRD_PARTY_COLUMNS[c] = FRAME_COLUMNS[c]
 end
@@ -3965,8 +4023,8 @@ local function GetExtraRow(index)
 	row.delete = CreateFrame("Button", nil, row, "UIPanelCloseButton")
 	row.delete:SetSize(22, 22)
 	row.delete:SetPoint("LEFT", -4, 0)
-	Tooltip(row.delete, "Takes this frame off the list. A frame you added stops fading; " ..
-		"one you kept up fades again if it's one the addon fades by itself.")
+	Tooltip(row.delete, L["Takes this frame off the list. A frame you added stops fading; " ..
+		"one you kept up fades again if it's one the addon fades by itself."])
 	row.delete:SetScript("OnClick", function()
 		if row.item.picked then
 			ns.DropPickedFrame(row.item.name)
@@ -3985,8 +4043,8 @@ local function GetExtraRow(index)
 	for c, column in ipairs(THIRD_PARTY_COLUMNS) do
 		local check
 		if c == 1 then
-			check = Check(row, nil, "", "Show this frame the whole time in CineMode (Cinematic leaves it " ..
-				"alone). Unticked, it's hidden, except as the other columns say.", function(value)
+			check = Check(row, nil, "", L["Show this frame the whole time in CineMode (Cinematic leaves it " ..
+				"alone). Unticked, it's hidden, except as the other columns say."], function(value)
 				ns.SetFrameKept(row.item.name, value)
 				RefreshExtras()
 			end)
@@ -4042,7 +4100,7 @@ RefreshExtras = function()
 			end
 		end
 		if item.picked then
-			row.text:SetText("|cffffd100" .. item.name .. "|r |cff808080(picked)|r")
+			row.text:SetText("|cffffd100" .. item.name .. "|r |cff808080(" .. L["picked"] .. ")|r")
 		else
 			row.text:SetText(item.name)
 		end
@@ -4062,61 +4120,61 @@ end
 local function CreateMinimapPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Minimap")
+	local title = Label(content, "GameFontNormalLarge", L["Minimap"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"When the minimap (and on retail the quest waypoint) stays up in CineMode. " ..
+		L["When the minimap (and on retail the quest waypoint) stays up in CineMode. " ..
 		"Hovering the minimap always shows it. To keep it up all the time, or in fights, " ..
-		"see the Standard Frames page.")
+		"see the Standard Frames page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
-	local switch = PageSwitch(content, "handleMinimap", "Let CineMode handle the minimap",
-		"On: CineMode fades and shrinks the minimap as this page and its Standard Frames row say. " ..
-		"Off: it leaves it alone.", subtitle)
+	local switch = PageSwitch(content, "handleMinimap", L["Let CineMode handle the minimap"],
+		L["On: CineMode fades and shrinks the minimap as this page and its Standard Frames row say. " ..
+		"Off: it leaves it alone."], subtitle)
 
 	-- Retail's quest waypoint (the marker in the world showing where to go).
 	local aboveTracking
 	if ns.OptionAvailable({ retail = true }) then
-		local waypoint = Check(content, "alwaysShowWaypoint", "Always show the quest waypoint",
-			"Keeps the marker showing where your tracked quest or map pin is, with its " ..
-			"distance, visible in CineMode. Off, it fades with the rest of the UI.")
+		local waypoint = Check(content, "alwaysShowWaypoint", L["Always show the quest waypoint"],
+			L["Keeps the marker showing where your tracked quest or map pin is, with its " ..
+			"distance, visible in CineMode. Off, it fades with the rest of the UI."])
 		waypoint:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -10)
 		aboveTracking = waypoint
 	end
 
 	-- Or only while tracking; the kinds of tracking below only apply while it's on.
-	local trackingMaster = Check(content, "minimapForTracking", "Keep minimap open while tracking",
-		"While you're tracking one of the kinds ticked below, the minimap stays up during " ..
-		"CineMode. Also on the minimap button's menu.", function(value)
+	local trackingMaster = Check(content, "minimapForTracking", L["Keep minimap open while tracking"],
+		L["While you're tracking one of the kinds ticked below, the minimap stays up during " ..
+		"CineMode. Also on the minimap button's menu."], function(value)
 			ns.GetDB().minimapForTracking = value
 			Refresh()
 		end)
-	local ping = Check(content, "minimapRevealOnPing", "Reveal when a group member pings it",
-		"Someone in your party or raid pinging the minimap shows it as if you'd hovered it, so " ..
+	local ping = Check(content, "minimapRevealOnPing", L["Reveal when a group member pings it"],
+		L["Someone in your party or raid pinging the minimap shows it as if you'd hovered it, so " ..
 		"you can see where, with the rest of the Mouseover groups that have Minimap ping ticked: it " ..
-		"goes after \"Stays after mouseover\" (Mouseover page). Your own pings don't count.")
+		"goes after \"Stays after mouseover\" (Mouseover page). Your own pings don't count."])
 	if aboveTracking then
 		ping:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
 	else
 		ping:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -10)
 	end
-	local indoors = Check(content, "minimapIndoors", "Keep minimap open indoors",
-		"Inside buildings, caves and cities like Ironforge, the minimap stays up during CineMode. " ..
+	local indoors = Check(content, "minimapIndoors", L["Keep minimap open indoors"],
+		L["Inside buildings, caves and cities like Ironforge, the minimap stays up during CineMode. " ..
 		"The game stops updating the indoor map while the minimap is hidden, so after walking " ..
-		"around it can come back blank or out of date for a moment. Off, it's redrawn as it comes back.")
+		"around it can come back blank or out of date for a moment. Off, it's redrawn as it comes back."])
 	indoors:SetPoint("TOPLEFT", ping, "BOTTOMLEFT", 0, -2)
 	trackingMaster:SetPoint("TOPLEFT", indoors, "BOTTOMLEFT", 0, -2)
-	local TRACKING_TIP = "While this tracking is active, the minimap stays up during cinematic " ..
-		"mode so you can spot nodes or creatures."
+	local TRACKING_TIP = L["While this tracking is active, the minimap stays up during cinematic " ..
+		"mode so you can spot nodes or creatures."]
 	local previousTracking = trackingMaster
 	for i, kind in ipairs({
-		{ "minimapForHerbs", "Herbs (Find Herbs)" },
-		{ "minimapForMinerals", "Minerals (Find Minerals)" },
-		{ "minimapForTreasure", "Treasure (Find Treasure)" },
-		{ "minimapForFish", "Fish (Find Fish)" },
-		{ "minimapForCreatures", "Creatures (hunter, druid, warlock)" },
+		{ "minimapForHerbs", L["Herbs (Find Herbs)"] },
+		{ "minimapForMinerals", L["Minerals (Find Minerals)"] },
+		{ "minimapForTreasure", L["Treasure (Find Treasure)"] },
+		{ "minimapForFish", L["Fish (Find Fish)"] },
+		{ "minimapForCreatures", L["Creatures (hunter, druid, warlock)"] },
 	}) do
 		local check = Check(content, kind[1], kind[2], kind[3] or TRACKING_TIP)
 		check:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", i == 1 and 16 or 0, -2)
@@ -4124,18 +4182,18 @@ local function CreateMinimapPanel()
 		previousTracking = check
 	end
 	-- Places where tracking doesn't keep the minimap up, in the usual place order.
-	local exceptIn = Label(content, "GameFontHighlight", "Except in")
+	local exceptIn = Label(content, "GameFontHighlight", L["Except in"])
 	exceptIn:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", 4, -4)
 	local PLACE_TIPS = {
-		Cities = "Capital cities. ",
-		PvP = "Battlegrounds and arenas (being flagged for PvP out in the world doesn't count). " ..
-			"Alterac Valley's mines do have ore, so untick this if you mine there. ",
+		Cities = L["Capital cities. "],
+		PvP = L["Battlegrounds and arenas (being flagged for PvP out in the world doesn't count). " ..
+			"Alterac Valley's mines do have ore, so untick this if you mine there. "],
 	}
 	for i, place in ipairs(PLACES) do
 		-- (PvP here is battlegrounds and arenas only, so it's named for them.)
-		local label = place[1] == "PvP" and "BGs" or place[2]
+		local label = place[1] == "PvP" and L["BGs"] or place[2]
 		local check = Check(content, "trackingOffIn" .. place[1], label, (PLACE_TIPS[place[1]] or "") ..
-			"Tracking doesn't keep the minimap up here. Hovering it still shows it.")
+			L["Tracking doesn't keep the minimap up here. Hovering it still shows it."])
 		check:SetPoint("TOPLEFT", i == 1 and exceptIn or previousTracking, "BOTTOMLEFT",
 			i == 1 and 12 or 0, i == 1 and -4 or -2)
 		GreyUnless(check, function(db) return db.minimapForTracking end)
@@ -4144,14 +4202,14 @@ local function CreateMinimapPanel()
 
 	-- Hide in camera modes: one box per camera (keys <cam>HideMinimap), in
 	-- two columns.
-	local hideInCams = Label(content, "GameFontHighlight", "Hide in camera modes")
+	local hideInCams = Label(content, "GameFontHighlight", L["Hide in camera modes"])
 	hideInCams:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", -30, -14)
 	local CAM_ROWS, CAM_COLUMN = math.ceil(#ns.CAMERA_OFF_CAMS / 2), 140
 	local camAbove = {}
 	for i, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 		local check = Check(content, cam[1] .. "HideMinimap", cam[2],
-			"While the " .. cam[2] .. " camera runs, the minimap fades, even if it's set to " ..
-			"always show or tracking would keep it up. Hovering it still shows it.")
+			L["While the %s camera runs, the minimap fades, even if it's set to " ..
+			"always show or tracking would keep it up. Hovering it still shows it."]:format(cam[2]))
 		local column, row = math.floor((i - 1) / CAM_ROWS), (i - 1) % CAM_ROWS
 		if row == 0 then
 			check:SetPoint("TOPLEFT", hideInCams, "BOTTOMLEFT", -2 + column * CAM_COLUMN, -4)
@@ -4170,41 +4228,41 @@ end
 local function CreateQuestTrackerPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Quest tracker")
+	local title = Label(content, "GameFontNormalLarge", L["Quest tracker"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it " ..
-		"up all the time, or in fights, see the Standard Frames page.")
+		L["When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it " ..
+		"up all the time, or in fights, see the Standard Frames page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	local reveal = Check(content, "questRevealOnAccept", "Reveal on new quest",
-		"Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the " ..
+	local reveal = Check(content, "questRevealOnAccept", L["Reveal on new quest"],
+		L["Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the " ..
 		"Mouseover groups that have Quest progress ticked): it goes after \"Stays after " ..
-		"mouseover\" (Mouseover page).")
+		"mouseover\" (Mouseover page)."])
 	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -48)
-	PageSwitch(content, "handleQuests", "Let CineMode handle the quest tracker",
-		"On: CineMode fades the quest tracker (and the quest timer and waypoint) as this page and its " ..
-		"Standard Frames row say. Off: it leaves them alone.", subtitle)
+	PageSwitch(content, "handleQuests", L["Let CineMode handle the quest tracker"],
+		L["On: CineMode fades the quest tracker (and the quest timer and waypoint) as this page and its " ..
+		"Standard Frames row say. Off: it leaves them alone."], subtitle)
 
-	local revealProgress = Check(content, "questRevealOnProgress", "Reveal on receiving quest objective",
-		"Progress on a quest's objectives (a kill or item counted towards it) shows the quest " ..
-		"tracker the same way.")
+	local revealProgress = Check(content, "questRevealOnProgress", L["Reveal on receiving quest objective"],
+		L["Progress on a quest's objectives (a kill or item counted towards it) shows the quest " ..
+		"tracker the same way."])
 	revealProgress:SetPoint("TOPLEFT", reveal, "BOTTOMLEFT", 0, -2)
 
 	-- Classic's quest timer box (retail shows timers in the tracker itself).
 	if ns.OptionAvailable({ retail = false }) then
-		local timer = Check(content, "questTimerShow", "Show the quest timer while one is running",
-			"Keeps the quest timer box up in CineMode, and in fights, while a timed quest " ..
-			"counts down. Just the timer: the quest tracker stays faded.")
+		local timer = Check(content, "questTimerShow", L["Show the quest timer while one is running"],
+			L["Keeps the quest timer box up in CineMode, and in fights, while a timed quest " ..
+			"counts down. Just the timer: the quest tracker stays faded."])
 		timer:SetPoint("TOPLEFT", revealProgress, "BOTTOMLEFT", 0, -2)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Quest tracker")
+	RegisterSubpage(canvas, L["Quest tracker"])
 end
 
 -- Sub-page: Classic's swing timer bars: only the weapons in use, and the
@@ -4212,99 +4270,98 @@ end
 local function CreateSwingPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Swing timer")
+	local title = Label(content, "GameFontNormalLarge", L["Swing timer"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Which of the game's swing timer bars show, in CineMode and out. When they come up in " ..
-		"CineMode is the Swing timer row on the Standard Frames page.")
+		L["Which of the game's swing timer bars show, in CineMode and out. When they come up in " ..
+		"CineMode is the Swing timer row on the Standard Frames page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	-- The page's master switch: off, CineMode leaves the swing timer alone
 	-- (everything below greys out, and its Standard Frames row).
-	local handleCheck = PageSwitch(content, "handleSwing", "Let CineMode handle the swing timer",
-		"On: CineMode fades the swing timer as this page and its Standard Frames row say. Off: it " ..
-		"leaves it alone, and the game shows every bar as usual, in CineMode and out.", subtitle)
+	local handleCheck = PageSwitch(content, "handleSwing", L["Let CineMode handle the swing timer"],
+		L["On: CineMode fades the swing timer as this page and its Standard Frames row say. Off: it " ..
+		"leaves it alone, and the game shows every bar as usual, in CineMode and out."], subtitle)
 
-	local smart = Check(content, "swingSmartShow", "Only show the weapons you're using",
-		"The main hand (and off-hand) bars show while you auto-attack, the ranged bar while you " ..
+	local smart = Check(content, "swingSmartShow", L["Only show the weapons you're using"],
+		L["The main hand (and off-hand) bars show while you auto-attack, the ranged bar while you " ..
 		"shoot. A hunter's main hand bar comes up when they melee, a warrior's ranged bar when " ..
-		"they shoot, and each fades out a while after (the slider below).")
+		"they shoot, and each fades out a while after (the slider below)."])
 	smart:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -8)
 	smart:HookScript("OnClick", Refresh) -- grey out / enable the slider below
 
-	local after = Slider(content, "swingHideAfter", "Fade out after the bar is done for", 0, 30, 1, "%d sec")
+	local after = Slider(content, "swingHideAfter", L["Fade out after the bar is done for"], 0, 30, 1, L["%d sec"])
 	after:SetPoint("TOPLEFT", smart, "BOTTOMLEFT", 20, -24)
-	Tooltip(after, "Once you stop swinging or shooting and the bar has run down to 0, it stays this " ..
-		"long before fading out.")
+	Tooltip(after, L["Once you stop swinging or shooting and the bar has run down to 0, it stays this " ..
+		"long before fading out."])
 	GreyUnless(after, function(db) return db.handleSwing and db.swingSmartShow end)
 
-	local offHand = Check(content, "swingHideOffHand", "Hide the off-hand bar",
-		"Never show the off-hand swing timer, dual wielding or not.")
+	local offHand = Check(content, "swingHideOffHand", L["Hide the off-hand bar"],
+		L["Never show the off-hand swing timer, dual wielding or not."])
 	offHand:SetPoint("TOPLEFT", after, "BOTTOMLEFT", -20, -16)
 
 	-- (Per class: your current one's.)
 	local className, class = UnitClass("player")
-	local rangedTop = Check(content, "swingRangedOnTop" .. class, "Ranged bar on top for " .. className,
-		"The main hand and ranged bars trade places, so the ranged bar is where the main hand's " ..
+	local rangedTop = Check(content, "swingRangedOnTop" .. class, L["Ranged bar on top for %s"]:format(className),
+		L["The main hand and ranged bars trade places, so the ranged bar is where the main hand's " ..
 		"was. Set for each class on its own (ticked for hunters, mages, priests and warlocks to start with), so one profile " ..
-		"suits all your characters.")
+		"suits all your characters."])
 	rangedTop:SetPoint("TOPLEFT", offHand, "BOTTOMLEFT", 0, -2)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Swing timer")
+	RegisterSubpage(canvas, L["Swing timer"])
 end
 
 -- Sub-page: the Cooldown Manager (the game's, or Forever Enhanced Cooldown Manager).
 local function CreateCooldownPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Cooldown Manager")
+	local title = Label(content, "GameFontNormalLarge", L["Cooldown Manager"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"When the Cooldown Manager comes up in CineMode (Enhanced Cooldown Manager's bars too). Hovering " ..
+		L["When the Cooldown Manager comes up in CineMode (Enhanced Cooldown Manager's bars too). Hovering " ..
 		"it always shows it. To keep it up all the time, or in fights, see the Standard Frames page; " ..
-		"what comes up with it is on the Mouseover page.")
+		"what comes up with it is on the Mouseover page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	-- The page's master switch: off, CineMode leaves the Cooldown Manager alone
 	-- (everything below greys out, and its Standard Frames row).
-	local handleCheck = PageSwitch(content, "handleCooldowns", "Let CineMode handle the Cooldown Manager",
-		"On: CineMode fades the Cooldown Manager as this page and its Standard Frames row say. Off: " ..
-		"it leaves it alone, and the game's own options decide, in CineMode and out.", subtitle)
+	local handleCheck = PageSwitch(content, "handleCooldowns", L["Let CineMode handle the Cooldown Manager"],
+		L["On: CineMode fades the Cooldown Manager as this page and its Standard Frames row say. Off: " ..
+		"it leaves it alone, and the game's own options decide, in CineMode and out."], subtitle)
 	local function Handled() return ns.GetDB().handleCooldowns end
 
-	local recharging = Check(content, "cooldownWhileRecharging", "Stay up while a cooldown is recharging",
-		"Keeps the Cooldown Manager up until every cooldown in it is ready again, then it fades. Not " ..
+	local recharging = Check(content, "cooldownWhileRecharging", L["Stay up while a cooldown is recharging"],
+		L["Keeps the Cooldown Manager up until every cooldown in it is ready again, then it fades. Not " ..
 		"the global cooldown, nor its buff bars. (It brings up the Mouseover groups with Cooldown " ..
-		"recharging ticked: the Cooldowns group by default.)")
+		"recharging ticked: the Cooldowns group by default.)"])
 	recharging:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -8)
 	recharging:HookScript("OnClick", Refresh) -- grey out / enable the option below
 	GreyUnless(recharging, function(db) return db.handleCooldowns end)
 
-	local afterCombat = Check(content, "cooldownAfterCombat", "Only after combat",
-		"Only within the Calm Timer after a fight (CineMode page): after that it fades even with a " ..
-		"long cooldown still going, and cooldowns used out of fights don't bring it up.")
+	local afterCombat = Check(content, "cooldownAfterCombat", L["Only after combat"],
+		L["Only within the Calm Timer after a fight (CineMode page): after that it fades even with a " ..
+		"long cooldown still going, and cooldowns used out of fights don't bring it up."])
 	afterCombat:SetPoint("TOPLEFT", recharging, "BOTTOMLEFT", 16, -2)
 	GreyUnless(afterCombat, function(db) return db.handleCooldowns and db.cooldownWhileRecharging end)
 
 	-- Spells shown only when ready in combat: a box per spell in the
 	-- Cooldown Manager's spell bars now, then any ticked that aren't in it.
-	local readyHeader = Label(content, "GameFontNormal", "Only when ready in combat")
+	local readyHeader = Label(content, "GameFontNormal", L["Only when ready in combat"])
 	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", -14, -18)
 	local readyNote = Label(content, "GameFontHighlightSmall",
-		"Tick a spell to show its icon only in fights, and only once it's nearly ready: out of fights, " ..
+		L["Tick a spell to show its icon only in fights, and only once it's nearly ready: out of fights, " ..
 		"and while it recharges, it fades out, in CineMode or not. It comes back once it's ready, or " ..
-		"with Show Early ticked the seconds set beside it before (left empty: " .. ns.READY_EARLY * 100 ..
-		"% of its cooldown). " ..
+		"with Show Early ticked the seconds set beside it before (left empty: %d%% of its cooldown). " ..
 		"Its place in the bar stays, so it sits best at the end of one. In fights the game may not " ..
-		"say how long is left, so then it goes by when you last cast it.")
+		"say how long is left, so then it goes by when you last cast it."]:format(ns.READY_EARLY * 100))
 	readyNote:SetPoint("TOPLEFT", readyHeader, "BOTTOMLEFT", 0, -6)
 	readyNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	readyNote:SetJustifyH("LEFT")
@@ -4315,12 +4372,12 @@ local function CreateCooldownPanel()
 	-- Two columns: the spell (ticked: only when ready in combat), and Show
 	-- Early (ticked: back the seconds in its box before it's ready).
 	local EARLY_X, ROW_HEIGHT = 296, 24
-	local spellHeading = Label(content, "GameFontNormalSmall", "Spell")
+	local spellHeading = Label(content, "GameFontNormalSmall", L["Spell"])
 	spellHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -10)
-	local earlyHeading = Label(content, "GameFontNormalSmall", "Show Early")
+	local earlyHeading = Label(content, "GameFontNormalSmall", L["Show Early"])
 	earlyHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", EARLY_X, -10)
 	local noSpells = Label(content, "GameFontDisable",
-		"No spells in the Cooldown Manager's spell bars right now.")
+		L["No spells in the Cooldown Manager's spell bars right now."])
 	noSpells:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, -8)
 
 	local GetName = (C_Spell and C_Spell.GetSpellName) or function(id) return (GetSpellInfo(id)) end
@@ -4339,15 +4396,15 @@ local function CreateCooldownPanel()
 			local check = spellChecks[i]
 			if not check then
 				local y = -2 - (i - 1) * ROW_HEIGHT
-				check = Check(content, nil, "", "Out of fights, and while it recharges, this spell's " ..
-					"icon fades out of the Cooldown Manager.", function(value)
+				check = Check(content, nil, "", L["Out of fights, and while it recharges, this spell's " ..
+					"icon fades out of the Cooldown Manager."], function(value)
 					ns.GetDB().cooldownReadyOnly[spellChecks[i].spellID] = value or nil
 					spellChecks[i]:Refresh() -- (greys its Show Early)
 				end)
 				check:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", -2, y)
 				-- Show Early: ticked, back before it's ready; unticked, only once it is.
-				local earlyCheck = Check(content, nil, "", "Bring the icon back a little before it's " ..
-					"ready, by the seconds beside it. Unticked, it comes back once it's ready.", function(value)
+				local earlyCheck = Check(content, nil, "", L["Bring the icon back a little before it's " ..
+					"ready, by the seconds beside it. Unticked, it comes back once it's ready."], function(value)
 					ns.GetDB().cooldownEarlyOn[check.spellID] = value or nil
 					check:Refresh()
 				end)
@@ -4360,8 +4417,8 @@ local function CreateCooldownPanel()
 				early:SetNumeric(true)
 				early:SetMaxLetters(4)
 				early:SetPoint("LEFT", earlyCheck, "RIGHT", 6, 0)
-				Tooltip(early, "How many seconds before it's ready the icon comes back. Leave it empty " ..
-					"for " .. ns.READY_EARLY * 100 .. "% of its cooldown.")
+				Tooltip(early, L["How many seconds before it's ready the icon comes back. Leave it empty " ..
+					"for %d%% of its cooldown."]:format(ns.READY_EARLY * 100))
 				local function Save(self)
 					local spell = check.spellID
 					if spell then
@@ -4397,8 +4454,8 @@ local function CreateCooldownPanel()
 					end
 					local length = ns.CooldownLength(spell)
 					self.earlyText:SetText(set and "sec" or (length
-						and ("sec (empty: %d)"):format(math.floor(length * ns.READY_EARLY + 0.5))
-						or ("sec (empty: %d%%)"):format(ns.READY_EARLY * 100)))
+						and (L["sec (empty: %d)"]):format(math.floor(length * ns.READY_EARLY + 0.5))
+						or (L["sec (empty: %d%%)"]):format(ns.READY_EARLY * 100)))
 					local handled = Handled()
 					self:SetEnabled(handled)
 					local label = self.Text or self.text
@@ -4419,8 +4476,8 @@ local function CreateCooldownPanel()
 			local okIcon, icon = pcall(GetIcon, id)
 			local text = check.Text or check.text
 			text:SetText(("|T%s:16|t %s%s"):format(okIcon and icon or 134400,
-				okName and name or ("Spell " .. id),
-				inManager[id] and "" or " |cff808080(not in it now)|r"))
+				okName and name or L["Spell %d"]:format(id),
+				inManager[id] and "" or L[" |cff808080(not in it now)|r"]))
 			text:SetWidth(EARLY_X - 36)
 			text:SetJustifyH("LEFT")
 			text:SetWordWrap(false)
@@ -4447,7 +4504,7 @@ local function CreateCooldownPanel()
 		shown()
 	end)
 	canvas:Hide()
-	RegisterSubpage(canvas, "Cooldown Manager")
+	RegisterSubpage(canvas, L["Cooldown Manager"])
 end
 
 -- Sub-page: tooltips. World tooltips and unit frames' hide where the Hide
@@ -4456,45 +4513,45 @@ end
 local function CreateTooltipPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Tooltips")
+	local title = Label(content, "GameFontNormalLarge", L["Tooltips"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleTooltips", "Let CineMode handle tooltips",
-		"On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal.", title)
+	local switch = PageSwitch(content, "handleTooltips", L["Let CineMode handle tooltips"],
+		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], title)
 
 	-- Where to hide them.
-	local hideHeader = Label(content, "GameFontNormal", "Hide tooltips")
+	local hideHeader = Label(content, "GameFontNormal", L["Hide tooltips"])
 	hideHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -18)
-	local HIDE_TIP = " Hides the tooltips for players, NPCs and objects you mouse over in the world, " ..
+	local HIDE_TIP = L[" Hides the tooltips for players, NPCs and objects you mouse over in the world, " ..
 		"and for units on unit frames, but for the kinds ticked under But still show. Hold your Show " ..
-		"hidden tooltips key (set it on the Keybinds page) to see one anyway."
-	local inCine = Check(content, "tooltipHideInCine", "In CineMode",
-		"The whole time CineMode is on, whatever the camera's doing." .. HIDE_TIP)
+		"hidden tooltips key (set it on the Keybinds page) to see one anyway."]
+	local inCine = Check(content, "tooltipHideInCine", L["In CineMode"],
+		L["The whole time CineMode is on, whatever the camera's doing."] .. HIDE_TIP)
 	inCine:SetPoint("TOPLEFT", hideHeader, "BOTTOMLEFT", 10, -6)
 	inCine:HookScript("OnClick", Refresh) -- grey out / enable the camera modes and the list below
 
 	-- The camera modes, in two columns of five, down the first then the second.
 	local MODES = { "Flight", "Idle", "Cozy", "Tele", "Vista", "Fish", "Walk", "Run", "Death", "Quest" }
-	local inModes = Check(content, "tooltipHideInModes", "In these camera modes",
-		"Only while one of the camera modes ticked below is running." .. HIDE_TIP)
+	local inModes = Check(content, "tooltipHideInModes", L["In these camera modes"],
+		L["Only while one of the camera modes ticked below is running."] .. HIDE_TIP)
 	inModes:SetPoint("TOPLEFT", inCine, "BOTTOMLEFT", 0, -2)
 	inModes:HookScript("OnClick", Refresh) -- grey out / enable the modes below
 	GreyUnless(inModes, function(db) return not db.tooltipHideInCine end)
 	local tooltipModes, firstOfColumn, lastOfFirst = nil, nil, nil
 	for i, mode in ipairs({
-		{ "Flight", "On flights" },
-		{ "Idle", "AFK camera (standing still or AFK)" },
-		{ "Cozy", "Cozy (campfire, sitting, emotes)" },
-		{ "Tele", "Tele (Hearthstone, teleports)" },
-		{ "Vista", "Vista (/stare)" },
-		{ "Fish", "Fish (fishing)" },
-		{ "Walk", "RP walking" },
-		{ "Run", "Auto-running" },
-		{ "Death", "Death camera" },
-		{ "Quest", "Quest camera (talking to quest givers)" },
+		{ "Flight", L["On flights"] },
+		{ "Idle", L["AFK camera (standing still or AFK)"] },
+		{ "Cozy", L["Cozy (campfire, sitting, emotes)"] },
+		{ "Tele", L["Tele (Hearthstone, teleports)"] },
+		{ "Vista", L["Vista (/stare)"] },
+		{ "Fish", L["Fish (fishing)"] },
+		{ "Walk", L["RP walking"] },
+		{ "Run", L["Auto-running"] },
+		{ "Death", L["Death camera"] },
+		{ "Quest", L["Quest camera (talking to quest givers)"] },
 	}) do
 		local hideIn = Check(content, "tooltipHideIn" .. mode[1], mode[2],
-			"Tooltips are hidden while this camera mode is running.")
+			L["Tooltips are hidden while this camera mode is running."])
 		if i == 1 then
 			hideIn:SetPoint("TOPLEFT", inModes, "BOTTOMLEFT", 20, -2)
 			firstOfColumn = hideIn
@@ -4509,8 +4566,8 @@ local function CreateTooltipPanel()
 		tooltipModes = hideIn
 	end
 
-	local outside = Check(content, "tooltipHideOutsideCine", "Outside CineMode",
-		"While CineMode is off too: with In CineMode ticked as well, tooltips are always hidden." .. HIDE_TIP)
+	local outside = Check(content, "tooltipHideOutsideCine", L["Outside CineMode"],
+		L["While CineMode is off too: with In CineMode ticked as well, tooltips are always hidden."] .. HIDE_TIP)
 	outside:SetPoint("TOPLEFT", lastOfFirst, "BOTTOMLEFT", -20, -2)
 	outside:HookScript("OnClick", Refresh) -- grey out / enable the list below
 
@@ -4529,7 +4586,7 @@ local function CreateTooltipPanel()
 	end
 
 	-- What shows anyway, each on a line of its own.
-	local stillHeader = Label(content, "GameFontNormal", "But still show")
+	local stillHeader = Label(content, "GameFontNormal", L["But still show"])
 	stillHeader:SetPoint("TOPLEFT", outside, "BOTTOMLEFT", -10, -14)
 	local previous = stillHeader
 	local function StillShow(key, label, tip, x)
@@ -4539,33 +4596,33 @@ local function CreateTooltipPanel()
 		previous = check
 		return check
 	end
-	StillShow("tooltipShowEnemy", "Enemies",
-		"Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems, " ..
-		"show at once. In combat, the list under In combat decides instead, while it's ticked.", 10)
-	StillShow("tooltipShowFriendly", "Friendlies",
-		"Players and NPCs you can't attack, and their pets, minions and totems, show at once. In " ..
-		"combat, the list under In combat decides instead, while it's ticked.")
-	StillShow("tooltipShowGather", "Gatherables (herbs, ore, skinnable)",
-		"Herbs, ore and creatures you can skin show at once, so you can see whether you can " ..
-		"gather them.")
-	StillShow("tooltipShowQuest", "Quest objectives",
-		"Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\") show at " ..
-		"once, so you can check your progress.")
+	StillShow("tooltipShowEnemy", L["Enemies"],
+		L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems, " ..
+		"show at once. In combat, the list under In combat decides instead, while it's ticked."], 10)
+	StillShow("tooltipShowFriendly", L["Friendlies"],
+		L["Players and NPCs you can't attack, and their pets, minions and totems, show at once. In " ..
+		"combat, the list under In combat decides instead, while it's ticked."])
+	StillShow("tooltipShowGather", L["Gatherables (herbs, ore, skinnable)"],
+		L["Herbs, ore and creatures you can skin show at once, so you can see whether you can " ..
+		"gather them."])
+	StillShow("tooltipShowQuest", L["Quest objectives"],
+		L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\") show at " ..
+		"once, so you can check your progress."])
 
 	-- In combat, the kinds ticked under it show (and nothing else does).
-	local combat = StillShow("tooltipShowInCombat", "In combat, these instead",
-		"In a fight, only the kinds ticked below show; the rest stay hidden.")
+	local combat = StillShow("tooltipShowInCombat", L["In combat, these instead"],
+		L["In a fight, only the kinds ticked below show; the rest stay hidden."])
 	combat:HookScript("OnClick", Refresh) -- grey out / enable the kinds below
 	local kinds = combat
 	for i, kind in ipairs({
-		{ "tooltipCombatShowEnemy", "Enemies",
-			"Players and NPCs you can attack, and their pets, minions and totems." },
-		{ "tooltipCombatShowFriendly", "Friendlies",
-			"Players and NPCs you can't attack, and their pets, minions and totems." },
-		{ "tooltipCombatShowElse", "Everything else",
-			"Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus " ..
+		{ "tooltipCombatShowEnemy", L["Enemies"],
+			L["Players and NPCs you can attack, and their pets, minions and totems."] },
+		{ "tooltipCombatShowFriendly", L["Friendlies"],
+			L["Players and NPCs you can't attack, and their pets, minions and totems."] },
+		{ "tooltipCombatShowElse", L["Everything else"],
+			L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus " ..
 			"and the rest. Off: they're hidden in combat, and the UI's only come back while you hold " ..
-			"your Show hidden tooltips key." },
+			"your Show hidden tooltips key."] },
 	}) do
 		local check = Check(content, kind[1], kind[2], kind[3])
 		check:SetPoint("TOPLEFT", kinds, "BOTTOMLEFT", i == 1 and 20 or 0, -2)
@@ -4574,30 +4631,30 @@ local function CreateTooltipPanel()
 	end
 
 	-- After hovering: the wait, then warm, and the fade.
-	local tooltipReveal = StillShow("tooltipReveal", "After hovering",
-		"A hidden world tooltip shows once you've kept the mouse on the same player, NPC or " ..
-		"object for the time below.")
+	local tooltipReveal = StillShow("tooltipReveal", L["After hovering"],
+		L["A hidden world tooltip shows once you've kept the mouse on the same player, NPC or " ..
+		"object for the time below."])
 	tooltipReveal:ClearAllPoints()
 	tooltipReveal:SetPoint("TOPLEFT", kinds, "BOTTOMLEFT", -20, -2)
 	tooltipReveal:HookScript("OnClick", Refresh) -- grey out / enable the sliders
 	local function Revealing(db) return db.tooltipReveal end
 
-	local tooltipRevealDelay = Slider(content, "tooltipRevealDelay", "After hovering for", 0, 10, 0.5, "%.1f sec")
+	local tooltipRevealDelay = Slider(content, "tooltipRevealDelay", L["After hovering for"], 0, 10, 0.5, L["%.1f sec"])
 	tooltipRevealDelay:SetPoint("TOPLEFT", tooltipReveal, "BOTTOMLEFT", 24, -26)
 	GreyUnless(tooltipRevealDelay, Hiding(Revealing))
-	Tooltip(tooltipRevealDelay, "How long to keep the mouse on something before its tooltip shows.")
+	Tooltip(tooltipRevealDelay, L["How long to keep the mouse on something before its tooltip shows."])
 
-	local tooltipWarm = Slider(content, "tooltipWarmTime", "Then show at once until none for", 0, 15, 0.5, "%.1f sec")
+	local tooltipWarm = Slider(content, "tooltipWarmTime", L["Then show at once until none for"], 0, 15, 0.5, L["%.1f sec"])
 	tooltipWarm:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", 0, -26)
 	GreyUnless(tooltipWarm, Hiding(Revealing))
-	Tooltip(tooltipWarm, "Once one tooltip has shown, whatever you hover next shows at once too, " ..
-		"until no world tooltip has been up for this long. 0: every tooltip waits.")
+	Tooltip(tooltipWarm, L["Once one tooltip has shown, whatever you hover next shows at once too, " ..
+		"until no world tooltip has been up for this long. 0: every tooltip waits."])
 
-	local tooltipFade = Slider(content, "tooltipFadeTime", "Fade in and out over", 0, 2, 0.05, "%.2f sec")
+	local tooltipFade = Slider(content, "tooltipFadeTime", L["Fade in and out over"], 0, 2, 0.05, L["%.2f sec"])
 	tooltipFade:SetPoint("TOPLEFT", tooltipWarm, "BOTTOMLEFT", 0, -26)
 	GreyUnless(tooltipFade, Hiding(Revealing))
-	Tooltip(tooltipFade, "How long a tooltip that waited takes to fade in, and to fade out when " ..
-		"you move off. 0: no fade.")
+	Tooltip(tooltipFade, L["How long a tooltip that waited takes to fade in, and to fade out when " ..
+		"you move off. 0: no fade."])
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -4608,18 +4665,18 @@ local function CreateExtrasPanel()
 	local canvas, content = CreateScrollPage()
 	extrasPanel = content
 
-	local title = Label(content, "GameFontNormalLarge", "3rd Party Frames")
+	local title = Label(content, "GameFontNormalLarge", L["3rd Party Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleAddonFrames", "Let CineMode handle other addons' frames",
-		"On: CineMode fades the supported addons' frames, and frames you added, as this page says. " ..
-		"Off: it leaves them all alone.", title)
+	local switch = PageSwitch(content, "handleAddonFrames", L["Let CineMode handle other addons' frames"],
+		L["On: CineMode fades the supported addons' frames, and frames you added, as this page says. " ..
+		"Off: it leaves them all alone."], title)
 	local stack = Stack(switch, "check")
-	stack:Header(content, "Supported addons")
-	stack:Note(content, "These addons' frames are hidden in CineMode unless ticked, like the game's " ..
+	stack:Header(content, L["Supported addons"])
+	stack:Note(content, L["These addons' frames are hidden in CineMode unless ticked, like the game's " ..
 		"frames on the Standard Frames page. Tick Always to leave an addon's frames alone (shown the " ..
 		"whole time); the next three show them only while you fight or have something targeted, and " ..
-		"the places while you're there.", 560)
+		"the places while you're there."], 560)
 
 	-- The addons, laid out afresh each time the page opens (most load after
 	-- this one, so whether they're loaded isn't known when it's built): those
@@ -4655,8 +4712,8 @@ local function CreateExtrasPanel()
 		for c, column in ipairs(COLUMNS) do
 			local check
 			if c == 1 then
-				check = Check(content, nil, "", ("Show %s the whole time in CineMode (Cinematic leaves them " ..
-					"alone). Unticked, they're hidden, except as the other columns say.%s"):format(known.about,
+				check = Check(content, nil, "", (L["Show %s the whole time in CineMode (Cinematic leaves them " ..
+					"alone). Unticked, they're hidden, except as the other columns say.%s"]):format(known.about,
 					known.note and " " .. known.note or ""), function(value)
 					ns.SetAddonFramesOn(known.key, not value)
 					Refresh() -- (greys the other columns)
@@ -4718,7 +4775,7 @@ local function CreateExtrasPanel()
 				Layout()
 				FitContentHeight(content)
 			end)
-			Tooltip(header, "Click to show or hide its parts.")
+			Tooltip(header, L["Click to show or hide its parts."])
 			suiteHeaders[suite] = header
 		end
 		return header
@@ -4803,8 +4860,8 @@ local function CreateExtrasPanel()
 		else
 			for _, heading in ipairs(headings) do heading:Hide() end
 		end
-		Section("Loaded", function(known) return ns.AddOnLoaded(known.addon) end)
-		Section("Installed, not loaded", function(known) return not ns.AddOnLoaded(known.addon) end)
+		Section(L["Loaded"], function(known) return ns.AddOnLoaded(known.addon) end)
+		Section(L["Installed, not loaded"], function(known) return not ns.AddOnLoaded(known.addon) end)
 
 		-- The rest supported, by name (a suite once).
 		local missing, listed = {}, {}
@@ -4817,8 +4874,8 @@ local function CreateExtrasPanel()
 		end
 		if #missing > 0 then
 			y = y + (y > 0 and 12 or 0)
-			Place(SectionTitle("Not installed"), 0, 20)
-			missingNote:SetText("|cff808080Also supported, when installed: " .. table.concat(missing, ", ") .. "|r")
+			Place(SectionTitle(L["Not installed"]), 0, 20)
+			missingNote:SetText("|cff808080" .. L["Also supported, when installed: %s"]:format(table.concat(missing, ", ")) .. "|r")
 			Place(missingNote, 0, missingNote:GetStringHeight() + 4)
 		else
 			missingNote:Hide()
@@ -4826,20 +4883,20 @@ local function CreateExtrasPanel()
 		box:SetHeight(math.max(1, y))
 	end
 
-	stack:Header(content, "Custom frames")
+	stack:Header(content, L["Custom frames"])
 	content.help = stack:Note(content,
-		"To fade something else, hover over it and type |cffffd100/cine add|r, " ..
+		L["To fade something else, hover over it and type |cffffd100/cine add|r, " ..
 			"or type |cffffd100/cine add|r and its frame name. To pick up several, use the button below " ..
 			"(or |cffffd100/cine add mode|r) and hover over each one. " ..
-		"The columns work as for the supported addons above; the X takes a frame off the list.", 560)
+		"The columns work as for the supported addons above; the X takes a frame off the list."], 560)
 
 	-- Add mode (/cine add mode): pick up frames by hovering, then fade them all.
 	local addMode = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	addMode:SetSize(180, 22)
 	addMode:SetPoint("TOPLEFT", content.help, "BOTTOMLEFT", 0, -10)
-	Tooltip(addMode, "Hover over the frames you want to fade (move this window out of the way, " ..
+	Tooltip(addMode, L["Hover over the frames you want to fade (move this window out of the way, " ..
 		"or close it), then click Stop or type /cine add mode again to fade them all. " ..
-		"The game's own frames and ones already faded are left out. /cine add cancel drops them.")
+		"The game's own frames and ones already faded are left out. /cine add cancel drops them."])
 	addMode:SetScript("OnClick", ns.ToggleAddMode)
 	-- A spinner beside it while it's on, to show it's still watching the mouse.
 	local spinner = addMode:CreateTexture(nil, "OVERLAY")
@@ -4859,7 +4916,7 @@ local function CreateExtrasPanel()
 		local on = ns.IsAddModeOn()
 		spinner:SetShown(on)
 		if on then spin:Play() else spin:Stop() end
-		addMode:SetText(on and "Stop" or "Pick frames by hovering")
+		addMode:SetText(on and L["Stop"] or L["Pick frames by hovering"])
 		local r, g, b = 1, 1, 1
 		if on then r, g, b = 0.3, 1, 0.3 end
 		for _, art in ipairs({ addMode.Left or false, addMode.Middle or false, addMode.Right or false,
@@ -4877,7 +4934,7 @@ local function CreateExtrasPanel()
 		end
 	end
 
-	content.empty = Label(content, "GameFontDisableSmall", "None yet.")
+	content.empty = Label(content, "GameFontDisableSmall", L["None yet."])
 	content.empty:SetPoint("TOPLEFT", addMode, "BOTTOMLEFT", 0, -12)
 
 	canvas:SetScript("OnShow", PageShown(function()
@@ -4888,38 +4945,38 @@ local function CreateExtrasPanel()
 		end
 	end, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "3rd Party Frames")
+	RegisterSubpage(canvas, L["3rd Party Frames"])
 end
 
 -- Sub-page: keybinds. The same bindings as Key Bindings > AddOns, with two
 -- key slots each like Blizzard's page.
 local KEYBINDS = {
-	{ action = "CINEMATIC_HIDEUI", label = "Hide the UI",
-		tip = "Like Blizzard's Alt+Z: hides the whole UI, but keeps the tint, letterbox " ..
-			"and time-of-day title. Press again (or Blizzard's key) to bring it back." },
-	{ action = "CINEMATIC_TOGGLE", label = "Toggle CineMode",
-		tip = "Turns CineMode on or off, like /cine." },
-	{ action = "CINEMATIC_CAM_IDLE", label = "AFK camera",
-		tip = "Starts the AFK camera now, without waiting out its delay. " ..
-			"Press again, move or jump to stop it." },
-	{ action = "CINEMATIC_CAM_COZY", label = "Cozy camera",
-		tip = "Starts the cozy camera now, as if you'd sat down. Press again, move or jump to stop it." },
-	{ action = "CINEMATIC_CAM_VISTA", label = "Vista camera",
-		tip = "Starts the vista camera now, as if you'd done a /stare. Press again, move or jump to stop it." },
-	{ action = "CINEMATIC_CAM_FISH", label = "Fish camera",
-		tip = "Starts the fish camera now, without casting. Press again, move or jump to stop it." },
-	{ action = "CINEMATIC_CAM_TELE", label = "Tele camera",
-		tip = "Starts the tele camera now, as if you were casting your Hearthstone. Press again, move or " ..
-			"jump to stop it." },
-	{ action = "CINEMATIC_CAM_DEATH", label = "Death camera test",
-		tip = "Pretends you're dead for 30 seconds so the death camera runs. Press again to stop. " ..
-			"Like /cine deathtest." },
-	{ action = "CINEMATIC_SHOWTOOLTIPS", label = "Show hidden tooltips",
-		tip = "Hold to see the tooltips the Tooltips page hides, in combat and in CineMode. Pressing it " ..
+	{ action = "CINEMATIC_HIDEUI", label = L["Hide the UI"],
+		tip = L["Like Blizzard's Alt+Z: hides the whole UI, but keeps the tint, letterbox " ..
+			"and time-of-day title. Press again (or Blizzard's key) to bring it back."] },
+	{ action = "CINEMATIC_TOGGLE", label = L["Toggle CineMode"],
+		tip = L["Turns CineMode on or off, like /cine."] },
+	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"],
+		tip = L["Starts the AFK camera now, without waiting out its delay. " ..
+			"Press again, move or jump to stop it."] },
+	{ action = "CINEMATIC_CAM_COZY", label = L["Cozy camera"],
+		tip = L["Starts the cozy camera now, as if you'd sat down. Press again, move or jump to stop it."] },
+	{ action = "CINEMATIC_CAM_VISTA", label = L["Vista camera"],
+		tip = L["Starts the vista camera now, as if you'd done a /stare. Press again, move or jump to stop it."] },
+	{ action = "CINEMATIC_CAM_FISH", label = L["Fish camera"],
+		tip = L["Starts the fish camera now, without casting. Press again, move or jump to stop it."] },
+	{ action = "CINEMATIC_CAM_TELE", label = L["Tele camera"],
+		tip = L["Starts the tele camera now, as if you were casting your Hearthstone. Press again, move or " ..
+			"jump to stop it."] },
+	{ action = "CINEMATIC_CAM_DEATH", label = L["Death camera test"],
+		tip = L["Pretends you're dead for 30 seconds so the death camera runs. Press again to stop. " ..
+			"Like /cine deathtest."] },
+	{ action = "CINEMATIC_SHOWTOOLTIPS", label = L["Show hidden tooltips"],
+		tip = L["Hold to see the tooltips the Tooltips page hides, in combat and in CineMode. Pressing it " ..
 			"while you're on a unit or something in the world brings its tooltip up; anything else, " ..
-			"hover it again with the key held." },
-	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = "Toggle tooltip hiding",
-		tip = "Turns the Tooltips page's \"Let CineMode handle tooltips\" switch on or off." },
+			"hover it again with the key held."] },
+	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = L["Toggle tooltip hiding"],
+		tip = L["Turns the Tooltips page's \"Let CineMode handle tooltips\" switch on or off."] },
 }
 
 local IGNORED_KEYS = {
@@ -4938,9 +4995,9 @@ local function RefreshKeybinds()
 	for _, button in ipairs(keybindButtons) do
 		local key = select(button.slot, GetBindingKey(button.action))
 		if button == listening then
-			button:SetText("Press a key")
+			button:SetText(L["Press a key"])
 		else
-			button:SetText(key and KeyText(key) or "|cff808080Not bound|r")
+			button:SetText(key and KeyText(key) or L["|cff808080Not bound|r"])
 		end
 	end
 end
@@ -4962,7 +5019,7 @@ end
 local function Bind(button, key)
 	StopListening()
 	if InCombatLockdown() then
-		ns.Print("keybinds can't be changed in combat")
+		ns.Print(L["keybinds can't be changed in combat"])
 		return
 	end
 	local action = button.action
@@ -4970,8 +5027,8 @@ local function Bind(button, key)
 	if key then
 		local previous = GetBindingAction(key)
 		if previous and previous ~= "" and previous ~= action then
-			ns.Print(KeyText(key) .. " was bound to " .. (_G["BINDING_NAME_" .. previous] or previous) ..
-				" and now isn't")
+			ns.Print(L["%s was bound to %s and now isn't"]:format(KeyText(key),
+				_G["BINDING_NAME_" .. previous] or previous))
 		end
 	end
 	for _, old in ipairs(keys) do
@@ -5029,8 +5086,8 @@ local function CreateKeybindButton(parent, action, slot)
 	-- Setting OnKeyDown turns keyboard input on, which would have every slot
 	-- grab the next key pressed on this page; only the clicked one listens.
 	button:EnableKeyboard(false)
-	Tooltip(button, "Click, then press a key (with Shift, Ctrl or Alt if you like). " ..
-		"Right-click to clear. Escape cancels.")
+	Tooltip(button, L["Click, then press a key (with Shift, Ctrl or Alt if you like). " ..
+		"Right-click to clear. Escape cancels."])
 	keybindButtons[#keybindButtons + 1] = button
 	return button
 end
@@ -5038,17 +5095,17 @@ end
 local function CreateKeybindsPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "Keybinds")
+	local title = Label(content, "GameFontNormalLarge", L["Keybinds"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Keys for Cinematic. These are the same bindings as under Key Bindings > AddOns, " ..
-		"so setting them in either place works.")
+		L["Keys for Cinematic. These are the same bindings as under Key Bindings > AddOns, " ..
+		"so setting them in either place works."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
-	local previous = Header(content, "Keys", subtitle, -20)
+	local previous = Header(content, L["Keys"], subtitle, -20)
 	for i, bind in ipairs(KEYBINDS) do
 		local label = Label(content, "GameFontHighlight", bind.label)
 		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, i == 1 and -14 or -18)
@@ -5079,7 +5136,7 @@ ns.RefreshOptions = function() Refresh() end
 -- Opens the settings, at a sub-page by name if given (else the main page).
 function ns.OpenOptions(page)
 	if InCombatLockdown() then
-		ns.Print("settings can't be opened in combat")
+		ns.Print(L["settings can't be opened in combat"])
 		return
 	end
 	if category and Settings and Settings.OpenToCategory then
@@ -5161,9 +5218,9 @@ local function NameFree(name, old)
 	local taken = ns.FindProfile(name)
 	local why
 	if name == "" then
-		why = "A profile needs a name."
+		why = L["A profile needs a name."]
 	elseif taken and taken ~= old then
-		why = "There's already a profile called " .. taken .. "."
+		why = L["There's already a profile called %s."]:format(taken)
 	end
 	if why then
 		UIErrorsFrame:AddMessage(why, 1, 0.1, 0.1)
@@ -5173,24 +5230,24 @@ local function NameFree(name, old)
 	return true
 end
 
-StaticPopupDialogs.CINEMATIC_PROFILE_NEW = NamePopup("Name the new profile (it starts from your current settings):",
+StaticPopupDialogs.CINEMATIC_PROFILE_NEW = NamePopup(L["Name the new profile (it starts from your current settings):"],
 	function(name)
 		if not NameFree(name) then return true end
 		ns.NewProfile(name)
 		Refresh()
 	end)
-StaticPopupDialogs.CINEMATIC_PROFILE_RENAME = NamePopup("Rename the profile:", function(name, old)
+StaticPopupDialogs.CINEMATIC_PROFILE_RENAME = NamePopup(L["Rename the profile:"], function(name, old)
 	if not old or name == old then return end
 	if not NameFree(name, old) then return true end
 	ns.RenameProfile(old, name)
 	Refresh()
 end)
-StaticPopupDialogs.CINEMATIC_PROFILE_NOTE = NamePopup("Describe the profile:", function(text, name)
+StaticPopupDialogs.CINEMATIC_PROFILE_NOTE = NamePopup(L["Describe the profile:"], function(text, name)
 	ns.SetProfileNote(name, text)
 	Refresh()
 end, { initial = function(name) return ns.ProfileNote(name) or "" end, maxLetters = 200, width = 360 })
 StaticPopupDialogs.CINEMATIC_PROFILE_DELETE = {
-	text = "Delete the profile %s?",
+	text = L["Delete the profile %s?"],
 	button1 = YES, button2 = NO,
 	OnAccept = function(_, name)
 		ns.DeleteProfile(name)
@@ -5199,7 +5256,7 @@ StaticPopupDialogs.CINEMATIC_PROFILE_DELETE = {
 	timeout = 0, whileDead = true, hideOnEscape = true,
 }
 StaticPopupDialogs.CINEMATIC_PROFILE_RESET = {
-	text = "Put the profile %s back to how it started? Every change you've made to it goes.",
+	text = L["Put the profile %s back to how it started? Every change you've made to it goes."],
 	button1 = YES, button2 = NO,
 	OnAccept = function()
 		ns.ResetSettings()
@@ -5211,24 +5268,24 @@ StaticPopupDialogs.CINEMATIC_PROFILE_RESET = {
 local function CreateProfilesPanel()
 	local canvas, content = CreateScrollPage(true)
 
-	local title = Label(content, "GameFontNormalLarge", "Profiles")
+	local title = Label(content, "GameFontNormalLarge", L["Profiles"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"A profile is a whole set of settings. Pick one to switch to it; changes you make go into the " ..
+		L["A profile is a whole set of settings. Pick one to switch to it; changes you make go into the " ..
 		"active profile and stay with it. The built-in ones keep your changes too, until you reset them. " ..
 		"New profile starts one of your own from the settings you have now. Every character uses " ..
 		"the same profile unless you tick the box below for one. Not part of a profile: the minimap button, frames you added or stopped fading, " ..
-		"and the zone and time tint colours you picked.")
+		"and the zone and time tint colours you picked."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 
 	-- Ticked, this character keeps the one it's on as its own.
-	local perChar = Check(content, nil, "Use a profile just for this character",
-		"Ticked: switching profiles changes only this character's, and it stays on it whatever " ..
+	local perChar = Check(content, nil, L["Use a profile just for this character"],
+		L["Ticked: switching profiles changes only this character's, and it stays on it whatever " ..
 		"your other characters use. Unticked: this character uses the same profile as the rest " ..
-		"(switching back to it now if this one's differs).", function(value)
+		"(switching back to it now if this one's differs)."], function(value)
 			ns.SetCharacterProfile(value)
 			Refresh()
 		end)
@@ -5237,13 +5294,13 @@ local function CreateProfilesPanel()
 		self:SetChecked(ns.IsCharacterProfile())
 		local text = self.Text or self.text
 		if text and ns.GetDB() then
-			text:SetText(("Use a profile just for this character |cff808080(other characters use %s)|r")
+			text:SetText((L["Use a profile just for this character |cff808080(other characters use %s)|r"])
 				:format(ns.GetDB().profile or ns.ActiveProfile()))
 		end
 	end
 	perChar:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
 
-	local header = Header(content, "Profiles", perChar, -12)
+	local header = Header(content, L["Profiles"], perChar, -12)
 	header:SetPoint("TOPLEFT", perChar, "BOTTOMLEFT", 2, -12)
 
 	-- One row per profile (built up as profiles come and go).
@@ -5281,30 +5338,30 @@ local function CreateProfilesPanel()
 		button:SetScript("OnClick", onClick)
 		return button
 	end
-	local new = Button("New profile", 120, "A profile of your own, starting from your current settings. " ..
-		"To copy another profile, switch to it first.", function()
+	local new = Button(L["New profile"], 120, L["A profile of your own, starting from your current settings. " ..
+		"To copy another profile, switch to it first."], function()
 		StaticPopup_Show("CINEMATIC_PROFILE_NEW")
 	end)
 	new:SetPoint("LEFT", buttons, "LEFT", 0, 0)
-	local rename = Button("Rename", 100, "Rename the active profile (your own ones only).", function()
+	local rename = Button(L["Rename"], 100, L["Rename the active profile (your own ones only)."], function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name)
 	end)
 	rename:SetPoint("LEFT", new, "RIGHT", 8, 0)
-	local note = Button("Description", 110, "Write what the active profile is for, shown beside it " ..
-		"(your own ones only).", function()
+	local note = Button(L["Description"], 110, L["Write what the active profile is for, shown beside it " ..
+		"(your own ones only)."], function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name)
 	end)
 	note:SetPoint("LEFT", rename, "RIGHT", 8, 0)
-	local delete = Button("Delete", 100, "Delete the active profile (your own ones only), switching to " ..
-		ns.BUILTIN_PROFILES[1].name .. ".", function()
+	local delete = Button(L["Delete"], 100, L["Delete the active profile (your own ones only), switching to %s."]:format(
+		ns.BUILTIN_PROFILES[1].name), function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
 	end)
 	delete:SetPoint("LEFT", note, "RIGHT", 8, 0)
-	local reset = Button("Reset profile", 120, "Put the active profile back to how it started: a built-in " ..
-		"profile's own values, or the defaults for one of yours.", function()
+	local reset = Button(L["Reset profile"], 120, L["Put the active profile back to how it started: a built-in " ..
+		"profile's own values, or the defaults for one of yours."], function()
 		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ActiveProfile())
 	end)
 	reset:SetPoint("LEFT", delete, "RIGHT", 8, 0)
@@ -5328,7 +5385,7 @@ local function CreateProfilesPanel()
 			end
 			row.label:SetText(text)
 			row.tip:SetText(builtin and builtin.tip or ns.ProfileNote(name)
-				or "Your own profile. Pick it, then Description to say what it's for.")
+				or L["Your own profile. Pick it, then Description to say what it's for."])
 			row.pick:SetChecked(name == active)
 			row:SetHeight(math.max(26, row.tip:GetStringHeight() + 10))
 			row:ClearAllPoints()
@@ -5363,26 +5420,26 @@ local function CreateMouseoverPanel()
 	local LEFT, WIDTH, ROW = 16, 560, 22
 	local RESULTS_SHOWN = 8
 
-	local title = Label(content, "GameFontNormalLarge", "Mouseover")
+	local title = Label(content, "GameFontNormalLarge", L["Mouseover"])
 	title:SetPoint("TOPLEFT", LEFT, -16)
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		"Frames in the same group come up together when you mouse over any of them. A frame can " ..
-		"be in more than one group; one in no group comes up on its own.")
+		L["Frames in the same group come up together when you mouse over any of them. A frame can " ..
+		"be in more than one group; one in no group comes up on its own."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetWidth(WIDTH)
 	subtitle:SetJustifyV("TOP")
 
-	local mouseover = Check(content, "mouseover", "Let CineMode reveal frames on mouseover",
-		"Pointing at a faded frame shows it, with the rest of its groups.", function(value)
+	local mouseover = Check(content, "mouseover", L["Let CineMode reveal frames on mouseover"],
+		L["Pointing at a faded frame shows it, with the rest of its groups."], function(value)
 			ns.GetDB().mouseover = value
 			Refresh() -- grey out / enable the hold time
 		end)
 	mouseover:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
-	local hold = Slider(content, "mouseoverHold", "Stays after mouseover", 0, 30, 1, "%d sec")
+	local hold = Slider(content, "mouseoverHold", L["Stays after mouseover"], 0, 30, 1, L["%d sec"])
 	hold:SetPoint("TOPLEFT", mouseover, "BOTTOMLEFT", 4, -26)
-	Tooltip(hold, "How long until a frame is gone after your mouse leaves it (and its groups), fade " ..
+	Tooltip(hold, L["How long until a frame is gone after your mouse leaves it (and its groups), fade " ..
 		"included. Events that bring a group up hold it this long too. In the camera modes the " ..
-		"shorter default is used.")
+		"shorter default is used."])
 	GreyUnless(hold, function(db) return db.mouseover end)
 	-- (The groups go back to the defaults with the rest of the page.)
 	RecordKey(content, "hoverGroups")
@@ -5399,12 +5456,12 @@ local function CreateMouseoverPanel()
 	end
 	for _, item in ipairs(ns.HOVER_ROWS) do
 		if ns.OptionAvailable(item) then
-			AddToCatalog(item.key, item.label, item.key:find("^addon:") and "addon")
+			AddToCatalog(item.key, item.label, item.key:find("^addon:") and L["addon"])
 		end
 	end
 	local function ScanCatalog()
 		for name in pairs(ns.GetDB().extraFrames or {}) do
-			AddToCatalog("extra:" .. name, name, "custom")
+			AddToCatalog("extra:" .. name, name, L["custom"])
 		end
 		local faded = {}
 		for _, entry in ipairs(ns.managed) do
@@ -5413,7 +5470,7 @@ local function CreateMouseoverPanel()
 		for _, frame in ipairs({ UIParent:GetChildren() }) do
 			local name = not (frame.IsForbidden and frame:IsForbidden()) and frame:GetName()
 			if name and frame:IsShown() and not faded[name] and not name:find("^Cinematic") then
-				AddToCatalog("frame:" .. name, name, "not faded yet")
+				AddToCatalog("frame:" .. name, name, L["not faded yet"])
 			end
 		end
 	end
@@ -5502,7 +5559,7 @@ local function CreateMouseoverPanel()
 		button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		resultButtons[i] = button
 	end
-	local noMatch = Label(results, "GameFontDisable", "No frames match")
+	local noMatch = Label(results, "GameFontDisable", L["No frames match"])
 	noMatch:SetPoint("TOPLEFT", 8, -8)
 
 	-- The scroll bar down the right edge: drag it, or scroll the wheel over the list.
@@ -5533,7 +5590,7 @@ local function CreateMouseoverPanel()
 				return
 			end
 			key = "extra:" .. name
-			AddToCatalog(key, name, "custom")
+			AddToCatalog(key, name, L["custom"])
 		end
 		local members = Writable()[index].members
 		for _, member in ipairs(members) do
@@ -5549,7 +5606,7 @@ local function CreateMouseoverPanel()
 		list.offset = math.max(0, math.min(list.offset, maxOffset))
 		local shown = math.min(#matches, RESULTS_SHOWN)
 		results:SetHeight(math.max(1, shown) * 20 + 8)
-		noMatch:SetText(list.events and "No events match" or "No frames match")
+		noMatch:SetText(list.events and L["No events match"] or L["No frames match"])
 		noMatch:SetShown(shown == 0)
 		scrollBar:SetShown(maxOffset > 0)
 		if maxOffset > 0 then
@@ -5572,11 +5629,11 @@ local function CreateMouseoverPanel()
 				else
 					local others = GroupsWith(item.key, index)
 					here = #GroupsWith(item.key) > #others
-					tag = #others > 0 and "in " .. table.concat(others, ", ") or item.tag or ""
+					tag = #others > 0 and L["in %s"]:format(table.concat(others, ", ")) or item.tag or ""
 				end
 				button.text:SetText(item.label)
 				button.text:SetFontObject(here and "GameFontDisable" or "GameFontHighlight")
-				button.tag:SetText(here and "already here" or tag)
+				button.tag:SetText(here and L["already here"] or tag)
 				button.tip = list.events and item.tip or nil
 				button:SetEnabled(not here)
 				button:SetScript("OnClick", function()
@@ -5633,10 +5690,10 @@ local function CreateMouseoverPanel()
 
 	local newGroup = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	newGroup:SetSize(120, 22)
-	newGroup:SetText("New group")
+	newGroup:SetText(L["New group"])
 	newGroup:SetScript("OnClick", function()
 		local groups = Writable()
-		groups[#groups + 1] = { name = "Group " .. (#groups + 1), members = {}, triggers = {} }
+		groups[#groups + 1] = { name = L["Group %d"]:format(#groups + 1), members = {}, triggers = {} }
 		Layout()
 	end)
 
@@ -5647,7 +5704,7 @@ local function CreateMouseoverPanel()
 		frame.remove = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
 		frame.remove:SetSize(22, 22)
 		frame.remove:SetPoint("LEFT", 0, 0)
-		Tooltip(frame.remove, "Take it out of this group.")
+		Tooltip(frame.remove, L["Take it out of this group."])
 		frame.text = Label(frame, "GameFontHighlight")
 		frame.text:SetPoint("LEFT", frame.remove, "RIGHT", 4, 0)
 		frame.also = Label(frame, "GameFontDisableSmall")
@@ -5722,7 +5779,7 @@ local function CreateMouseoverPanel()
 				box:SetFontObject("GameFontNormal")
 				box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
 				box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-				Tooltip(box, "The group's name: click to change it.")
+				Tooltip(box, L["The group's name: click to change it."])
 				return box
 			end)
 			At(nameBox, LEFT + 6)
@@ -5738,8 +5795,8 @@ local function CreateMouseoverPanel()
 			local delete = Take("delete", function()
 				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 				button:SetSize(100, 22)
-				button:SetText("Delete group")
-				Tooltip(button, "Its frames come up on their own again (or with their other groups).")
+				button:SetText(L["Delete group"])
+				Tooltip(button, L["Its frames come up on their own again (or with their other groups)."])
 				return button
 			end)
 			At(delete, LEFT + WIDTH - 100, -1)
@@ -5760,8 +5817,8 @@ local function CreateMouseoverPanel()
 					At(row, LEFT + 4)
 					row.text:SetText(item and item.label or key:gsub("^extra:", ""))
 					local others = GroupsWith(key, index)
-					row.also:SetText(#others > 0 and "also in " .. table.concat(others, ", ")
-						or (item and item.tag) or (item and "" or "custom"))
+					row.also:SetText(#others > 0 and L["also in %s"]:format(table.concat(others, ", "))
+						or (item and item.tag) or (item and "" or L["custom"]))
 					row.remove:SetScript("OnClick", function()
 						local members = Writable()[index].members
 						for i, member in ipairs(members) do
@@ -5773,19 +5830,19 @@ local function CreateMouseoverPanel()
 				end
 			end
 			if listed == 0 then
-				local empty = Take("empty", function() return Label(content, "GameFontDisable", "No frames yet.") end)
+				local empty = Take("empty", function() return Label(content, "GameFontDisable", L["No frames yet."]) end)
 				At(empty, LEFT + 10, 4)
 				y = y + ROW
 			end
 
 			-- Add a frame: type to search the list.
-			At(AddBox("add", "Add a frame: type to search...", index), LEFT + 34, 4)
+			At(AddBox("add", L["Add a frame: type to search..."], index), LEFT + 34, 4)
 			y = y + 30
 
 			-- The events that bring the group up besides the mouse: one row
 			-- each, then a box to add more.
 			local alsoLabel = Take("alsoLabel", function()
-				return Label(content, "GameFontNormalSmall", "Also bring this group up for:")
+				return Label(content, "GameFontNormalSmall", L["Also bring this group up for:"])
 			end)
 			At(alsoLabel, LEFT + 10, 2)
 			y = y + 18
@@ -5803,7 +5860,7 @@ local function CreateMouseoverPanel()
 					y = y + ROW
 				end
 			end
-			At(AddBox("addEvent", "Add an event: type to search...", index, true), LEFT + 34, 4)
+			At(AddBox("addEvent", L["Add an event: type to search..."], index, true), LEFT + 34, 4)
 			y = y + 48
 		end
 
@@ -5826,51 +5883,78 @@ local function CreateMouseoverPanel()
 	RegisterSubpage(canvas, "Mouseover")
 end
 
-CreatePanel()
-CreateProfilesPanel()
--- Sub-pages in the order they're listed: what fades and shows, then the look
--- and sound, then the camera modes (their shared page and events first),
--- keybinds. (Standard Frames and 3rd Party Frames come right after CineMode.)
-CreateRevealPanel()
-CreateCombatPanel()
--- WoW Forever's gamepad mode (retail's has no frames of its own).
-if C_GamePad and not ns.isRetail then
-	CreateGamepadPanel()
-end
-CreateExtrasPanel()
-CreateMouseoverPanel()
-CreateMinimapPanel()
-CreateQuestTrackerPanel()
--- (Classic clients' own swing timer.)
-if not ns.isRetail then
-	CreateSwingPanel()
-end
--- (Only with a Cooldown Manager: the game's, on clients that have it, or the addon.)
-if ns.AddOnInstalled("Blizzard_CooldownViewer") or ns.AddOnInstalled("ForeverEnhancedCooldownManager") then
-	CreateCooldownPanel()
-end
-CreateTooltipPanel()
-CreateBuffsPanel()
-CreatePlatesPanel()
-CreateChatPanel()
-CreateFishingPanel()
-CreateTintPanel()
-CreateAudioPanel()
-CreateCameraPanel()
-CreateEventsPanel()
--- Each camera mode's own page: hidden for now (too many pages for settings few
--- players change); their settings keep their defaults. True brings them back.
-local SHOW_CAMERA_MODE_PAGES = false
-if SHOW_CAMERA_MODE_PAGES then
-	CreateFlightPanel()
-	CreateStandingPanel()
-	CreateCozyPanel()
-	CreateTelePanel()
-	CreateVistaPanel()
-	CreateFishPanel()
-	CreateWalkPanel()
-	CreateAutoRunPanel()
-	CreateDeathPanel()
-	CreateQuestPanel()
-end
-CreateKeybindsPanel()
+-- The pages are built once the language is known (Locales.lua): first the
+-- text this file made as it ran is translated again.
+ns.OnLanguage(function()
+	PVP_TIP, ZOOM_TIP, INPUT_PAUSE_TIP = L[PVP_TIP], L[ZOOM_TIP], L[INPUT_PAUSE_TIP]
+	ns.TranslateFields(PLACES, 2)
+	for _, choices in ipairs({ EVENT_CAMERAS, FLIGHT_CAMERAS, WALK_CAMERAS, RUN_CAMERAS, DEATH_CAMERAS,
+		QUEST_CAMERAS, TELE_CAMERAS, QUEST_SIDES }) do
+		ns.TranslateFields(choices, "text")
+	end
+	for key, tip in pairs(EVENT_TIPS) do
+		EVENT_TIPS[key] = L[tip]
+	end
+	ns.TranslateFields(FRAME_COLUMNS, 1, 5)
+	ns.TranslateFields(THIRD_PARTY_COLUMNS, 1) -- (the rest are FRAME_COLUMNS' own)
+	ns.TranslateFields(KEYBINDS, "label", "tip")
+	for _, popup in ipairs({ "CINEMATIC_RESET_PAGE", "CINEMATIC_PROFILE_NEW", "CINEMATIC_PROFILE_RENAME",
+		"CINEMATIC_PROFILE_NOTE", "CINEMATIC_PROFILE_DELETE", "CINEMATIC_PROFILE_RESET" }) do
+		StaticPopupDialogs[popup].text = L[StaticPopupDialogs[popup].text]
+	end
+	StaticPopupDialogs.CINEMATIC_LANGUAGE_RELOAD = {
+		text = L["Cinematic's language changes after a reload. Reload now?"],
+		button1 = RELOADUI or L["Reload"], button2 = L["Later"],
+		OnAccept = ReloadUI,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+
+	CreatePanel()
+	CreateProfilesPanel()
+	-- Sub-pages in the order they're listed: what fades and shows, then the look
+	-- and sound, then the camera modes (their shared page and events first),
+	-- keybinds. (Standard Frames and 3rd Party Frames come right after CineMode.)
+	CreateRevealPanel()
+	CreateCombatPanel()
+	-- WoW Forever's gamepad mode (retail's has no frames of its own).
+	if C_GamePad and not ns.isRetail then
+		CreateGamepadPanel()
+	end
+	CreateExtrasPanel()
+	CreateMouseoverPanel()
+	CreateMinimapPanel()
+	CreateQuestTrackerPanel()
+	-- (Classic clients' own swing timer.)
+	if not ns.isRetail then
+		CreateSwingPanel()
+	end
+	-- (Only with a Cooldown Manager: the game's, on clients that have it, or the addon.)
+	if ns.AddOnInstalled("Blizzard_CooldownViewer") or ns.AddOnInstalled("ForeverEnhancedCooldownManager") then
+		CreateCooldownPanel()
+	end
+	CreateTooltipPanel()
+	CreateBuffsPanel()
+	CreatePlatesPanel()
+	CreateChatPanel()
+	CreateFishingPanel()
+	CreateTintPanel()
+	CreateAudioPanel()
+	CreateCameraPanel()
+	CreateEventsPanel()
+	-- Each camera mode's own page: hidden for now (too many pages for settings few
+	-- players change); their settings keep their defaults. True brings them back.
+	local SHOW_CAMERA_MODE_PAGES = false
+	if SHOW_CAMERA_MODE_PAGES then
+		CreateFlightPanel()
+		CreateStandingPanel()
+		CreateCozyPanel()
+		CreateTelePanel()
+		CreateVistaPanel()
+		CreateFishPanel()
+		CreateWalkPanel()
+		CreateAutoRunPanel()
+		CreateDeathPanel()
+		CreateQuestPanel()
+	end
+	CreateKeybindsPanel()
+end)

@@ -17,9 +17,10 @@
 -- times, the log, game settings it's holding).
 
 local _, ns = ...
+local L = ns.L
 
 local GLOBAL_KEYS = {
-	enabled = true, minimapButton = true, minimapAngle = true, logDetail = true,
+	enabled = true, minimapButton = true, minimapAngle = true, logDetail = true, language = true,
 }
 -- Lists kept as tables that belong to a profile (their defaults are in code;
 -- see EnsureTables in Core.lua). Missing from a profile: emptied, which means defaults.
@@ -74,8 +75,8 @@ end
 ns.BUILTIN_PROFILES = {
 	{
 		name = DEFAULT_PROFILE,
-		tip = "Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
-			"and how the developer plays every day.",
+		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
+			"and how the developer plays every day."],
 		apply = function(set)
 			-- Auto-walking and auto-running can start music.
 			set("musicCamWalk", true)
@@ -84,9 +85,9 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Immersive (CDM)",
-		tip = "Immersive, with the Cooldown Manager in place of the action bars in fights: your " ..
+		tip = L["Immersive, with the Cooldown Manager in place of the action bars in fights: your " ..
 			"portrait, target, buffs, swing timer, pet, stance and totem bars and the Cooldown Manager " ..
-			"come up, the action bars don't. After a fight it stays up until its cooldowns are ready.",
+			"come up, the action bars don't. After a fight it stays up until its cooldowns are ready."],
 		apply = function(set)
 			-- The Standard Frames page's columns.
 			set("cineShow", Column({}))
@@ -104,8 +105,8 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Lite",
-		tip = "The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
-			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras.",
+		tip = L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
+			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
 		apply = function(set)
 			CamsOff(set, { "cozy", "vista", "fish", "walk", "run", "death", "quest" })
 			-- Chat shows for General, Trade and LocalDefense (others joined later stay off).
@@ -115,8 +116,8 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "VFX Only",
-		tip = "Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no " ..
-			"letterbox, and the camera's left to you.",
+		tip = L["Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no " ..
+			"letterbox, and the camera's left to you."],
 		apply = function(set)
 			set("fadeUI", false) -- (the effects then show over the normal UI)
 			set("letterbox", false)
@@ -125,9 +126,9 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Camera Only",
-		tip = "The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), " ..
+		tip = L["The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), " ..
 			"then CineMode until it ends. The letterbox, tint, vignette and weather show only while a " ..
-			"camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music.",
+			"camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music."],
 		apply = function(set)
 			-- The visual effects just for the camera modes (Visual Effects
 			-- page's "Outside camera modes" column).
@@ -161,8 +162,8 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Solo Explorer",
-		tip = "Everything on while you're out in the world on your own; the normal UI in a group, " ..
-			"in dungeons, raids and PvP.",
+		tip = L["Everything on while you're out in the world on your own; the normal UI in a group, " ..
+			"in dungeons, raids and PvP."],
 		apply = function(set)
 			set("offInDungeons", true)
 			set("offInRaids", true)
@@ -173,10 +174,10 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Pure Cinema",
-		tip = "As little UI as possible: chat, buffs, the quest tracker, the minimap and your portrait " ..
+		tip = L["As little UI as possible: chat, buffs, the quest tracker, the minimap and your portrait " ..
 			"don't pop up on their own (hovering still shows them), your target's and group members' " ..
 			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
-			"your target and your cast bar (hidden otherwise), and every camera can start music.",
+			"your target and your cast bar (hidden otherwise), and every camera can start music."],
 		apply = function(set)
 			set("chatPeek", false)
 			set("buffPeek", false)
@@ -228,6 +229,7 @@ ns.BUILTIN_PROFILES = {
 		end,
 	},
 }
+ns.OnLanguage(function() ns.TranslateFields(ns.BUILTIN_PROFILES, "tip") end)
 local builtinByName = {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
 
@@ -403,7 +405,7 @@ function ns.NewProfile(name)
 	end
 	ns.SaveProfile()
 	ns.db.profiles[name] = saved
-	ns.db.profileNotes[name] = "Started from " .. ns.ActiveProfile() .. "."
+	ns.db.profileNotes[name] = L["Started from %s."]:format(ns.ActiveProfile())
 	Choose(name)
 	ns.db.profileChosen = true
 	return true

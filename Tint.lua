@@ -1,6 +1,7 @@
 -- Cinematic screen tint: colour grading and a vignette over the game world
 -- while cinematic mode is active. Driven from Core.lua's update loop.
 local _, ns = ...
+local L = ns.L
 
 local db -- set once saved settings have loaded (ns.CreateTint runs at login)
 
@@ -18,57 +19,57 @@ end
 -- blends the tint toward no change. A vignette of four edge gradients can sit
 -- on top. Both fade with cinematic mode.
 local TINT_PRESETS = {
-	{ key = "none", label = "None", tip = "No colour tint." },
-	{ key = "warm", label = "Warm / golden hour", mode = "MOD", color = { 1, 0.82, 0.6 },
-		tip = "Soft orange, like late-afternoon light." },
-	{ key = "cool", label = "Cool", mode = "MOD", color = { 0.75, 0.88, 1 },
-		tip = "Pale blue, crisp and wintry." },
-	{ key = "night", label = "Night", mode = "MOD", color = { 0.45, 0.55, 0.85 },
-		tip = "Deep blue and darker, like moonlight." },
-	{ key = "dusk", label = "Dusk gradient", mode = "MOD",
+	{ key = "none", label = L["None"], tip = L["No colour tint."] },
+	{ key = "warm", label = L["Warm / golden hour"], mode = "MOD", color = { 1, 0.82, 0.6 },
+		tip = L["Soft orange, like late-afternoon light."] },
+	{ key = "cool", label = L["Cool"], mode = "MOD", color = { 0.75, 0.88, 1 },
+		tip = L["Pale blue, crisp and wintry."] },
+	{ key = "night", label = L["Night"], mode = "MOD", color = { 0.45, 0.55, 0.85 },
+		tip = L["Deep blue and darker, like moonlight."] },
+	{ key = "dusk", label = L["Dusk gradient"], mode = "MOD",
 		top = { 1, 0.7, 0.45 }, bottom = { 0.6, 0.45, 0.85 },
-		tip = "Orange at the top fading to purple at the bottom, like a sunset." },
-	{ key = "sepia", label = "Sepia-ish", mode = "MOD", color = { 0.95, 0.8, 0.55 },
-		tip = "Warm brownish yellow, old-photo warmth. (The world can't be truly desaturated.)" },
-	{ key = "dreamy", label = "Dreamy", mode = "ADD", color = { 0.3, 0.22, 0.12 },
-		tip = "A faint warm glow added over the scene. Soft and hazy." },
-	{ key = "custom", label = "Custom", mode = "MOD",
-		tip = "Your own colour, chosen with the colour picker below." },
-	{ key = "timeofday", label = "Time of day", mode = "MOD", dynamic = true,
-		tip = "Changes through the day: blue at night, pink at dawn, clear in the day, " ..
-			"golden in the evening and purple at dusk." },
-	{ key = "zone", label = "Zone", mode = "MOD", dynamic = true,
-		tip = "A mood for the zone you're in: pale blue in the snow, sandy in deserts, green " ..
+		tip = L["Orange at the top fading to purple at the bottom, like a sunset."] },
+	{ key = "sepia", label = L["Sepia-ish"], mode = "MOD", color = { 0.95, 0.8, 0.55 },
+		tip = L["Warm brownish yellow, old-photo warmth. (The world can't be truly desaturated.)"] },
+	{ key = "dreamy", label = L["Dreamy"], mode = "ADD", color = { 0.3, 0.22, 0.12 },
+		tip = L["A faint warm glow added over the scene. Soft and hazy."] },
+	{ key = "custom", label = L["Custom"], mode = "MOD",
+		tip = L["Your own colour, chosen with the colour picker below."] },
+	{ key = "timeofday", label = L["Time of day"], mode = "MOD", dynamic = true,
+		tip = L["Changes through the day: blue at night, pink at dawn, clear in the day, " ..
+			"golden in the evening and purple at dusk."] },
+	{ key = "zone", label = L["Zone"], mode = "MOD", dynamic = true,
+		tip = L["A mood for the zone you're in: pale blue in the snow, sandy in deserts, green " ..
 			"in swamps and jungles, sickly in blighted lands, ember red near volcanoes. " ..
-			"Other zones are left untinted." },
-	{ key = "zonetime", label = "Zone + time of day", mode = "MOD", dynamic = true,
-		tip = "The zone's mood and the time-of-day colour together: a desert at night is warm " ..
-			"sand darkened by moonlight." },
+			"Other zones are left untinted."] },
+	{ key = "zonetime", label = L["Zone + time of day"], mode = "MOD", dynamic = true,
+		tip = L["The zone's mood and the time-of-day colour together: a desert at night is warm " ..
+			"sand darkened by moonlight."] },
 }
 
 -- Zone moods: subtle colours, multiplied over the scene.
 local ZONE_MOODS = {
-	snow = { { 0.82, 0.9, 1 }, "Snow" },
-	desert = { { 1, 0.86, 0.66 }, "Desert" },
-	savanna = { { 1, 0.92, 0.78 }, "Savanna" },
-	swamp = { { 0.8, 0.92, 0.74 }, "Swamp and jungle" },
-	blight = { { 0.88, 0.92, 0.62 }, "Blighted" },
-	volcanic = { { 1, 0.8, 0.68 }, "Volcanic" },
-	forest = { { 0.92, 0.98, 0.85 }, "Forest" },
-	dusky = { { 0.72, 0.75, 0.92 }, "Dusky" },
-	forge = { { 0.8, 0.72, 0.62 }, "Forge" },   -- dim, warm and smoky
-	hearth = { { 1, 0.95, 0.88 }, "Warm" },      -- just a touch of golden warmth
-	dusty = { { 1, 0.86, 0.74 }, "Dusty red" },  -- sun-baked, a little orange
-	sickly = { { 0.8, 0.88, 0.7 }, "Sickly" },   -- dim and faintly green
-	airy = { { 1, 0.98, 0.93 }, "Airy" },        -- bright and clear, barely warm
-	moonlit = { { 0.84, 0.88, 1 }, "Moonlit" },  -- cool, soft blue
-	gloomy = { { 0.76, 0.83, 0.82 }, "Gloomy" }, -- foggy grey-green, damp and eerie
-	twilight = { { 0.86, 0.8, 1 }, "Twilight" }, -- cool, soft purple-blue
-	golden = { { 1, 0.9, 0.7 }, "Golden" },      -- warm harvest gold
-	autumn = { { 1, 0.88, 0.76 }, "Autumn" },    -- rust and amber, red rock and turning leaves
-	summer = { { 0.95, 0.97, 0.96 }, "Summer" }, -- clear and fresh, tames red ground, keeps blue skies
-	fel = { { 0.84, 1, 0.76 }, "Fel" },          -- sickly bright green, demon-scorched land
-	void = { { 0.84, 0.76, 0.96 }, "Void" },     -- deeper violet than twilight
+	snow = { { 0.82, 0.9, 1 }, L["Snow"] },
+	desert = { { 1, 0.86, 0.66 }, L["Desert"] },
+	savanna = { { 1, 0.92, 0.78 }, L["Savanna"] },
+	swamp = { { 0.8, 0.92, 0.74 }, L["Swamp and jungle"] },
+	blight = { { 0.88, 0.92, 0.62 }, L["Blighted"] },
+	volcanic = { { 1, 0.8, 0.68 }, L["Volcanic"] },
+	forest = { { 0.92, 0.98, 0.85 }, L["Forest"] },
+	dusky = { { 0.72, 0.75, 0.92 }, L["Dusky"] },
+	forge = { { 0.8, 0.72, 0.62 }, L["Forge"] },   -- dim, warm and smoky
+	hearth = { { 1, 0.95, 0.88 }, L["Warm"] },      -- just a touch of golden warmth
+	dusty = { { 1, 0.86, 0.74 }, L["Dusty red"] },  -- sun-baked, a little orange
+	sickly = { { 0.8, 0.88, 0.7 }, L["Sickly"] },   -- dim and faintly green
+	airy = { { 1, 0.98, 0.93 }, L["Airy"] },        -- bright and clear, barely warm
+	moonlit = { { 0.84, 0.88, 1 }, L["Moonlit"] },  -- cool, soft blue
+	gloomy = { { 0.76, 0.83, 0.82 }, L["Gloomy"] }, -- foggy grey-green, damp and eerie
+	twilight = { { 0.86, 0.8, 1 }, L["Twilight"] }, -- cool, soft purple-blue
+	golden = { { 1, 0.9, 0.7 }, L["Golden"] },      -- warm harvest gold
+	autumn = { { 1, 0.88, 0.76 }, L["Autumn"] },    -- rust and amber, red rock and turning leaves
+	summer = { { 0.95, 0.97, 0.96 }, L["Summer"] }, -- clear and fresh, tames red ground, keeps blue skies
+	fel = { { 0.84, 1, 0.76 }, L["Fel"] },          -- sickly bright green, demon-scorched land
+	void = { { 0.84, 0.76, 0.96 }, L["Void"] },     -- deeper violet than twilight
 }
 -- Zones by area ID, so names match in any client language. IDs a client
 -- doesn't have are skipped, so retail's zones sit here too. Matching is by
@@ -277,9 +278,9 @@ end
 local function ZoneTint(zoneName)
 	local override = db.zoneTints and db.zoneTints[zoneName]
 	if type(override) == "table" then
-		return override, "Custom colour", true
+		return override, L["Custom colour"], true
 	elseif override == "none" then
-		return { 1, 1, 1 }, "No tint", true
+		return { 1, 1, 1 }, L["No tint"], true
 	elseif override and ZONE_MOODS[override] then
 		return ZONE_MOODS[override][1], ZONE_MOODS[override][2], true
 	end
@@ -288,7 +289,7 @@ local function ZoneTint(zoneName)
 	if mood then
 		return mood[1], mood[2], false
 	end
-	return { 1, 1, 1 }, "No tint", false
+	return { 1, 1, 1 }, L["No tint"], false
 end
 
 -- A zone's strength for the Zone presets: its own if set, else the main one.
@@ -1014,6 +1015,10 @@ ns.GetTimeOfDayPhaseAt = function(hour)
 	return TIME_OF_DAY[1][3]
 end
 ns.TINT_PRESETS = TINT_PRESETS
+ns.OnLanguage(function()
+	ns.TranslateFields(TINT_PRESETS, "label", "tip")
+	ns.TranslateFields(ZONE_MOODS, 2)
+end)
 
 -- Time-of-day title: a line such as "Dusk" under the game's own zone name
 -- when you log in or reload. It's a child of the zone text frame, so it fades
@@ -1095,7 +1100,7 @@ function ns.ShowTimeOfDayTitle()
 	db = db or ns.GetDB()
 	local _, _, hour = TimeOfDayColor()
 	PlaceTimeTitle()
-	timeTitle.text:SetText(TimeTitleAt(hour))
+	timeTitle.text:SetText(L[TimeTitleAt(hour)])
 	-- If the zone name never showed, don't leave the title waiting for the
 	-- next zone change.
 	C_Timer.After(10, function()
@@ -1148,7 +1153,7 @@ ns.GetAreaTintInfo = function()
 	end
 	local color, label, own = HereTint()
 	local strength, default, ownStrength = HereStrength()
-	return area, own and label or "same as the zone", own, color, strength, default, ownStrength
+	return area, own and label or L["same as the zone"], own, color, strength, default, ownStrength
 end
 -- The preset where you're standing (a zone's or area's own, else the main
 -- one), and where it came from: "area", "zone" or nil.
@@ -1257,7 +1262,7 @@ local function ShowChangeTitle(text)
 	else
 		changeTitle:SetPoint("CENTER", UIParent, "TOP", 0, -200)
 	end
-	changeTitle.text:SetText(text)
+	changeTitle.text:SetText(L[text])
 	changeTitle.t = 0
 	changeTitle:SetAlpha(0)
 	changeTitle:Show()

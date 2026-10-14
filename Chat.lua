@@ -1,6 +1,7 @@
 -- Cinematic: chat. Which new messages briefly show the chat window (by message
 -- type and by channel), and typing detection.
 local _, ns = ...
+local L = ns.L
 
 function ns.IsChatActive()
 	return ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() ~= nil
@@ -14,52 +15,53 @@ end
 -- missing = db.chatPeekChannels). "game" types are game events rather than
 -- conversation; the noisy ones default off.
 ns.CHAT_PEEK_TYPES = {
-	{ key = "say", label = "Say", events = { "CHAT_MSG_SAY" } },
-	{ key = "yell", label = "Yell", events = { "CHAT_MSG_YELL" } },
-	{ key = "emote", label = "Emotes", events = { "CHAT_MSG_EMOTE", "CHAT_MSG_TEXT_EMOTE" } },
-	{ key = "whisper", label = "Whispers", events = { "CHAT_MSG_WHISPER", "CHAT_MSG_BN_WHISPER" } },
-	{ key = "party", label = "Party", events = { "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER" } },
-	{ key = "raid", label = "Raid", events = { "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER" } },
-	{ key = "raidwarning", label = "Raid warnings", events = { "CHAT_MSG_RAID_WARNING" } },
-	{ key = "instance", label = "Instance",
+	{ key = "say", label = L["Say"], events = { "CHAT_MSG_SAY" } },
+	{ key = "yell", label = L["Yell"], events = { "CHAT_MSG_YELL" } },
+	{ key = "emote", label = L["Emotes"], events = { "CHAT_MSG_EMOTE", "CHAT_MSG_TEXT_EMOTE" } },
+	{ key = "whisper", label = L["Whispers"], events = { "CHAT_MSG_WHISPER", "CHAT_MSG_BN_WHISPER" } },
+	{ key = "party", label = L["Party"], events = { "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER" } },
+	{ key = "raid", label = L["Raid"], events = { "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER" } },
+	{ key = "raidwarning", label = L["Raid warnings"], events = { "CHAT_MSG_RAID_WARNING" } },
+	{ key = "instance", label = L["Instance"],
 		events = { "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER" } },
-	{ key = "guild", label = "Guild", events = { "CHAT_MSG_GUILD" } },
-	{ key = "officer", label = "Officer", events = { "CHAT_MSG_OFFICER" } },
-	{ key = "npc", label = "NPC speech", events = {
+	{ key = "guild", label = L["Guild"], events = { "CHAT_MSG_GUILD" } },
+	{ key = "officer", label = L["Officer"], events = { "CHAT_MSG_OFFICER" } },
+	{ key = "npc", label = L["NPC speech"], events = {
 		"CHAT_MSG_MONSTER_SAY", "CHAT_MSG_MONSTER_YELL", "CHAT_MSG_MONSTER_WHISPER",
 		"CHAT_MSG_MONSTER_EMOTE" } },
-	{ key = "boss", label = "Boss emotes",
+	{ key = "boss", label = L["Boss emotes"],
 		events = { "CHAT_MSG_RAID_BOSS_EMOTE", "CHAT_MSG_RAID_BOSS_WHISPER" } },
 
 	-- Guild members' comings and goings arrive as system messages; see IsGuildLine below.
-	{ key = "guildmembers", label = "Guild members (online, offline, joins, leaves)", section = "game",
+	{ key = "guildmembers", label = L["Guild members (online, offline, joins, leaves)"], section = "game",
 		events = {} },
 	-- Group members' comings and goings likewise; see IsGroupLine below.
-	{ key = "groupmembers", label = "Group members (joins, leaves)", section = "game", events = {} },
+	{ key = "groupmembers", label = L["Group members (joins, leaves)"], section = "game", events = {} },
 	-- Server announcements ("[SERVER] Shutdown in 9:00"); see the AddMessage hook below.
-	{ key = "server", label = "Server messages (shutdowns, restarts)", section = "game", events = {} },
+	{ key = "server", label = L["Server messages (shutdowns, restarts)"], section = "game", events = {} },
 	-- Level ups arrive as a system message; see LEVEL_UP_WINDOW below.
-	{ key = "levelup", label = "Level ups", section = "game", events = {} },
-	{ key = "skill", label = "Skill ups", section = "game", events = { "CHAT_MSG_SKILL" } },
-	{ key = "achievement", label = "Achievements", section = "game", default = false,
+	{ key = "levelup", label = L["Level ups"], section = "game", events = {} },
+	{ key = "skill", label = L["Skill ups"], section = "game", events = { "CHAT_MSG_SKILL" } },
+	{ key = "achievement", label = L["Achievements"], section = "game", default = false,
 		events = { "CHAT_MSG_ACHIEVEMENT", "CHAT_MSG_GUILD_ACHIEVEMENT" } },
-	{ key = "xp", label = "Experience", section = "game", default = false,
+	{ key = "xp", label = L["Experience"], section = "game", default = false,
 		events = { "CHAT_MSG_COMBAT_XP_GAIN" } },
-	{ key = "reputation", label = "Reputation", section = "game", default = false,
+	{ key = "reputation", label = L["Reputation"], section = "game", default = false,
 		events = { "CHAT_MSG_COMBAT_FACTION_CHANGE" } },
-	{ key = "honor", label = "Honor", section = "game", default = false,
+	{ key = "honor", label = L["Honor"], section = "game", default = false,
 		events = { "CHAT_MSG_COMBAT_HONOR_GAIN" } },
-	{ key = "battleground", label = "Battleground objectives (assaults, captures, flags)", section = "game",
+	{ key = "battleground", label = L["Battleground objectives (assaults, captures, flags)"], section = "game",
 		events = { "CHAT_MSG_BG_SYSTEM_ALLIANCE", "CHAT_MSG_BG_SYSTEM_HORDE", "CHAT_MSG_BG_SYSTEM_NEUTRAL" } },
 	-- Group loot rolls arrive as loot messages; see IsLootRollLine below.
-	{ key = "rolls", label = "Loot rolls (need, greed, won)", section = "game", events = {} },
-	{ key = "loot", label = "All loot", section = "game", default = false, events = { "CHAT_MSG_LOOT" } },
-	{ key = "money", label = "Money", section = "game", default = false, events = { "CHAT_MSG_MONEY" } },
-	{ key = "tradeskill", label = "Other players' crafting", section = "game", default = false,
+	{ key = "rolls", label = L["Loot rolls (need, greed, won)"], section = "game", events = {} },
+	{ key = "loot", label = L["All loot"], section = "game", default = false, events = { "CHAT_MSG_LOOT" } },
+	{ key = "money", label = L["Money"], section = "game", default = false, events = { "CHAT_MSG_MONEY" } },
+	{ key = "tradeskill", label = L["Other players' crafting"], section = "game", default = false,
 		events = { "CHAT_MSG_TRADESKILLS" } },
-	{ key = "system", label = "All other system messages", section = "game", default = false,
+	{ key = "system", label = L["All other system messages"], section = "game", default = false,
 		events = { "CHAT_MSG_SYSTEM" } },
 }
+ns.OnLanguage(function() ns.TranslateFields(ns.CHAT_PEEK_TYPES, "label") end)
 local PEEK_TYPE_DEFAULT = {}
 for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 	PEEK_TYPE_DEFAULT[peekType.key] = peekType.default ~= false

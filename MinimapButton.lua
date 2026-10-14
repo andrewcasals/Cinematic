@@ -6,6 +6,7 @@
 -- whenever the minimap is at full size. It's in the minimap fade group, so it
 -- fades with the minimap and hovering it reveals the minimap.
 local _, ns = ...
+local L = ns.L
 
 local ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
 local EDGE_OFFSET = 10 -- how far outside the minimap's rim the button sits
@@ -42,9 +43,9 @@ end
 
 local function FormatTime(seconds)
 	if seconds == math.huge then
-		return "until logout"
+		return L["until logout"]
 	end
-	return ("%d:%02d left"):format(math.floor(seconds / 60), math.floor(seconds % 60))
+	return (L["%d:%02d left"]):format(math.floor(seconds / 60), math.floor(seconds % 60))
 end
 
 local STRENGTHS = { 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1 }
@@ -69,7 +70,7 @@ local function AddTintMenu(root, db)
 	root:CreateDivider()
 	root:CreateTitle("VFX")
 
-	local strength = root:CreateButton("Tint")
+	local strength = root:CreateButton(L["Tint"])
 	AddStrengthChoices(strength, function()
 		return db.tintPreset == "none" and 0 or db.tintStrength
 	end, function(value)
@@ -85,8 +86,8 @@ end
 -- Audio section: the Audio page's master music switch.
 local function AddAudioMenu(root, db)
 	root:CreateDivider()
-	root:CreateTitle("Audio")
-	root:CreateCheckbox("Allow CineMode to queue Music", function() return db.musicInCinematic end,
+	root:CreateTitle(L["Audio"])
+	root:CreateCheckbox(L["Allow CineMode to queue Music"], function() return db.musicInCinematic end,
 		function() db.musicInCinematic = not db.musicInCinematic end)
 end
 
@@ -124,25 +125,25 @@ local function ShowMenu(owner)
 	local menu = MenuUtil.CreateContextMenu(owner, function(_, root)
 		local db = ns.GetDB()
 		root:CreateTitle("Cinematic")
-		root:CreateCheckbox("Enable Cinematic", function() return db.enabled end, function()
+		root:CreateCheckbox(L["Enable Cinematic"], function() return db.enabled end, function()
 			ns.SetEnabled(not db.enabled)
 			UpdateIcon()
 		end)
 		-- (Ticked whenever the menu is open: unticking hides the button.)
-		root:CreateCheckbox("Show minimap button", function() return db.minimapButton end, function()
+		root:CreateCheckbox(L["Show minimap button"], function() return db.minimapButton end, function()
 			db.minimapButton = false
 			UpdateIcon()
-			Print("minimap button hidden. Bring it back with /cine button or the " ..
-				"\"Show minimap button\" option.")
+			Print(L["minimap button hidden. Bring it back with /cine button or the " ..
+				"\"Show minimap button\" option."])
 		end)
 		-- (The CineMode page's "Turn off in: Combat": stored the other way round.)
-		root:CreateCheckbox("Turn off in combat",
+		root:CreateCheckbox(L["Turn off in combat"],
 			function() return not db.stayInCombat end,
 			function() db.stayInCombat = not db.stayInCombat end)
 		AddAudioMenu(root, db)
 		AddTintMenu(root, db)
 		root:CreateDivider()
-		root:CreateButton("Open settings", ns.OpenOptions)
+		root:CreateButton(L["Open settings"], ns.OpenOptions)
 	end)
 	-- The menu opens at the cursor and is only kept on screen; keep it a little
 	-- way off the edges too. (Once it has its size, a frame later.)
@@ -157,15 +158,15 @@ local function OnEnter(self)
 	local db = ns.GetDB()
 	local left = ns.GetSnoozeLeft()
 	if not db.enabled then
-		GameTooltip:AddLine("Off", 1, 0.3, 0.3)
+		GameTooltip:AddLine(L["Off"], 1, 0.3, 0.3)
 	elseif left then
-		GameTooltip:AddLine("Paused, " .. FormatTime(left), 1, 0.8, 0.2)
+		GameTooltip:AddLine(L["Paused, %s"]:format(FormatTime(left)), 1, 0.8, 0.2)
 	else
-		GameTooltip:AddLine("On", 0.3, 1, 0.3)
+		GameTooltip:AddLine(L["On"], 0.3, 1, 0.3)
 	end
-	GameTooltip:AddLine("Left-click: options", 1, 1, 1)
-	GameTooltip:AddLine("Right-click: settings", 1, 1, 1)
-	GameTooltip:AddLine("Drag: move", 1, 1, 1)
+	GameTooltip:AddLine(L["Left-click: options"], 1, 1, 1)
+	GameTooltip:AddLine(L["Right-click: settings"], 1, 1, 1)
+	GameTooltip:AddLine(L["Drag: move"], 1, 1, 1)
 	GameTooltip:Show()
 end
 
@@ -241,5 +242,5 @@ function ns.ToggleMinimapButton()
 	local db = ns.GetDB()
 	db.minimapButton = not db.minimapButton
 	ns.UpdateMinimapButton()
-	Print("minimap button " .. (db.minimapButton and "shown" or "hidden"))
+	Print(db.minimapButton and L["minimap button shown"] or L["minimap button hidden"])
 end

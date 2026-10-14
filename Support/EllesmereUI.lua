@@ -7,47 +7,48 @@
 -- It sets its frames' alpha all the time (target changes, combat, mouseover):
 -- its own frames are hooked, and game frames it sets are checked every frame.
 local _, ns = ...
+local L = ns.L
 
 -- 3rd Party Frames rows.
 for _, known in ipairs({
 	{
 		key = "euiBars", addon = "EllesmereUIActionBars",
 		label = "EllesmereUI Action Bars 6-10", short = "EllesmereUI bars 6-10",
-		about = "its action bars 6 to 10",
-		note = "Its bars 1-5, pet, stance and XP bars are rows on the Standard Frames page, " ..
-			"with its unit frames and quest tracker.",
+		about = L["its action bars 6 to 10"],
+		note = L["Its bars 1-5, pet, stance and XP bars are rows on the Standard Frames page, " ..
+			"with its unit frames and quest tracker."],
 		names = { "EABBar_Bar6", "EABBar_Bar7", "EABBar_Bar8", "EABBar_Bar9", "EABBar_Bar10" },
 	},
 	{
 		key = "euiCooldowns", addon = "EllesmereUICooldownManager",
 		label = "EllesmereUI Cooldown Manager", short = "EllesmereUI cooldowns",
-		about = "its cooldown bars",
+		about = L["its cooldown bars"],
 		patterns = { "^ECME_CDMBar_" },
 	},
 	{
 		key = "euiResource", addon = "EllesmereUIResourceBars",
 		label = "EllesmereUI Resource Bars", short = "EllesmereUI resource bars",
-		about = "its health, power and totem bars",
-		note = "Its cast bar isn't faded, like the game's. Its swing timer is the Swing timer row on " ..
-			"the Standard Frames page.",
+		about = L["its health, power and totem bars"],
+		note = L["Its cast bar isn't faded, like the game's. Its swing timer is the Swing timer row on " ..
+			"the Standard Frames page."],
 		names = { "EllesmereUIResourceBarsFrame", "ERB_TotemBarFrame", "ERB_CallTotemBarFrame" },
 	},
 	{
 		key = "euiMeters", addon = "EllesmereUIDamageMeters",
 		label = "EllesmereUI Damage Meters", short = "EllesmereUI meters",
-		about = "its meter windows",
+		about = L["its meter windows"],
 		patterns = { "^EllesmereUIDMFrame%d+$" },
 	},
 	{
 		key = "euiDataBars", addon = "EllesmereUIDataBars",
 		label = "EllesmereUI Data Bars", short = "EllesmereUI data bars",
-		about = "its data bars",
+		about = L["its data bars"],
 		patterns = { "^EllesmereUIDataBarsBar%d+$" },
 	},
 	{
 		key = "euiReminders", addon = "EllesmereUIAuraBuffReminders",
 		label = "EllesmereUI Buff Reminders", short = "EllesmereUI reminders",
-		about = "its missing-buff reminders",
+		about = L["its missing-buff reminders"],
 		names = { "EABR_Anchor", "EABR_CombatAnchor", "EABR_TalentAnchor", "EABR_BeaconAnchor", "EABR_CursorAnchor" },
 	},
 }) do

@@ -6,6 +6,7 @@
 -- window sits above the letterbox and tint. /cine welcome brings it back.
 
 local _, ns = ...
+local L = ns.L
 
 local window
 local buttons = {} -- profile name -> its button
@@ -29,11 +30,11 @@ local function Update()
 		end
 	end
 	if chosen then
-		status:SetText("Trying |cffffd100" .. active .. "|r. Pick another to compare.")
-		later:SetText("Done")
+		status:SetText(L["Trying %s. Pick another to compare."]:format("|cffffd100" .. active .. "|r"))
+		later:SetText(L["Done"])
 	else
-		status:SetText("Nothing runs until you pick one.")
-		later:SetText("Decide later")
+		status:SetText(L["Nothing runs until you pick one."])
+		later:SetText(L["Decide later"])
 	end
 end
 
@@ -65,7 +66,7 @@ local function CreateWindow()
 
 	local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 18, -16)
-	title:SetText("Welcome to Cinematic")
+	title:SetText(L["Welcome to Cinematic"])
 
 	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
 	close:SetPoint("TOPRIGHT", -2, -2)
@@ -74,10 +75,10 @@ local function CreateWindow()
 	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
 	intro:SetWidth(564)
 	intro:SetJustifyH("LEFT")
-	intro:SetText("Between fights, Cinematic fades your UI away, adds letterbox bars and a colour " ..
+	intro:SetText(L["Between fights, Cinematic fades your UI away, adds letterbox bars and a colour " ..
 		"tint, and brings the camera to life: on flights, standing still, sitting by a campfire. " ..
 		"Fights, casting and opening windows bring the UI back. Hovering a faded frame shows it.\n\n" ..
-		"How much of that do you want? Pick a profile to start from:")
+		"How much of that do you want? Pick a profile to start from:"])
 
 	local last, height = intro, 0
 	for _, profile in ipairs(ns.BUILTIN_PROFILES) do
@@ -111,40 +112,40 @@ local function CreateWindow()
 	note:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -16)
 	note:SetWidth(564)
 	note:SetJustifyH("LEFT")
-	note:SetText("Try as many as you like: each one starts straight away behind this window. " ..
+	note:SetText(L["Try as many as you like: each one starts straight away behind this window. " ..
 		"Afterwards you can switch any time, tweak a profile or make your own on the Profiles page " ..
 		"(Options > AddOns > Cinematic, or right-click the minimap button), or with /cine profile. " ..
-		"/cine toggles Cinematic on and off.")
+		"/cine toggles Cinematic on and off."])
 
 	-- Decide later, or Done once one's picked (keeping it).
 	later = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
 	later:SetSize(120, 22)
 	later:SetPoint("BOTTOMRIGHT", -14, 14)
-	later:SetText("Decide later") -- (Update changes it to Done)
+	later:SetText(L["Decide later"]) -- (Update changes it to Done)
 	later:SetScript("OnClick", function()
 		Close()
 		if not ns.ProfileChosen() then
-			ns.Print("off until you pick a profile. This window comes back next login, or now with /cine welcome.")
+			ns.Print(L["off until you pick a profile. This window comes back next login, or now with /cine welcome."])
 		else
-			ns.Print("profile: " .. ns.ActiveProfile() .. ". Change it any time on the Profiles settings page, " ..
-				"or with /cine profile.")
+			ns.Print(L["profile: %s. Change it any time on the Profiles settings page, or with /cine profile."]
+				:format(ns.ActiveProfile()))
 		end
 	end)
 	-- Not for them: switched off, and not asked again (/cine brings this back).
 	local off = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
 	off:SetSize(150, 22)
 	off:SetPoint("RIGHT", later, "LEFT", -8, 0)
-	off:SetText("Turn Cinematic off")
+	off:SetText(L["Turn Cinematic off"])
 	off:SetScript("OnClick", function()
 		ns.SetEnabled(false)
 		Close()
-		ns.Print("turned off. /cine brings this window back to pick a profile.")
+		ns.Print(L["turned off. /cine brings this window back to pick a profile."])
 	end)
 	-- The settings, at the Profiles page (this window would sit over them).
 	local settings = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
 	settings:SetSize(110, 22)
 	settings:SetPoint("RIGHT", off, "LEFT", -8, 0)
-	settings:SetText("Settings")
+	settings:SetText(L["Settings"])
 	settings:SetScript("OnClick", function()
 		Close()
 		ns.OpenOptions("Profiles")

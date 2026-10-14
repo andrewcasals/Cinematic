@@ -7,14 +7,15 @@
 -- Its bars set their own alpha (each bar's opacity and fade-out settings):
 -- they're its own frames, so they're hooked.
 local _, ns = ...
+local L = ns.L
 
 -- 3rd Party Frames row.
 table.insert(ns.ADDON_FRAMES, {
 	key = "bt4Bars", addon = "Bartender4",
 	label = "Bartender4 other bars", short = "Bartender4 bars",
-	about = "its bar 2, class bars and bonus bar",
-	note = "Its other bars, pet, stance, bag, micro menu, status and art bars are rows on the Standard " ..
-		"Frames page.",
+	about = L["its bar 2, class bars and bonus bar"],
+	note = L["Its other bars, pet, stance, bag, micro menu, status and art bars are rows on the Standard " ..
+		"Frames page."],
 	names = { "BT4Bar2", "BT4Bar7", "BT4Bar8", "BT4Bar9", "BT4Bar10", "BT4Bar11", "BT4Bar12" },
 	hookAlpha = true,
 })

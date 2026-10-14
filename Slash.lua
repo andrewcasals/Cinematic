@@ -1,5 +1,6 @@
 -- Cinematic: the /cine slash commands.
 local _, ns = ...
+local L = ns.L
 
 -- What the commands print goes in the log too (/cine log), so troubleshooting
 -- output can be sent in one paste. The help lists are left out.
@@ -21,33 +22,38 @@ local function Heading(text)
 	print("|cffffd100" .. text .. "|r")
 end
 
+-- A command and what it does (the command itself is the same in every language).
+local function Command(command, text)
+	print("  " .. command .. " - " .. text)
+end
+
 local function PrintHelp()
 	logPrints = false
-	ns.Print("commands")
-	Heading("General")
-	print("  /cine - toggle CineMode (also /cine on, /cine off)")
-	print("  /cine config - open the settings")
-	print("  /cine hideui - hide the UI but keep the look (again to bring it back)")
-	print("  /cine size <percent> - letterbox bar height (now " .. ns.db.letterboxSize * 100 .. "%)")
-	print("  /cine button - show or hide the minimap button")
-	print("  /cine reset - put the active profile back to how it started")
-	print("  /cine profile - list the profiles (/cine profile <name> switches to one)")
-	print("  /cine welcome - the welcome window, to pick a profile")
-	Heading("Frames (hover over one first)")
-	print("  /cine add - fade it too (or /cine add <FrameName>)")
-	print("  /cine add mode - pick up every frame you hover over, then again to fade them all")
-	print("  /cine keep - always show it")
-	print("  /cine list - show the extra faded frames")
-	Heading("Camera")
-	print("  /cine behind - swing the camera back behind your character")
-	print("  /cine flyby - turn the camera slowly round to look back, then back behind you (again to stop)")
-	print("  /cine walk - does the addon think you're walking or auto-running?")
-	print("  /cine walk flip - fix it if it has walk and run backwards")
-	Heading("More")
-	print("  /cine debug help - troubleshooting commands")
-	print("  /cine log - copy the log and your setup for a bug report (/cine log clear empties it)")
-	print("  /cine panic - stop for this session and put your UI and settings back (/cine resume to restart)")
-	print("  Keybinds (toggle CineMode, hide the UI, start a camera) are on the Keybinds settings page.")
+	ns.Print(L["commands"])
+	Heading(L["General"])
+	Command("/cine", L["toggle CineMode (also /cine on, /cine off)"])
+	Command("/cine config", L["open the settings"])
+	Command("/cine hideui", L["hide the UI but keep the look (again to bring it back)"])
+	Command("/cine size <percent>", L["letterbox bar height (now %s%%)"]:format(ns.db.letterboxSize * 100))
+	Command("/cine button", L["show or hide the minimap button"])
+	Command("/cine reset", L["put the active profile back to how it started"])
+	Command("/cine profile", L["list the profiles (/cine profile <name> switches to one)"])
+	Command("/cine welcome", L["the welcome window, to pick a profile"])
+	Heading(L["Frames (hover over one first)"])
+	Command("/cine add", L["fade it too (or /cine add <FrameName>)"])
+	Command("/cine add mode", L["pick up every frame you hover over, then again to fade them all"])
+	Command("/cine keep", L["always show it"])
+	Command("/cine list", L["show the extra faded frames"])
+	Heading(L["Camera"])
+	Command("/cine behind", L["swing the camera back behind your character"])
+	Command("/cine flyby", L["turn the camera slowly round to look back, then back behind you (again to stop)"])
+	Command("/cine walk", L["does the addon think you're walking or auto-running?"])
+	Command("/cine walk flip", L["fix it if it has walk and run backwards"])
+	Heading(L["More"])
+	Command("/cine debug help", L["troubleshooting commands"])
+	Command("/cine log", L["copy the log and your setup for a bug report (/cine log clear empties it)"])
+	Command("/cine panic", L["stop for this session and put your UI and settings back (/cine resume to restart)"])
+	print("  " .. L["Keybinds (toggle CineMode, hide the UI, start a camera) are on the Keybinds settings page."])
 	logPrints = true
 end
 
@@ -111,18 +117,18 @@ function ns.HandleSlash(msg)
 	if cmd == "log" then
 		if arg == "clear" then
 			ns.ClearLog()
-			ns.Print("log cleared")
+			ns.Print(L["log cleared"])
 		else
 			ns.ShowLog()
 		end
 	elseif cmd == "panic" then
 		if ns.IsSuspended() then
-			ns.Print("already stopped: /cine resume starts it again")
+			ns.Print(L["already stopped: /cine resume starts it again"])
 		else
 			ns.Suspend("/cine panic")
 		end
 	elseif cmd == "resume" then
-		ns.Print(ns.Resume() and "started again" or "isn't stopped")
+		ns.Print(ns.Resume() and L["started again"] or L["isn't stopped"])
 	elseif cmd == "debug" and arg:find("^cpu") then
 		local seconds = tonumber(arg:match("^cpu%s+(%d+)"))
 		if arg == "cpu stop" then
@@ -146,14 +152,14 @@ function ns.HandleSlash(msg)
 		ns.OpenOptions()
 	elseif cmd == "on" or cmd == "off" then
 		ns.SetEnabled(cmd == "on")
-		ns.Print(ns.db.enabled and "enabled" or "disabled")
+		ns.Print(ns.db.enabled and L["enabled"] or L["disabled"])
 		if ns.IsSuspended() then
-			ns.Print("(still stopped after an error: /cine resume starts it again)")
+			ns.Print(L["(still stopped after an error: /cine resume starts it again)"])
 		end
 	elseif cmd == "size" and num and num >= 0 and num <= 40 then
 		ns.db.letterboxSize = num / 100
 		ns.letterboxDirty = true
-		ns.Print("letterbox size set to " .. num .. "%")
+		ns.Print(L["letterbox size set to %s%%"]:format(num))
 	elseif cmd == "add" then
 		-- Frame names are case-sensitive, so take the name before lowercasing.
 		local name = msg:match("^%s*%S+%s+(%S+)")
@@ -666,23 +672,24 @@ function ns.HandleSlash(msg)
 		if ns.IsRPWalking then ns.IsRPWalking() end -- refresh from your speed if moving
 		local state
 		if not ns.walking then
-			state = "running (walk mode off)"
+			state = L["running (walk mode off)"]
 		elseif ns.playerMoving and ns.MovingManually and ns.MovingManually() then
-			state = "walking by hand - no RP walk camera (auto-walk for it)"
+			state = L["walking by hand - no RP walk camera (auto-walk for it)"]
 		elseif ns.playerMoving then
-			state = "auto-walking - RP walk camera " .. (ns.db.walkOrbit and "on" or "switched off in settings")
+			state = ns.db.walkOrbit and L["auto-walking - RP walk camera on"]
+				or L["auto-walking - RP walk camera switched off in settings"]
 		else
-			state = "walk mode on, standing still"
+			state = L["walk mode on, standing still"]
 		end
 		local speed = ns.GetPlayerSpeed()
 		local source = (ns.playerMoving and ns.walkingFromSpeed)
-			and (" (from your speed: %.1f yards/sec)"):format(speed or 0)
-			or " (from the walk/run key)"
-		ns.Print("the addon thinks you're " .. state .. source ..
-			(arg == "flip" and "." or ". Wrong? Type /cine walk flip."))
-		ns.Print("auto-run: " .. (ns.autoRunning and "on" or "off") ..
-			((ns.IsAutoRunning and ns.IsAutoRunning()) and " (auto-run camera)" or
-				(ns.autoRunning and ns.walking and " (walking, so RP walk camera)" or "")))
+			and L["from your speed: %.1f yards/sec"]:format(speed or 0)
+			or L["from the walk/run key"]
+		ns.Print((arg == "flip" and L["the addon thinks you're %s (%s)."]
+			or L["the addon thinks you're %s (%s). Wrong? Type /cine walk flip."]):format(state, source))
+		ns.Print(L["auto-run: %s"]:format(ns.autoRunning and L["on"] or L["off"]) ..
+			((ns.IsAutoRunning and ns.IsAutoRunning()) and L[" (auto-run camera)"] or
+				(ns.autoRunning and ns.walking and L[" (walking, so RP walk camera)"] or "")))
 	elseif cmd == "debug" and arg == "mode" then
 		-- Which camera situation the addon thinks you're in.
 		local still = ns.GetStillSince()
@@ -839,7 +846,7 @@ function ns.HandleSlash(msg)
 		ns.ListExtras()
 	elseif cmd == "reset" then
 		ns.ResetSettings()
-		ns.Print("profile " .. ns.ActiveProfile() .. " reset")
+		ns.Print(L["profile %s reset"]:format(ns.ActiveProfile()))
 	elseif cmd == "welcome" then
 		ns.ShowWelcome()
 	elseif cmd == "profile" or cmd == "profiles" then
@@ -847,10 +854,10 @@ function ns.HandleSlash(msg)
 		local name = arg ~= "" and ns.FindProfile(arg)
 		if name then
 			ns.SetProfile(name)
-			ns.Print("profile: " .. name)
+			ns.Print(L["profile: %s"]:format(name))
 		else
-			if arg ~= "" then ns.Print("no profile called " .. arg) end
-			ns.Print("profiles (the active one in yellow):")
+			if arg ~= "" then ns.Print(L["no profile called %s"]:format(arg)) end
+			ns.Print(L["profiles (the active one in yellow):"])
 			for _, each in ipairs(ns.ProfileNames()) do
 				local active = ns.ProfileChosen() and each == ns.ActiveProfile()
 				print("  " .. (active and "|cffffd100" .. each .. "|r" or each))

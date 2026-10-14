@@ -6,7 +6,11 @@
 ## Version: dev
 ## SavedVariables: CinematicDB
 ## SavedVariablesPerCharacter: CinematicCharDB
+# Remove the "# " below to force Spanish over the settings choice (then /reload):
+# ## X-Cinematic-Locale: esES
 
+Locales\Locales.lua
+Locales\esES.lua
 Diagnostics.lua
 Profiler.lua
 Core.lua

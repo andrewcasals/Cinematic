@@ -16,14 +16,15 @@
 -- target fading. They're its own frames, so they're hooked: while a plate is
 -- faded its alpha is ours times its own, and at full it's left to it again.
 local _, ns = ...
+local L = ns.L
 
 -- 3rd Party Frames page (no columns: its plates follow the Nameplates page).
 table.insert(ns.ADDON_NOTES, {
 	addon = "Plater", label = "Plater",
-	works = "Follows the Nameplates page",
-	about = "Plater's nameplates fade in CineMode and follow the Nameplates page's rows. Plater can " ..
+	works = L["Follows the Nameplates page"],
+	about = L["Plater's nameplates fade in CineMode and follow the Nameplates page's rows. Plater can " ..
 		"change the game's nameplate settings itself (at login, and with its auto toggles); " ..
-		"Cinematic puts its own back afterwards.",
+		"Cinematic puts its own back afterwards."],
 })
 
 -- The game's settings that pick which plates show: one of these changed by a

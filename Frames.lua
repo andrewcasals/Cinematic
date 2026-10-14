@@ -2,6 +2,7 @@
 -- nesting, the minimap shrink, scanning for frames created later, the Issue
 -- Reporter, hover, and the 3rd Party Frames page's lists.
 local ADDON_NAME, ns = ...
+local L = ns.L
 
 -- Frames to fade, grouped so hovering one member reveals the whole group.
 -- Names differ between Classic Era, progression Classic and Retail; missing
@@ -1069,119 +1070,119 @@ ns.IsEntryHovered = ns.Profiled("IsEntryHovered", ns.IsEntryHovered)
 -- Frames the player can choose to show while fighting when staying cinematic
 -- in combat (db.combatShow[key], missing = the default here).
 ns.COMBAT_SHOW = {
-	{ key = "player", label = "Player portrait (and pet)", default = true, frames = { "PlayerFrame", "PetFrame" } },
-	{ key = "prd", label = "Personal resource bars", default = true,
+	{ key = "player", label = L["Player portrait (and pet)"], default = true, frames = { "PlayerFrame", "PetFrame" } },
+	{ key = "prd", label = L["Personal resource bars"], default = true,
 		frames = { "PersonalResourceDisplayFrame", "CinematicPersonalResource" } },
-	{ key = "target", label = "Target", default = true, frames = { "TargetFrame" } },
-	{ key = "tot", label = "Target of target", default = true, frames = { "TargetFrameToT" } },
-	{ key = "focus", label = "Focus", default = true, frames = { "FocusFrame" } },
+	{ key = "target", label = L["Target"], default = true, frames = { "TargetFrame" } },
+	{ key = "tot", label = L["Target of target"], default = true, frames = { "TargetFrameToT" } },
+	{ key = "focus", label = L["Focus"], default = true, frames = { "FocusFrame" } },
 	-- The Standard Frames page's Party frames section (page = "party"); the
 	-- raid-style ones are the Raid frames section's.
-	{ key = "party", label = "Party frames", default = true, page = "party", groups = { "party" } },
+	{ key = "party", label = L["Party frames"], default = true, page = "party", groups = { "party" } },
 	-- Their parts, Always ticked to start with (CINE_SHOW_DEFAULT), as the raid frames' are.
-	{ key = "partyroles", label = "Role icons", default = true, page = "party", groups = { "partyroles" }, part = true },
-	{ key = "partynames", label = "Names", default = true, page = "party", groups = { "partynames" }, part = true },
+	{ key = "partyroles", label = L["Role icons"], default = true, page = "party", groups = { "partyroles" }, part = true },
+	{ key = "partynames", label = L["Names"], default = true, page = "party", groups = { "partynames" }, part = true },
 	-- The raid frames (raid-style party frames too), members and pets apart,
 	-- and the Raid Frame Manager (the tab at the left edge): the Standard
 	-- Frames page's Raid frames section (page = "raid").
-	{ key = "raidplayers", label = "Players", default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidplayers", label = L["Players"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidplayers" } },
-	{ key = "raidpets", label = "Pets", default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidpets", label = L["Pets"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidpets" } },
 	-- Parts of them, Always ticked to start with (CINE_SHOW_DEFAULT): untick
 	-- one to hide it in CineMode (names and role icons while you heal, say).
 	-- (part: Always means whenever its frame shows, over its Mouseover groups.)
-	{ key = "raidroles", label = "Role icons", default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidroles", label = L["Role icons"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidroles" }, part = true },
 	-- The glow round a member with threat. (tip: the row name's tooltip.)
-	{ key = "raidthreat", label = "Threat highlight", default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidthreat", label = L["Threat highlight"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidthreat" }, part = true,
-		tip = "The glow round a member with threat (aggro). To hide it all the time, CineMode or not, " ..
-			"turn off the game's own Display Aggro Highlight raid frame option." },
-	{ key = "raidnames", label = "Player names", default = true, addon = "Blizzard_CompactRaidFrames",
+		tip = L["The glow round a member with threat (aggro). To hide it all the time, CineMode or not, " ..
+			"turn off the game's own Display Aggro Highlight raid frame option."] },
+	{ key = "raidnames", label = L["Player names"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidnames" }, part = true },
-	{ key = "raidpetnames", label = "Pet names", default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidpetnames", label = L["Pet names"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidpetnames" }, part = true },
-	{ key = "raidtitles", label = "Group titles", default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidtitles", label = L["Group titles"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidtitles" }, part = true },
-	{ key = "raidbuffs", label = "Buffs", default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidbuffs", label = L["Buffs"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidbuffs" }, part = true },
-	{ key = "raiddebuffs", label = "Debuffs", default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raiddebuffs", label = L["Debuffs"], default = true, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raiddebuffs" }, part = true },
-	{ key = "raidmanager", label = "Raid Frame Manager", default = false, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidmanager", label = L["Raid Frame Manager"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", frames = { "CompactRaidFrameManager" } },
 	-- The battlegrounds' flag carriers: its Battlegrounds section (page = "bg").
 	-- Always shown to start with (CINE_SHOW_DEFAULT), as before it had a row.
-	{ key = "flags", label = "Flag carriers", default = true, addon = "Blizzard_Deprecated_ArenaUI",
+	{ key = "flags", label = L["Flag carriers"], default = true, addon = "Blizzard_Deprecated_ArenaUI",
 		page = "bg", frames = { "ArenaEnemyFramesContainer" } },
 	-- morePage: the options page with more settings for it, which can keep it up besides.
-	{ key = "minimap", label = "Minimap", default = true, groups = { "minimap" }, morePage = "Minimap",
+	{ key = "minimap", label = L["Minimap"], default = true, groups = { "minimap" }, morePage = "Minimap",
 		handledBy = "handleMinimap" },
-	{ key = "quests", label = "Quest tracker", default = false, frames = FRAME_GROUPS.quests,
+	{ key = "quests", label = L["Quest tracker"], default = false, frames = FRAME_GROUPS.quests,
 		morePage = "Quest tracker", handledBy = "handleQuests" },
 	-- Retail's quest waypoint: its Always tick is the Minimap page's "Always
 	-- show the quest waypoint" (CINE_SHOW_SETTING).
-	{ key = "waypoint", label = "Quest waypoint", default = false, retail = true, groups = { "waypoint" },
+	{ key = "waypoint", label = L["Quest waypoint"], default = false, retail = true, groups = { "waypoint" },
 		morePage = "Minimap", handledBy = "handleQuests" },
-	{ key = "buffs", label = "Buffs and debuffs", default = true, morePage = "Buffs/debuffs", handledBy = "handleBuffs",
+	{ key = "buffs", label = L["Buffs and debuffs"], default = true, morePage = "Buffs/debuffs", handledBy = "handleBuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
-	{ key = "swing", label = "Swing timer", default = true, retail = false, handledBy = "handleSwing",
-		tip = "The Swing timer page can fade out the bars of weapons you aren't using, and the off-hand's.",
+	{ key = "swing", label = L["Swing timer"], default = true, retail = false, handledBy = "handleSwing",
+		tip = L["The Swing timer page can fade out the bars of weapons you aren't using, and the off-hand's."],
 		frames ={ "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
 	-- Always ticked to start with (CINE_SHOW_DEFAULT), as before it had a row:
 	-- untick it to hide your cast bar in CineMode but for fights.
-	{ key = "castbar", label = "Cast bar", default = true, frames = FRAME_GROUPS.castbar },
+	{ key = "castbar", label = L["Cast bar"], default = true, frames = FRAME_GROUPS.castbar },
 	-- (handledBy: a master switch that, off, leaves its frames alone: its row greys out.)
-	{ key = "cooldowns", label = "Cooldown Manager", default = false, addon = "Blizzard_CooldownViewer",
+	{ key = "cooldowns", label = L["Cooldown Manager"], default = false, addon = "Blizzard_CooldownViewer",
 		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager", handledBy = "handleCooldowns" },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
-	{ key = "mainbar", label = "Action bar 1", default = true,
+	{ key = "mainbar", label = L["Action bar 1"], default = true,
 		frames = { "MainMenuBar", "MainActionBar", "MainMenuBarVehicleLeaveButton" } },
 	-- The game's art round action bar 1 (end caps, the bar behind the buttons),
 	-- left up or faded apart from its buttons, which an action bar addon may
 	-- have taken away. Follows Action bar 1's ticks until set (see ROW_FALLBACK).
 	-- noHoverRow: hovering it is hovering action bar 1.
-	{ key = "art", label = "Action bar art", default = true, groups = { "barart" }, noHoverRow = true },
-	{ key = "bottomleft", label = ns.isRetail and "Action bar 2" or "Action bar 2 (bottom left)", default = true,
+	{ key = "art", label = L["Action bar art"], default = true, groups = { "barart" }, noHoverRow = true },
+	{ key = "bottomleft", label = ns.isRetail and L["Action bar 2"] or L["Action bar 2 (bottom left)"], default = true,
 		frames = { "MultiBarBottomLeft" } },
-	{ key = "bottomright", label = ns.isRetail and "Action bar 3" or "Action bar 3 (bottom right)", default = true,
+	{ key = "bottomright", label = ns.isRetail and L["Action bar 3"] or L["Action bar 3 (bottom right)"], default = true,
 		frames = { "MultiBarBottomRight" } },
-	{ key = "right1", label = ns.isRetail and "Action bar 4" or "Action bar 4 (right)", default = false,
+	{ key = "right1", label = ns.isRetail and L["Action bar 4"] or L["Action bar 4 (right)"], default = false,
 		frames = { "MultiBarRight" } },
-	{ key = "right2", label = ns.isRetail and "Action bar 5" or "Action bar 5 (right 2)", default = false,
+	{ key = "right2", label = ns.isRetail and L["Action bar 5"] or L["Action bar 5 (right 2)"], default = false,
 		frames = { "MultiBarLeft" } },
 	-- Retail only (the frames don't exist on Classic, so the rows are skipped).
-	{ key = "bar6", label = "Action bar 6", default = false, frames = { "MultiBar5" } },
-	{ key = "bar7", label = "Action bar 7", default = false, frames = { "MultiBar6" } },
-	{ key = "bar8", label = "Action bar 8", default = false, frames = { "MultiBar7" } },
-	{ key = "pet", label = "Pet bar", default = true, frames = { "PetActionBarFrame", "PetActionBar" } },
-	{ key = "stance", label = "Stance bar", default = true, frames = { "StanceBarFrame", "StanceBar" } },
-	{ key = "totems", label = "Totem bar", default = true, frames = {
+	{ key = "bar6", label = L["Action bar 6"], default = false, frames = { "MultiBar5" } },
+	{ key = "bar7", label = L["Action bar 7"], default = false, frames = { "MultiBar6" } },
+	{ key = "bar8", label = L["Action bar 8"], default = false, frames = { "MultiBar7" } },
+	{ key = "pet", label = L["Pet bar"], default = true, frames = { "PetActionBarFrame", "PetActionBar" } },
+	{ key = "stance", label = L["Stance bar"], default = true, frames = { "StanceBarFrame", "StanceBar" } },
+	{ key = "totems", label = L["Totem bar"], default = true, frames = {
 		"MultiCastActionBarFrame", "MultiCastSummonSpellButton", "MultiCastRecallSpellButton",
 		"MultiCastFlyoutFrame", "MultiCastSlotButton1", "MultiCastSlotButton2",
 		"MultiCastSlotButton3", "MultiCastSlotButton4",
 		"MultiCastActionPage1", "MultiCastActionPage2", "MultiCastActionPage3", "TotemFrame",
 	} },
-	{ key = "micro", label = "Micro menu and bags", default = true,
+	{ key = "micro", label = L["Micro menu and bags"], default = true,
 		frames = { "MicroButtonAndBagsBar", "MicroMenuContainer", "BagsBar" } },
 	-- (In gamepad mode the Gamepad page's row has them instead: notGamepad.)
-	{ key = "xp", label = "Experience and reputation bars", default = true, notGamepad = true, frames = {
+	{ key = "xp", label = L["Experience and reputation bars"], default = true, notGamepad = true, frames = {
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
 		"StatusTrackingBarManager",
 	} },
-	{ key = "extra", label = "Extra action and zone ability", default = true, retail = true,
+	{ key = "extra", label = L["Extra action and zone ability"], default = true, retail = true,
 		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
 	-- WoW Forever's gamepad mode, on the Gamepad page (page = "gamepad") rather
 	-- than the Standard Frames page.
-	{ key = "gamepadbars", label = "Gamepad action bars", default = true, retail = false, page = "gamepad",
+	{ key = "gamepadbars", label = L["Gamepad action bars"], default = true, retail = false, page = "gamepad",
 		frames = FRAME_GROUPS.gamepadbars },
-	{ key = "gamepadlegend", label = "Button hints (top left)", default = false, retail = false, page = "gamepad",
+	{ key = "gamepadlegend", label = L["Button hints (top left)"], default = false, retail = false, page = "gamepad",
 		frames = FRAME_GROUPS.gamepadlegend },
-	{ key = "gamepadreticle", label = "Reticle (center dot)", default = true, retail = false, page = "gamepad",
+	{ key = "gamepadreticle", label = L["Reticle (center dot)"], default = true, retail = false, page = "gamepad",
 		frames = FRAME_GROUPS.gamepadreticle },
 	-- The game's experience bars again, used only in gamepad mode (gamepadOnly).
-	{ key = "gamepadxp", label = "Experience and reputation bars", default = false, retail = false,
+	{ key = "gamepadxp", label = L["Experience and reputation bars"], default = false, retail = false,
 		page = "gamepad", gamepadOnly = true, frames = {
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
 		"StatusTrackingBarManager",
@@ -1217,12 +1218,12 @@ end
 -- ("extra:<name>"). These only decide what reveals together: the fade groups
 -- (FRAME_GROUPS) still drive everything else.
 local HOVER_EXTRA_ROWS = {
-	{ key = "totemtimers", label = "Totem timers (by the portrait)", frames = { "TotemFrame" } },
-	{ key = "durability", label = "Durability figure", frames = { "DurabilityFrame" } },
-	{ key = "chat", label = "Chat tabs and buttons", frames = FRAME_GROUPS.chat },
-	{ key = "questtimer", label = "Quest timer", frames = { "QuestTimerFrame" } },
-	{ key = "waypoint", label = "Quest waypoint", frames = { "SuperTrackedFrame" } },
-	{ key = "meters", label = "Damage meter (the game's)", frames = FRAME_GROUPS.meters },
+	{ key = "totemtimers", label = L["Totem timers (by the portrait)"], frames = { "TotemFrame" } },
+	{ key = "durability", label = L["Durability figure"], frames = { "DurabilityFrame" } },
+	{ key = "chat", label = L["Chat tabs and buttons"], frames = FRAME_GROUPS.chat },
+	{ key = "questtimer", label = L["Quest timer"], frames = { "QuestTimerFrame" } },
+	{ key = "waypoint", label = L["Quest waypoint"], frames = { "SuperTrackedFrame" } },
+	{ key = "meters", label = L["Damage meter (the game's)"], frames = FRAME_GROUPS.meters },
 }
 ns.HOVER_ROWS = {}
 local HOVER_ROW_BY_NAME = {} -- frame name -> row key (the first row listing it)
@@ -1260,44 +1261,44 @@ end
 -- buff peeks on the Buffs/debuffs page, the Minimap and Quest tracker pages'
 -- options, the gamepad's press reveal.
 ns.HOVER_TRIGGERS = {
-	{ key = "chat", label = "Chat message", tip = "A chat window peeking for a new message (Chat page)." },
-	{ key = "whisper", label = "Unread whisper",
-		tip = "A whisper tab waiting to be read, while that keeps chat up (Chat page)." },
-	{ key = "typing", label = "Typing", tip = "Typing in chat." },
-	{ key = "aura", label = "New buff or debuff", tip = "A buff or debuff peek (Buffs/debuffs page)." },
-	{ key = "ping", label = "Minimap ping", tip = "A group member pinging the minimap (Minimap page)." },
-	{ key = "tracking", label = "Tracking",
-		tip = "While the minimap stays up for herb, mineral or other tracking (Minimap page)." },
-	{ key = "quest", label = "Quest progress", tip = "Accepting a quest or progress on one (Quest tracker page)." },
-	{ key = "gamepad", label = "Gamepad input", gamepad = true, tip = "Pressing a gamepad button (Gamepad page)." },
-	{ key = "roster", label = "Group joins or leaves",
-		tip = "Someone joining or leaving your party or raid, or you joining or leaving one." },
-	{ key = "cooldown", label = "Cooldown recharging", tip = "While a spell in the Cooldown Manager (or " ..
+	{ key = "chat", label = L["Chat message"], tip = L["A chat window peeking for a new message (Chat page)."] },
+	{ key = "whisper", label = L["Unread whisper"],
+		tip = L["A whisper tab waiting to be read, while that keeps chat up (Chat page)."] },
+	{ key = "typing", label = L["Typing"], tip = L["Typing in chat."] },
+	{ key = "aura", label = L["New buff or debuff"], tip = L["A buff or debuff peek (Buffs/debuffs page)."] },
+	{ key = "ping", label = L["Minimap ping"], tip = L["A group member pinging the minimap (Minimap page)."] },
+	{ key = "tracking", label = L["Tracking"],
+		tip = L["While the minimap stays up for herb, mineral or other tracking (Minimap page)."] },
+	{ key = "quest", label = L["Quest progress"], tip = L["Accepting a quest or progress on one (Quest tracker page)."] },
+	{ key = "gamepad", label = L["Gamepad input"], gamepad = true, tip = L["Pressing a gamepad button (Gamepad page)."] },
+	{ key = "roster", label = L["Group joins or leaves"],
+		tip = L["Someone joining or leaving your party or raid, or you joining or leaving one."] },
+	{ key = "cooldown", label = L["Cooldown recharging"], tip = L["While a spell in the Cooldown Manager (or " ..
 		"Enhanced Cooldown Manager's cooldown bars) is still recharging, until they're all ready. Not " ..
-		"the global cooldown (Cooldown Manager page)." },
+		"the global cooldown (Cooldown Manager page)."] },
 }
 
 -- What it's like before you change anything: today's groups that do
 -- something (more than one frame, or brought up by more than the mouse).
 ns.HOVER_GROUPS_DEFAULT = {
-	{ name = "Action bars", members = { "mainbar", "bottomleft", "bottomright",
+	{ name = L["Action bars"], members = { "mainbar", "bottomleft", "bottomright",
 		"pet", "stance", "totems", "micro", "xp", "extra" } },
-	{ name = "Action bars 6-8", members = { "bar6", "bar7", "bar8" } },
-	{ name = "Side bars", members = { "right1", "right2" } },
-	{ name = "Player", members = { "player", "prd", "totemtimers", "castbar" } },
-	{ name = "Target and focus", members = { "target", "tot", "focus" } },
+	{ name = L["Action bars 6-8"], members = { "bar6", "bar7", "bar8" } },
+	{ name = L["Side bars"], members = { "right1", "right2" } },
+	{ name = L["Player"], members = { "player", "prd", "totemtimers", "castbar" } },
+	{ name = L["Target and focus"], members = { "target", "tot", "focus" } },
 	-- (Raid-style party frames are the raid frames; the Raid Frame Manager
 	-- goes with both.)
-	{ name = "Raid frames", members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidnames",
+	{ name = L["Raid frames"], members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidnames",
 		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
-	{ name = "Party frames", members = { "party", "partyroles", "partynames", "raidmanager" },
+	{ name = L["Party frames"], members = { "party", "partyroles", "partynames", "raidmanager" },
 		triggers = { roster = true } },
-	{ name = "Minimap", members = { "minimap" }, triggers = { ping = true, tracking = true } },
-	{ name = "Buffs", members = { "buffs" }, triggers = { aura = true } },
-	{ name = "Quest tracker", members = { "quests" }, triggers = { quest = true } },
-	{ name = "Gamepad action bars", members = { "gamepadbars" }, triggers = { gamepad = true } },
-	{ name = "Chat", members = { "chat" }, triggers = { whisper = true, typing = true } },
-	{ name = "Cooldowns", members = { "cooldowns", "addon:fecm" }, triggers = { cooldown = true } },
+	{ name = L["Minimap"], members = { "minimap" }, triggers = { ping = true, tracking = true } },
+	{ name = L["Buffs"], members = { "buffs" }, triggers = { aura = true } },
+	{ name = L["Quest tracker"], members = { "quests" }, triggers = { quest = true } },
+	{ name = L["Gamepad action bars"], members = { "gamepadbars" }, triggers = { gamepad = true } },
+	{ name = L["Chat"], members = { "chat" }, triggers = { whisper = true, typing = true } },
+	{ name = L["Cooldowns"], members = { "cooldowns", "addon:fecm" }, triggers = { cooldown = true } },
 }
 
 -- The groups in use: the player's (db.hoverGroups), or the defaults until
@@ -1442,13 +1443,13 @@ function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SH
 -- Places as the Nameplates page has them (bar its PvP flagged column, which
 -- goes with the open world here). All unticked to start with.
 ns.PLACE_SHOW = {
-	{ list = "bgShow", label = "BGs & Arenas", tip = "Show all through CineMode in battlegrounds and arenas." },
-	{ list = "worldShow", label = "Open World",
-		tip = "Show all through CineMode everywhere else, cities and inns included." },
-	{ list = "groupShow", label = "Grouped",
-		tip = "Show all through CineMode while you're in a party or raid, wherever you are." },
-	{ list = "instanceShow", label = "Instances",
-		tip = "Show all through CineMode in dungeons, scenarios and raids." },
+	{ list = "bgShow", label = L["BGs & Arenas"], tip = L["Show all through CineMode in battlegrounds and arenas."] },
+	{ list = "worldShow", label = L["Open World"],
+		tip = L["Show all through CineMode everywhere else, cities and inns included."] },
+	{ list = "groupShow", label = L["Grouped"],
+		tip = L["Show all through CineMode while you're in a party or raid, wherever you are."] },
+	{ list = "instanceShow", label = L["Instances"],
+		tip = L["Show all through CineMode in dungeons, scenarios and raids."] },
 }
 local NO_DEFAULTS = {}
 -- Ticked to start with: the raid and party frames in battlegrounds, arenas,
@@ -1990,31 +1991,40 @@ local NO_REVEAL = {
 -- letters there (a Nintendo-style pad's A is on the right, Xbox's B). The left stick's directions are left to
 -- the moving check: they don't always walk you.
 ns.GAMEPAD_BUTTONS = {
-	{ key = "PAD1", label = "Bottom face button", default = true },
-	{ key = "PAD2", label = "Right face button", default = true },
-	{ key = "PAD3", label = "Left face button", default = true },
-	{ key = "PAD4", label = "Top face button", default = true },
-	{ key = "PADDUP", label = "D-pad up", default = true },
-	{ key = "PADDDOWN", label = "D-pad down", default = true },
-	{ key = "PADDLEFT", label = "D-pad left", default = true },
-	{ key = "PADDRIGHT", label = "D-pad right", default = true },
-	{ key = "PADLSHOULDER", label = "Left bumper (LB)", default = true },
-	{ key = "PADRSHOULDER", label = "Right bumper (RB)", default = true },
-	{ key = "PADLTRIGGER", label = "Left trigger (LT)", default = true },
-	{ key = "PADRTRIGGER", label = "Right trigger (RT)", default = true },
-	{ key = "PADLSTICKUP", label = "Left stick up", default = true },
-	{ key = "PADLSTICKDOWN", label = "Left stick down", default = true },
-	{ key = "PADLSTICKLEFT", label = "Left stick left", default = true },
-	{ key = "PADLSTICKRIGHT", label = "Left stick right", default = true },
-	{ key = "PADRSTICKUP", label = "Right stick up", default = false },
-	{ key = "PADRSTICKDOWN", label = "Right stick down", default = false },
-	{ key = "PADRSTICKLEFT", label = "Right stick left", default = false },
-	{ key = "PADRSTICKRIGHT", label = "Right stick right", default = false },
-	{ key = "PADLSTICK", label = "Left stick click", default = false },
-	{ key = "PADRSTICK", label = "Right stick click", default = false },
-	{ key = "PADFORWARD", label = "Start / Menu", default = false },
-	{ key = "PADBACK", label = "Back / View", default = false },
+	{ key = "PAD1", label = L["Bottom face button"], default = true },
+	{ key = "PAD2", label = L["Right face button"], default = true },
+	{ key = "PAD3", label = L["Left face button"], default = true },
+	{ key = "PAD4", label = L["Top face button"], default = true },
+	{ key = "PADDUP", label = L["D-pad up"], default = true },
+	{ key = "PADDDOWN", label = L["D-pad down"], default = true },
+	{ key = "PADDLEFT", label = L["D-pad left"], default = true },
+	{ key = "PADDRIGHT", label = L["D-pad right"], default = true },
+	{ key = "PADLSHOULDER", label = L["Left bumper (LB)"], default = true },
+	{ key = "PADRSHOULDER", label = L["Right bumper (RB)"], default = true },
+	{ key = "PADLTRIGGER", label = L["Left trigger (LT)"], default = true },
+	{ key = "PADRTRIGGER", label = L["Right trigger (RT)"], default = true },
+	{ key = "PADLSTICKUP", label = L["Left stick up"], default = true },
+	{ key = "PADLSTICKDOWN", label = L["Left stick down"], default = true },
+	{ key = "PADLSTICKLEFT", label = L["Left stick left"], default = true },
+	{ key = "PADLSTICKRIGHT", label = L["Left stick right"], default = true },
+	{ key = "PADRSTICKUP", label = L["Right stick up"], default = false },
+	{ key = "PADRSTICKDOWN", label = L["Right stick down"], default = false },
+	{ key = "PADRSTICKLEFT", label = L["Right stick left"], default = false },
+	{ key = "PADRSTICKRIGHT", label = L["Right stick right"], default = false },
+	{ key = "PADLSTICK", label = L["Left stick click"], default = false },
+	{ key = "PADRSTICK", label = L["Right stick click"], default = false },
+	{ key = "PADFORWARD", label = L["Start / Menu"], default = false },
+	{ key = "PADBACK", label = L["Back / View"], default = false },
 }
+-- The labels above were made before the language was known: translated again.
+ns.OnLanguage(function()
+	ns.TranslateFields(ns.COMBAT_SHOW, "label", "tip")
+	ns.TranslateFields(ns.HOVER_ROWS, "label", "tip")
+	ns.TranslateFields(ns.HOVER_TRIGGERS, "label", "tip")
+	ns.TranslateFields(ns.HOVER_GROUPS_DEFAULT, "name")
+	ns.TranslateFields(ns.PLACE_SHOW, "label", "tip")
+	ns.TranslateFields(ns.GAMEPAD_BUTTONS, "label")
+end)
 local PAD_BUTTON_DEFAULT = {}
 for _, item in ipairs(ns.GAMEPAD_BUTTONS) do
 	PAD_BUTTON_DEFAULT[item.key] = item.default
@@ -3188,7 +3198,7 @@ function ns.AddUnderMouse(name)
 	if name and name ~= "" then
 		frame = _G[name]
 		if not IsFrame(frame) then
-			ns.Print("no frame called " .. name .. " (frame names are case-sensitive; /fstack shows them).")
+			ns.Print(L["no frame called %s (frame names are case-sensitive; /fstack shows them)."]:format(name))
 			return
 		end
 	else
@@ -3201,38 +3211,38 @@ function ns.AddUnderMouse(name)
 		name = frame and frame:GetName()
 	end
 	if not name then
-		ns.Print("hover over a named UI element, then type /cine add and press Enter " ..
+		ns.Print(L["hover over a named UI element, then type /cine add and press Enter " ..
 			"(or /cine add <FrameName>). Frames without a name can't be added: the 3rd Party Frames " ..
-			"settings page lists the addons faded out of the box.")
+			"settings page lists the addons faded out of the box."])
 		return
 	end
 	if IsWindow(frame, name) then
-		ns.Print(name .. " is a window, so it isn't faded (it would stay there invisible). " ..
-			"Move the mouse off it onto the frame you want, then try again.")
+		ns.Print(L["%s is a window, so it isn't faded (it would stay there invisible). " ..
+			"Move the mouse off it onto the frame you want, then try again."]:format(name))
 		return
 	end
 	for _, entry in ipairs(ns.managed) do
 		if entry.frame == frame and not entry.group:find("^extra:") then
-			ns.Print(name .. " is already faded as part of the built-in \"" .. entry.group .. "\" group.")
+			ns.Print(L["%s is already faded as part of the built-in \"%s\" group."]:format(name, entry.group))
 			return
 		end
 	end
 	ns.db.ignoredFrames[name] = nil
 	ns.db.extraFrames[name] = true
 	AddFrame(frame, "extra:" .. name)
-	ns.Print("now fading " .. name)
+	ns.Print(L["now fading %s"]:format(name))
 end
 
 function ns.RemoveUnderMouse()
 	local frame = GetTopLevelFrameUnderMouse()
 	local name = frame and frame:GetName()
 	if not name then
-		ns.Print("hover over a faded UI element, then type /cine keep and press Enter.")
+		ns.Print(L["hover over a faded UI element, then type /cine keep and press Enter."])
 		return
 	end
 	ns.StopFading(name)
-	ns.Print(name .. " will always be shown (untick its CineMode box under Custom frames on the 3rd Party Frames " ..
-		"options page to undo).")
+	ns.Print(L["%s will always be shown (untick its CineMode box under Custom frames on the 3rd Party Frames " ..
+		"options page to undo)."]:format(name))
 end
 
 -- Add mode (/cine add mode): hovering frames collects them, and the second
@@ -3315,13 +3325,13 @@ do
 		local _, source = GlobalSource(name)
 		if ns.db.ignoredFrames[name] then
 			skipped[name] = true
-			ns.Print(name .. " skipped: you set it to always show (untick its CineMode box under Custom frames " ..
-				"on the 3rd Party Frames page).")
+			ns.Print(L["%s skipped: you set it to always show (untick its CineMode box under Custom frames " ..
+				"on the 3rd Party Frames page)."]:format(name))
 			return
 		end
 		pending[#pending + 1] = name
 		ShowOverlay(frame, name)
-		ns.Print("found " .. name .. (source and (" (" .. source .. ")") or ""))
+		ns.Print(L["found %s"]:format(name) .. (source and (" (" .. source .. ")") or ""))
 		AddModeChanged()
 	end
 
@@ -3364,8 +3374,8 @@ do
 	function ns.ToggleAddMode()
 		if not addMode then
 			addMode = C_Timer.NewTicker(ADD_MODE_CHECK, CheckUnderMouse)
-			ns.Print("add mode: hover over the frames to fade. Type /cine add mode again to fade them " ..
-				"(or /cine add cancel to drop them). The game's own frames and ones already faded are left out.")
+			ns.Print(L["add mode: hover over the frames to fade. Type /cine add mode again to fade them " ..
+				"(or /cine add cancel to drop them). The game's own frames and ones already faded are left out."])
 			AddModeChanged()
 			return
 		end
@@ -3379,28 +3389,30 @@ do
 				added = added + 1
 			end
 		end
-		ns.Print(added == 0 and "add mode off: nothing found to add."
-			or ("add mode off: now fading %d frame%s."):format(added, added == 1 and "" or "s"))
+		ns.Print(added == 0 and L["add mode off: nothing found to add."]
+			or (added == 1 and L["add mode off: now fading %d frame."] or L["add mode off: now fading %d frames."])
+				:format(added))
 		AddModeChanged()
 	end
 
 	function ns.CancelAddMode()
 		if not addMode then
-			ns.Print("add mode isn't on (/cine add mode starts it).")
+			ns.Print(L["add mode isn't on (/cine add mode starts it)."])
 			return
 		end
 		local count = #EndAddMode()
-		ns.Print(("add mode cancelled: %d frame%s left as they were."):format(count, count == 1 and "" or "s"))
+		ns.Print((count == 1 and L["add mode cancelled: %d frame left as it was."]
+			or L["add mode cancelled: %d frames left as they were."]):format(count))
 		AddModeChanged()
 	end
 end
 
 function ns.ListExtras()
 	local faded, ignored = ns.GetExtraFrames()
-	for _, name in ipairs(faded) do ns.Print("fading " .. name) end
-	for _, name in ipairs(ignored) do ns.Print("ignoring " .. name) end
+	for _, name in ipairs(faded) do ns.Print(L["fading %s"]:format(name)) end
+	for _, name in ipairs(ignored) do ns.Print(L["ignoring %s"]:format(name)) end
 	if #faded + #ignored == 0 then
-		ns.Print("no extra frames.")
+		ns.Print(L["no extra frames."])
 	end
 end
 

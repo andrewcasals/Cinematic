@@ -1,6 +1,7 @@
 -- Cinematic: camera rotation. The orbit (flights and standing still), camera
 -- input detection, the takeoff swing, flight timing and settling before landing.
 local _, ns = ...
+local L = ns.L
 
 -- Flight path orbit: while on a taxi the camera moves in sweeps, holding still
 -- for taxiOrbitPause seconds between them. Each sweep eases in and out (see
@@ -67,28 +68,29 @@ local turnKeys = { left = false, right = false }
 -- The emotes and seats end as you move or jump; those marked stopsOnMove (a
 -- state that carries on as you move) end too, until they start afresh.
 ns.EVENTS = {
-	{ key = "Campfire", label = "Resting with a listed buff (campfire)", camera = "cozy", stopsOnMove = true },
-	{ key = "Sit", label = "/sit (or press the sit key)", camera = "vista" },
-	{ key = "Sleep", label = "/sleep or /lie down", camera = "cozy" },
-	{ key = "Dance", label = "/dance", camera = "cozy" },
-	{ key = "Kneel", label = "/kneel", camera = "cozy" },
-	{ key = "Chair", label = "Sitting in a chair or on a bench", camera = "cozy" },
-	{ key = "Weapon", label = "Unsheathe your weapon (sheathe key)", camera = "cozy", stopsOnMove = true },
-	{ key = "Hearth", label = "Cast your Hearthstone", camera = "tele" },
-	{ key = "Teleport", label = "Cast a teleport", camera = "tele" },
-	{ key = "Logout", label = "Log out (the 20-second countdown)", camera = "cozy" },
-	{ key = "Stare", label = "/stare", camera = "vista" },
-	{ key = "Fishing", label = "Cast Fishing", camera = "fish" },
-	{ key = "AFK", label = "Go AFK", camera = "afk", stopsOnMove = true },
+	{ key = "Campfire", label = L["Resting with a listed buff (campfire)"], camera = "cozy", stopsOnMove = true },
+	{ key = "Sit", label = L["/sit (or press the sit key)"], camera = "vista" },
+	{ key = "Sleep", label = L["/sleep or /lie down"], camera = "cozy" },
+	{ key = "Dance", label = L["/dance"], camera = "cozy" },
+	{ key = "Kneel", label = L["/kneel"], camera = "cozy" },
+	{ key = "Chair", label = L["Sitting in a chair or on a bench"], camera = "cozy" },
+	{ key = "Weapon", label = L["Unsheathe your weapon (sheathe key)"], camera = "cozy", stopsOnMove = true },
+	{ key = "Hearth", label = L["Cast your Hearthstone"], camera = "tele" },
+	{ key = "Teleport", label = L["Cast a teleport"], camera = "tele" },
+	{ key = "Logout", label = L["Log out (the 20-second countdown)"], camera = "cozy" },
+	{ key = "Stare", label = L["/stare"], camera = "vista" },
+	{ key = "Fishing", label = L["Cast Fishing"], camera = "fish" },
+	{ key = "AFK", label = L["Go AFK"], camera = "afk", stopsOnMove = true },
 	-- Standing still for the standing-still delay (idleOrbitDelay, its slider
 	-- on this row), with nothing else on: no camera by default (going AFK
 	-- starts the AFK camera).
-	{ key = "Still", label = "Stand still", camera = "none" },
+	{ key = "Still", label = L["Stand still"], camera = "none" },
 	-- Not a standing-still camera: its choices are the flight camera or none.
-	{ key = "Flight", label = "Take a flight", camera = "flight" },
+	{ key = "Flight", label = L["Take a flight"], camera = "flight" },
 	-- Nor this: the quest cam (QuestCam.lua) or none.
-	{ key = "Quest", label = "Talk to a quest giver", camera = "quest" },
+	{ key = "Quest", label = L["Talk to a quest giver"], camera = "quest" },
 }
+ns.OnLanguage(function() ns.TranslateFields(ns.EVENTS, "label") end)
 -- Each event's Music column (event<key>Music): its camera can start music
 -- (when music fatigue allows). Flights use the flight camera's own switch
 -- (musicCamFlight). The AFK camera's is Go AFK's (eventAFKMusic) while flagged
@@ -2977,7 +2979,7 @@ local flyby = { active = false }
 -- ones while /cine debug flybys is on. debugOnly: only with that on.
 local function FlyBySay(text, debugOnly)
 	if ns.db.debugFlyBy or not (debugOnly or flyby.quiet) then
-		ns.Print("fly-by" .. (flyby.quiet and " (random)" or "") .. ": " .. text)
+		ns.Print((flyby.quiet and L["fly-by (random): %s"] or L["fly-by: %s"]):format(text))
 	end
 end
 
@@ -3065,7 +3067,7 @@ local function EndFlyBy(why)
 	end
 	flyby.active, flyby.handover = false, nil
 	if why then
-		FlyBySay("stopped: " .. why)
+		FlyBySay(L["stopped: %s"]:format(L[why]))
 	end
 	StopTurn()
 	ns.ApplyCVarSet(FLYBY.CVARS, false)
@@ -3123,26 +3125,26 @@ end
 function ns.ToggleFlyBy(quiet)
 	if flyby.active then
 		EndFlyBy()
-		return true, "stopped"
+		return true, L["stopped"]
 	end
 	if not ns.db.enabled then
-		return false, "Cinematic is off (/cine turns it on)"
+		return false, L["Cinematic is off (/cine turns it on)"]
 	end
 	if InCombatLockdown() then
-		return false, "not in combat"
+		return false, L["not in combat"]
 	end
 	-- Steering with the mouse turns your character to face the camera, so the
 	-- camera can't turn away from your facing meanwhile.
 	if IsMouseOnCamera() then
-		return false, "let go of the mouse first"
+		return false, L["let go of the mouse first"]
 	end
 	-- On a flight the flight camera makes it, between its sways (see
 	-- ns.OrbitSpecial): just ask.
 	if UnitOnTaxi("player") and ns.orbit.level > 0 and orbitPrefix == "taxiOrbit" then
 		if ns.orbit.special or ns.orbit.flyByWanted then
-			return false, "one's already under way"
+			return false, L["one's already under way"]
 		elseif ns.orbit.noNewSways or ns.orbit.settleWanted then
-			return false, "too close to landing"
+			return false, L["too close to landing"]
 		end
 		ns.orbit.flyByWanted, ns.orbit.flyByQuiet = true, quiet or false
 		return true
@@ -3177,7 +3179,7 @@ function ns.ToggleFlyBy(quiet)
 	else
 		ns.ApplyCVarSet(FLYBY.CVARS, GetCVar("cameraSmoothStyle") ~= "0")
 	end
-	FlyBySay(("turning round to look back (%s)"):format(flyby.side > 0 and "left" or "right"))
+	FlyBySay(flyby.side > 0 and L["turning round to look back (left)"] or L["turning round to look back (right)"])
 	FlyByLook()
 	return true
 end
@@ -3713,7 +3715,8 @@ function ns.OrbitSpecial()
 			ns.FlyByLogBefore()
 		end
 		-- (The flight camera's angle is positive to your right.)
-		FlyBySay(("turning round to look back (%s, %.0f sec)"):format(side > 0 and "right" or "left", o.sweepTime))
+		FlyBySay((side > 0 and L["turning round to look back (right, %.0f sec)"]
+			or L["turning round to look back (left, %.0f sec)"]):format(o.sweepTime))
 		FlyByLook()
 		return true
 	end

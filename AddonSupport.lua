@@ -21,6 +21,11 @@ ns.ADDON_FRAMES = {}
 -- the same, with what's done for them (works) in place of the columns. about:
 -- the same said at more length, for its tooltip.
 ns.ADDON_NOTES = {}
+-- (Their descriptions are made before the language is known: see Locales.lua.)
+ns.OnLanguage(function()
+	ns.TranslateFields(ns.ADDON_FRAMES, "about", "note")
+	ns.TranslateFields(ns.ADDON_NOTES, "about", "works")
+end)
 
 local setups = {} -- addon name -> setup functions still to run
 local started = false -- (Cinematic itself loaded: the setups can run)

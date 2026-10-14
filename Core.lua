@@ -4,6 +4,7 @@
 -- to touch protected frames like action bars even during combat lockdown.
 
 local ADDON_NAME, ns = ...
+local L = ns.L
 
 -- Retail (the main game) rather than a Classic client such as WoW Forever.
 -- Most differences are handled by checking whether an API or frame exists;
@@ -11,16 +12,21 @@ local ADDON_NAME, ns = ...
 ns.isRetail = WOW_PROJECT_ID ~= nil and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 
 BINDING_HEADER_CINEMATIC = "Cinematic"
-BINDING_NAME_CINEMATIC_TOGGLE = "Cinematic: Toggle CineMode"
-BINDING_NAME_CINEMATIC_HIDEUI = "Cinematic: Hide the UI (keep the look)"
-BINDING_NAME_CINEMATIC_CAM_IDLE = "Cinematic: Start the AFK camera"
-BINDING_NAME_CINEMATIC_CAM_COZY = "Cinematic: Start the cozy camera"
-BINDING_NAME_CINEMATIC_CAM_VISTA = "Cinematic: Start the vista camera"
-BINDING_NAME_CINEMATIC_CAM_FISH = "Cinematic: Start the fish camera"
-BINDING_NAME_CINEMATIC_CAM_TELE = "Cinematic: Start the tele camera"
-BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: Test the death camera"
-BINDING_NAME_CINEMATIC_SHOWTOOLTIPS = "Cinematic: Show hidden tooltips (hold)"
-BINDING_NAME_CINEMATIC_TOGGLETOOLTIPS = "Cinematic: Toggle tooltip hiding"
+-- (Set again once the language is known: see Locales.lua.)
+local function SetBindingNames()
+	BINDING_NAME_CINEMATIC_TOGGLE = "Cinematic: " .. L["Toggle CineMode"]
+	BINDING_NAME_CINEMATIC_HIDEUI = "Cinematic: " .. L["Hide the UI (keep the look)"]
+	BINDING_NAME_CINEMATIC_CAM_IDLE = "Cinematic: " .. L["Start the AFK camera"]
+	BINDING_NAME_CINEMATIC_CAM_COZY = "Cinematic: " .. L["Start the cozy camera"]
+	BINDING_NAME_CINEMATIC_CAM_VISTA = "Cinematic: " .. L["Start the vista camera"]
+	BINDING_NAME_CINEMATIC_CAM_FISH = "Cinematic: " .. L["Start the fish camera"]
+	BINDING_NAME_CINEMATIC_CAM_TELE = "Cinematic: " .. L["Start the tele camera"]
+	BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: " .. L["Test the death camera"]
+	BINDING_NAME_CINEMATIC_SHOWTOOLTIPS = "Cinematic: " .. L["Show hidden tooltips (hold)"]
+	BINDING_NAME_CINEMATIC_TOGGLETOOLTIPS = "Cinematic: " .. L["Toggle tooltip hiding"]
+end
+SetBindingNames()
+ns.OnLanguage(SetBindingNames)
 
 local DEFAULTS = {
 	enabled = true,
@@ -394,10 +400,11 @@ DEFAULTS.deathSongFiles = "53519, 53232, 53235, 53234, 53240, 53216, 53602"
 -- arenas; the open world), but not those in ns.CAMERA_OFF_NEVER (no flight from there).
 -- All off.
 ns.CAMERA_OFF_CAMS = {
-	{ "flight", "Flight" }, { "idle", "AFK" }, { "cozy", "Cozy" }, { "tele", "Tele" },
-	{ "vista", "Vista" }, { "fish", "Fish" }, { "walk", "RP Walk" }, { "run", "Auto-run" },
-	{ "death", "Death" }, { "quest", "Quest" },
+	{ "flight", L["Flight"] }, { "idle", L["AFK"] }, { "cozy", L["Cozy"] }, { "tele", L["Tele"] },
+	{ "vista", L["Vista"] }, { "fish", L["Fish"] }, { "walk", L["RP Walk"] }, { "run", L["Auto-run"] },
+	{ "death", L["Death"] }, { "quest", L["Quest"] },
 }
+ns.OnLanguage(function() ns.TranslateFields(ns.CAMERA_OFF_CAMS, 2) end)
 ns.CAMERA_OFF_WHERE = { "Cities", "Instances", "BGs", "World" }
 ns.CAMERA_OFF_NEVER = { flight = { Instances = true, BGs = true } }
 -- The Visual Effects page's grid: the same places, by where you are now.
@@ -1512,8 +1519,8 @@ function ns.Suspend(reason)
 		combatRetry:RegisterEvent("PLAYER_REGEN_ENABLED")
 	end
 	ns.Log("safety", "stopped: " .. reason)
-	ns.Print(("|cffff4040stopped for this session|r (%s) and put your UI and settings back. " ..
-		"/cine log has the details for a bug report; /cine resume starts it again."):format(reason))
+	ns.Print(L["|cffff4040stopped for this session|r (%s) and put your UI and settings back. " ..
+		"/cine log has the details for a bug report; /cine resume starts it again."]:format(reason))
 end
 
 function ns.Resume()
@@ -1564,23 +1571,24 @@ function Cinematic_Toggle()
 		return
 	end
 	ns.SetEnabled(not ns.db.enabled)
-	ns.Print(ns.db.enabled and "enabled" or "disabled")
+	ns.Print(ns.db.enabled and L["enabled"] or L["disabled"])
 	if ns.IsSuspended() then
-		ns.Print("(still stopped after an error: /cine resume starts it again)")
+		ns.Print(L["(still stopped after an error: /cine resume starts it again)"])
 	end
 end
 
 function Cinematic_FlyBy()
 	local _, message = ns.ToggleFlyBy()
 	if message then
-		ns.Print("fly-by: " .. message)
+		ns.Print(L["fly-by: %s"]:format(message))
 	end
 end
 
 -- Key bindings for the standing-still cameras: each starts its camera now, as
 -- if its event had happened, and pressing it again stops it. Moving or jumping
 -- ends it, like an emote. "death" runs the death camera test (/cine deathtest).
-local CAM_NAMES = { idle = "AFK", cozy = "cozy", vista = "vista", fish = "fish", tele = "tele" }
+local CAM_NAMES = { idle = "AFK camera", cozy = "cozy camera", vista = "vista camera", fish = "fish camera",
+	tele = "tele camera" }
 function Cinematic_StartCam(camera)
 	if not ns.db then
 		return
@@ -1589,22 +1597,22 @@ function Cinematic_StartCam(camera)
 	if camera == "death" then
 		if now < (ns.deathTestUntil or 0) then
 			ns.deathTestUntil = 0
-			ns.Print("death camera test stopped")
+			ns.Print(L["death camera test stopped"])
 		elseif not ns.db.deathOrbit then
-			ns.Print("the death camera is off: turn it on with /cine death first")
+			ns.Print(L["the death camera is off: turn it on with /cine death first"])
 		else
 			ns.deathTestUntil = now + 30
-			ns.Print(("death camera test for 30 seconds: stand still and it starts after %.1f sec. " ..
-				"Press the key again to stop it."):format(ns.db.deathOrbitDelay))
+			ns.Print(L["death camera test for 30 seconds: stand still and it starts after %.1f sec. " ..
+				"Press the key again to stop it."]:format(ns.db.deathOrbitDelay))
 		end
 		return
 	end
 	if not ns.db.enabled then
-		ns.Print("Cinematic is off: turn it on first")
+		ns.Print(L["Cinematic is off: turn it on first"])
 		return
 	end
 	if ns.playerMoving or UnitOnTaxi("player") then
-		ns.Print("stand still to start the " .. CAM_NAMES[camera] .. " camera")
+		ns.Print(L["stand still to start the %s"]:format(L[CAM_NAMES[camera]]))
 		return
 	end
 	local idleOn = camera == "idle" and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
@@ -1615,17 +1623,17 @@ function Cinematic_StartCam(camera)
 	if ns.manualCam == manual or idleOn then
 		ns.manualCam = nil
 		ns.stillSince = now -- the standing-still timer starts afresh
-		ns.Print(CAM_NAMES[camera] .. " camera stopped")
+		ns.Print(L["%s stopped"]:format(L[CAM_NAMES[camera]]))
 		return
 	end
 	if camera == "idle" and not ns.db.idleOrbit then
-		ns.Print("the AFK camera's rotation is off on its options page")
+		ns.Print(L["the AFK camera's rotation is off on its options page"])
 		return
 	end
 	ns.manualCam = manual
 	ns.stillSince = now - ns.db.idleOrbitDelay -- counts as stood still long enough
 	lastBusy = 0 -- fade the UI now
-	ns.Print(CAM_NAMES[camera] .. " camera on: move, jump or press the key again to stop it")
+	ns.Print(L["%s on: move, jump or press the key again to stop it"]:format(L[CAM_NAMES[camera]]))
 end
 
 function Cinematic_ToggleUI()
