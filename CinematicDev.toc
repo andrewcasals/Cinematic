@@ -12,6 +12,7 @@
 Locales\Locales.lua
 Locales\deDE.lua
 Locales\esES.lua
+Locales\frFR.lua
 Diagnostics.lua
 Profiler.lua
 Core.lua

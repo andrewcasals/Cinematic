@@ -4,6 +4,7 @@
 ## Notes-deDE: Blendet zwischen Kämpfen das UI aus und fügt Kinobalken für ein filmischeres Gefühl hinzu.
 ## Notes-esES: Desvanece la interfaz y añade franjas de cine entre combates para un aire más cinematográfico.
 ## Notes-esMX: Desvanece la interfaz y añade franjas de cine entre combates para un aire más cinematográfico.
+## Notes-frFR: Estompe l'interface et ajoute des bandes noires entre les combats pour une ambiance plus cinématographique.
 ## Author: Andrew Casals
 ## Category: UI
 ## Version: @project-version@
@@ -14,6 +15,7 @@
 Locales\Locales.lua
 Locales\deDE.lua
 Locales\esES.lua
+Locales\frFR.lua
 Diagnostics.lua
 Profiler.lua
 Core.lua
