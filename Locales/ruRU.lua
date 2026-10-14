@@ -1168,3 +1168,11 @@ L["cozy camera"] = "уютная камера"
 L["vista camera"] = "панорамная камера"
 L["fish camera"] = "камера рыбалки"
 L["tele camera"] = "камера телепорта"
+
+-- Campfire.lua
+L["Quality of life"] = "Удобство"
+L["Small helpers for getting about the world."] = "Небольшие помощники для путешествий по миру."
+L["Sit button at campfires"] = "Кнопка «Сесть» у костров"
+L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon just above the cursor: click it to sit down by the fire, without typing /sit. Not in a fight or while mounted."] = "Если навести курсор на костер ближе к центру экрана, чуть выше курсора появится значок костра: нажмите ее, чтобы сесть у огня, не вводя /sit. Не в бою и не верхом."
+L["Stand up once you get Camp Benefits"] = "Вставать, получив «Преимущества лагеря»"
+L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "Если просидеть минуту у Гостеприимного костра, вы получите «Преимущества лагеря»: как только они появятся, вы встанете и сможете идти дальше."

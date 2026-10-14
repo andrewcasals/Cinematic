@@ -1168,3 +1168,11 @@ L["cozy camera"] = "아늑한 카메라"
 L["vista camera"] = "풍경 카메라"
 L["fish camera"] = "낚시 카메라"
 L["tele camera"] = "순간이동 카메라"
+
+-- Campfire.lua
+L["Quality of life"] = "편의 기능"
+L["Small helpers for getting about the world."] = "세상을 다니는 데 도움이 되는 작은 기능들입니다."
+L["Sit button at campfires"] = "모닥불에서 앉기 버튼"
+L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon just above the cursor: click it to sit down by the fire, without typing /sit. Not in a fight or while mounted."] = "화면 중앙 근처에서 커서를 모닥불 위에 올리면 커서 바로 위에 모닥불 아이콘이 나타납니다. 클릭하면 /sit를 입력하지 않고 불가에 앉습니다. 전투 중이나 탈것을 탄 상태에서는 나타나지 않습니다."
+L["Stand up once you get Camp Benefits"] = "야영지 혜택을 받으면 일어서기"
+L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "환영의 모닥불 옆에 1분 동안 앉아 있으면 야영지 혜택을 받습니다. 혜택을 받는 즉시 다시 일어서서 바로 출발할 수 있습니다."

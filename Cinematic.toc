@@ -42,6 +42,7 @@ Support\Plater.lua
 Frames.lua
 Chat.lua
 Bubbles.lua
+Campfire.lua
 Effects.lua
 Camera.lua
 QuestCam.lua

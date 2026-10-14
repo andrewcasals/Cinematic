@@ -1168,3 +1168,11 @@ L["cozy camera"] = "悠閒鏡頭"
 L["vista camera"] = "遠景鏡頭"
 L["fish camera"] = "釣魚鏡頭"
 L["tele camera"] = "傳送鏡頭"
+
+-- Campfire.lua
+L["Quality of life"] = "便利功能"
+L["Small helpers for getting about the world."] = "在世界中遊歷時的小幫手。"
+L["Sit button at campfires"] = "營火旁的坐下按鈕"
+L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon just above the cursor: click it to sit down by the fire, without typing /sit. Not in a fight or while mounted."] = "在畫面中央附近將滑鼠指向營火時，滑鼠游標正上方會出現營火圖示：點擊即可在火邊坐下，不必輸入 /sit。戰鬥中或騎乘時不顯示。"
+L["Stand up once you get Camp Benefits"] = "獲得營地增益後站起"
+L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "在迎賓營火旁坐滿一分鐘會獲得營地增益：獲得時你會站起來，隨時出發。"

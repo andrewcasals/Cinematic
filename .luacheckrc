@@ -187,6 +187,7 @@ read_globals = {
 	"UnitHealthMax",
 	"UnitIsAFK",
 	"UnitIsDead",
+	"UnitInVehicle",
 	"UnitIsDeadOrGhost",
 	"UnitPlayerOrPetInParty",
 	"UnitPlayerOrPetInRaid",

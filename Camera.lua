@@ -166,6 +166,11 @@ local EMOTE_EVENTS = {
 	DANCE = "Dance", KNEEL = "Kneel", STARE = "Stare",
 }
 local emoteEvent -- the event for the emote (or seat) you're doing, or nil
+-- Whether you're sitting or lying down (an emote, the sit key or a seat), as
+-- far as the emotes followed here can tell (Campfire.lua's Sit button).
+function ns.IsSitting()
+	return emoteEvent == "Sit" or emoteEvent == "Sleep" or emoteEvent == "Chair"
+end
 
 -- Hearthstone and teleports: casting one counts like an emote until the cast
 -- ends (you're whisked away, or it's interrupted), for the tele camera: the

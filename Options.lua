@@ -3535,6 +3535,37 @@ local function CreateBubblesPanel()
 	RegisterSubpage(canvas, "Chat bubbles")
 end
 
+-- Sub-page: quality of life, small helpers grouped by section (General, ...).
+-- Sections and options only for one client show only there.
+local function CreateQualityPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Quality of life"])
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall", L["Small helpers for getting about the world."])
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local stack = Stack(subtitle, "label")
+	stack:Header(content, L["General"])
+	-- (WoW Forever: Campfire.lua.)
+	local sit = stack:Add(Check(content, "campfireSitButton", L["Sit button at campfires"],
+		L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon just " ..
+		"above the cursor: click it to sit down by the fire, without typing /sit. Not in a fight or " ..
+		"while mounted."]), "check")
+	sit:HookScript("OnClick", Refresh) -- grey out / enable the option below
+	local stand = stack:Add(Check(content, "campfireStandUp", L["Stand up once you get Camp Benefits"],
+		L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, " ..
+		"you stand up again, ready to go."]), "check", 24)
+	GreyUnless(stand, function(db) return db.campfireSitButton end)
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Quality of life")
+end
+
 -- Sub-page: fishing (casting with right-click or a gamepad button, the cast bar).
 local function CreateFishingPanel()
 	local canvas, content = CreateScrollPage()
@@ -6106,6 +6137,10 @@ ns.OnLanguage(function()
 	CreateChatPanel()
 	CreateBubblesPanel()
 	CreateFishingPanel()
+	-- (Everything on it is WoW Forever's, for now.)
+	if not ns.isRetail then
+		CreateQualityPanel()
+	end
 	CreateTintPanel()
 	CreateAudioPanel()
 	CreateCameraPanel()

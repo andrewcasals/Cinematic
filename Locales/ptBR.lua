@@ -1168,3 +1168,11 @@ L["cozy camera"] = "câmera aconchegante"
 L["vista camera"] = "câmera panorâmica"
 L["fish camera"] = "câmera de pesca"
 L["tele camera"] = "câmera de teleporte"
+
+-- Campfire.lua
+L["Quality of life"] = "Conveniência"
+L["Small helpers for getting about the world."] = "Pequenas ajudas para andar pelo mundo."
+L["Sit button at campfires"] = "Botão Sentar nas fogueiras"
+L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon just above the cursor: click it to sit down by the fire, without typing /sit. Not in a fight or while mounted."] = "Passar o cursor sobre uma fogueira perto do centro da tela mostra um ícone de fogueira logo acima do cursor: clique nele para se sentar junto ao fogo sem digitar /sit. Não em combate nem montado."
+L["Stand up once you get Camp Benefits"] = "Levantar ao receber Benefícios do Acampamento"
+L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "Sentar um minuto junto a uma Fogueira Acolhedora dá Benefícios do Acampamento: assim que chegam, você se levanta, pronto para seguir."
