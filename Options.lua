@@ -4428,6 +4428,12 @@ local function CreateTooltipPanel()
 		end
 		keys = check
 	end
+	local bindNote = Label(content, "GameFontHighlightSmall",
+		"Or hold a key of your own: Show hidden tooltips on the Keybinds page (or Key Bindings > AddOns).")
+	bindNote:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", 0, -38)
+	bindNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	bindNote:SetJustifyH("LEFT")
+	keys = bindNote
 
 	-- In CineMode: when world tooltips are hidden (throughout CineMode or
 	-- only in the camera modes ticked Hide), then how they come back after
@@ -4844,6 +4850,11 @@ local KEYBINDS = {
 	{ action = "CINEMATIC_CAM_DEATH", label = "Death camera test",
 		tip = "Pretends you're dead for 30 seconds so the death camera runs. Press again to stop. " ..
 			"Like /cine deathtest." },
+	{ action = "CINEMATIC_SHOWTOOLTIPS", label = "Show hidden tooltips",
+		tip = "Hold to see the tooltips the Tooltips page hides (in combat and in CineMode), " ..
+			"like that page's Shift, Ctrl or Alt choice." },
+	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = "Toggle tooltip hiding",
+		tip = "Turns the Tooltips page's \"Let CineMode hide tooltips\" on or off." },
 }
 
 local IGNORED_KEYS = {

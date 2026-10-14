@@ -19,6 +19,8 @@ BINDING_NAME_CINEMATIC_CAM_VISTA = "Cinematic: Start the vista camera"
 BINDING_NAME_CINEMATIC_CAM_FISH = "Cinematic: Start the fish camera"
 BINDING_NAME_CINEMATIC_CAM_TELE = "Cinematic: Start the tele camera"
 BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: Test the death camera"
+BINDING_NAME_CINEMATIC_SHOWTOOLTIPS = "Cinematic: Show hidden tooltips (hold)"
+BINDING_NAME_CINEMATIC_TOGGLETOOLTIPS = "Cinematic: Toggle tooltip hiding"
 
 local DEFAULTS = {
 	enabled = true,

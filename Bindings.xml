@@ -23,4 +23,10 @@
 	<Binding name="CINEMATIC_CAM_DEATH" category="ADDONS">
 		Cinematic_StartCam("death")
 	</Binding>
+	<Binding name="CINEMATIC_SHOWTOOLTIPS" category="ADDONS" runOnUp="true">
+		Cinematic_ShowTooltips(keystate)
+	</Binding>
+	<Binding name="CINEMATIC_TOGGLETOOLTIPS" category="ADDONS">
+		Cinematic_ToggleTooltips()
+	</Binding>
 </Bindings>
