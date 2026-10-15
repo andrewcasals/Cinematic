@@ -171,6 +171,7 @@ read_globals = {
 	"UNIT_SKINNABLE_ROCK",
 	"UnitAffectingCombat",
 	"UnitAttackSpeed",
+	"IsSpellInRange",
 	"UnitRangedDamage",
 	"IsCurrentSpell",
 	"UnitBuff",

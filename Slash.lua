@@ -69,6 +69,7 @@ local function PrintDebugHelp()
 	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
 	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
+	print("  /cine debug swing - what the swing timer bars read, and print each one showing or fading (again to stop)")
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug cooldowns - what the Cooldown Manager's \"stay up while recharging\" check sees")
 	print("  /cine debug newplayer - back to no profile picked, as on a fresh install (the welcome window)")
@@ -267,6 +268,12 @@ function ns.HandleSlash(msg)
 	elseif cmd == "debug" and arg == "alpha" then
 		ns.alphaWatch = not ns.alphaWatch
 		ns.Print("print frames setting their own alpha: " .. OnOff(ns.alphaWatch) .. " (until you /reload)")
+	elseif cmd == "debug" and arg == "swing" then
+		ns.swingDebug = not ns.swingDebug
+		if ns.ReportSwing then
+			ns.ReportSwing()
+		end
+		ns.Print("print swing bars showing or fading: " .. OnOff(ns.swingDebug) .. " (until you /reload)")
 	elseif cmd == "debug" and arg == "pad" then
 		ns.padDebug = not ns.padDebug
 		local hasState = C_GamePad and C_GamePad.GetDeviceMappedState and true or false

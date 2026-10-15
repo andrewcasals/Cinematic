@@ -2802,8 +2802,10 @@ local PORTRAIT_FRAMES = { PlayerFrame = true }
 
 -- Swing timer page (Classic clients' own swing timer): a bar fades out once
 -- its weapon hasn't been used for a while, and the off-hand's can go for
--- good. Melee counts as used while auto-attack is on, ranged while Auto Shot
--- or a wand repeats, and on single shots (a warrior's Shoot Bow or Throw).
+-- good. A bar counts as used while it runs down (after a real swing or
+-- shot). Without a bar to read, melee counts while auto-attack is on and the
+-- target is in melee range, ranged while Auto Shot or a wand repeats and the
+-- target is in its range, and on single shots (Shoot Bow or Throw).
 -- Each holds on past its last use for the bar to run down to 0 and the
 -- swingHideAfter seconds after.
 -- (In a do block: the file is near Lua's 200 locals.)
@@ -2836,14 +2838,48 @@ do
 		return math.min(speed or 2, 5)
 	end
 
+	-- (Switching off doesn't count as a use: a hunter's /startattack plus
+	-- /cast !Auto Shot macro switches auto-attack on and straight off again.
+	-- While a weapon's switched on and in reach, each check counts instead.)
 	local function SetInUse(weapon, on)
-		if inUse[weapon] and not on then
-			usedAt[weapon] = GetTime()
-		end
 		inUse[weapon] = on
 	end
 
+	-- Spells whose range says whether the target is in reach of each weapon:
+	-- Auto Attack, then a hunter's melee strikes (in case the game won't range
+	-- check Auto Attack); Auto Shot (too close counts as out of range), then Shoot.
+	local RANGE_SPELLS = { melee = { 6603, 2973, 2974, 1495 }, ranged = { 75, 5019 } }
+
+	-- Whether the target is in range of the weapon: true, false, or nil when
+	-- the game can't say (no target, a secret answer), which counts as in range.
+	local function InRange(weapon)
+		if not UnitExists("target") then
+			return nil
+		end
+		for _, spellID in ipairs(RANGE_SPELLS[weapon]) do
+			local ok, inRange
+			if C_Spell and C_Spell.IsSpellInRange then
+				ok, inRange = pcall(C_Spell.IsSpellInRange, spellID, "target")
+			elseif IsSpellInRange and GetSpellInfo then
+				local spellName = GetSpellInfo(spellID)
+				if spellName then
+					ok, inRange = pcall(IsSpellInRange, spellName, "target")
+				end
+			end
+			if ok and not (issecretvalue and issecretvalue(inRange)) then
+				if inRange == true or inRange == 1 then
+					return true
+				elseif inRange == false or inRange == 0 then
+					return false
+				end
+			end
+		end
+		return nil
+	end
+
 	if not ns.isRetail then
+		-- (No combat log for the swings themselves: registering for it gets the
+		-- addon blocked on Forever.)
 		local watcher = CreateFrame("Frame")
 		watcher:RegisterEvent("PLAYER_ENTER_COMBAT") -- (auto-attack on)
 		watcher:RegisterEvent("PLAYER_LEAVE_COMBAT")
@@ -2864,6 +2900,69 @@ do
 		inUse.melee = ok and attacking == true
 	end
 
+	-- The game's own bar shows whether the weapon has really been used: it
+	-- sits still (at 0.0) until a swing or shot, then runs down. Its status
+	-- bar's value, or nil when there's none to read (a secret value, say).
+	local statusBars = {}
+	local function FindStatusBar(frame, depth)
+		if frame:IsObjectType("StatusBar") then
+			return frame
+		end
+		if depth > 0 then
+			for _, child in ipairs({ frame:GetChildren() }) do
+				local bar = FindStatusBar(child, depth - 1)
+				if bar then
+					return bar
+				end
+			end
+		end
+	end
+	local function BarValue(name)
+		local bar = statusBars[name]
+		if bar == nil then
+			local frame = _G[name]
+			if not frame then
+				return nil
+			end
+			local ok, found = pcall(FindStatusBar, frame, 2)
+			bar = ok and found or false
+			statusBars[name] = bar
+		end
+		if not bar then
+			return nil
+		end
+		local ok, value = pcall(bar.GetValue, bar)
+		return ok and Number(value) or nil
+	end
+	local lastValue, moves, lastDecision = {}, {}, {}
+
+	-- /cine debug swing: each bar's showing or fading, as it changes, and why.
+	local function DebugSwing(name, unused, why)
+		if ns.swingDebug and lastDecision[name] ~= unused then
+			ns.Print(("swing %s: %s (%s)"):format(name, unused and "fades" or "shows", why))
+		end
+		lastDecision[name] = unused
+		return unused
+	end
+
+	function ns.ReportSwing()
+		for name in pairs(BAR_WEAPON) do
+			local frame = _G[name]
+			local value = BarValue(name)
+			local bar = statusBars[name]
+			local minValue, maxValue
+			if bar then
+				local ok, a, b = pcall(bar.GetMinMaxValues, bar)
+				minValue, maxValue = ok and Number(a), ok and Number(b)
+			end
+			local weapon = BAR_WEAPON[name]
+			ns.Print(("%s: frame %s, status bar %s, value %s (%s-%s), %s switched on %s, in range %s, last used %s sec ago"):format(
+				name, frame and "yes" or "no", bar and (bar:GetName() or "unnamed") or "none", tostring(value),
+				tostring(minValue), tostring(maxValue), weapon, tostring(inUse[weapon]), tostring(InRange(weapon)),
+				usedAt[weapon] > -math.huge and ("%.1f"):format(GetTime() - usedAt[weapon]) or "never"))
+		end
+	end
+
 	-- Whether the swing timer frame is to be faded out (it fades at the usual speed).
 	function ns.IsSwingBarUnused(name)
 		local weapon = BAR_WEAPON[name]
@@ -2876,10 +2975,37 @@ do
 		if name == "SwingTimerOffHandFrame" and ns.db.swingHideOffHand then
 			return true
 		end
-		if not ns.db.swingSmartShow or inUse[weapon] then
+		if not ns.db.swingSmartShow then
 			return false
 		end
-		return GetTime() - usedAt[weapon] > Speed(weapon) + ns.db.swingHideAfter
+		-- The bar moving: a real swing or shot (switched on with nothing in
+		-- reach, it stays still). It has to move on two checks running: auto-
+		-- attack switching on can jump it once without a swing.
+		local value = BarValue(name)
+		if value then
+			if lastValue[name] and value ~= lastValue[name] then
+				moves[name] = (moves[name] or 0) + 1
+				if moves[name] >= 2 then
+					usedAt[weapon] = GetTime()
+				end
+			else
+				moves[name] = 0
+			end
+			local previous = lastValue[name]
+			lastValue[name] = value
+			return DebugSwing(name, GetTime() - usedAt[weapon] > ns.db.swingHideAfter,
+				("bar %s -> %s"):format(tostring(previous), tostring(value)))
+		end
+		-- No bar to read: switched on and the target in reach: in use (and it holds on from
+		-- here once it isn't). Switched on out of reach doesn't count: a
+		-- hunter's /startattack plus /cast !Auto Shot macro turns on both.
+		local inRange = InRange(weapon)
+		if inUse[weapon] and inRange ~= false then
+			usedAt[weapon] = GetTime()
+			return DebugSwing(name, false, "no bar to read; switched on, in range " .. tostring(inRange))
+		end
+		return DebugSwing(name, GetTime() - usedAt[weapon] > Speed(weapon) + ns.db.swingHideAfter,
+			"no bar to read; switched on " .. tostring(inUse[weapon]) .. ", in range " .. tostring(inRange))
 	end
 
 	-- Ranged bar on top (swingRangedOnTop<CLASS>, for your class): the main hand and ranged bars
