@@ -36,7 +36,7 @@
 -- nudges showed as small snaps.)
 -- Moving off (walking away from the quest giver) ends it: everything goes
 -- back, and it doesn't start again until the next conversation.
--- The zoom back out takes its time (questCamZoomOutTime) while you stand
+-- The zoom back out goes at its own speed (questCamZoomOutSpeed) while you stand
 -- still; walk off, or start walking as it goes, and it's quick (ZOOM_HURRY).
 -- It starts at once, not queued behind the turn back (walking, the RP walk
 -- and auto-run cameras' own swing behind you held the queue up, and it never
@@ -565,7 +565,7 @@ local function Start()
 	ns.TakeOverZoom()
 	if cam.zoom and GetCameraZoom and GetCameraZoom() > db.questCamDistance + ZOOM_MARGIN then
 		cam.zoomedTo = db.questCamDistance
-		ZoomTo(db.questCamDistance, db.questCamZoomTime)
+		ZoomTo(db.questCamDistance, (GetCameraZoom() - db.questCamDistance) / db.questCamZoomSpeed)
 	else
 		ns.RestoreZoomLimit() -- (close already: inside it)
 	end
@@ -631,7 +631,7 @@ local function Stop(walkedOff)
 	-- (Still on its way in counts as ours.)
 	if cam.zoomedTo and cam.zoom and GetCameraZoom
 		and (zoomer.moving or math.abs(GetCameraZoom() - cam.zoomedTo) < ZOOM_YOURS) then
-		local T = ns.db.questCamZoomOutTime
+		local T = math.abs(cam.zoom - GetCameraZoom()) / ns.db.questCamZoomOutSpeed
 		ZoomTo(cam.zoom, walkedOff and math.min(T, ZOOM_HURRY) or T)
 		zoomer.leaving = true
 	end

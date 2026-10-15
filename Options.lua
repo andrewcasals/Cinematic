@@ -2515,14 +2515,14 @@ local function CreateQuestPanel()
 	local distance = right:Add(Slider(content, "questCamDistance", L["Zoom in to about"], 1.5, 10, 0.5, L["%.1f yards"]), "slider")
 	Tooltip(distance, L["If you're further out than this. Closer already, it stays where it is."])
 	GreyUnless(distance, IfOn)
-	local zoomTime = right:Add(Slider(content, "questCamZoomTime", L["Zoom in takes"], 1, 10, 0.5, L["%.1f sec"]), "slider")
-	Tooltip(zoomTime, L["The turn to the side happens along the way, then the tilt down."])
-	GreyUnless(zoomTime, IfOn)
-	local zoomOutTime = right:Add(Slider(content, "questCamZoomOutTime", L["Zoom back out takes"], 1.5, 10, 0.5, L["%.1f sec"]), "slider")
-	Tooltip(zoomOutTime, L["Leaving the quest giver, the camera zooms back out to your own distance " ..
-		"this slowly while you stand still (turning back behind you and tilting back up as it goes). " ..
-		"Walk off and it speeds up, back out in a moment."])
-	GreyUnless(zoomOutTime, IfOn)
+	local zoomSpeed = right:Add(Slider(content, "questCamZoomSpeed", L["Zoom in speed"], 0.25, 10, 0.25, L["%.2f yards/sec"]), "slider")
+	Tooltip(zoomSpeed, L["The turn to the side happens along the way, then the tilt down."])
+	GreyUnless(zoomSpeed, IfOn)
+	local zoomOutSpeed = right:Add(Slider(content, "questCamZoomOutSpeed", L["Zoom back out speed"], 0.25, 10, 0.25, L["%.2f yards/sec"]), "slider")
+	Tooltip(zoomOutSpeed, L["Leaving the quest giver, the camera zooms back out to your own distance " ..
+		"at this speed while you stand still (turning back behind you and tilting back up as it goes), " ..
+		"so further out takes longer. Walk off and it speeds up, back out in a moment."])
+	GreyUnless(zoomOutSpeed, IfOn)
 end
 
 local function CreateTelePanel()

@@ -245,8 +245,8 @@ local DEFAULTS = {
 	-- Quest cam (eventQuestCamera on the Camera Triggers page): talking to a quest giver, zoom in and swing behind you
 	questCamDistance = 4,     -- ...yards it zooms in to (if you're further out)
 	questCamTime = 3,         -- ...seconds the swing behind you takes
-	questCamZoomTime = 7,     -- ...seconds the zoom in takes (the side turn and tilt finish with it)
-	questCamZoomOutTime = 5,  -- ...seconds the zoom back out takes, leaving (walking off: quicker)
+	questCamZoomSpeed = 0.5,  -- ...yards a second the zoom in goes
+	questCamZoomOutSpeed = 0.5, -- ...yards a second the zoom back out goes, leaving (walking off: quicker)
 	questCamAngle = 30,       -- ...degrees the camera comes round to one side of behind you (0: straight behind)
 	questCamSide = "click",   -- ...the side of the screen you clicked them on (else at random), or "random", "left" or "right"
 	questCamTurnTime = 4,     -- ...seconds that turn takes (once the zoom's done)
@@ -2248,6 +2248,10 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		if not ns.db.deathSettingsV3 then -- a gentler rise
 			if ns.db.deathLevel == 70 or ns.db.deathLevel == 60 then ns.db.deathLevel = nil end
 			ns.db.deathSettingsV3 = true
+		end
+		if not ns.db.questCamSettingsV7 then -- the zooms in and back out go by speed, not time
+			ns.db.questCamZoomTime, ns.db.questCamZoomOutTime = nil, nil
+			ns.db.questCamSettingsV7 = true
 		end
 		if not ns.db.questCamSettingsV6 then -- a slower zoom back out (walking off, it's still quick)
 			if ns.db.questCamZoomOutTime == 1.5 then ns.db.questCamZoomOutTime = nil end
