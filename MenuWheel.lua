@@ -18,7 +18,9 @@ local L = ns.L
 -- client whose buttons have no layoutIndex). One we don't know uses the
 -- button's own art; so does one whose icon file this client lacks.
 local BUTTONS = {
-	{ name = "CharacterMicroButton", portrait = true },
+	-- (On Classic this one acts on mouse down/up, not a click: where it has no
+	-- OnClick, the slot opens the window itself.)
+	{ name = "CharacterMicroButton", portrait = true, open = function() ToggleCharacter("PaperDollFrame") end },
 	{ name = "ProfessionMicroButton", icon = "Interface\\Icons\\Trade_BlackSmithing" },
 	{ name = "PlayerSpellsMicroButton", icon = "Interface\\Icons\\INV_Misc_Book_09" },
 	{ name = "SpellbookMicroButton", icon = "Interface\\Icons\\INV_Misc_Book_09" },
@@ -55,6 +57,7 @@ local FADE_TIME = 0.12
 local wheel, disc, centerText, stateText, keyButton, area, gameMenuButton
 local slots = {}         -- secure buttons, one per button the bar could have
 local shown = {}         -- the bar's buttons as last laid out, by slot
+local openButtons = {}   -- by slot: what it clicks for a button with no OnClick
 local radius = MIN_RADIUS
 local picked             -- the slot the cursor points at, or nil
 
@@ -231,7 +234,14 @@ local function Build()
 			local angle = math.rad(90 - (i - 1) * 360 / count)
 			slot:ClearAllPoints()
 			slot:SetPoint("CENTER", wheel, "CENTER", radius * math.cos(angle), radius * math.sin(angle))
-			local target = item.entry.gameMenu and gameMenuButton or item.button
+			local target = item.button
+			if item.entry.gameMenu then
+				target = gameMenuButton
+			elseif item.entry.open and not item.button:GetScript("OnClick") then
+				openButtons[i] = openButtons[i] or CreateFrame("Button") -- (no size: never seen)
+				openButtons[i]:SetScript("OnClick", item.entry.open)
+				target = openButtons[i]
+			end
 			slot:SetAttribute("clickbutton", target)
 			keyButton:SetAttribute("clickbutton-slot" .. i, target)
 			slot:Show()
