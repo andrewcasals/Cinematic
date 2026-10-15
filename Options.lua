@@ -4042,38 +4042,6 @@ local function CreatePlatesPanel()
 		self:SetShown(GetCVar("nameplateShowAll") == "0")
 	end
 	controls[#controls + 1] = showAllWarning
-	-- Your target, whatever its own row says (not a game option of its own).
-	local targetCheck = Check(content, "plateTarget", L["Always show your target's nameplate"],
-		L["Your target's nameplate shows in CineMode everywhere, in fights and out, even where its row below is off."],
-		function(value)
-			ns.GetDB().plateTarget = value
-			Refresh()
-		end)
-	targetCheck:SetPoint("TOPLEFT", showHeader, "BOTTOMLEFT", -2, -6)
-	-- Your party or raid, and (a child option) their pets.
-	local membersCheck = Check(content, "plateGroupMembers", L["Always show group members' nameplates"],
-		L["Your party or raid members' nameplates show in CineMode everywhere, in fights and out, even " ..
-		"where Friendly Players is off. In dungeons and raids on retail the game won't let addons pick " ..
-		"them out: there every friendly player's nameplate shows."],
-		function(value)
-			ns.GetDB().plateGroupMembers = value
-			if value then
-				ns.EnablePlateRow("Friends")
-			end
-			Refresh()
-		end)
-	membersCheck:SetPoint("TOPLEFT", targetCheck, "BOTTOMLEFT", 0, -2)
-	local minionsCheck = Check(content, "plateGroupMemberMinions", L["Their minions"],
-		L["Their pets too, and yours."],
-		function(value)
-			ns.GetDB().plateGroupMemberMinions = value
-			if value then
-				ns.EnablePlateRow("FriendlyMinions")
-			end
-			Refresh()
-		end)
-	minionsCheck:SetPoint("TOPLEFT", membersCheck, "BOTTOMLEFT", 16, -2)
-	GreyUnless(minionsCheck, function(db) return db.plateGroupMembers end)
 	-- The columns: Always (set apart: it stands for the rest of its row), In
 	-- Combat, In PvP Combat, PvP and BGs & Arenas, the other places, and
 	-- Grouped (not a place) beside Instances.
@@ -4093,13 +4061,16 @@ local function CreatePlatesPanel()
 			or (place.group and L["Grouped"]) or place[2]
 	end
 	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 10
-	local columnTop = TableTop(minionsCheck, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
-	-- (Lined up with the switches' left edge, not the indented child.)
-	columnTop:ClearAllPoints()
-	columnTop:SetPoint("TOPLEFT", minionsCheck, "BOTTOMLEFT", -16, -10)
+	local columnTop = TableTop(showHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 
-	-- The game's own nameplate options, with enemy players and NPCs apart.
+	-- Rows for particular units first (they only add to the rows below:
+	-- ns.PLATE_UNIT_ROWS; group members have no use for Grouped), then the
+	-- game's own nameplate options, with enemy players and NPCs apart.
 	local KINDS = {
+		{ "MyTarget", L["Your Target"] },
+		{ "MyPet", L["Your Pet"] },
+		{ "GroupMembers", L["Group Members"], nil, true },
+		{ "GroupMinions", L["Minions"], true, true },
 		{ "Enemies", L["Enemy Players"] },
 		{ "EnemyMinions", L["Minions"], true },
 		{ "EnemyNPCs", L["Enemy NPCs"] },
@@ -4109,6 +4080,13 @@ local function CreatePlatesPanel()
 		{ "FriendlyNPCs", L["Friendly NPCs"] },
 	}
 	local tip = L[" Also turns these nameplates on in the game's options."]
+	local UNIT_ROW_TIPS = {
+		MyTarget = L[" Your target's nameplate, whatever its own row below says."],
+		MyPet = L[" Your pet's nameplate, whatever the Minions rows say, grouped or not."],
+		GroupMembers = L[" Your party or raid members' nameplates, whatever Friendly Players says. In dungeons and " ..
+			"raids on retail the game won't let addons pick them out: there every friendly player's nameplate shows."],
+		GroupMinions = L[" Your party or raid members' pets, whatever the Minions rows say."],
+	}
 	local lastLabel
 	for r, kind in ipairs(KINDS) do
 		local function Ticked(key)
@@ -4124,6 +4102,9 @@ local function CreatePlatesPanel()
 		local checks = {}
 		local pvpCheck
 		local alwaysKey = "plateAlways" .. kind[1]
+		local rowTip = UNIT_ROW_TIPS[kind[1]]
+		local tip = rowTip and kind[1] == "MyTarget" and rowTip or (rowTip or "") .. tip
+		local groupColumn
 		for _, place in ipairs(PLACE_COLUMNS) do
 			if place.always then
 				checks[#checks + 1] = Check(content, alwaysKey, "", ALWAYS_TIP .. tip, Ticked(alwaysKey))
@@ -4136,6 +4117,7 @@ local function CreatePlatesPanel()
 			elseif place.group then
 				local groupKey = "plateGroup" .. kind[1]
 				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. tip, Ticked(groupKey))
+				groupColumn = #checks
 			else
 				-- The open world keeps the original "keep up in CineMode" key.
 				local key = place[1] == "" and ("plateCinematic" .. kind[1]) or ("plateIn" .. place[1] .. kind[1])
@@ -4149,7 +4131,7 @@ local function CreatePlatesPanel()
 		end
 		for c, check in ipairs(checks) do
 			GreyUnless(check, function(db)
-				return Available() and (c == 1 or not db[alwaysKey])
+				return Available() and (c == 1 or not db[alwaysKey]) and not (kind[4] and c == groupColumn)
 			end)
 		end
 		lastLabel = PlaceRow(columnTop, r, kind[2], kind[3], unpack(checks))
@@ -4203,8 +4185,8 @@ local function CreatePlatesPanel()
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 
-	-- Laid out top to bottom: the master switch, the target and group
-	-- switches, then the two grids (nameplates, then names).
+	-- Laid out top to bottom: the master switch, then the two grids
+	-- (nameplates, then names).
 	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
 	-- (Lined up with the nameplate grid, so both grids' columns match.)
 	namesHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
@@ -5265,6 +5247,10 @@ local KEYBINDS = {
 		tip = L["Hold to bring up a wheel of the cameras below, an icon for each: point at one and let go " ..
 			"to start it. Tap it instead and the wheel stays up for you to click one. Picking the camera " ..
 			"that's running stops it."] },
+	{ action = "CLICK CinematicMenuWheelButton:LeftButton", label = L["Menu wheel"],
+		tip = L["Hold to bring up a wheel of the game's menu buttons (character, spellbook, quest log...), " ..
+			"the ones on your menu bar: point at one and let go to open its window, even with the UI hidden. " ..
+			"Tap it instead and the wheel stays up for you to click one."] },
 	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"],
 		tip = L["Starts the AFK camera now, without waiting out its delay. " ..
 			"Press again, move or jump to stop it."] },

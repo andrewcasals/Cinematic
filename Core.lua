@@ -548,10 +548,22 @@ for _, class in ipairs({ "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEA
 		or class == "WARLOCK"
 end
 DEFAULTS.handleFishing = true -- right-click casting and the cast bar
-DEFAULTS.plateTarget = true
--- And your party or raid members' plates (their pets' too), likewise.
-DEFAULTS.plateGroupMembers = true
-DEFAULTS.plateGroupMemberMinions = true
+-- The Nameplates grid's rows for particular units, over the kinds above (see
+-- Effects): your target, your pet, and your party or raid's players and their
+-- pets. Same columns as the kinds. Your target and group members (with their
+-- pets) are kept up everywhere to start with.
+ns.PLATE_UNIT_ROWS = { "MyTarget", "MyPet", "GroupMembers", "GroupMinions" }
+for _, row in ipairs(ns.PLATE_UNIT_ROWS) do
+	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
+		DEFAULTS[prefix .. row] = false
+	end
+	for _, suffix in ipairs(ns.PLATE_PLACES) do
+		DEFAULTS["plateIn" .. suffix .. row] = false
+	end
+end
+DEFAULTS.plateAlwaysMyTarget = true
+DEFAULTS.plateAlwaysGroupMembers = true
+DEFAULTS.plateAlwaysGroupMinions = true
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
 for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
 	DEFAULTS["nameCombat" .. key], DEFAULTS["nameCombatPvP" .. key] = false, false
@@ -2600,6 +2612,25 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		if targetSeen and ns.db.plateTarget == nil then
 			ns.db.plateTarget = targetOn
 		end
+		-- ...and that switch, "Always show group members' nameplates" (with
+		-- "Their minions") and "Always show your pet's nameplate" became rows of
+		-- the grid again: their Always boxes, as the switches were. In every
+		-- profile too.
+		local function UnitRowsFromSwitches(t)
+			if t.plateTarget ~= nil then t.plateAlwaysMyTarget = t.plateTarget end
+			if t.plateOwnPet ~= nil then t.plateAlwaysMyPet = t.plateOwnPet end
+			if t.plateGroupMembers ~= nil then t.plateAlwaysGroupMembers = t.plateGroupMembers end
+			if t.plateGroupMembers == false then
+				t.plateAlwaysGroupMinions = false
+			elseif t.plateGroupMemberMinions ~= nil then
+				t.plateAlwaysGroupMinions = t.plateGroupMemberMinions
+			end
+			t.plateTarget, t.plateOwnPet, t.plateGroupMembers, t.plateGroupMemberMinions = nil, nil, nil, nil
+		end
+		UnitRowsFromSwitches(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then UnitRowsFromSwitches(saved) end
+		end
 		-- The Nameplates page's Cities column joined Open world (ticked there
 		-- wherever either was), and Dungeons and Raids became one column
 		-- (ticked wherever either was). Its BGs column came back from PvP:
@@ -2673,8 +2704,13 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		}) do
 			ns.db[key] = nil
 		end
+		-- New settings start as the active profile has them (a built-in's
+		-- changes to the defaults included).
+		local base = ns.ProfileBase and ns.ProfileBase() or DEFAULTS
 		for k, v in pairs(DEFAULTS) do
-			if ns.db[k] == nil then ns.db[k] = v end
+			if ns.db[k] == nil then
+				if base[k] ~= nil and type(base[k]) ~= "table" then ns.db[k] = base[k] else ns.db[k] = v end
+			end
 		end
 		ns.EnsureTables()
 		ns.InitProfiles()

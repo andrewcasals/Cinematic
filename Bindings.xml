@@ -8,6 +8,8 @@
 	<Binding name="CINEMATIC_CAMWHEEL" category="ADDONS" runOnUp="true">
 		Cinematic_CameraWheel(keystate)
 	</Binding>
+	<Binding name="CLICK CinematicMenuWheelButton:LeftButton" category="ADDONS">
+	</Binding>
 	<Binding name="CINEMATIC_CAM_IDLE" category="ADDONS">
 		Cinematic_StartCam("idle")
 	</Binding>

@@ -870,53 +870,78 @@ end
 -- (or changing the ticks) doesn't pop plates on or off. kind -> 0 to 1.
 local keptLevel = {}
 
--- The Nameplates page's "Always show group members' nameplates" (and its
--- "Their minions"): your party or raid's players, and their pets (yours too),
--- whatever their rows say. Kind ("Friends" or "FriendlyMinions") -> whether
--- it's kept up for group members now.
-local function GroupKept(kind)
-	if not (ns.db.plateGroupMembers and ns.InGroup()) then
-		return false
-	end
-	return kind == "Friends" or (kind == "FriendlyMinions" and ns.db.plateGroupMemberMinions) or false
+local function Ask(fn, ...)
+	local ok, value = pcall(fn, ...)
+	return ok and Known(value) and value and true or false
 end
 
-local function InYourGroup(unit, kind)
-	local function Ask(fn, ...)
-		local ok, value = pcall(fn, ...)
-		return ok and Known(value) and value and true or false
+-- The Nameplates grid's rows for particular units (ns.PLATE_UNIT_ROWS): your
+-- target, your pet, your party or raid's players and their pets. They only
+-- add: a plate shows as far as its kind's row or any of these lets it. In
+-- fights a row's In Combat boxes count; out of them, where you are (and just
+-- after a fight, both).
+local function UnitRowWanted(row)
+	if InCombatLockdown() then
+		return ShownInFights(row)
 	end
-	if kind == "FriendlyMinions" and Ask(UnitIsUnit, unit, "pet") then
-		return true
+	return KeptHere(row) or (ns.FightLingering() and ShownInFights(row))
+end
+
+-- Whether a unit row has anyone to show now (your target's has its own fade, below).
+local function UnitRowActive(row)
+	if not UnitRowWanted(row) then
+		return false
+	end
+	if row == "MyPet" then
+		return Ask(UnitExists, "pet")
+	end
+	return ns.InGroup()
+end
+
+-- Whether a plate's unit is the one (or one of those) a unit row covers.
+local function InUnitRow(row, unit, kind)
+	if row == "MyPet" then
+		return kind == "FriendlyMinions" and Ask(UnitIsUnit, unit, "pet")
+	end
+	local wanted = row == "GroupMembers" and "Friends" or "FriendlyMinions"
+	if kind ~= wanted or (row == "GroupMinions" and Ask(UnitIsUnit, unit, "pet")) then
+		return false -- (your pet has its own row)
 	end
 	return Ask(UnitPlayerOrPetInParty, unit) or Ask(UnitPlayerOrPetInRaid, unit)
 end
 
--- How far group members' plates are held up, faded like keptLevel. kind -> 0 to 1.
-local groupLevel = { Friends = 0, FriendlyMinions = 0 }
+-- How far each unit row holds its plates up, faded like keptLevel. row -> 0 to 1.
+local unitRowLevel = { MyPet = 0, GroupMembers = 0, GroupMinions = 0 }
 
-local function GroupMemberAlpha(unit, kind)
-	local level = groupLevel[kind]
-	if not level or level <= 0 or not InYourGroup(unit, kind) then
-		return 0
+local function UnitRowAlpha(unit, kind)
+	local alpha = 0
+	for row, level in pairs(unitRowLevel) do
+		if level > alpha and InUnitRow(row, unit, kind) then
+			alpha = level
+		end
 	end
-	return level
+	return alpha
 end
 
 -- Any kind kept up in cinematic mode keeps the plates switched on.
 local function AnyPlatesKeptCinematic()
+	for row, level in pairs(unitRowLevel) do
+		if level > 0 or UnitRowActive(row) then
+			return true
+		end
+	end
 	for _, kind in ipairs(ns.PLATE_KINDS) do
-		if KeptHere(kind) or (keptLevel[kind] or 0) > 0 or GroupKept(kind) or (groupLevel[kind] or 0) > 0 then
+		if KeptHere(kind) or (keptLevel[kind] or 0) > 0 then
 			return true
 		end
 	end
 	return false
 end
 
--- Whether your target's plate always shows (the Nameplates page's "Always
--- show your target's nameplate"), whatever its own row says.
+-- Whether your target's plate shows now (the Your Target row), whatever its
+-- kind's row says.
 local function AlwaysShownTarget(unit)
-	return ns.db.plateTarget and ns.IsEnemyUnit(unit) ~= nil
+	return UnitRowWanted("MyTarget") and ns.IsEnemyUnit(unit) ~= nil
 end
 
 local function TargetKeptUp()
@@ -1046,7 +1071,7 @@ end
 local function KindAlpha(unit)
 	local kind = unit and PlateKind(unit)
 	if kind then
-		local member = GroupMemberAlpha(unit, kind)
+		local member = UnitRowAlpha(unit, kind)
 		-- Plates can't be switched off in fights, only made invisible.
 		if platesActive and InCombatLockdown() and not ShownInFights(kind) then
 			return member
@@ -1250,11 +1275,16 @@ local PLATE_KIND_CVARS = {
 	FriendlyNPCs = { "nameplateShowFriendlyNPCs" },
 }
 local PLATE_ROW_PARENT = { EnemyMinions = "Enemies", EnemyMinor = "EnemyNPCs", FriendlyMinions = "Friends" }
+-- The unit rows go by their units' kinds (your target's could be any: none).
+local UNIT_ROW_KIND = { MyPet = "FriendlyMinions", GroupMembers = "Friends", GroupMinions = "FriendlyMinions" }
 local pendingPlateRows = {}
 
 -- Whether this client has any of a row's nameplate settings.
 function ns.HasPlateSettings(kind)
-	for _, cvar in ipairs(PLATE_KIND_CVARS[kind]) do
+	if kind == "MyTarget" then
+		return true
+	end
+	for _, cvar in ipairs(PLATE_KIND_CVARS[UNIT_ROW_KIND[kind] or kind]) do
 		if GetCVar(cvar) ~= nil then
 			return true
 		end
@@ -1263,6 +1293,10 @@ function ns.HasPlateSettings(kind)
 end
 
 function ns.EnablePlateRow(kind)
+	kind = UNIT_ROW_KIND[kind] or kind
+	if not PLATE_KIND_CVARS[kind] then
+		return
+	end
 	if InCombatLockdown() then
 		pendingPlateRows[kind] = true
 		return
@@ -1282,12 +1316,10 @@ function ns.EnsurePlateRows()
 	if not ns.db.handlePlates then
 		return -- (the game's own options decide: Nameplates page's switch off)
 	end
-	for _, kind in ipairs(ns.PLATE_KINDS) do
-		local groupKept = kind == "Friends" and ns.db.plateGroupMembers
-			or kind == "FriendlyMinions" and ns.db.plateGroupMembers and ns.db.plateGroupMemberMinions
-		if groupKept then
-			ns.EnablePlateRow(kind)
-		end
+	local rows = {}
+	for _, kind in ipairs(ns.PLATE_KINDS) do rows[#rows + 1] = kind end
+	for _, row in ipairs(ns.PLATE_UNIT_ROWS) do rows[#rows + 1] = row end
+	for _, kind in ipairs(rows) do
 		for _, prefix in ipairs({ "plateAlways", "plateGroup", "plateCombat", "plateCombatPvP",
 			"plateCinematic", "plateInInstances", "plateInPvP", "plateInBGs" }) do
 			if ns.db[prefix .. kind] then
@@ -1319,7 +1351,14 @@ local function UpdateLockedPlates()
 	local locked = platesActive and placeSuffix == "Instances"
 	local hidden = {}
 	for _, kind in ipairs(LOCKED_PLATE_KINDS) do
-		hidden[kind] = locked and not KeptHere(kind) and not ShownInFights(kind) and not GroupKept(kind)
+		hidden[kind] = locked and not KeptHere(kind) and not ShownInFights(kind)
+	end
+	-- (Nor where a unit row keeps some of them up, in fights or out.)
+	for row, kind in pairs(UNIT_ROW_KIND) do
+		if hidden[kind] and (KeptHere(row) or ShownInFights(row))
+			and (row == "MyPet" and Ask(UnitExists, "pet") or row ~= "MyPet" and ns.InGroup()) then
+			hidden[kind] = false
+		end
 	end
 	hidden.Friends = hidden.Friends and hidden.FriendlyMinions
 	local changed = false
@@ -1428,6 +1467,15 @@ function ns.UpdatePlates(cinematic, elapsed)
 		local duration = target > ns.plates.level and ns.FadeInTime() or ns.FadeOutTime()
 		ns.plates.level = ns.Approach(ns.plates.level, target, elapsed, duration)
 	end
+	-- The unit rows' plates (your pet's, group members') fade up and down likewise.
+	for row, level in pairs(unitRowLevel) do
+		local rowTarget = UnitRowActive(row) and 1 or 0
+		if level ~= rowTarget then
+			unitRowLevel[row] = ns.Approach(level, rowTarget, elapsed,
+				rowTarget > level and ns.FadeInTime() or ns.FadeOutTime())
+			changed = true
+		end
+	end
 	-- Kinds hidden in cinematic fights: held at 0 in combat, then let back up
 	-- at the fade-in speed, but only while plates are on their way in. Heading
 	-- out (cinematic again), they stay hidden until the fade has caught up.
@@ -1437,14 +1485,6 @@ function ns.UpdatePlates(cinematic, elapsed)
 		local combat = ShownInFights(kind)
 		local cinematicKept = KeptHere(kind)
 		local keptTarget = cinematicKept and 1 or 0
-		if groupLevel[kind] then
-			local groupTarget = GroupKept(kind) and 1 or 0
-			if groupLevel[kind] ~= groupTarget then
-				groupLevel[kind] = ns.Approach(groupLevel[kind], groupTarget, elapsed,
-					groupTarget > groupLevel[kind] and ns.FadeInTime() or ns.FadeOutTime())
-				changed = true
-			end
-		end
 		if keptLevel[kind] == nil then
 			keptLevel[kind] = keptTarget -- logging in: no fade
 		elseif keptLevel[kind] ~= keptTarget then

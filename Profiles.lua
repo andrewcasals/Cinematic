@@ -81,6 +81,11 @@ ns.BUILTIN_PROFILES = {
 			-- Auto-walking and auto-running can start music.
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
+			-- Nameplates: group members' pets, and the Grouped column for
+			-- friendly players and minions, don't stay up.
+			set("plateAlwaysGroupMinions", false)
+			set("plateGroupFriends", false)
+			set("plateGroupFriendlyMinions", false)
 		end,
 	},
 	{
@@ -101,6 +106,11 @@ ns.BUILTIN_PROFILES = {
 			-- Auto-walking and auto-running can start music, as in Immersive.
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
+			-- Nameplates: group members' pets, and the Grouped column for
+			-- friendly players and minions, don't stay up, as in Immersive.
+			set("plateAlwaysGroupMinions", false)
+			set("plateGroupFriends", false)
+			set("plateGroupFriendlyMinions", false)
 		end,
 	},
 	{
@@ -188,9 +198,9 @@ ns.BUILTIN_PROFILES = {
 			set("portraitWhenNotFull", false)
 			set("letterboxOffInCombat", false)
 			set("timeOfDayMessage", false)
-			set("plateTarget", false)
-			set("plateGroupMembers", false)
-			set("plateGroupMemberMinions", false)
+			set("plateAlwaysMyTarget", false)
+			set("plateAlwaysGroupMembers", false)
+			set("plateAlwaysGroupMinions", false)
 			-- No cast bar out of fights (it's up in them, with the default).
 			set("cineShow", { castbar = false })
 			-- Fights bring up only your target and its target (and the cast

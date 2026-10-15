@@ -27,6 +27,8 @@ read_globals = {
 	"CANCEL",
 	"C_AddOnProfiler",
 	"C_AddOns",
+	"SetPortraitTexture",
+	"CLASS_ICON_TCOORDS",
 	"C_CooldownViewer",
 	"C_CVar",
 	"C_ChatBubbles",

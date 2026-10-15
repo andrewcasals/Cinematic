@@ -145,8 +145,9 @@ end
 local TENT_FORGET = 15
 local TENT_FORGET_TIME = 60
 -- tent: { at = GetTime(), x, y = where you stood (yards, or nil), how =
--- "tooltip"/"test", side = "left"/"right" of the screen, facing = yours then
--- (degrees, or nil), duringCozy, seq = counts each new sighting or side }
+-- "tooltip"/"test", side = "left"/"right" of the screen, offset = how far
+-- across (half screen heights from the middle, negative to the left), facing
+-- = yours then (degrees, or nil), duringCozy, seq = counts each new sighting }
 local tent
 local tentSeq = 0
 -- The latest cozy camera, for /cine debug tent: whether the tent was known
@@ -162,15 +163,24 @@ end
 
 -- side: which half of the screen it's on (by the cursor, if not given).
 local function SawTent(how, side)
-	side = side or (CursorPosition() > UIParent:GetWidth() / 2 and "right" or "left")
+	-- How far across the screen: the cursor's distance from the middle, in
+	-- half screen heights (negative to the left). A given side: halfway out.
+	local offset
+	if side then
+		offset = side == "right" and 0.5 or -0.5
+	else
+		local width, height = UIParent:GetSize()
+		offset = (CursorPosition() - width / 2) / (height / 2)
+		side = offset > 0 and "right" or "left"
+	end
 	-- Where it was first seen is what counts: the sway moves the camera, so the
 	-- same tent crosses the screen, and taking each side afresh would turn the
 	-- camera back and forth. (A test sighting always counts afresh.)
 	if not tent or how == "test" then
 		tentSeq = tentSeq + 1
-		ns.Log("campfire", ("Camp Tent seen (%s), %s of the screen"):format(how, side))
+		ns.Log("campfire", ("Camp Tent seen (%s), %s of the screen (%.2f across)"):format(how, side, offset))
 		tent = tent or {}
-		tent.side, tent.seq, tent.facing, tent.duringCozy = side, tentSeq, Facing(), cozy.on
+		tent.side, tent.offset, tent.seq, tent.facing, tent.duringCozy = side, offset, tentSeq, Facing(), cozy.on
 	end
 	tent.at, tent.how = GetTime(), how
 	tent.x, tent.y = PlayerPosition()
@@ -223,11 +233,11 @@ function ns.TentNearby()
 end
 
 -- The latest sighting, for the cozy camera's sway: its number (new each
--- sighting or change of side), the screen side, your facing then (degrees,
--- or nil) and whether the cozy camera was on. Nil if none is remembered.
+-- sighting), how far across the screen (see tent above), your facing then
+-- (degrees, or nil) and whether the cozy camera was on. Nil if none is remembered.
 function ns.TentSighting()
 	if tent then
-		return tent.seq, tent.side, tent.facing, tent.duringCozy
+		return tent.seq, tent.offset, tent.facing, tent.duringCozy
 	end
 end
 

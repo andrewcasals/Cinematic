@@ -33,6 +33,7 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Quest Cam:** talk to a quest giver and the camera eases in close and comes round to a dialogue shot past your shoulder. It goes back when you close the window.
 * **Death Cam:** when you die, the camera rises and circles slowly round your body over a cold, dimmed screen, with a song of its own. You can also start it from a key or the camera wheel to see it without dying.
 * **Camera wheel:** hold its key and a ring of camera icons comes up round your cursor. Point at one and let go to start that camera, or tap the key and click one.
+* **Menu wheel:** the same, for the game's menu bar buttons (character, spellbook, quest log and the rest your client shows), so their windows are in reach with the UI hidden.
 * **Camera Triggers page:** pick which camera each event starts (or none), and whether it starts music. It starts right away, and moving ends it. With CineMode off, an event can bring CineMode on for as long as its camera runs: tick Stand still and Go AFK for a screensaver that only takes over once you've been idle.
 * **Depth of field:** a soft haze round the screen edges in the camera modes, set separately for each one.
 * **Indoor limits** keep the camera out of walls in buildings and caves.
@@ -68,7 +69,7 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Share profiles:** export your setup as a string and import a friend's.
 * **A minimap button** with quick switches for tint strength, music and combat.
 * **Full settings** under Options › AddOns › Cinematic, with a search box to find any setting. The pages are Profiles, CineMode, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Mouseover, Minimap, Quest tracker, Swing timer, Cooldown Manager, Tooltips, Buffs/debuffs, Nameplates, Chat, Chat bubbles, Fishing, Quality of life, Visual Effects, Audio, Camera Modes, Camera Triggers, Camera Settings (one section per camera) and Keybinds. Each page, and each camera's section, has its own Reset button for just that part.
-* **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, start any camera on demand (or pick one from the camera wheel), or show hidden tooltips.
+* **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, start any camera on demand (or pick one from the camera wheel), open the menu wheel, or show hidden tooltips.
 * **In your language:** English, Deutsch, Español, Français, Italiano, Português, Русский, 한국어, 简体中文 and 繁體中文, picked on the main settings page.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.
 

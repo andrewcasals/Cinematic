@@ -610,6 +610,7 @@ local function RemoveFrame(frame)
 				frame:SetScale(entry.savedScale or 1)
 			end
 			table.remove(ns.managed, i)
+			entry.removed = true -- (for script hooks still holding it: see HookPartyScripts)
 			seen[frame] = nil
 			RecomputeNesting()
 			return true
@@ -3851,11 +3852,34 @@ do
 
 	-- A party member's frame, with its role icon and name (retail's are
 	-- parent keys, Classic's named after the frame).
+	-- The party frames dim members out of range (and light them back up) with
+	-- their own SetAlpha, so while faded one flashed up until the next tick
+	-- put ours back. Their own scripts are followed by ours straight away
+	-- instead, as for the cast bars. Script hooks, not method hooks (see
+	-- AddFrame); one for a frame no longer faded does nothing.
+	local partyEntries = {} -- frame -> its entry (entry.removed once let go)
+	local onPartyScript = ns.Profiled("Party frame alpha hook", function(frame)
+		local entry = partyEntries[frame]
+		if entry and not entry.removed and entry.alpha < 1 then
+			ReapplyIfChanged(entry)
+		end
+	end)
+	local function HookPartyScripts(frame)
+		if partyEntries[frame] == nil and frame.HookScript then
+			frame:HookScript("OnEvent", onPartyScript)
+			frame:HookScript("OnShow", onPartyScript)
+			frame:HookScript("OnUpdate", onPartyScript)
+		end
+		partyEntries[frame] = ns.managed[#ns.managed]
+	end
+
 	local function SortPartyFrame(frame)
 		if not frame or IsForbidden(frame) then
 			return
 		end
-		AddFrame(frame, "party")
+		if AddFrame(frame, "party") then
+			HookPartyScripts(frame)
+		end
 		local name = frame:GetName()
 		local overlay = frame.PartyMemberOverlay
 		SortRaidPart((overlay and overlay.RoleIcon) or frame.RoleIcon or (name and _G[name .. "RoleIcon"]),

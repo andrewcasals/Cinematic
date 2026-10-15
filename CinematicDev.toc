@@ -36,6 +36,7 @@ Bubbles.lua
 Campfire.lua
 Hunter.lua
 CameraWheel.lua
+MenuWheel.lua
 Effects.lua
 Camera.lua
 QuestCam.lua

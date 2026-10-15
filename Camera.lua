@@ -1603,17 +1603,22 @@ local function RandomPitchTarget()
 end
 
 -- A Camp Tent by the cozy camera: the camera goes through tents, so the sway
--- keeps clear of it. All that's known is which side of the screen it was on
--- (Campfire.lua), so it's taken to be TENT_GUESS degrees round from where the
--- camera was then, toward that side, and kept as a bearing so your turning
--- doesn't lose it. (Tested in game: a positive turn, the "view left" command,
--- carries the camera round away from a tent on the right of the screen, so
--- that tent is at a negative angle. The orbit's angles also count the other
+-- keeps clear of it. All that's known is how far across the screen the cursor
+-- was on it (Campfire.lua). The tent only matters where the camera's circle
+-- round you meets it, so it's taken to be there: seen at an angle a off the
+-- middle of the view, that's 180 - 2a degrees round from the camera (a tent
+-- in the middle of the screen is across from it, past you; one at the edge,
+-- much nearer round). It's kept as a bearing so your turning doesn't lose it.
+-- (Tested in game: a positive turn, the "view left" command, carries the
+-- camera round away from a tent on the right of the screen, so that tent is
+-- at a negative angle. The old guess, 45 degrees round toward its side, put a
+-- tent seen past you on the wrong side of the camera's path: sent the long
+-- way round, the camera went into it. The orbit's angles also count the other
 -- way round from your facing, which turns left as it grows: hence the + below.)
 -- Angles here count as ns.orbit.angle does. (In a do block: this file is at
 -- Lua's 200-local limit.)
 do
-	local TENT_GUESS = 45 -- degrees round from the camera, toward the tent's side
+	local VIEW_HALF_HEIGHT = 0.47 -- tan of half the view's height (about 50 degrees tall)
 	local TENT_CLEAR = 90 -- degrees from the tent a sway's end keeps
 	local TENT_BRAKE = 2  -- seconds to slow a move heading for the tent to a stop
 	local lastSeq
@@ -1629,9 +1634,9 @@ do
 	-- camera, from where the camera is; before it, from behind you (where the
 	-- cozy camera starts from) as you faced then.
 	function ns.CozyTentAngle()
-		local seq, side, facing, duringCozy
+		local seq, offset, facing, duringCozy
 		if ns.TentSighting then
-			seq, side, facing, duringCozy = ns.TentSighting()
+			seq, offset, facing, duringCozy = ns.TentSighting()
 		end
 		if not seq then
 			ns.orbit.tentBearing, lastSeq = nil, nil
@@ -1642,7 +1647,9 @@ do
 			lastSeq = seq
 			local cozyOn = duringCozy and orbitPrefix == "cozyOrbit" and ns.orbit.level > 0
 			local angle = cozyOn and ns.orbit.angle or 0
-			ns.orbit.tentBearing = angle + (side == "right" and -TENT_GUESS or TENT_GUESS)
+			local off = math.deg(math.atan(math.abs(offset) * VIEW_HALF_HEIGHT))
+			local round = 180 - 2 * off
+			ns.orbit.tentBearing = angle + (offset > 0 and -round or round)
 				- (cozyOn and now or facing or now)
 			ns.orbit.tentNew = true
 		end
@@ -1674,7 +1681,7 @@ do
 	end
 
 	-- Every frame of the cozy camera (not the tele spin): a new sighting with a
-	-- move heading for the tent slows it to a stop over TENT_BRAKE (from the
+	-- move that would pass the tent slows it to a stop over TENT_BRAKE (from the
 	-- speed it's going, so there's no jolt), and the move ends there; the next
 	-- one heads away. In a pause, the drift turns away. While braking, returns
 	-- the move's yaw speed (before the level) and signed tilt speed.
@@ -1685,7 +1692,12 @@ do
 			o.tentNew = false
 			local away = WrapAngle(o.angle - tentAngle) >= 0
 			local T = o.sweepTime
-			if o.phase == "move" and not o.spin and o.t < T and (o.yawDelta >= 0) ~= away then
+			-- (What's left of the move: the planned turn less the way come so far.)
+			local sign = o.yawDelta >= 0 and 1 or -1
+			local come = ((o.angle - (o.moveFrom or o.angle)) * sign) % 360 * sign
+			local left = math.abs(come) < math.abs(o.yawDelta) and o.yawDelta - come or 0
+			if o.phase == "move" and not o.spin and o.t < T and ns.CozyTentOnPath(o.angle, left, tentAngle) then
+				away = sign < 0
 				local ease = o.ease or OrbitSetting("Ease")
 				local shape = EaseShape(o.t, T, ease) / (T * (1 - ease))
 				o.tentBrake = { t = 0, away = away, yaw = o.yawDelta * shape,
@@ -1729,6 +1741,7 @@ end
 local function PlanNextSweep()
 	local mode = OrbitSetting("Mode")
 	ns.orbit.spin = false
+	ns.orbit.moveFrom = ns.orbit.angle -- (where this move sets off from: ns.CozyTentBrake)
 	-- The tele camera's spin, not yet started this cast: it starts with this
 	-- move, even from in front (say, sitting by a fire as you cast).
 	local teleSwing = ARC_CENTER[orbitPrefix] and ns.IsTele() and ns.DepartTimeLeft() ~= nil and not ns.orbit.teleSpun
