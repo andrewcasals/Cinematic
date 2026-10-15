@@ -1,7 +1,7 @@
--- Cinematic: a Sit button at campfires. Hovering a campfire with the cursor
--- near the middle of the screen brings up a campfire icon right under the
--- cursor; clicking it does /sit, so you needn't type it. Moving the cursor
--- off it puts it away.
+-- Cinematic: the Campfire button. Hovering a campfire with the cursor near
+-- the middle of the screen brings up a campfire icon right under the cursor;
+-- clicking it sits, kneels or lies down (as ticked), so you needn't type the
+-- emote. Moving the cursor off it puts it away.
 -- (campfireSitButton, on the Quality of life page; WoW Forever only.)
 local ADDON_NAME, ns = ...
 
@@ -45,6 +45,7 @@ local hoverSince         -- when the cursor came onto the campfire (near the mid
 local shownX, shownY     -- where you stood as it showed (yards)
 local walkedOff = false  -- moved WALK_OFF from there: going, whatever the cursor's on
 local leftIcon = false   -- the cursor has moved off it: going
+local blockedLogged, fadingLogged = false, false -- (logged once each, for /cine log)
 
 local function CursorPosition()
 	local x, y = GetCursorPosition()
@@ -104,13 +105,26 @@ local function CanSit()
 	return true
 end
 
+-- The emotes the button can do (campfireSit, campfireKneel, campfireLie): one
+-- of those ticked, at random; sitting if none is.
+local EMOTES = { { key = "campfireSit", token = "SIT" }, { key = "campfireKneel", token = "KNEEL" },
+	{ key = "campfireLie", token = "LAYDOWN" } }
+local picks = {}
 local function Sit()
-	if C_ChatInfo and C_ChatInfo.PerformEmote then
-		pcall(C_ChatInfo.PerformEmote, "SIT")
-	elseif DoEmote then
-		pcall(DoEmote, "SIT")
+	wipe(picks)
+	for _, emote in ipairs(EMOTES) do
+		if ns.db[emote.key] then
+			picks[#picks + 1] = emote.token
+		end
 	end
-	-- (Its own Camera Triggers row, cozy by default, rather than /sit's.)
+	local token = picks[1] and picks[math.random(#picks)] or "SIT"
+	if C_ChatInfo and C_ChatInfo.PerformEmote then
+		pcall(C_ChatInfo.PerformEmote, token)
+	elseif DoEmote then
+		pcall(DoEmote, token)
+	end
+	ns.Log("campfire", "button clicked: " .. token)
+	-- (Its own Camera Triggers row, cozy by default, rather than the emote's.)
 	if ns.SatByButton then ns.SatByButton() end
 end
 
@@ -270,6 +284,22 @@ local function OnCampfire()
 	return false
 end
 
+-- The icon flickers like a fire while it's up: a little bigger and brighter,
+-- then smaller and dimmer, unevenly (a few waves out of step). Pressed, it
+-- sits a pixel down and right.
+local FLICKER_GROW = 0.8   -- UI units each edge moves out (or in) at most
+local FLICKER_DIM = 0.2    -- how far its alpha dips at the low point (100% down to 80%)
+local icon
+local pressed = false
+local function Flicker(now)
+	local wave = (math.sin(now * 7.3) + 0.6 * math.sin(now * 11.9 + 1.3) + 0.4 * math.sin(now * 3.1 + 2.2)) / 2
+	local grow = wave * FLICKER_GROW
+	local shift = pressed and 1 or 0
+	icon:SetPoint("TOPLEFT", shift - grow, -shift + grow)
+	icon:SetPoint("BOTTOMRIGHT", shift + grow, -shift - grow)
+	icon:SetAlpha(1 - FLICKER_DIM * (1 - wave) / 2)
+end
+
 -- Looked at every frame, and the tooltip every LOOK_EVERY seconds: the game
 -- often moves its tooltip from one thing to the next without showing it
 -- again (walking past a fire with the cursor still), so OnShow alone misses it.
@@ -286,9 +316,20 @@ local function OnUpdate(_, elapsed)
 		ForgetTentIfAway()
 		local onFire = CanSit() and OnCampfire()
 		if not CanSit() then
+			if alpha == 0 and not blockedLogged and ns.db and ns.db.campfireSitButton and TooltipIsCampfire() then
+				blockedLogged = true
+				ns.Log("campfire", ("on a campfire, but no button: sitting %s, combat %s, mounted %s"):format(
+					tostring(ns.IsSitting and ns.IsSitting()), tostring(InCombatLockdown()),
+					tostring(IsMounted and ns.Flag(IsMounted()))))
+			end
 			lastSeen, dismissed, hoverSince = -math.huge, false, nil
 		elseif onFire and NearCenter(CursorPosition()) then
+			blockedLogged = false
 			-- (Once it's up, staying on the fire keeps it there without the wait.)
+			if not hoverSince and alpha == 0 then
+				ns.Log("campfire", ("cursor on a campfire: rest %.1f sec left, dismissed %s, tooltip %s"):format(
+					math.max(0, restUntil - now), tostring(dismissed), tostring(ns.Flag(GameTooltip:IsShown()))))
+			end
 			hoverSince = hoverSince or now
 			-- (Kept on the fire for REST_HOVER since it went: back without the REST wait.)
 			if alpha == 0 and now < restUntil and now - hoverSince >= REST_HOVER then
@@ -301,6 +342,7 @@ local function OnUpdate(_, elapsed)
 			hoverSince = nil
 			if not onFire then
 				dismissed = false
+				blockedLogged = false
 			end
 		end
 		if alpha > 0 and not walkedOff and WalkedOff() then
@@ -318,7 +360,9 @@ local function OnUpdate(_, elapsed)
 		and (alpha > 0 or now >= restUntil)
 		and (now - lastSeen < LINGER or (button:IsShown() and button:IsMouseOver()))
 	if want then
+		fadingLogged = false
 		if alpha == 0 then
+			ns.Log("campfire", "button shown")
 			shownX, shownY = PlayerPosition()
 			-- Right under the cursor, and left there to be clicked.
 			local x, y = CursorPosition()
@@ -327,8 +371,14 @@ local function OnUpdate(_, elapsed)
 		end
 		alpha = math.min(1, alpha + elapsed / FADE_TIME)
 	elseif alpha > 0 then
+		if not fadingLogged then
+			fadingLogged = true
+			ns.Log("campfire", ("button going: clicked %s, walked off %s, cursor left %s, can sit %s"):format(
+				tostring(dismissed), tostring(walkedOff), tostring(leftIcon), tostring(CanSit())))
+		end
 		alpha = math.max(0, alpha - elapsed / FADE_TIME)
 		if alpha == 0 then
+			fadingLogged = false
 			restUntil, walkedOff, leftIcon, shownX, shownY = now + REST, false, false, nil, nil
 			-- (Gone: the sighting that brought it up is used up, so it doesn't
 			-- come straight back wherever the cursor is now.)
@@ -340,6 +390,9 @@ local function OnUpdate(_, elapsed)
 	button:SetAlpha(alpha)
 	button:SetShown(alpha > 0)
 	button:EnableMouse(alpha > 0.5)
+	if alpha > 0 then
+		Flicker(now)
+	end
 end
 
 -- A campfire's tooltip appeared: noted where, in case Cinematic hides it at
@@ -362,7 +415,7 @@ button = CreateFrame("Button", "CinematicSitButton", UIParent)
 button:SetSize(SIZE, SIZE)
 button:SetFrameStrata("DIALOG")
 button:SetClampedToScreen(true)
-local icon = button:CreateTexture(nil, "ARTWORK")
+icon = button:CreateTexture(nil, "ARTWORK")
 icon:SetAllPoints()
 icon:SetTexture(ICON)
 icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) -- (trims the icon's own edge)
@@ -377,13 +430,12 @@ if button.CreateMaskTexture then
 	highlight:AddMaskTexture(mask)
 end
 button:SetScript("OnMouseDown", function()
-	icon:ClearAllPoints()
-	icon:SetPoint("TOPLEFT", 1, -1)
-	icon:SetPoint("BOTTOMRIGHT", 1, -1)
+	pressed = true
+	Flicker(GetTime())
 end)
 button:SetScript("OnMouseUp", function()
-	icon:ClearAllPoints()
-	icon:SetAllPoints()
+	pressed = false
+	Flicker(GetTime())
 end)
 button:SetScript("OnClick", function()
 	Sit()

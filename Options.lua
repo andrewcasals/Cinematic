@@ -1894,7 +1894,7 @@ local TELE_CAMERAS = {
 local EVENT_TIPS = {
 	Campfire = L["Standing or sitting still with any of the buffs listed below (like Welcoming Campfire)."],
 	Sit = L["Doing the emote (or pressing the sit key). Moving, jumping or another emote ends it."],
-	SitButton = L["Clicking the campfire Sit button (Quality of life page). Once the campfire's buff " ..
+	SitButton = L["Clicking the Campfire button (Quality of life page). Once the campfire's buff " ..
 		"comes, the first row's camera takes over. Moving, jumping or another emote ends it."],
 	Sleep = L["Doing the emote. Moving, jumping or another emote ends it."],
 	Dance = L["Doing the emote. Moving, jumping or another emote ends it."],
@@ -3715,11 +3715,18 @@ local function CreateQualityPanel()
 	local stack = Stack(subtitle, "label")
 	stack:Header(content, L["General"])
 	-- (WoW Forever: Campfire.lua.)
-	local sit = stack:Add(Check(content, "campfireSitButton", L["Sit button at campfires"],
+	local sit = stack:Add(Check(content, "campfireSitButton", L["Campfire button"],
 		L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon where " ..
-		"the cursor is: click it to sit down by the fire, without typing /sit. Moving the cursor off it " ..
-		"puts it away. Not in a fight or while mounted."]), "check")
-	sit:HookScript("OnClick", Refresh) -- grey out / enable the option below
+		"the cursor is: click it to settle down by the fire (sit, kneel or lie down, as ticked below), " ..
+		"without typing the emote. Moving the cursor off it puts it away. Not in a fight or while mounted."]), "check")
+	sit:HookScript("OnClick", Refresh) -- grey out / enable the options below
+	local EMOTE_TIP = L["What clicking the Campfire button does. With more than one ticked, it's one of " ..
+		"them at random each time."]
+	for _, emote in ipairs({ { "campfireSit", L["Sit"] }, { "campfireKneel", L["Kneel"] },
+		{ "campfireLie", L["Lie down"] } }) do
+		local check = stack:Add(Check(content, emote[1], emote[2], EMOTE_TIP), "check", 24)
+		GreyUnless(check, function(db) return db.campfireSitButton end)
+	end
 	local stand = stack:Add(Check(content, "campfireStandUp", L["Stand up once you get Camp Benefits"],
 		L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, " ..
 		"you stand up again, ready to go."]), "check", 24)

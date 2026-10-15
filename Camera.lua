@@ -71,7 +71,7 @@ ns.EVENTS = {
 	{ key = "Campfire", label = L["Resting with a listed buff (campfire)"], camera = "cozy", stopsOnMove = true },
 	{ key = "Sit", label = L["/sit (or press the sit key)"], camera = "vista" },
 	-- Sitting down with Campfire.lua's Sit button (WoW Forever only: forever).
-	{ key = "SitButton", label = L["Sit button at a campfire"], camera = "cozy", forever = true },
+	{ key = "SitButton", label = L["Campfire button"], camera = "cozy", forever = true },
 	{ key = "Sleep", label = L["/sleep or /lie down"], camera = "cozy" },
 	{ key = "Dance", label = L["/dance"], camera = "cozy" },
 	{ key = "Kneel", label = L["/kneel"], camera = "cozy" },
@@ -173,9 +173,10 @@ local emoteEvent -- the event for the emote (or seat) you're doing, or nil
 function ns.IsSitting()
 	return emoteEvent == "Sit" or emoteEvent == "SitButton" or emoteEvent == "Sleep" or emoteEvent == "Chair"
 end
--- The sit just done was the campfire Sit button's: its own event, not /sit's.
+-- The emote just done (sit, kneel or lie down) was the Campfire button's: its
+-- own event, not the emote's.
 function ns.SatByButton()
-	if emoteEvent == "Sit" then
+	if emoteEvent == "Sit" or emoteEvent == "Kneel" or emoteEvent == "Sleep" then
 		emoteEvent = "SitButton"
 	end
 end
@@ -2356,9 +2357,11 @@ local function EndIdleZoom(restore)
 	idleZoom.active = false
 	if restore and idleZoom.saved and GetCameraZoom then
 		idleZoom.restoring = true
-		-- (The tele zoom only ends early on a cancelled cast: back quickly then.)
-		PlanPath(idleZoom.saved, idleZoom.context == "tele" and ns.db.teleZoomBackTime or ZOOM_RESTORE_TIME,
-			0.5, "restore")
+		-- (The tele zoom only ends early on a cancelled cast: back quickly then.
+		-- The cozy close-up eases out slower, over 3 seconds: it's a long way back.)
+		local time = idleZoom.context == "tele" and ns.db.teleZoomBackTime
+			or idleZoom.context == "cozy" and 3 or ZOOM_RESTORE_TIME
+		PlanPath(idleZoom.saved, time, 0.5, "restore")
 	else
 		FinishRestore()
 	end
@@ -2731,7 +2734,19 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		ns.stillSince = walkHandoff and (now - ns.db.idleOrbitDelay) or now
 		walkHandoff = false
 	end
-	-- Moving ends an emote.
+	-- Moving ends an emote, and turning stands you up from sitting, kneeling or
+	-- lying down. (ns.sitFacing: your facing as you got down, in radians.)
+	local okFacing, facing = pcall(GetPlayerFacing)
+	facing = okFacing and type(facing) == "number" and not (issecretvalue and issecretvalue(facing)) and facing or nil
+	local down = emoteEvent == "Sit" or emoteEvent == "SitButton" or emoteEvent == "Sleep" or emoteEvent == "Kneel"
+	if not down then
+		ns.sitFacing = nil
+	elseif not ns.sitFacing then
+		ns.sitFacing = facing
+	elseif facing and math.abs(facing - ns.sitFacing) > 0.02 then
+		ns.sitFacing = nil
+		emoteEvent = nil
+	end
 	if ns.playerMoving or onTaxi then
 		emoteEvent = nil
 		ns.manualCam = nil -- (and a camera started from a key binding)

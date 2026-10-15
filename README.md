@@ -57,7 +57,7 @@ Each situation has its own camera, and they hand over seamlessly:
 
 ## Quality of life (WoW Forever)
 
-* **Campfire Sit button:** hover a campfire and click the icon at your cursor to sit down by the fire, no `/sit` needed. It has its own camera trigger.
+* **Campfire button:** hover a campfire and click the icon at your cursor to sit, kneel or lie down by the fire (your pick, or at random between the ones you tick), no emote to type. It has its own camera trigger.
 * **Stand up with Camp Benefits:** once the buff arrives, you stand up again, ready to go.
 * **Fishing:** cast with right-click or a gamepad button, in CineMode or not.
 * **Hunters** (Classic clients): right-click an enemy to start Auto Shot, or swing in melee when it's too close, in a fight or out of one. A smart attack key starts Auto Shot on your target.
