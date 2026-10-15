@@ -1189,6 +1189,8 @@ L["Lie down"] = "躺下"
 L["What clicking the Campfire button does. With more than one ticked, it's one of them at random each time."] = "點擊營火按鈕時做的動作。勾選多個時，每次隨機選其中一個。"
 L["Clicking the Campfire button (Quality of life page). Once the campfire's buff comes, the first row's camera takes over. Moving, jumping or another emote ends it."] = "點擊營火按鈕（便利功能頁面）。營火增益出現後，由第一列的鏡頭接手。移動、跳躍或其他表情會結束它。"
 L["Stand up once you get Camp Benefits"] = "獲得營地增益後站起"
+L["Open the character window when picking up gear"] = "拿起裝備時打開角色視窗"
+L["Picking up something you can wear opens the character window, so its slots are there to drop it on. Put it back without wearing it and the window closes again. Not in a fight."] = "拿起可穿戴的物品時會打開角色視窗，方便把它放到欄位上。沒穿上就放回去，視窗會再次關閉。戰鬥中不生效。"
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "在迎賓營火旁坐滿一分鐘會獲得營地增益：獲得時你會站起來，隨時出發。"
 
 -- Options.lua: the Camera Settings page

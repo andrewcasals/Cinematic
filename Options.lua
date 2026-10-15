@@ -3714,23 +3714,29 @@ local function CreateQualityPanel()
 
 	local stack = Stack(subtitle, "label")
 	stack:Header(content, L["General"])
-	-- (WoW Forever: Campfire.lua.)
-	local sit = stack:Add(Check(content, "campfireSitButton", L["Campfire button"],
-		L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon where " ..
-		"the cursor is: click it to settle down by the fire (sit, kneel or lie down, as ticked below), " ..
-		"without typing the emote. Moving the cursor off it puts it away. Not in a fight or while mounted."]), "check")
-	sit:HookScript("OnClick", Refresh) -- grey out / enable the options below
-	local EMOTE_TIP = L["What clicking the Campfire button does. With more than one ticked, it's one of " ..
-		"them at random each time."]
-	for _, emote in ipairs({ { "campfireSit", L["Sit"] }, { "campfireKneel", L["Kneel"] },
-		{ "campfireLie", L["Lie down"] } }) do
-		local check = stack:Add(Check(content, emote[1], emote[2], EMOTE_TIP), "check", 24)
-		GreyUnless(check, function(db) return db.campfireSitButton end)
+	-- (WoW Forever only: Campfire.lua.)
+	if not ns.isRetail then
+		local sit = stack:Add(Check(content, "campfireSitButton", L["Campfire button"],
+			L["Hovering a campfire with the cursor near the middle of the screen shows a campfire icon where " ..
+			"the cursor is: click it to settle down by the fire (sit, kneel or lie down, as ticked below), " ..
+			"without typing the emote. Moving the cursor off it puts it away. Not in a fight or while mounted."]), "check")
+		sit:HookScript("OnClick", Refresh) -- grey out / enable the options below
+		local EMOTE_TIP = L["What clicking the Campfire button does. With more than one ticked, it's one of " ..
+			"them at random each time."]
+		for _, emote in ipairs({ { "campfireSit", L["Sit"] }, { "campfireKneel", L["Kneel"] },
+			{ "campfireLie", L["Lie down"] } }) do
+			local check = stack:Add(Check(content, emote[1], emote[2], EMOTE_TIP), "check", 24)
+			GreyUnless(check, function(db) return db.campfireSitButton end)
+		end
+		local stand = stack:Add(Check(content, "campfireStandUp", L["Stand up once you get Camp Benefits"],
+			L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, " ..
+			"you stand up again, ready to go."]), "check", 24)
+		GreyUnless(stand, function(db) return db.campfireSitButton end)
 	end
-	local stand = stack:Add(Check(content, "campfireStandUp", L["Stand up once you get Camp Benefits"],
-		L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, " ..
-		"you stand up again, ready to go."]), "check", 24)
-	GreyUnless(stand, function(db) return db.campfireSitButton end)
+	-- (DragEquip.lua.)
+	stack:Add(Check(content, "dragEquipCharacter", L["Open the character window when picking up gear"],
+		L["Picking up something you can wear opens the character window, so its slots are there to drop it " ..
+		"on. Put it back without wearing it and the window closes again. Not in a fight."]), "check")
 
 	-- (Not on retail, where right-click already shoots. Shown on every class; Hunter.lua
 	-- only runs on hunters.)
@@ -6300,10 +6306,7 @@ ns.OnLanguage(function()
 	CreateChatPanel()
 	CreateBubblesPanel()
 	CreateFishingPanel()
-	-- (Everything on it is WoW Forever's, for now.)
-	if not ns.isRetail then
-		CreateQualityPanel()
-	end
+	CreateQualityPanel()
 	CreateTintPanel()
 	CreateAudioPanel()
 	CreateCameraPanel()

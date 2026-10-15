@@ -1189,6 +1189,8 @@ L["Lie down"] = "Лечь"
 L["What clicking the Campfire button does. With more than one ticked, it's one of them at random each time."] = "Что делает нажатие кнопки костра. Если отмечено несколько, каждый раз выбирается одно из них случайно."
 L["Clicking the Campfire button (Quality of life page). Once the campfire's buff comes, the first row's camera takes over. Moving, jumping or another emote ends it."] = "Нажатие кнопки костра (страница «Удобство»). Когда появится эффект костра, включится камера первой строки. Движение, прыжок или другая эмоция завершают это."
 L["Stand up once you get Camp Benefits"] = "Вставать, получив «Преимущества лагеря»"
+L["Open the character window when picking up gear"] = "Открывать окно персонажа, когда берёшь снаряжение"
+L["Picking up something you can wear opens the character window, so its slots are there to drop it on. Put it back without wearing it and the window closes again. Not in a fight."] = "Если взять предмет, который можно надеть, откроется окно персонажа, чтобы было куда его положить. Вернёте его, не надев, — окно снова закроется. Не в бою."
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "Если просидеть минуту у Гостеприимного костра, вы получите «Преимущества лагеря»: как только они появятся, вы встанете и сможете идти дальше."
 
 -- Options.lua: the Camera Settings page

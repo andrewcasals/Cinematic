@@ -35,6 +35,7 @@ Chat.lua
 Bubbles.lua
 Campfire.lua
 Hunter.lua
+DragEquip.lua
 CameraWheel.lua
 MenuWheel.lua
 Effects.lua

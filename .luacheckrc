@@ -81,6 +81,7 @@ read_globals = {
 	"GetChannelList", "C_FriendList", "IsInGuild", "GetNumGuildMembers", "GetGuildRosterInfo",
 	"GetCurrentBindingSet",
 	"GetCursorInfo",
+	"CharacterFrame", "HideUIPanel", "ToggleCharacter",
 	"GetCursorPosition",
 	"GetGameTime",
 	"GetInventoryItemID",

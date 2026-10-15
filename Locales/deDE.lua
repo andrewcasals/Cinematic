@@ -1189,6 +1189,8 @@ L["Lie down"] = "Hinlegen"
 L["What clicking the Campfire button does. With more than one ticked, it's one of them at random each time."] = "Was ein Klick auf den Lagerfeuerknopf tut. Ist mehr als eines angehakt, wird jedes Mal zufällig eines davon gewählt."
 L["Clicking the Campfire button (Quality of life page). Once the campfire's buff comes, the first row's camera takes over. Moving, jumping or another emote ends it."] = "Ein Klick auf den Lagerfeuerknopf (Seite Komfort). Sobald der Buff des Lagerfeuers kommt, übernimmt die Kamera der ersten Zeile. Bewegen, Springen oder ein anderes Emote beendet es."
 L["Stand up once you get Camp Benefits"] = "Aufstehen, sobald du Lagervorteile erhältst"
+L["Open the character window when picking up gear"] = "Charakterfenster beim Aufnehmen von Ausrüstung öffnen"
+L["Picking up something you can wear opens the character window, so its slots are there to drop it on. Put it back without wearing it and the window closes again. Not in a fight."] = "Wenn du etwas aufnimmst, das du tragen kannst, öffnet sich das Charakterfenster, damit seine Plätze zum Ablegen bereitstehen. Legst du es zurück, ohne es anzulegen, schließt sich das Fenster wieder. Nicht im Kampf."
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "Sitzt du eine Minute an einem Einladenden Lagerfeuer, erhältst du Lagervorteile: Sobald sie da sind, stehst du wieder auf, bereit zum Weiterziehen."
 
 -- Options.lua: the Camera Settings page
