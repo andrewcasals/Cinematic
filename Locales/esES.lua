@@ -52,6 +52,7 @@ L["Guild members (online, offline, joins, leaves)"] = "Hermandad (conexiones, en
 L["Group members (joins, leaves)"] = "Miembros del grupo (entran, salen)"
 L["Server messages (shutdowns, restarts)"] = "Mensajes del servidor (cierres, reinicios)"
 L["Level ups"] = "Subidas de nivel"
+L["/who results (shift-clicking a name)"] = "Resultados de /who (Mayús+clic en un nombre)"
 L["Skill ups"] = "Subidas de habilidad"
 L["Achievements"] = "Logros"
 L["Experience"] = "Experiencia"

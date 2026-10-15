@@ -52,6 +52,7 @@ L["Guild members (online, offline, joins, leaves)"] = "길드원 (접속, 접속
 L["Group members (joins, leaves)"] = "파티원 (참가, 떠남)"
 L["Server messages (shutdowns, restarts)"] = "서버 메시지 (종료, 재시작)"
 L["Level ups"] = "레벨 업"
+L["/who results (shift-clicking a name)"] = "/who 결과 (이름을 Shift+클릭)"
 L["Skill ups"] = "기술 숙련도 상승"
 L["Achievements"] = "업적"
 L["Experience"] = "경험치"

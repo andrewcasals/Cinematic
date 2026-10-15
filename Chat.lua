@@ -41,6 +41,8 @@ ns.CHAT_PEEK_TYPES = {
 	{ key = "server", label = L["Server messages (shutdowns, restarts)"], section = "game", events = {} },
 	-- Level ups arrive as a system message; see LEVEL_UP_WINDOW below.
 	{ key = "levelup", label = L["Level ups"], section = "game", events = {} },
+	-- /who replies (shift-clicking a name in the guild list, too); see WHO_WINDOW below.
+	{ key = "who", label = L["/who results (shift-clicking a name)"], section = "game", events = {} },
 	{ key = "skill", label = L["Skill ups"], section = "game", events = { "CHAT_MSG_SKILL" } },
 	{ key = "achievement", label = L["Achievements"], section = "game", default = false,
 		events = { "CHAT_MSG_ACHIEVEMENT", "CHAT_MSG_GUILD_ACHIEVEMENT" } },
@@ -80,6 +82,19 @@ end
 -- LEVEL_UP_WINDOW seconds of PLAYER_LEVEL_UP counts as the level-up line.
 ns.LEVEL_UP_WINDOW = 2
 ns.levelUpUntil = 0
+-- /who replies are system messages too, so likewise: ones arriving within
+-- WHO_WINDOW seconds of a /who being sent (typed, or by shift-clicking a name).
+local WHO_WINDOW = 3
+local whoUntil = 0
+local function WhoSent()
+	whoUntil = GetTime() + WHO_WINDOW
+end
+if C_FriendList and C_FriendList.SendWho then
+	hooksecurefunc(C_FriendList, "SendWho", WhoSent)
+end
+if _G.SendWho then
+	hooksecurefunc("SendWho", WhoSent)
+end
 local EVENT_PEEK_TYPE = {}
 local CHAT_PEEK_EVENTS = { "CHAT_MSG_CHANNEL" }
 for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
@@ -282,6 +297,8 @@ local function ChatPeekFilter(chatFrame, event, text, _, _, channelString, _, _,
 	if event == "CHAT_MSG_CHANNEL" then
 		wanted = ns.IsChannelPeekOn(ChannelBaseName(channelBaseName, channelString))
 	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < ns.levelUpUntil and IsPeekTypeOn("levelup") then
+		wanted = true
+	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < whoUntil and IsPeekTypeOn("who") then
 		wanted = true
 	elseif event == "CHAT_MSG_LOOT" and IsPeekTypeOn("rolls") and IsLootRollLine(text) then
 		wanted = true

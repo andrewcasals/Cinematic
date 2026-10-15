@@ -52,6 +52,7 @@ L["Guild members (online, offline, joins, leaves)"] = "公会成员（上线、�
 L["Group members (joins, leaves)"] = "队伍成员（加入、离开）"
 L["Server messages (shutdowns, restarts)"] = "服务器消息（关闭、重启）"
 L["Level ups"] = "升级"
+L["/who results (shift-clicking a name)"] = "/who 结果（Shift+点击名字）"
 L["Skill ups"] = "技能提升"
 L["Achievements"] = "成就"
 L["Experience"] = "经验值"
