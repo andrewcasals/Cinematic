@@ -38,7 +38,9 @@ local function UpdateIcon()
 	local db = ns.GetDB()
 	local active = db.enabled and not ns.GetSnoozeLeft()
 	button.icon:SetDesaturated(not active)
-	button:SetShown(db.minimapButton)
+	-- (Not in gamepad mode with hideMinimapButtonGamepad: clicking it there
+	-- tends to freeze WoW Forever.)
+	button:SetShown(db.minimapButton and not (db.hideMinimapButtonGamepad and ns.IsGamePadOn()))
 end
 
 local function FormatTime(seconds)

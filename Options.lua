@@ -3909,6 +3909,22 @@ local function CreateGamepadPanel()
 		"slider")
 	Tooltip(fadeOut, L["How long the gamepad action bars take to fade out."])
 
+	stack:Header(content, L["Settings window"])
+	stack:Add(Check(content, "forceReloadOnSettingsExit", L["Force Reload on Settings Exit"],
+		L["A workaround for a game bug: in gamepad mode, closing the Settings window after using an " ..
+		"addon's settings (any addon's, not just Cinematic's) can freeze the game. With this on, once " ..
+		"you've opened a Cinematic page, closing Settings (X, Close, Escape or the gamepad) reloads " ..
+		"the UI instead, which closes it without the freeze. Your settings are saved first, as they are " ..
+		"on every reload. Turning it off takes effect after a reload."]), "check")
+	stack:Add(Check(content, "hideMinimapButtonGamepad", L["Hide the minimap button in gamepad mode"],
+		L["Using Cinematic's minimap button in gamepad mode tends to freeze the game, like closing " ..
+		"Settings does. With this on, the button is hidden while gamepad mode is on and comes back " ..
+		"when it's off. Cinematic's settings are still in the game's Settings (AddOns tab), or type /cine."],
+		function(value)
+			ns.GetDB().hideMinimapButtonGamepad = value
+			if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
+		end), "check")
+
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Gamepad")
@@ -6232,6 +6248,53 @@ local function CreateMouseoverPanel()
 	RegisterSubpage(canvas, "Mouseover")
 end
 
+-- WoW Forever freezes closing Settings in gamepad mode once one of our
+-- controls has been used (a Blizzard bug: an empty addon does it too).
+-- With forceReloadOnSettingsExit (Gamepad page), closing reloads the UI
+-- instead: our settings are saved already, and the reload closes the window
+-- without the freeze. The X, Close, Escape and the gamepad's own presses all
+-- go through SettingsPanel:Close (the gamepad clicks buttons itself, past
+-- anything laid over them), so that's replaced, once one of our pages has
+-- shown in gamepad mode. Replacing it taints the close from then on, so every
+-- close in gamepad mode reloads after that (until a reload, if the setting
+-- is turned off).
+local function GuardGamepadClose()
+	local panel = _G.SettingsPanel
+	local InputUtil = _G.InputUtil
+	if ns.isRetail or not panel or not panel.Close or not InputUtil or not InputUtil.IsGamepadUIEnabled then
+		return
+	end
+	local function Wanted()
+		return ns.db and ns.db.forceReloadOnSettingsExit and InputUtil.IsGamepadUIEnabled()
+	end
+	local function Install()
+		local Close = panel.Close
+		panel.Close = function(...)
+			if Wanted() then
+				ReloadUI()
+				return
+			end
+			return Close(...)
+		end
+		print("|cffffd100Cinematic:|r " .. L["closing Settings now reloads the UI (Force Reload on Settings Exit, " ..
+			"Gamepad page)."])
+	end
+	-- Runs only while Settings is open (a child of it).
+	local watcher = CreateFrame("Frame", nil, panel)
+	watcher:SetScript("OnUpdate", function(self)
+		if not Wanted() then
+			return
+		end
+		for _, page in ipairs(searchPages) do
+			if page.canvas:IsVisible() then
+				Install()
+				self:SetScript("OnUpdate", nil)
+				return
+			end
+		end
+	end)
+end
+
 -- The pages are built once the language is known (Locales.lua): first the
 -- text this file made as it ran is translated again.
 ns.OnLanguage(function()
@@ -6298,4 +6361,5 @@ ns.OnLanguage(function()
 	-- Each camera's own settings, in a section apiece.
 	CreateCameraSettingsPanel()
 	CreateKeybindsPanel()
+	GuardGamepadClose()
 end)
