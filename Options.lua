@@ -4884,9 +4884,9 @@ local function CreateCooldownPanel()
 	RegisterSubpage(canvas, L["Cooldown Manager"])
 end
 
--- Sub-page: tooltips. World tooltips and unit frames' hide where the Hide
--- tooltips rows say (in CineMode, in the camera modes ticked, outside
--- CineMode), but the kinds under But still show show anyway.
+-- Sub-page: tooltips. In CineMode, world tooltips and unit frames' hide by
+-- kind out of combat, enemies or everything else (the UI's too) in combat,
+-- and all of them in the camera modes ticked.
 local function CreateTooltipPanel()
 	local canvas, content = CreateScrollPage()
 
@@ -4896,25 +4896,47 @@ local function CreateTooltipPanel()
 	local switch = PageSwitch(content, "handleTooltips", L["Let CineMode handle tooltips"],
 		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], title)
 
-	-- Where to hide them.
-	local hideHeader = Label(content, "GameFontNormal", L["Hide tooltips"])
-	hideHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -18)
-	local HIDE_TIP = L[" Hides the tooltips for players, NPCs and objects you mouse over in the world, " ..
-		"and for units on unit frames, but for the kinds ticked under But still show. Hold your Show " ..
-		"hidden tooltips key (set it on the Keybinds page) to see one anyway."]
-	local inCine = Check(content, "tooltipHideInCine", L["In CineMode"],
-		L["The whole time CineMode is on, whatever the camera's doing."] .. HIDE_TIP)
-	inCine:SetPoint("TOPLEFT", hideHeader, "BOTTOMLEFT", 10, -6)
-	inCine:HookScript("OnClick", Refresh) -- grey out / enable the camera modes and the list below
+	local note = Label(content, "GameFontHighlightSmall", L["Only in CineMode. Hold your Show hidden tooltips " ..
+		"key (set it on the Keybinds page) to see a hidden one anyway."])
+	note:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -4)
+	note:SetWidth(560)
+
+	-- A header, then its ticks under it, each on a line of its own.
+	local previous = note
+	local function Section(text)
+		local header = Label(content, "GameFontNormal", text)
+		header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == note and -2 or -10, -14)
+		previous = header
+		return header
+	end
+	local function Row(key, label, tip, first)
+		local check = Check(content, key, label, tip)
+		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", first and 10 or 0, first and -6 or -2)
+		previous = check
+		return check
+	end
+
+	Section(L["Hide out of combat"])
+	Row("tooltipHideEnemy", L["Enemies"],
+		L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."], true)
+	Row("tooltipHideFriendly", L["Friendlies"],
+		L["Players and NPCs you can't attack, and their pets, minions and totems."])
+	Row("tooltipHideGather", L["Gatherables (herbs, ore, skinnable)"],
+		L["Herbs, ore and creatures you can skin."])
+	Row("tooltipHideQuest", L["Quest objectives"],
+		L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\"). Something " ..
+		"that's more than one kind (a quest mob is an enemy too) hides only with each of its kinds ticked."])
+
+	Section(L["Hide in combat"])
+	Row("tooltipHideCombatEnemy", L["Enemies"],
+		L["Players and NPCs you can attack, and their pets, minions and totems."], true)
+	Row("tooltipHideCombatElse", L["Everything else"],
+		L["Friendlies, objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, " ..
+		"menus and the rest."])
 
 	-- The camera modes, in two columns of five, down the first then the second.
-	local MODES = { "Flight", "Idle", "Cozy", "Tele", "Vista", "Fish", "Walk", "Run", "Death", "Quest" }
-	local inModes = Check(content, "tooltipHideInModes", L["In these camera modes"],
-		L["Only while one of the camera modes ticked below is running."] .. HIDE_TIP)
-	inModes:SetPoint("TOPLEFT", inCine, "BOTTOMLEFT", 0, -2)
-	inModes:HookScript("OnClick", Refresh) -- grey out / enable the modes below
-	GreyUnless(inModes, function(db) return not db.tooltipHideInCine end)
-	local tooltipModes, firstOfColumn, lastOfFirst = nil, nil, nil
+	Section(L["Hide in camera modes"])
+	local firstOfColumn
 	for i, mode in ipairs({
 		{ "Flight", L["On flights"] },
 		{ "Idle", L["AFK camera (standing still or AFK)"] },
@@ -4927,111 +4949,16 @@ local function CreateTooltipPanel()
 		{ "Death", L["Death camera"] },
 		{ "Quest", L["Quest camera (talking to quest givers)"] },
 	}) do
-		local hideIn = Check(content, "tooltipHideIn" .. mode[1], mode[2],
-			L["Tooltips are hidden while this camera mode is running."])
-		if i == 1 then
-			hideIn:SetPoint("TOPLEFT", inModes, "BOTTOMLEFT", 20, -2)
-			firstOfColumn = hideIn
-		elseif i == 6 then
-			hideIn:SetPoint("TOPLEFT", firstOfColumn, "TOPLEFT", 280, 0)
-			lastOfFirst = tooltipModes
+		local tip = L["Every tooltip in the world and on unit frames is hidden while this camera mode is running."]
+		if i == 6 then
+			local check = Check(content, "tooltipHideIn" .. mode[1], mode[2], tip)
+			check:SetPoint("TOPLEFT", firstOfColumn, "TOPLEFT", 280, 0)
+			previous = check
 		else
-			hideIn:SetPoint("TOPLEFT", tooltipModes, "BOTTOMLEFT", 0, -2)
-		end
-		hideIn:HookScript("OnClick", Refresh) -- grey out / enable the list below
-		GreyUnless(hideIn, function(db) return db.tooltipHideInModes and not db.tooltipHideInCine end)
-		tooltipModes = hideIn
-	end
-
-	local outside = Check(content, "tooltipHideOutsideCine", L["Outside CineMode"],
-		L["While CineMode is off too: with In CineMode ticked as well, tooltips are always hidden."] .. HIDE_TIP)
-	outside:SetPoint("TOPLEFT", lastOfFirst, "BOTTOMLEFT", -20, -2)
-	outside:HookScript("OnClick", Refresh) -- grey out / enable the list below
-
-	-- Whether any of those hides anything.
-	local function Hiding(test)
-		return function(db)
-			local modes = false
-			if db.tooltipHideInModes then
-				for _, mode in ipairs(MODES) do
-					modes = modes or db["tooltipHideIn" .. mode]
-				end
-			end
-			return (db.tooltipHideInCine or modes or db.tooltipHideOutsideCine) and (not test or test(db))
-				and true or false
+			local check = Row("tooltipHideIn" .. mode[1], mode[2], tip, i == 1)
+			firstOfColumn = firstOfColumn or check
 		end
 	end
-
-	-- What shows anyway, each on a line of its own.
-	local stillHeader = Label(content, "GameFontNormal", L["But still show"])
-	stillHeader:SetPoint("TOPLEFT", outside, "BOTTOMLEFT", -10, -14)
-	local previous = stillHeader
-	local function StillShow(key, label, tip, x)
-		local check = Check(content, key, label, tip)
-		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", x or 0, x and -6 or -2)
-		GreyUnless(check, Hiding())
-		previous = check
-		return check
-	end
-	StillShow("tooltipShowEnemy", L["Enemies"],
-		L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems, " ..
-		"show at once. In combat, the list under In combat decides instead, while it's ticked."], 10)
-	StillShow("tooltipShowFriendly", L["Friendlies"],
-		L["Players and NPCs you can't attack, and their pets, minions and totems, show at once. In " ..
-		"combat, the list under In combat decides instead, while it's ticked."])
-	StillShow("tooltipShowGather", L["Gatherables (herbs, ore, skinnable)"],
-		L["Herbs, ore and creatures you can skin show at once, so you can see whether you can " ..
-		"gather them."])
-	StillShow("tooltipShowQuest", L["Quest objectives"],
-		L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\") show at " ..
-		"once, so you can check your progress."])
-
-	-- In combat, the kinds ticked under it show (and nothing else does).
-	local combat = StillShow("tooltipShowInCombat", L["In combat, these instead"],
-		L["In a fight, only the kinds ticked below show; the rest stay hidden."])
-	combat:HookScript("OnClick", Refresh) -- grey out / enable the kinds below
-	local kinds = combat
-	for i, kind in ipairs({
-		{ "tooltipCombatShowEnemy", L["Enemies"],
-			L["Players and NPCs you can attack, and their pets, minions and totems."] },
-		{ "tooltipCombatShowFriendly", L["Friendlies"],
-			L["Players and NPCs you can't attack, and their pets, minions and totems."] },
-		{ "tooltipCombatShowElse", L["Everything else"],
-			L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus " ..
-			"and the rest. Off: they're hidden in combat, and the UI's only come back while you hold " ..
-			"your Show hidden tooltips key."] },
-	}) do
-		local check = Check(content, kind[1], kind[2], kind[3])
-		check:SetPoint("TOPLEFT", kinds, "BOTTOMLEFT", i == 1 and 20 or 0, -2)
-		GreyUnless(check, Hiding(function(db) return db.tooltipShowInCombat end))
-		kinds = check
-	end
-
-	-- After hovering: the wait, then warm, and the fade.
-	local tooltipReveal = StillShow("tooltipReveal", L["After hovering"],
-		L["A hidden world tooltip shows once you've kept the mouse on the same player, NPC or " ..
-		"object for the time below."])
-	tooltipReveal:ClearAllPoints()
-	tooltipReveal:SetPoint("TOPLEFT", kinds, "BOTTOMLEFT", -20, -2)
-	tooltipReveal:HookScript("OnClick", Refresh) -- grey out / enable the sliders
-	local function Revealing(db) return db.tooltipReveal end
-
-	local tooltipRevealDelay = Slider(content, "tooltipRevealDelay", L["After hovering for"], 0, 10, 0.5, L["%.1f sec"])
-	tooltipRevealDelay:SetPoint("TOPLEFT", tooltipReveal, "BOTTOMLEFT", 24, -26)
-	GreyUnless(tooltipRevealDelay, Hiding(Revealing))
-	Tooltip(tooltipRevealDelay, L["How long to keep the mouse on something before its tooltip shows."])
-
-	local tooltipWarm = Slider(content, "tooltipWarmTime", L["Then show at once until none for"], 0, 15, 0.5, L["%.1f sec"])
-	tooltipWarm:SetPoint("TOPLEFT", tooltipRevealDelay, "BOTTOMLEFT", 0, -26)
-	GreyUnless(tooltipWarm, Hiding(Revealing))
-	Tooltip(tooltipWarm, L["Once one tooltip has shown, whatever you hover next shows at once too, " ..
-		"until no world tooltip has been up for this long. 0: every tooltip waits."])
-
-	local tooltipFade = Slider(content, "tooltipFadeTime", L["Fade in and out over"], 0, 2, 0.05, L["%.2f sec"])
-	tooltipFade:SetPoint("TOPLEFT", tooltipWarm, "BOTTOMLEFT", 0, -26)
-	GreyUnless(tooltipFade, Hiding(Revealing))
-	Tooltip(tooltipFade, L["How long a tooltip that waited takes to fade in, and to fade out when " ..
-		"you move off. 0: no fade."])
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()

@@ -34,16 +34,16 @@ local DEFAULTS = {
 	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, over the normal UI)
 	minimapButton = true,     -- show the minimap button
 	minimapAngle = 225,       -- its position around the minimap, in degrees
-	-- Hide tooltips in each camera mode (with tooltipHideInModes):
+	-- In CineMode, hide every tooltip in each camera mode ticked (the Tooltips page):
 	tooltipHideInFlight = true,
-	tooltipHideInIdle = false,  -- standing still
-	tooltipHideInCozy = false,
-	tooltipHideInVista = false, -- /stare
-	tooltipHideInFish = false,  -- fishing
+	tooltipHideInIdle = true,   -- standing still
+	tooltipHideInCozy = true,
+	tooltipHideInVista = true,  -- /stare
+	tooltipHideInFish = true,   -- fishing
 	tooltipHideInWalk = false,  -- RP walking
 	tooltipHideInRun = false,   -- auto-running
-	tooltipHideInTele = false,  -- Hearthstone and teleports
-	tooltipHideInDeath = false, -- the death camera
+	tooltipHideInTele = true,   -- Hearthstone and teleports
+	tooltipHideInDeath = true,  -- the death camera
 	tooltipHideInQuest = false, -- the quest camera
 	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
 	hideWorldText = false,    -- no floating world text at all (XP gained, damage and healing numbers): a blank font, from the next game start
@@ -163,22 +163,15 @@ local DEFAULTS = {
 	nameKeepFriendlyMinions = false,
 	nameKeepEnemies = false,
 	nameKeepEnemyMinions = false,
-	tooltipReveal = true,     -- a hidden world tooltip comes back after hovering the same thing...
-	tooltipRevealDelay = 1,   -- ...for this many seconds
-	tooltipWarmTime = 5,     -- once one's shown, the rest show at once until none has been up this long (0: off)
-	tooltipFadeTime = 0.5,    -- seconds it takes to fade in, and out again
 	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
-	tooltipHideInCine = false,  -- hide world tooltips and unit frames' in CineMode...
-	tooltipHideInModes = true,  -- ...or in the camera modes ticked above (tooltipHideIn*)
-	tooltipHideOutsideCine = false, -- ...or outside CineMode
-	tooltipShowEnemy = true,    -- but still show a unit you can attack
-	tooltipShowFriendly = false, -- ...or one you can't
-	tooltipShowGather = true,   -- ...or something gatherable (herb, ore, skinnable)
-	tooltipShowQuest = true,    -- ...or one showing a quest objective
-	tooltipShowInCombat = true,  -- ...or in combat, these instead (the UI's too):
-	tooltipCombatShowEnemy = true,
-	tooltipCombatShowFriendly = false,
-	tooltipCombatShowElse = false, -- objects in the world, action bars, bags, menus
+	-- In CineMode, out of combat, hide the tooltips of (world ones and unit frames')...
+	tooltipHideEnemy = false,   -- ...units you can attack
+	tooltipHideFriendly = true, -- ...units you can't
+	tooltipHideGather = false,  -- ...something gatherable (herb, ore, skinnable)
+	tooltipHideQuest = false,   -- ...one showing a quest objective
+	-- In CineMode, in combat, hide...
+	tooltipHideCombatEnemy = false, -- ...units you can attack
+	tooltipHideCombatElse = true,   -- ...everything else: friends, objects, action bars, bags, menus
 	musicFadeTime = 3,        -- seconds for music to fade in or out
 	musicFatigue = 2,         -- minutes: don't start music again within this long of the last start
 	-- Which cameras can start music as they start (when music fatigue allows).
@@ -2422,6 +2415,60 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then TooltipsTheOtherWay(saved) end
 			end
 			ns.db.tooltipsTheOtherWayV1 = true
+		end
+		-- The Tooltips page was Hide tooltips (in CineMode, in the camera modes
+		-- ticked, outside CineMode), then But still show (kinds, a combat list,
+		-- After hovering). Now it only hides in CineMode: the kinds ticked under
+		-- Hide out of combat / Hide in combat, and everything in the camera modes
+		-- ticked. Hiding in all of CineMode is every mode ticked and the kinds
+		-- that didn't show anyway; with just the modes, plain CineMode hid
+		-- nothing. Saved profiles too (missing settings were the old defaults).
+		local OLD_TOOLTIP_DEFAULTS = {
+			tooltipHideInCine = false, tooltipHideInModes = true, tooltipHideOutsideCine = false,
+			tooltipShowEnemy = true, tooltipShowFriendly = false, tooltipShowGather = true,
+			tooltipShowQuest = true, tooltipShowInCombat = true, tooltipCombatShowEnemy = true,
+			tooltipCombatShowFriendly = false, tooltipCombatShowElse = false, tooltipReveal = true,
+			tooltipRevealDelay = 1, tooltipWarmTime = 5, tooltipFadeTime = 0.5,
+		}
+		local function TooltipKindsToHide(t)
+			local any = false
+			for key in pairs(OLD_TOOLTIP_DEFAULTS) do
+				any = any or t[key] ~= nil
+			end
+			if not any then
+				return
+			end
+			local function old(key)
+				if t[key] == nil then return OLD_TOOLTIP_DEFAULTS[key] end
+				return t[key]
+			end
+			-- (With the page's switch off, it starts over from the new defaults.)
+			if t.handleTooltips then
+				local all = old("tooltipHideInCine")
+				if all or not old("tooltipHideInModes") then
+					for _, mode in ipairs(tooltipModes) do
+						t["tooltipHideIn" .. mode] = all
+					end
+				end
+				local combatList = old("tooltipShowInCombat")
+				t.tooltipHideEnemy = all and not old("tooltipShowEnemy")
+				t.tooltipHideFriendly = all and not old("tooltipShowFriendly")
+				t.tooltipHideGather = all and not old("tooltipShowGather")
+				t.tooltipHideQuest = all and not old("tooltipShowQuest")
+				t.tooltipHideCombatEnemy = all and not old(combatList and "tooltipCombatShowEnemy" or "tooltipShowEnemy")
+				t.tooltipHideCombatElse = all and combatList and not old("tooltipCombatShowElse")
+			else
+				for _, mode in ipairs(tooltipModes) do
+					t["tooltipHideIn" .. mode] = nil
+				end
+			end
+			for key in pairs(OLD_TOOLTIP_DEFAULTS) do
+				t[key] = nil
+			end
+		end
+		TooltipKindsToHide(ns.db)
+		for _, saved in pairs(type(ns.db.profiles) == "table" and ns.db.profiles or {}) do
+			if type(saved) == "table" then TooltipKindsToHide(saved) end
 		end
 		-- The cozy and vista triggers used to be switches on those cameras' pages;
 		-- they're events now, each picking its camera. A switched-off trigger

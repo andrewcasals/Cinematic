@@ -1489,9 +1489,10 @@ function ns.UpdatePlates(cinematic, elapsed)
 end
 
 -- World tooltips (units and objects under the cursor) use the default anchor,
--- owned by UIParent. Tooltips owned by UI elements are left alone so hovering a
--- faded button still explains it. World tooltips are hidden outright while
--- cinematic: fading them fought Blizzard's own tooltip alpha and flickered.
+-- owned by UIParent. They and unit frames' hide in CineMode as the Tooltips
+-- page says; other UI elements' only in combat (Hide in combat: Everything
+-- else), so hovering a faded button still explains it. Hidden outright:
+-- fading them fought Blizzard's own tooltip alpha and flickered.
 ns.lastCinematic = false
 
 -- Minimap blips (tracked herbs, party members) use a world-style tooltip; with
@@ -1505,12 +1506,7 @@ local function WorldOwned()
 	return owner == nil or owner == UIParent or owner == WorldFrame
 end
 
-local function IsWorldTooltip()
-	return WorldOwned() and not OverMinimap()
-end
-
--- Tooltips hide in the camera modes ticked (tooltipHideInModes, then each
--- chosen on its own: tooltipHideIn*).
+-- Tooltips hide in the camera modes ticked (tooltipHideIn*).
 local TOOLTIP_HIDE_IN = {
 	flight = "tooltipHideInFlight", idle = "tooltipHideInIdle", cozy = "tooltipHideInCozy",
 	tele = "tooltipHideInTele", walk = "tooltipHideInWalk", run = "tooltipHideInRun",
@@ -1565,49 +1561,6 @@ local function InCombat()
 	return InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 end
 
--- Hide tooltips: world ones and unit frames' are hidden in CineMode
--- (tooltipHideInCine), in the camera modes ticked, or outside CineMode
--- (tooltipHideOutsideCine), but for the page's But still show list (by the
--- tooltip: ShowsAnyway, after hovering).
-local function HidingNow()
-	if not ns.lastCinematic then
-		return ns.db.tooltipHideOutsideCine and true or false
-	end
-	if ns.db.tooltipHideInCine then
-		return true
-	end
-	if not ns.db.tooltipHideInModes then
-		return false
-	end
-	local mode = TooltipCameraMode()
-	return mode ~= nil and ns.db[TOOLTIP_HIDE_IN[mode]] and true or false
-end
-
-local function Hiding()
-	return Handling() and HidingNow()
-end
-
--- Whether world tooltips are hidden right now (not whether one is up). They
--- come back as tooltipReveal says.
-local function HidingWorldTooltips()
-	return Hiding()
-end
-
--- Whether hidden world tooltips come back (after hovering, the exceptions,
--- warm): tooltipReveal.
-local function Revealing()
-	return ns.db.tooltipReveal and true or false
-end
-
-local function ShouldHideTooltip()
-	return ns.Flag(GameTooltip:IsShown()) and IsWorldTooltip() and HidingWorldTooltips() and not ShowKeyDown()
-end
-
--- The UI's tooltips. Unit frames' (a UI element's tooltip for a unit:
--- hovering a unit frame makes it the mouseover) hide like world ones; any
--- other UI element's only in a fight, with In combat, these instead ticked and
--- Everything else not. World ones go the world way above, so they come back
--- after hovering; these only with the key held.
 -- The owner SetUnit was last called for: a unit frame's tooltip appears
 -- (OnShow) before the mouseover and GetUnit catch up, so it's told apart by
 -- that until it hides or another owner takes it over.
@@ -1627,39 +1580,6 @@ local function TooltipHasUnit(tooltip)
 	return ok and (type(unit) == "string" or (issecretvalue and issecretvalue(unit))) or false
 end
 
-local ShowsAnyway -- (below, with its tests)
-
-local function UIHides(tooltip)
-	if WorldOwned() or ShowKeyDown() or not Hiding() then
-		return false -- (world ones: HidingWorldTooltips)
-	end
-	if TooltipHasUnit(tooltip) then
-		return not ShowsAnyway(tooltip)
-	end
-	return ns.db.tooltipShowInCombat and InCombat() and not ns.db.tooltipCombatShowElse or false
-end
-
--- Reveal after hovering (tooltipReveal): the tooltip is hidden outright as
--- usual (anything gentler flashed it as it appeared), and its contents noted.
--- If you're still on the same thing after tooltipRevealDelay seconds it's put
--- back: a unit's from the mouseover, an object's from the noted lines (the game
--- has no way to ask about an object again). The cursor is usually still on
--- its way as an object's tooltip appears (at once, on a big one like a shop
--- sign), so the object's place is taken as wherever the cursor comes to rest;
--- one that doesn't rest within CURSOR_SETTLE seconds was only passing over.
--- Each move starts the wait over. After that, an object counts as left once
--- the cursor strays from there or goes over the UI, or the view moves
--- (walking, flying, turning, the camera orbiting); a unit once it's no longer
--- the mouseover.
--- A put-back tooltip is the add-on's own, so it's also taken down that way.
--- Once one's been put back, tooltips are warm: the game's own show at once,
--- left to it, until none has been up for tooltipWarmTime seconds.
-local held, shown, revealedName, revealing
-local warmUntil = 0
-local CURSOR_REACH = 32 -- UI pixels the cursor may wander over an object
-local CURSOR_REST = 3   -- UI pixels a tick that still count as resting
-local CURSOR_SETTLE = 0.5 -- seconds the cursor has to come to rest over an object
-
 local function TooltipName()
 	local ok, text = pcall(function() return GameTooltipTextLeft1 and GameTooltipTextLeft1:GetText() end)
 	return ok and text or nil
@@ -1669,26 +1589,6 @@ end
 local function SameName(a, b)
 	local ok, same = pcall(function() return a == b end)
 	return not ok or same
-end
-
--- The game reuses a world tooltip for the next unit without showing it again
--- (OnShow never fires), so a unit with a different name in a tooltip that's
--- already up is a new one. Only a unit: an object's tooltip (a shop sign) is
--- the add-on's own once put back, and the game can redo it in place.
-local function ReusedForUnit(name)
-	local ok, isUnit = pcall(function()
-		local _, unit = GameTooltip:GetUnit()
-		return unit ~= nil
-	end)
-	return ok and isUnit and not SameName(TooltipName(), name)
-end
-
-local function Warm()
-	return Revealing() and GetTime() < warmUntil
-end
-
-local function KeepWarm()
-	warmUntil = GetTime() + (ns.db.tooltipWarmTime or 0)
 end
 
 -- The titles of the quests in your log.
@@ -1818,71 +1718,14 @@ local function ShowsFriend(tooltip)
 	return TooltipUnitIsEnemy(tooltip) == false
 end
 
--- Hidden tooltips that show at once anyway (But still show): db key ->
--- test.
-local SHOW_KINDS = {
-	{ key = "tooltipShowQuest", test = ShowsQuestObjective, why = "quest objective" },
-	{ key = "tooltipShowGather", test = ShowsGatheringNode, why = "gatherable" },
-	{ key = "tooltipShowEnemy", test = ShowsEnemy, why = "enemy" },
-	{ key = "tooltipShowFriendly", test = ShowsFriend, why = "friendly" },
+-- Hide out of combat: db key -> test. One that's more than one kind (a quest
+-- mob is an enemy too) hides only if every kind it is is ticked.
+local HIDE_KINDS = {
+	{ key = "tooltipHideQuest", test = ShowsQuestObjective, why = "quest objective" },
+	{ key = "tooltipHideGather", test = ShowsGatheringNode, why = "gatherable" },
+	{ key = "tooltipHideEnemy", test = ShowsEnemy, why = "enemy" },
+	{ key = "tooltipHideFriendly", test = ShowsFriend, why = "friendly" },
 }
-
--- In a fight, with In combat, these instead ticked, that list
--- decides instead: enemies, friends, or everything else (objects, and units
--- the game won't say about).
-function ShowsAnyway(tooltip)
-	if ns.db.tooltipShowInCombat and InCombat() then
-		local enemy = TooltipUnitIsEnemy(tooltip)
-		local key = enemy == true and "tooltipCombatShowEnemy"
-			or enemy == false and "tooltipCombatShowFriendly" or "tooltipCombatShowElse"
-		return ns.db[key] and "in combat" or nil
-	end
-	for _, rule in ipairs(SHOW_KINDS) do
-		if ns.db[rule.key] and rule.test(tooltip) then
-			return rule.why
-		end
-	end
-end
-
--- Fades every frame (the tick is too coarse for a short fade). Fading out ends
--- by hiding the tooltip; anything else hiding or showing it stops the fade.
-local fader = CreateFrame("Frame")
-fader:Hide()
-local fadeFrom, fadeTo, fadeStart, fadingName
-
-local function StopFade()
-	if fader:IsShown() then
-		fader:Hide()
-		GameTooltip:SetAlpha(1)
-	end
-end
-
-local function StartFade(to)
-	fadeFrom, fadeTo, fadeStart = GameTooltip:GetAlpha(), to, GetTime()
-	fadingName = TooltipName()
-	fader:Show()
-end
-
-fader:SetScript("OnUpdate", ns.Profiled("Tooltip fade", function(self)
-	-- Reused for the next unit while fading out: finishing the fade would hide
-	-- the new one, and nothing would bring it back until the mouseover changed.
-	-- Treat it as newly shown instead.
-	if fadeTo == 0 and ReusedForUnit(fadingName) then
-		ns.OnTooltipShow(GameTooltip)
-		return
-	end
-	local fadeTime = ns.db.tooltipFadeTime or 0
-	local t = fadeTime > 0 and (GetTime() - fadeStart) / fadeTime or 1
-	if t < 1 then
-		GameTooltip:SetAlpha(fadeFrom + (fadeTo - fadeFrom) * t)
-		return
-	end
-	self:Hide()
-	if fadeTo == 0 then
-		GameTooltip:Hide()
-	end
-	GameTooltip:SetAlpha(1)
-end))
 
 -- Optional trace for /cine debug tooltip: what the tooltip did and why.
 local function Trace(what, ...)
@@ -1890,6 +1733,67 @@ local function Trace(what, ...)
 	if log and #log < 60 then
 		log[#log + 1] = ("%.2f %s"):format(GetTime() - log.started, what:format(...))
 	end
+end
+
+-- Whether the tooltip should be hidden now, and why. Only in CineMode, with
+-- the key not held, and never a minimap blip's. In a camera mode ticked
+-- (tooltipHideIn*), every world and unit frame tooltip; in combat, enemies
+-- (tooltipHideCombatEnemy) or everything else, the UI's too
+-- (tooltipHideCombatElse); otherwise the world and unit frame kinds ticked.
+local function Hides(tooltip)
+	if not Handling() or not ns.lastCinematic or ShowKeyDown() then
+		return false
+	end
+	local world = WorldOwned()
+	if world and OverMinimap() then
+		return false
+	end
+	local unitOrWorld = world or TooltipHasUnit(tooltip)
+	local mode = TooltipCameraMode()
+	if unitOrWorld and mode and ns.db[TOOLTIP_HIDE_IN[mode]] then
+		return true, mode
+	end
+	if InCombat() then
+		if TooltipUnitIsEnemy(tooltip) == true then
+			return ns.db.tooltipHideCombatEnemy and true or false, "combat enemy"
+		end
+		return ns.db.tooltipHideCombatElse and true or false, "combat else"
+	end
+	if not unitOrWorld then
+		return false
+	end
+	local why
+	for _, kind in ipairs(HIDE_KINDS) do
+		if kind.test(tooltip) then
+			if not ns.db[kind.key] then
+				return false
+			end
+			why = kind.why
+		end
+	end
+	return why ~= nil, why
+end
+
+-- The decision for the tooltip up now, kept until it hides, shows something
+-- else (the game reuses a world tooltip for the next unit without showing it
+-- again) or things change (combat, the camera mode, CineMode, the key), so
+-- the tick doesn't read the quest log and the lines each time.
+local checked
+
+local function CheckState()
+	return ("%s:%s:%s:%s"):format(tostring(ns.lastCinematic), tostring(InCombat()),
+		tostring(TooltipCameraMode()), tostring(ShowKeyDown()))
+end
+
+local function StillChecked(tooltip)
+	return checked ~= nil and checked.owner == tooltip:GetOwner() and SameName(TooltipName(), checked.name)
+		and checked.state == CheckState()
+end
+
+local function CheckTooltip(tooltip)
+	local hide, why = Hides(tooltip)
+	checked = { owner = tooltip:GetOwner(), name = TooltipName(), state = CheckState() }
+	return hide, why
 end
 
 -- Each line on its own, so one odd line (no text, an icon, a secret value)
@@ -1928,6 +1832,7 @@ end
 -- world under it, so the view moving counts as leaving the object too.
 local VIEW_SLACK_YARDS = 0.5
 local VIEW_SLACK_FACING = math.rad(2)
+local CURSOR_REACH = 32 -- UI pixels the cursor may wander over an object
 
 -- Secret values (the game hiding them from addons) can't be compared, so
 -- they count as unknown.
@@ -1969,45 +1874,39 @@ local function ViewMoved(note)
 	return moved
 end
 
-local function HoldBack(tooltip)
-	-- One that shows anyway is left up, the game's own, and warms the rest.
-	local atOnce = ShowsAnyway(tooltip)
-	if atOnce then
-		Trace("at once (%s): %s", atOnce, tostring(TooltipName()))
-		held = nil
-		KeepWarm()
-		return
+-- What was hidden, to show again if the Show hidden tooltips key goes down
+-- while you're still on it: a unit's (in the world or on a unit frame) from
+-- the mouseover, a world object's from its noted lines. Any other UI
+-- element's needs hovering again with the key held (putting it back would
+-- mean running the game's own code). A unit counts as left once it's no
+-- longer the mouseover; an object once the cursor strays from there or goes
+-- over the UI, or the view moves (walking, flying, turning, the camera
+-- orbiting).
+local hid
+local showingAgain -- (our own Show: not a new tooltip)
+
+local function HideTooltip(tooltip, why)
+	local world, hasUnit = WorldOwned(), TooltipHasUnit(tooltip)
+	hid = nil
+	if world or hasUnit then
+		local x, y = GetCursorPosition()
+		local px, py, facing = PlayerView()
+		hid = {
+			name = TooltipName(), owner = tooltip:GetOwner(), world = world, unit = hasUnit,
+			x = x, y = y, px = px, py = py, facing = facing,
+			lines = not hasUnit and NoteLines(tooltip) or nil,
+		}
 	end
-	if Revealing() then
-		local name = TooltipName()
-		if held and SameName(name, held.name) then
-			-- The game showing the same thing again (a unit refreshing): keep counting.
-			Trace("same again: %s", tostring(name))
-		else
-			local ok, _, unit = pcall(tooltip.GetUnit, tooltip)
-			local x, y = GetCursorPosition()
-			local px, py, facing = PlayerView()
-			held = {
-				name = name, unit = ok and unit or nil, x = x, y = y, lastX = x, lastY = y,
-				px = px, py = py, facing = facing, settleBy = GetTime() + CURSOR_SETTLE,
-				lines = not (ok and unit) and NoteLines(tooltip) or nil,
-				at = GetTime() + (ns.db.tooltipRevealDelay or 0),
-			}
-			Trace("hold %s (%s, %d lines)", tostring(name), held.unit and "unit" or "object",
-				held.lines and #held.lines or 0)
-		end
-	end
-	revealedName = nil
-	StopFade()
+	Trace("hiding %s (%s)", tostring(TooltipName()), tostring(why))
 	tooltip:Hide()
 end
 
 local function StillOver(note)
+	if not note.world and MouseFocus() ~= note.owner then
+		return false
+	end
 	if note.unit then
 		return ns.Flag(UnitExists("mouseover"))
-	end
-	if not note.settled then
-		return GetTime() <= note.settleBy and MouseOverWorld() and not ViewMoved(note)
 	end
 	local x, y = GetCursorPosition()
 	local reach = CURSOR_REACH * UIParent:GetEffectiveScale()
@@ -2015,96 +1914,10 @@ local function StillOver(note)
 		and not ViewMoved(note)
 end
 
--- An object's wait starts over while the cursor is still moving; until it
--- first rests, the object's place follows it.
-local function WaitForRest(note)
-	if note.unit then
-		return
-	end
-	local x, y = GetCursorPosition()
-	local rest = CURSOR_REST * UIParent:GetEffectiveScale()
-	if math.abs(x - note.lastX) > rest or math.abs(y - note.lastY) > rest then
-		note.at = GetTime() + (ns.db.tooltipRevealDelay or 0)
-		if not note.settled then
-			note.x, note.y = x, y
-		end
-	elseif not note.settled then
-		note.settled = true
-		Trace("rests on %s", tostring(note.name))
-	end
-	note.lastX, note.lastY = x, y
-end
-
-local function Reveal()
-	local tooltip, note = GameTooltip, held
-	held = nil
-	note.settled = true -- (with no wait set, it may not have rested yet)
-	revealing = true
-	StopFade()
-	local ok, err = pcall(GameTooltip_SetDefaultAnchor, tooltip, UIParent)
-	if note.unit then
-		ok, err = pcall(tooltip.SetUnit, tooltip, "mouseover")
-	else
-		-- A line that won't go back is skipped rather than losing the tooltip.
-		for _, line in ipairs(note.lines) do
-			pcall(function()
-				if line.right then
-					tooltip:AddDoubleLine(line.left, line.right, line.lr[1], line.lr[2], line.lr[3],
-						line.rr[1], line.rr[2], line.rr[3])
-				else
-					tooltip:AddLine(line.left, line.lr[1], line.lr[2], line.lr[3])
-				end
-			end)
-		end
-		if #note.lines > 0 then
-			ok, err = pcall(tooltip.Show, tooltip)
-		end
-	end
-	Trace("reveal %s (%d lines) ok=%s %s", tostring(note.name), note.lines and #note.lines or -1,
-		tostring(ok), ok and "" or tostring(err))
-	revealing = false
-	revealedName, shown = TooltipName(), note
-	KeepWarm()
-	if tooltip:IsShown() then
-		tooltip:SetAlpha(0)
-		StartFade(1)
-	end
-end
-
--- What UIHides hid, to show again if the key goes down while you're still on
--- it: a unit's (in the world or on a unit frame) from the mouseover, a world
--- object's from its noted lines. Any other UI element's needs hovering again
--- with the key held (putting it back would mean running the game's own code).
-local uiHid
-
-local function HideUITooltip(tooltip)
-	local world, hasUnit = WorldOwned(), TooltipHasUnit(tooltip)
-	uiHid = nil
-	if world or hasUnit then
-		local x, y = GetCursorPosition()
-		local px, py, facing = PlayerView()
-		uiHid = {
-			name = TooltipName(), owner = tooltip:GetOwner(), world = world, unit = hasUnit,
-			x = x, y = y, px = px, py = py, facing = facing, settled = true,
-			lines = not hasUnit and NoteLines(tooltip) or nil,
-		}
-	end
-	Trace("UI, hiding %s", tostring(TooltipName()))
-	held, shown, revealedName = nil, nil, nil
-	StopFade()
-	tooltip:Hide()
-end
-
-local function StillOverUIHid(note)
-	if not note.world and MouseFocus() ~= note.owner then
-		return false
-	end
-	return StillOver(note)
-end
-
 local function ShowAgain(note)
-	uiHid = nil
+	hid = nil
 	local tooltip = GameTooltip
+	showingAgain = true
 	local ok, err = pcall(GameTooltip_SetDefaultAnchor, tooltip, note.world and UIParent or note.owner)
 	if note.unit then
 		ok, err = pcall(tooltip.SetUnit, tooltip, "mouseover")
@@ -2121,120 +1934,74 @@ local function ShowAgain(note)
 		end
 		ok, err = pcall(tooltip.Show, tooltip)
 	end
+	showingAgain = false
+	checked = nil
 	Trace("key down, showing %s ok=%s %s", tostring(note.name), tostring(ok), ok and "" or tostring(err))
 end
 
 -- Catches each new tooltip the moment it appears (a hidden tooltip shows
 -- again for the next thing you mouse over, so this runs every time).
 function ns.OnTooltipShow(self)
-	if revealing then
+	if showingAgain then
 		return
 	end
+	local hide, why = CheckTooltip(self)
 	if ns.tooltipTrace then
 		local owner = self:GetOwner()
-		Trace("show %s owner=%s world=%s hiding=%s ui=%s", tostring(TooltipName()),
-			tostring(owner and (owner:GetName() or "unnamed")), tostring(IsWorldTooltip()),
-			tostring(HidingWorldTooltips()), tostring(UIHides(self)))
+		Trace("show %s owner=%s hide=%s (%s)", tostring(TooltipName()),
+			tostring(owner and (owner:GetName() or "unnamed")), tostring(hide), tostring(why))
 	end
-	StopFade() -- something new: never leave it part-faded
-	shown = nil -- the game's own now (a minimap blip, a UI element, the next thing)
-	if UIHides(self) then
-		HideUITooltip(self)
-		return
+	if hide then
+		HideTooltip(self, why)
+	else
+		hid = nil
 	end
-	uiHid = nil
-	if not ShouldHideTooltip() then
-		return
-	end
-	if revealedName and SameName(TooltipName(), revealedName) then
-		return -- the revealed one refreshing
-	end
-	if Warm() then
-		Trace("warm, showing %s", tostring(TooltipName()))
-		held, revealedName = nil, nil
-		KeepWarm()
-		return
-	end
-	HoldBack(self)
 end
 
 -- After GameTooltip:SetUnit (a unit frame's OnEnter): OnShow ran inside it,
--- before the unit was known, and took it for "everything else". Hidden here,
--- still before it's drawn, rather than flashing until the next tick.
+-- before the unit was known, and took it for "everything else". Checked again
+-- here, still before it's drawn, rather than flashing until the next tick.
 function ns.OnTooltipSetUnit(self)
-	if revealing then
+	if showingAgain then
 		return
 	end
 	unitTooltipOwner = self:GetOwner()
-	if ns.Flag(self:IsShown()) and not WorldOwned() and UIHides(self) then
-		HideUITooltip(self)
+	if ns.Flag(self:IsShown()) and not WorldOwned() then
+		local hide, why = CheckTooltip(self)
+		if hide then
+			HideTooltip(self, why)
+		end
 	end
 end
 
 function ns.OnTooltipHide()
 	unitTooltipOwner = nil
-	StopFade()
+	checked = nil
 end
 
--- Runs on the tick: counts down a held tooltip, and covers a tooltip that was
--- already up when cinematic mode started.
+-- Runs on the tick: hides a tooltip that was already up as hiding starts (or
+-- as the key's let go, or the game reused it for something else), and shows
+-- a hidden one again while the key's down.
 function ns.UpdateTooltip()
-	-- The UI's: one already up as hiding starts (or as the key's let go)
-	-- goes; one hidden comes back while the key's down.
-	if Handling() then
-		if ns.Flag(GameTooltip:IsShown()) and UIHides(GameTooltip) then
-			HideUITooltip(GameTooltip)
-			return
-		end
-		if uiHid then
-			if not Hiding() or not StillOverUIHid(uiHid) then
-				uiHid = nil
-			elseif ShowKeyDown() then
-				ShowAgain(uiHid)
-			end
-		end
-	end
-	-- Any world tooltip up keeps them warm.
-	if Warm() and GameTooltip:IsShown() and IsWorldTooltip() then
-		KeepWarm()
-	end
-	-- Gone, or taken over by a UI element's tooltip (left alone). (Not the
-	-- minimap exception: a put-back tooltip is the add-on's to take down, and
-	-- nothing else would if the cursor went over the minimap.)
-	if shown and not (GameTooltip:IsShown() and WorldOwned()) then
-		shown, revealedName = nil, nil
-	end
-	-- Straight from the revealed one onto the next unit: caught here as new.
-	if shown and revealedName and ReusedForUnit(revealedName) then
-		Trace("replaced %s", tostring(revealedName))
-		ns.OnTooltipShow(GameTooltip)
+	if not Handling() then
+		hid = nil
 		return
 	end
-	if shown and not StillOver(shown) then
-		Trace("left %s, fading out", tostring(shown.name))
-		shown, revealedName = nil, nil
-		StartFade(0)
-		return
-	end
-	if held then
-		if not (Revealing() and HidingWorldTooltips() and StillOver(held)) then
-			if ns.tooltipTrace then
-				local x, y = GetCursorPosition()
-				Trace("drop %s: reveal=%s hiding=%s moved=%.0f,%.0f overWorld=%s overMinimap=%s mouseover=%s view=%s",
-					tostring(held.name), tostring(Revealing()), tostring(HidingWorldTooltips()),
-					x - held.x, y - held.y, tostring(MouseOverWorld()), tostring(OverMinimap()),
-					tostring(UnitExists("mouseover")), tostring(not held.unit and ViewMoved(held)))
-			end
-			held = nil
-		else
-			WaitForRest(held)
-			if GetTime() >= held.at or ShowKeyDown() then
-				Reveal()
+	if ns.Flag(GameTooltip:IsShown()) then
+		if not StillChecked(GameTooltip) then
+			local hide, why = CheckTooltip(GameTooltip)
+			if hide then
+				HideTooltip(GameTooltip, why)
 			end
 		end
-	elseif not (fader:IsShown() and fadeTo == 0) -- let a fade-out finish
-		and not Warm() and ShouldHideTooltip() and not (revealedName and SameName(TooltipName(), revealedName)) then
-		HoldBack(GameTooltip)
+		return
+	end
+	if hid then
+		if not ns.lastCinematic or not StillOver(hid) then
+			hid = nil
+		elseif ShowKeyDown() then
+			ShowAgain(hid)
+		end
 	end
 end
 

@@ -520,10 +520,9 @@ function ns.HandleSlash(msg)
 		local text = arg ~= "" and (arg:gsub("^%l", string.upper)) or nil
 		ns.TestTimeChangeTitle(text)
 	elseif cmd == "debug" and arg == "tooltip" then
-		-- Traces the world tooltip hold-back for 10 seconds (hover a herb meanwhile).
+		-- Traces tooltip hiding for 10 seconds (hover a herb meanwhile).
 		ns.tooltipTrace = { started = GetTime() }
-		ns.Print(("tooltip trace for 10 seconds: hover the thing now (reveal %s, after %.1f sec)."):format(
-			OnOff(ns.db.tooltipReveal), ns.db.tooltipRevealDelay or 0))
+		ns.Print("tooltip trace for 10 seconds: hover the thing now.")
 		C_Timer.After(10, function()
 			local log = ns.tooltipTrace
 			ns.tooltipTrace = nil
