@@ -920,7 +920,7 @@ local function AlwaysShownTarget(unit)
 end
 
 local function TargetKeptUp()
-	return ns.Flag(UnitExists("target")) and AlwaysShownTarget("target")
+	return ns.HasTarget() and AlwaysShownTarget("target") -- (not one dropped at takeoff)
 end
 
 -- The always-shown target's plate fades in (at the UI's fade-in time) rather
