@@ -145,14 +145,18 @@ local DEFAULTS = {
 	plateCombatEnemies = false, -- in cinematic mode, show these during fights (Enemies: enemy players)
 	plateCombatEnemyMinions = false,
 	plateCombatEnemyNPCs = true,
+	plateCombatNeutralNPCs = true,
 	plateCombatEnemyMinor = true,
+	plateCombatNeutralMinor = true,
 	plateCombatFriends = false,
 	plateCombatFriendlyMinions = false,
 	plateCombatFriendlyNPCs = false,
 	plateCinematicEnemies = true, -- keep these up in cinematic mode in the open world (plateIn<place><kind> elsewhere)
 	plateCinematicEnemyMinions = false,
 	plateCinematicEnemyNPCs = false,
+	plateCinematicNeutralNPCs = false,
 	plateCinematicEnemyMinor = false,
+	plateCinematicNeutralMinor = false,
 	plateCinematicFriends = false,
 	plateCinematicFriendlyMinions = false,
 	plateCinematicFriendlyNPCs = false,
@@ -497,7 +501,8 @@ end
 -- place: keep these up in cinematic mode out of combat there.
 ns.PLATE_PLACES = { "PvP", "BGs", "Instances" } -- (BGs: and arenas; Instances: dungeons and raids)
 ns.PLATE_KINDS = {
-	"Enemies", "EnemyMinions", "EnemyNPCs", "EnemyMinor", "Friends", "FriendlyMinions", "FriendlyNPCs",
+	"Enemies", "EnemyMinions", "EnemyNPCs", "EnemyMinor", "NeutralNPCs", "NeutralMinor", "Friends",
+	"FriendlyMinions", "FriendlyNPCs",
 }
 for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateCombatPvP" .. kind] = false -- shown in fights while flagged for PvP
@@ -553,7 +558,13 @@ DEFAULTS.handleFishing = true -- right-click casting and the cast bar
 -- Effects): your target, your pet, and your party or raid's players and their
 -- pets. Same columns as the kinds. Your target and group members (with their
 -- pets) are kept up everywhere to start with.
-ns.PLATE_UNIT_ROWS = { "MyTarget", "MyPet", "GroupMembers", "GroupMinions" }
+-- (Your target's rows, the Target Nameplate grid: ns.PLATE_TARGET_ROWS.)
+ns.PLATE_TARGET_ROWS = { "MyEnemyPlayerTarget", "MyEnemyNPCTarget", "MyNeutralPlayerTarget", "MyNeutralNPCTarget",
+	"MyFriendlyPlayerTarget", "MyFriendlyNPCTarget" }
+ns.PLATE_UNIT_ROWS = { "MyPet", "GroupMembers", "GroupMinions" }
+for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
+	table.insert(ns.PLATE_UNIT_ROWS, row)
+end
 for _, row in ipairs(ns.PLATE_UNIT_ROWS) do
 	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
 		DEFAULTS[prefix .. row] = false
@@ -562,7 +573,9 @@ for _, row in ipairs(ns.PLATE_UNIT_ROWS) do
 		DEFAULTS["plateIn" .. suffix .. row] = false
 	end
 end
-DEFAULTS.plateAlwaysMyTarget = true
+for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
+	DEFAULTS["plateAlways" .. row] = true
+end
 DEFAULTS.plateAlwaysGroupMembers = true
 DEFAULTS.plateAlwaysGroupMinions = true
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
@@ -2661,6 +2674,61 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				ns.db[head .. "Instances" .. key] = (dungeons or raids) and true or false
 			end
 			ns.db[head .. "Dungeons" .. key], ns.db[head .. "Raids" .. key] = nil, nil
+		end
+		-- Enemy NPCs (with Minor) split into Hostile NPCs (still "EnemyNPCs"
+		-- and "EnemyMinor") and Neutral NPCs (with a Minor of their own): the
+		-- new rows start out ticked wherever the old ones were. In every
+		-- profile too.
+		local function NeutralFromHostile(t)
+			t.plateNeutralNPCsV1 = nil
+			if t.plateNeutralRowsV1 then
+				return
+			end
+			for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup",
+				"plateInPvP", "plateInBGs", "plateInInstances" }) do
+				for old, new in pairs({ EnemyNPCs = "NeutralNPCs", EnemyMinor = "NeutralMinor" }) do
+					if t[prefix .. old] ~= nil and t[prefix .. new] == nil then
+						t[prefix .. new] = t[prefix .. old]
+					end
+				end
+			end
+			t.plateNeutralRowsV1 = true
+		end
+		-- ...and Your Target into the Target Nameplate grid's rows (enemy,
+		-- neutral and friendly, players and NPCs apart): each starts out ticked
+		-- wherever it was, and with Always ticked whatever it was.
+		local OLD_TARGET_ROWS = {
+			MyTarget = ns.PLATE_TARGET_ROWS,
+			MyEnemyTarget = { "MyEnemyPlayerTarget", "MyEnemyNPCTarget" },
+			MyNeutralTarget = { "MyNeutralPlayerTarget", "MyNeutralNPCTarget" },
+			MyFriendlyTarget = { "MyFriendlyPlayerTarget", "MyFriendlyNPCTarget" },
+		}
+		local function TargetRowsFromMyTarget(t)
+			for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup",
+				"plateInPvP", "plateInBGs", "plateInInstances" }) do
+				for old, rows in pairs(OLD_TARGET_ROWS) do
+					if t[prefix .. old] ~= nil then
+						for _, row in ipairs(rows) do
+							if t[prefix .. row] == nil then t[prefix .. row] = t[prefix .. old] end
+						end
+						t[prefix .. old] = nil
+					end
+				end
+			end
+			if not t.plateTargetRowsV1 then
+				for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
+					t["plateAlways" .. row] = true
+				end
+				t.plateTargetRowsV1 = true
+			end
+		end
+		NeutralFromHostile(ns.db)
+		TargetRowsFromMyTarget(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then
+				NeutralFromHostile(saved)
+				TargetRowsFromMyTarget(saved)
+			end
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.

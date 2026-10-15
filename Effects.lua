@@ -800,8 +800,8 @@ local function Known(value)
 	return not (issecretvalue and issecretvalue(value))
 end
 
--- The Nameplates page's rows: enemy players (their minions apart), enemy
--- NPCs (minor units apart), friendly players (their minions apart) and
+-- The Nameplates page's rows: enemy players (their minions apart), hostile
+-- and neutral NPCs (minor units apart), friendly players (their minions apart) and
 -- friendly NPCs. Friendly or not is the game's own test, so the other
 -- faction's players are enemies. Minions are anything a player controls
 -- (pets, guardians, totems). nil when the game won't say (secret values in
@@ -827,11 +827,14 @@ local function PlateKind(unit)
 	if friend then
 		return "FriendlyNPCs"
 	end
+	-- Neutral (yellow) NPCs apart; hostile when the game won't say.
+	local okReaction, reaction = pcall(UnitReaction, unit, "player")
+	local neutral = okReaction and Known(reaction) and reaction == 4
 	local okClass, class = pcall(UnitClassification, unit)
 	if okClass and Known(class) and class == "minus" then
-		return "EnemyMinor"
+		return neutral and "NeutralMinor" or "EnemyMinor"
 	end
-	return "EnemyNPCs"
+	return neutral and "NeutralNPCs" or "EnemyNPCs"
 end
 
 -- The Nameplates page only steers plates in cinematic mode: outside it the
@@ -938,10 +941,37 @@ local function AnyPlatesKeptCinematic()
 	return false
 end
 
--- Whether your target's plate shows now (the Your Target row), whatever its
+-- Which of the Target Nameplate rows your target goes by, players and NPCs
+-- apart: Enemy (those you can attack), Neutral (NPCs the game calls neutral,
+-- and the other faction's players you can't attack) or Friendly (the rest,
+-- and the dead). nil when the game won't say.
+local function TargetRow(unit)
+	local who = Ask(UnitIsPlayer, unit) and "Player" or "NPC"
+	if Ask(UnitIsDeadOrGhost, unit) then
+		return "MyFriendly" .. who .. "Target"
+	end
+	local enemy = ns.IsEnemyUnit(unit)
+	if enemy == nil then
+		return nil
+	end
+	if not enemy then
+		return "MyFriendly" .. who .. "Target"
+	end
+	local neutral
+	if who == "Player" then
+		neutral = not Ask(UnitCanAttack, "player", unit)
+	else
+		local ok, reaction = pcall(UnitReaction, unit, "player")
+		neutral = ok and Known(reaction) and reaction == 4
+	end
+	return (neutral and "MyNeutral" or "MyEnemy") .. who .. "Target"
+end
+
+-- Whether your target's plate shows now (its target row), whatever its
 -- kind's row says.
 local function AlwaysShownTarget(unit)
-	return UnitRowWanted("MyTarget") and ns.IsEnemyUnit(unit) ~= nil
+	local row = TargetRow(unit)
+	return row ~= nil and UnitRowWanted(row)
 end
 
 local function TargetKeptUp()
@@ -1259,11 +1289,13 @@ end
 local PLATE_KIND_CVARS = {
 	Enemies = { "nameplateShowEnemies", "nameplateShowEnemyPlayers" },
 	EnemyNPCs = { "nameplateShowEnemies" },
+	NeutralNPCs = { "nameplateShowEnemies" },
 	EnemyMinions = {
 		"nameplateShowEnemyMinions", "nameplateShowEnemyPets", "nameplateShowEnemyGuardians",
 		"nameplateShowEnemyTotems",
 	},
 	EnemyMinor = { "nameplateShowEnemyMinus" },
+	NeutralMinor = { "nameplateShowEnemyMinus" },
 	Friends = { "nameplateShowFriends", "nameplateShowFriendlyPlayers" },
 	FriendlyMinions = {
 		"nameplateShowFriendlyMinions", "nameplateShowFriendlyPets", "nameplateShowFriendlyGuardians",
@@ -1274,14 +1306,15 @@ local PLATE_KIND_CVARS = {
 	},
 	FriendlyNPCs = { "nameplateShowFriendlyNPCs" },
 }
-local PLATE_ROW_PARENT = { EnemyMinions = "Enemies", EnemyMinor = "EnemyNPCs", FriendlyMinions = "Friends" }
+local PLATE_ROW_PARENT = { EnemyMinions = "Enemies", EnemyMinor = "EnemyNPCs", NeutralMinor = "NeutralNPCs",
+	FriendlyMinions = "Friends" }
 -- The unit rows go by their units' kinds (your target's could be any: none).
 local UNIT_ROW_KIND = { MyPet = "FriendlyMinions", GroupMembers = "Friends", GroupMinions = "FriendlyMinions" }
 local pendingPlateRows = {}
 
 -- Whether this client has any of a row's nameplate settings.
 function ns.HasPlateSettings(kind)
-	if kind == "MyTarget" then
+	if kind:find("Target$") then
 		return true
 	end
 	for _, cvar in ipairs(PLATE_KIND_CVARS[UNIT_ROW_KIND[kind] or kind]) do

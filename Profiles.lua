@@ -193,7 +193,7 @@ ns.BUILTIN_PROFILES = {
 	{
 		name = "Pure Cinema",
 		tip = L["As little UI as possible: chat, buffs, the quest tracker, the minimap and your portrait " ..
-			"don't pop up on their own (hovering still shows them), your target's and group members' " ..
+			"don't pop up on their own (hovering still shows them), group members' " ..
 			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
 			"your target and your cast bar (hidden otherwise), and every camera can start music."],
 		apply = function(set)
@@ -206,7 +206,6 @@ ns.BUILTIN_PROFILES = {
 			set("portraitWhenNotFull", false)
 			set("letterboxOffInCombat", false)
 			set("timeOfDayMessage", false)
-			set("plateAlwaysMyTarget", false)
 			set("plateAlwaysGroupMembers", false)
 			set("plateAlwaysGroupMinions", false)
 			-- No cast bar out of fights (it's up in them, with the default).

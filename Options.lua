@@ -4074,28 +4074,47 @@ local function CreatePlatesPanel()
 	-- ns.PLATE_UNIT_ROWS; group members have no use for Grouped), then the
 	-- game's own nameplate options, with enemy players and NPCs apart.
 	local KINDS = {
-		{ "MyTarget", L["Your Target"] },
 		{ "MyPet", L["Your Pet"] },
 		{ "GroupMembers", L["Group Members"], nil, true },
 		{ "GroupMinions", L["Minions"], true, true },
 		{ "Enemies", L["Enemy Players"] },
 		{ "EnemyMinions", L["Minions"], true },
-		{ "EnemyNPCs", L["Enemy NPCs"] },
+		{ "EnemyNPCs", L["Hostile NPCs"] },
 		{ "EnemyMinor", L["Minor"], true },
+		{ "NeutralNPCs", L["Neutral NPCs"] },
+		{ "NeutralMinor", L["Minor"], true },
 		{ "Friends", L["Friendly Players"] },
 		{ "FriendlyMinions", L["Minions"], true },
 		{ "FriendlyNPCs", L["Friendly NPCs"] },
 	}
 	local tip = L[" Also turns these nameplates on in the game's options."]
 	local UNIT_ROW_TIPS = {
-		MyTarget = L[" Your target's nameplate, whatever its own row below says."],
+		MyEnemyPlayerTarget = L[" Your target's nameplate while it's a player you can attack, whatever the " ..
+			"Nameplates grid says."],
+		MyEnemyNPCTarget = L[" Your target's nameplate while it's a hostile NPC, whatever the Nameplates grid says."],
+		MyNeutralPlayerTarget = L[" Your target's nameplate while it's the other faction's player but you can't " ..
+			"attack them, whatever the Nameplates grid says."],
+		MyNeutralNPCTarget = L[" Your target's nameplate while it's a neutral NPC, whatever the Nameplates grid says."],
+		MyFriendlyPlayerTarget = L[" Your target's nameplate while it's a friendly or dead player, whatever the " ..
+			"Nameplates grid says."],
+		MyFriendlyNPCTarget = L[" Your target's nameplate while it's a friendly or dead NPC, whatever the " ..
+			"Nameplates grid says."],
 		MyPet = L[" Your pet's nameplate, whatever the Minions rows say, grouped or not."],
 		GroupMembers = L[" Your party or raid members' nameplates, whatever Friendly Players says. In dungeons and " ..
 			"raids on retail the game won't let addons pick them out: there every friendly player's nameplate shows."],
 		GroupMinions = L[" Your party or raid members' pets, whatever the Minions rows say."],
 	}
+	-- The Target Nameplate grid's rows, below (your target, by what it is).
+	local TARGET_KINDS = {
+		{ "MyEnemyPlayerTarget", L["Enemy Player"] },
+		{ "MyEnemyNPCTarget", L["Enemy NPC"] },
+		{ "MyNeutralPlayerTarget", L["Neutral Player"] },
+		{ "MyNeutralNPCTarget", L["Neutral NPC"] },
+		{ "MyFriendlyPlayerTarget", L["Friendly Player"] },
+		{ "MyFriendlyNPCTarget", L["Friendly NPC"] },
+	}
 	local lastLabel
-	for r, kind in ipairs(KINDS) do
+	local function AddPlateRow(top, r, kind)
 		local function Ticked(key)
 			return function(value)
 				ns.GetDB()[key] = value
@@ -4110,7 +4129,7 @@ local function CreatePlatesPanel()
 		local pvpCheck
 		local alwaysKey = "plateAlways" .. kind[1]
 		local rowTip = UNIT_ROW_TIPS[kind[1]]
-		local tip = rowTip and kind[1] == "MyTarget" and rowTip or (rowTip or "") .. tip
+		local tip = rowTip and kind[1]:find("Target$") and rowTip or (rowTip or "") .. tip
 		local groupColumn
 		for _, place in ipairs(PLACE_COLUMNS) do
 			if place.always then
@@ -4141,9 +4160,20 @@ local function CreatePlatesPanel()
 				return Available() and (c == 1 or not db[alwaysKey]) and not (kind[4] and c == groupColumn)
 			end)
 		end
-		lastLabel = PlaceRow(columnTop, r, kind[2], kind[3], unpack(checks))
+		lastLabel = PlaceRow(top, r, kind[2], kind[3], unpack(checks))
+	end
+	for r, kind in ipairs(KINDS) do
+		AddPlateRow(columnTop, r, kind)
 	end
 	local lastPlateRow = lastLabel
+
+	-- Your target's plate, laid out the same way.
+	local targetHeader = Header(content, L["Target Nameplate"], lastLabel, -24)
+	local targetTop = TableTop(targetHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	for r, kind in ipairs(TARGET_KINDS) do
+		AddPlateRow(targetTop, r, kind)
+	end
+	local lastTargetRow = lastLabel
 
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
@@ -4192,11 +4222,12 @@ local function CreatePlatesPanel()
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 
-	-- Laid out top to bottom: the master switch, then the two grids
-	-- (nameplates, then names).
+	-- Laid out top to bottom: the master switch, then the three grids
+	-- (nameplates, your target's, then names).
 	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
-	-- (Lined up with the nameplate grid, so both grids' columns match.)
-	namesHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
+	-- (Lined up with the nameplate grid, so the grids' columns match.)
+	targetHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
+	namesHeader:SetPoint("TOPLEFT", lastTargetRow, "BOTTOMLEFT", 0, -24)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
