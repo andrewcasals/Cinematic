@@ -95,6 +95,7 @@ read_globals = {
 	"GetNumQuestLogEntries",
 	"GetPlayerFacing",
 	"GetQuestLogTitle",
+	"GetQuestProgressBarPercent",
 	"GetQuestTimers",
 	"GetInventoryAlertStatus",
 	"GetPetHappiness",

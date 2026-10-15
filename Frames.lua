@@ -1971,12 +1971,80 @@ do
 	for event in pairs(QUEST_REVEAL_EVENTS) do
 		pcall(questWatcher.RegisterEvent, questWatcher, event)
 	end
-	questWatcher:SetScript("OnEvent", function(_, event)
-		if ns.db and ns.db[QUEST_REVEAL_EVENTS[event]] then
+	local function Reveal(setting)
+		if ns.db and ns.db[setting] then
 			local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
 			questRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
 		end
+	end
+	questWatcher:SetScript("OnEvent", function(_, event)
+		Reveal(QUEST_REVEAL_EVENTS[event])
 	end)
+
+	-- Retail: QUEST_WATCH_UPDATE misses progress-bar objectives (a percentage
+	-- going up) and some counted ones, so each quest's progress (its counts
+	-- plus its bar's percent) is summed after a quest log update, and a quest
+	-- whose sum went up reveals. A quest seen for the first time doesn't.
+	local questLog = C_QuestLog
+	if ns.isRetail and questLog and questLog.GetNumQuestLogEntries and questLog.GetQuestObjectives then
+		local progress, seen = {}, {}
+		local pending = false
+		local function Progress(questID)
+			local sum = 0
+			local objectives = questLog.GetQuestObjectives(questID)
+			if objectives then
+				for i = 1, #objectives do
+					local count = objectives[i].numFulfilled
+					if type(count) == "number" then
+						sum = sum + count
+					end
+				end
+			end
+			if GetQuestProgressBarPercent then
+				local percent = GetQuestProgressBarPercent(questID)
+				if type(percent) == "number" then
+					sum = sum + percent
+				end
+			end
+			return sum
+		end
+		local function Scan()
+			pending = false
+			local advanced = false
+			for questID in pairs(seen) do
+				seen[questID] = nil
+			end
+			for i = 1, questLog.GetNumQuestLogEntries() do
+				local info = questLog.GetInfo(i)
+				local questID = info and not info.isHeader and info.questID
+				if type(questID) == "number" and questID > 0 then
+					local sum = Progress(questID)
+					local before = progress[questID]
+					if before and sum > before then
+						advanced = true
+					end
+					progress[questID] = sum
+					seen[questID] = true
+				end
+			end
+			for questID in pairs(progress) do
+				if not seen[questID] then
+					progress[questID] = nil
+				end
+			end
+			if advanced then
+				Reveal("questRevealOnProgress")
+			end
+		end
+		local logWatcher = CreateFrame("Frame")
+		logWatcher:RegisterEvent("QUEST_LOG_UPDATE")
+		logWatcher:SetScript("OnEvent", function()
+			if not pending then
+				pending = true
+				C_Timer.After(0.2, Scan)
+			end
+		end)
+	end
 end
 
 -- Gear damaged (yellow) or broken (red): the game shows the durability
