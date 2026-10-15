@@ -943,7 +943,7 @@ local restoredHandlers = {}
 local minimapNeedsRedraw = false
 
 local function RedrawMinimapWhenShown()
-	if not minimapNeedsRedraw or not Minimap:IsVisible() or Minimap:GetEffectiveAlpha() < 0.99 then
+	if not minimapNeedsRedraw or not ns.Flag(Minimap:IsVisible()) or Minimap:GetEffectiveAlpha() < 0.99 then
 		return
 	end
 	minimapNeedsRedraw = false
@@ -3218,7 +3218,7 @@ local function GetTopLevelFrameUnderCursor(accept)
 			and ns.Flag(frame:IsVisible()) and ns.Flag(frame:IsMouseOver()) and (not accept or accept(frame)) then
 			local width, height = frame:GetSize()
 			local area = (width or 0) * (height or 0)
-			if area > 0 and (not bestArea or area < bestArea) then
+			if not (issecretvalue and issecretvalue(area)) and area > 0 and (not bestArea or area < bestArea) then
 				best, bestArea = frame, area
 			end
 		end

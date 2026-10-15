@@ -395,7 +395,7 @@ do
 		if ok and fishing then
 			bar.cinematicFishingHidden = true
 			bar:SetAlpha(0)
-		elseif bar.cinematicFishingHidden and (UnitCastingInfo("player") or UnitChannelInfo("player")) then
+		elseif bar.cinematicFishingHidden and (ns.Flag(UnitCastingInfo("player")) or ns.Flag(UnitChannelInfo("player"))) then
 			bar.cinematicFishingHidden = nil -- another cast: the bar shows it as usual
 			bar:SetAlpha(1)
 			ns.ReapplyCastBar(bar)
@@ -443,7 +443,8 @@ do
 			return true
 		end
 		local channel = select(8, UnitChannelInfo("player"))
-		return channel ~= nil and IsFishingSpell(channel)
+		return type(channel) == "number" and not (issecretvalue and issecretvalue(channel))
+			and IsFishingSpell(channel) or false
 	end
 
 	-- In gamepad mode a gamepad button does the same (fishGamepadCast, the
@@ -627,7 +628,8 @@ do
 			and not ns.playerMoving and not IsMounted() and not UnitOnTaxi("player")
 			and not ns.Flag(UnitIsDeadOrGhost("player"))
 		-- (The Fishing page's switch off: no casting from here.)
-		local ready = ns.db and ns.db.handleFishing and not UnitChannelInfo("player") and not UnitCastingInfo("player")
+		local ready = ns.db and ns.db.handleFishing and not ns.Flag(UnitChannelInfo("player"))
+			and not ns.Flag(UnitCastingInfo("player"))
 			and GetTime() - channelEndedAt >= (tonumber(ns.db.fishRecastDelay) or 0.5)
 			and GetTime() - missedAt >= (tonumber(ns.db.fishMissPause) or 30)
 			and GetTime() >= skillBlockedUntil
