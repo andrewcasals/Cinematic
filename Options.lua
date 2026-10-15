@@ -3732,8 +3732,9 @@ local function CreateQualityPanel()
 		"you stand up again, ready to go."]), "check", 24)
 	GreyUnless(stand, function(db) return db.campfireSitButton end)
 
-	-- (Hunters, not on retail, where right-click already shoots: Hunter.lua.)
-	if not ns.isRetail and ns.IsHunter and ns.IsHunter() then
+	-- (Not on retail, where right-click already shoots. Shown on every class; Hunter.lua
+	-- only runs on hunters.)
+	if not ns.isRetail then
 		stack:Header(content, L["Hunter"])
 		stack:Add(Check(content, "hunterRightClickShot", L["Right click attack also uses Auto-shot"],
 			L["Right-clicking an enemy targets it and attacks: Auto Shot when it's far enough away to shoot, " ..
