@@ -215,6 +215,24 @@ local layerLevel = { vignette = 0, weather = 0 }
 local tintDirty = false
 local tintPreview = false
 local menuPreviewHour, menuPreviewUntil = -1, 0
+-- /cine tinttest: each time of day in turn, its tint and its title.
+local daySweep -- { started, each, shown } while it runs
+local DAY_SWEEP_STOPS = { -- title, and the clock time (minutes) whose tint it shows
+	{ "Dawn", 390 }, { "Morning", 600 }, { "Midday", 780 }, { "Afternoon", 930 },
+	{ "Evening", 1110 }, { "Dusk", 1200 }, { "Night", 60 },
+}
+local DAY_SWEEP_GLIDE = 3 -- seconds the tint takes to move on to the next stop
+
+-- The sweep's stop now, and its clock time in minutes (gliding in from the last).
+local function DaySweepNow()
+	local elapsed = GetTime() - daySweep.started
+	local index = math.min(#DAY_SWEEP_STOPS, math.floor(elapsed / daySweep.each) + 1)
+	local from = DAY_SWEEP_STOPS[index == 1 and #DAY_SWEEP_STOPS or index - 1][2]
+	local to = DAY_SWEEP_STOPS[index][2]
+	local t = math.min(1, (elapsed - (index - 1) * daySweep.each) / DAY_SWEEP_GLIDE)
+	t = t * t * (3 - 2 * t) -- ease in and out
+	return index, (from + ((to - from) % 1440) * t) % 1440, elapsed
+end
 local zoneMoodByName -- zone name -> mood key, built on first use
 local zoneColor = { 1, 1, 1 } -- the zone colour shown now: zoneGoal, faded by zoneMix
 local zoneGoal = { 1, 1, 1 } -- the mood being shown, or faded out or in
@@ -434,7 +452,7 @@ end
 -- Showing a preview: the Visual Effects page is open, or a quick preview from
 -- the minimap menu is running.
 local function Previewing()
-	return tintPreview or GetTime() < menuPreviewUntil
+	return tintPreview or GetTime() < menuPreviewUntil or daySweep ~= nil
 end
 
 -- A phase's colour: your own if you picked one, else the built-in.
@@ -463,7 +481,10 @@ end
 -- Time-of-day strength blends the colour toward no change.
 local function TimeOfDayColor()
 	local hour, minute
-	if GetTime() < menuPreviewUntil then
+	if daySweep then
+		local _, minutes = DaySweepNow()
+		hour, minute = math.floor(minutes / 60), minutes % 60
+	elseif GetTime() < menuPreviewUntil then
 		hour, minute = menuPreviewHour, 0
 	elseif tintPreview and (db.tintPreviewHour or -1) >= 0 then
 		hour, minute = db.tintPreviewHour, 0
@@ -842,7 +863,7 @@ local driftRefreshedAt = 0
 -- and the new one fades in. While the tint is hidden or previewed it just
 -- swaps. True while anything changed.
 local function UpdatePresetSwap(elapsed)
-	local want = HerePreset()
+	local want = daySweep and "timeofday" or HerePreset()
 	if want ~= shownPreset then
 		if tintLevel == 0 or Previewing() or not shownPreset then
 			shownPreset, presetFade = want, 1
@@ -896,6 +917,16 @@ local function UpdateTint(cinematic, elapsed, vignetteOn, weatherOn)
 	end
 	if db.tintDrift and tintLevel > 0 and now - driftRefreshedAt >= DRIFT_REFRESH then
 		driftRefreshedAt = now
+		tintDirty = true
+	end
+	if daySweep then
+		local index, _, elapsed = DaySweepNow()
+		if elapsed >= #DAY_SWEEP_STOPS * daySweep.each then
+			ns.DaySweep() -- done: stop
+		elseif index ~= daySweep.shown then
+			daySweep.shown = index
+			ns.TestTimeChangeTitle(DAY_SWEEP_STOPS[index][1])
+		end
 		tintDirty = true
 	end
 	-- Zone moods blend across borders; while hidden the colour just jumps.
@@ -1001,6 +1032,24 @@ ns.PreviewTintHour = function(hour)
 	menuPreviewHour, menuPreviewUntil = hour, GetTime() + MENU_PREVIEW_TIME
 	tintDirty = true
 	C_Timer.After(MENU_PREVIEW_TIME + 0.1, function() tintDirty = true end)
+end
+-- /cine tinttest: each time of day in turn (Dawn to Night), this many seconds
+-- each: the tint glides to it, whatever your preset, and its title shows (with
+-- its sound). Called while running (or with no seconds), it stops. True if it
+-- started. onStop runs when it stops, either way.
+ns.DaySweep = function(seconds, onStop)
+	if daySweep or not seconds then
+		if daySweep then
+			local stopped = daySweep.onStop
+			daySweep = nil
+			tintDirty = true
+			if stopped then stopped() end
+		end
+		return false
+	end
+	daySweep = { started = GetTime(), each = seconds, onStop = onStop }
+	tintDirty = true
+	return true
 end
 -- Phase name at a given hour, for labelling the preview choices.
 ns.GetTimeOfDayPhaseAt = function(hour)
