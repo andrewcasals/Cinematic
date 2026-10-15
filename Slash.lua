@@ -69,6 +69,7 @@ local function PrintDebugHelp()
 	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
 	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
+	print("  /cine debug hover [group] - print what the mouse is on and whether the group (quests) counts as hovered (again to stop)")
 	print("  /cine debug swing - what the swing timer bars read, and print each one showing or fading (again to stop)")
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug cooldowns - what the Cooldown Manager's \"stay up while recharging\" check sees")
@@ -269,6 +270,35 @@ function ns.HandleSlash(msg)
 	elseif cmd == "debug" and arg == "alpha" then
 		ns.alphaWatch = not ns.alphaWatch
 		ns.Print("print frames setting their own alpha: " .. OnOff(ns.alphaWatch) .. " (until you /reload)")
+	elseif cmd == "debug" and arg:find("^hover") then
+		-- What the mouse is on and whether a group counts as hovered, printed as
+		-- it changes (quest tracker by default), to see a fade it won't stop.
+		if ns.hoverWatch then
+			ns.hoverWatch:Cancel()
+			ns.hoverWatch = nil
+			ns.Print("hover watch: off")
+			return
+		end
+		local group = arg:match("^hover%s+(%S+)") or "quests"
+		local last
+		ns.hoverWatch = C_Timer.NewTicker(0.1, function()
+			local focus = GetMouseFoci and GetMouseFoci()[1] or (GetMouseFocus and GetMouseFocus())
+			local ok, focusName = pcall(function() return focus and focus:GetDebugName() or "nothing" end)
+			local parts = { "on " .. (ok and tostring(focusName) or "?") }
+			for _, entry in ipairs(ns.managed) do
+				if entry.group == group then
+					parts[#parts + 1] = ("%s alpha=%.1f over=%s hovered=%s"):format(
+						entry.name or "?", entry.alpha, tostring(ns.Flag(entry.frame:IsMouseOver())),
+						tostring(ns.IsEntryHovered(entry)))
+				end
+			end
+			local line = table.concat(parts, " | ")
+			if line ~= last then
+				last = line
+				ns.Print(line)
+			end
+		end)
+		ns.Print("hover watch: on for " .. group .. " (again to stop)")
 	elseif cmd == "debug" and arg == "swing" then
 		ns.swingDebug = not ns.swingDebug
 		if ns.ReportSwing then
