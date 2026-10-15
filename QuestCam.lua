@@ -628,8 +628,8 @@ local function Stop(walkedOff)
 		end
 	end
 	-- Back out to your distance, unless you zoomed yourself while talking.
-	-- (Still on its way in counts as ours.)
-	if cam.zoomedTo and cam.zoom and GetCameraZoom
+	-- (Still on its way in counts as ours.) At speed 0 it stays where it is.
+	if cam.zoomedTo and cam.zoom and GetCameraZoom and ns.db.questCamZoomOutSpeed > 0
 		and (zoomer.moving or math.abs(GetCameraZoom() - cam.zoomedTo) < ZOOM_YOURS) then
 		local T = math.abs(cam.zoom - GetCameraZoom()) / ns.db.questCamZoomOutSpeed
 		ZoomTo(cam.zoom, walkedOff and math.min(T, ZOOM_HURRY) or T)
