@@ -228,6 +228,7 @@ local DEFAULTS = {
 	cozyChairWords = "chair, bench, stool, seat, throne, pew", -- the chair event: words in a seat's name
 	campfireSitButton = true, -- a Sit button on hovering a campfire near the middle of the screen (Campfire.lua)
 	campfireStandUp = true,   -- ...and stand up again once Camp Benefits arrives
+	hunterRightClickShot = true, -- hunters: right-click on an enemy starts Auto Shot, in combat too (Hunter.lua)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
 	cozyZoomClose = 10,       -- yards: the distance it zooms in to (if you're further out); far side of a fire
 	cozyLevel = 15,           -- degrees it brings the camera down toward the ground as it swings round

@@ -3725,6 +3725,17 @@ local function CreateQualityPanel()
 		"you stand up again, ready to go."]), "check", 24)
 	GreyUnless(stand, function(db) return db.campfireSitButton end)
 
+	-- (Hunters, not on retail, where right-click already shoots: Hunter.lua.)
+	if not ns.isRetail and ns.IsHunter and ns.IsHunter() then
+		stack:Header(content, L["Hunter"])
+		stack:Add(Check(content, "hunterRightClickShot", L["Right click attack also uses Auto-shot"],
+			L["Right-clicking an enemy targets it and attacks: Auto Shot when it's far enough away to shoot, " ..
+			"a melee swing when it's too close, in a fight or out of one. In a fight the game only checks what's " ..
+			"under the mouse a few times a second, so a very quick right-click on a new enemy can still be a " ..
+			"melee one.\n\nThere's also a key that starts Auto Shot on your target: set it under Key Bindings > " ..
+			"Cinematic (Hunter smart attack)."]), "check")
+	end
+
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Quality of life")

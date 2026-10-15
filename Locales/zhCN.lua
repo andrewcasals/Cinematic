@@ -1203,3 +1203,7 @@ L["Each camera's own settings. Click a camera's name to open its settings, and a
 L["Put this camera's settings back to the profile's own?"] = "将此镜头的设置恢复为配置文件自身的设置？"
 L["Put this camera's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "将此镜头的设置恢复为当前配置文件的值（默认值或内置配置文件的值）。"
 L["While the death camera runs, a song picked at random from the list below plays in place of the zone music. With CineMode music off, only if your game music is on. It stops when you release or come back."] = "死亡镜头运行时，会从下方列表中随机选一首歌代替区域音乐播放。关闭CineMode音乐时，仅在游戏音乐开启时播放。释放灵魂或复活时停止。"
+L["Hunter"] = "猎人"
+L["Hunter smart attack"] = "猎人智能攻击"
+L["Right click attack also uses Auto-shot"] = "右键攻击也使用自动射击"
+L["Right-clicking an enemy targets it and attacks: Auto Shot when it's far enough away to shoot, a melee swing when it's too close, in a fight or out of one. In a fight the game only checks what's under the mouse a few times a second, so a very quick right-click on a new enemy can still be a melee one.\n\nThere's also a key that starts Auto Shot on your target: set it under Key Bindings > Cinematic (Hunter smart attack)."] = "右键点击敌人会选中它并攻击：距离足够远时用自动射击，太近时用近战攻击，无论是否在战斗中。战斗中游戏每秒只检查几次鼠标下的目标，所以对新敌人极快地右键点击仍可能是近战攻击。\n\n还有一个对目标开始自动射击的按键：在按键设置 > Cinematic（猎人智能攻击）中设置。"

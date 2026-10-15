@@ -147,6 +147,8 @@ read_globals = {
 	"SetBinding",
 	"SetCVar",
 	"SetOverrideBindingClick",
+	"RegisterStateDriver",
+	"UnregisterStateDriver",
 	"SetOverrideBinding",
 	"IsKeyDown",
 	"SetUIVisibility",
