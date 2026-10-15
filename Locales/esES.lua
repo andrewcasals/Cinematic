@@ -1190,8 +1190,8 @@ L["Lie down"] = "Tumbarse"
 L["What clicking the Campfire button does. With more than one ticked, it's one of them at random each time."] = "Lo que hace el botón de hoguera al pulsarlo. Con más de uno marcado, es uno de ellos al azar cada vez."
 L["Clicking the Campfire button (Quality of life page). Once the campfire's buff comes, the first row's camera takes over. Moving, jumping or another emote ends it."] = "Pulsar el botón de hoguera (página Comodidades). Cuando llega el beneficio de la hoguera, toma el relevo la cámara de la primera fila. Moverte, saltar u otro emote lo termina."
 L["Stand up once you get Camp Benefits"] = "Levantarse al recibir Beneficios del campamento"
-L["Open the character window when picking up gear"] = "Abrir la ventana de personaje al coger equipo"
-L["Picking up something you can wear opens the character window, so its slots are there to drop it on. Put it back without wearing it and the window closes again. Not in a fight."] = "Al coger algo que puedes llevar puesto se abre la ventana de personaje, para tener sus casillas a mano donde soltarlo. Si lo devuelves sin ponértelo, la ventana se cierra de nuevo. No en combate."
+L["Open the character window when dragging gear out of your bags"] = "Abrir la ventana de personaje al arrastrar equipo fuera de las bolsas"
+L["Dragging something you can wear out of your bags, over the game world, opens the character window, so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it and the window closes again. Not in a fight."] = "Arrastrar algo que puedes llevar puesto fuera de tus bolsas, sobre el mundo del juego, abre la ventana de personaje, para tener sus casillas a mano donde soltarlo. Moverlo entre bolsas no la abre. Si lo devuelves sin ponértelo, la ventana se cierra de nuevo. No en combate."
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "Sentarte un minuto junto a una Hoguera acogedora te da Beneficios del campamento: al recibirlos, te levantas, listo para seguir."
 
 -- Options.lua: the Camera Settings page

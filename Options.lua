@@ -3734,9 +3734,10 @@ local function CreateQualityPanel()
 		GreyUnless(stand, function(db) return db.campfireSitButton end)
 	end
 	-- (DragEquip.lua.)
-	stack:Add(Check(content, "dragEquipCharacter", L["Open the character window when picking up gear"],
-		L["Picking up something you can wear opens the character window, so its slots are there to drop it " ..
-		"on. Put it back without wearing it and the window closes again. Not in a fight."]), "check")
+	stack:Add(Check(content, "dragEquipCharacter", L["Open the character window when dragging gear out of your bags"],
+		L["Dragging something you can wear out of your bags, over the game world, opens the character window, " ..
+		"so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it " ..
+		"and the window closes again. Not in a fight."]), "check")
 
 	-- (Not on retail, where right-click already shoots. Shown on every class; Hunter.lua
 	-- only runs on hunters.)

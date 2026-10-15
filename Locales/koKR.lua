@@ -1190,8 +1190,8 @@ L["Lie down"] = "눕기"
 L["What clicking the Campfire button does. With more than one ticked, it's one of them at random each time."] = "모닥불 버튼을 클릭했을 때 하는 동작입니다. 둘 이상 선택하면 매번 그중 하나를 무작위로 합니다."
 L["Clicking the Campfire button (Quality of life page). Once the campfire's buff comes, the first row's camera takes over. Moving, jumping or another emote ends it."] = "모닥불 버튼을 클릭할 때 (편의 기능 페이지). 모닥불 효과가 생기면 첫 줄의 카메라가 이어받습니다. 움직이거나 점프하거나 다른 감정 표현을 하면 끝납니다."
 L["Stand up once you get Camp Benefits"] = "야영지 혜택을 받으면 일어서기"
-L["Open the character window when picking up gear"] = "장비를 집으면 캐릭터 창 열기"
-L["Picking up something you can wear opens the character window, so its slots are there to drop it on. Put it back without wearing it and the window closes again. Not in a fight."] = "착용할 수 있는 물건을 집으면 캐릭터 창이 열려 슬롯에 바로 놓을 수 있습니다. 착용하지 않고 다시 내려놓으면 창이 다시 닫힙니다. 전투 중에는 동작하지 않습니다."
+L["Open the character window when dragging gear out of your bags"] = "가방 밖으로 장비를 끌면 캐릭터 창 열기"
+L["Dragging something you can wear out of your bags, over the game world, opens the character window, so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it and the window closes again. Not in a fight."] = "착용할 수 있는 물건을 가방 밖 게임 세계 위로 끌면 캐릭터 창이 열려 슬롯에 바로 놓을 수 있습니다. 가방 사이에서 옮길 때는 열리지 않습니다. 착용하지 않고 다시 내려놓으면 창이 다시 닫힙니다. 전투 중에는 동작하지 않습니다."
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "환영의 모닥불 옆에 1분 동안 앉아 있으면 야영지 혜택을 받습니다. 혜택을 받는 즉시 다시 일어서서 바로 출발할 수 있습니다."
 
 -- Options.lua: the Camera Settings page

@@ -1,6 +1,8 @@
--- Cinematic: picking up something you can wear opens the character window
--- (dragEquipCharacter, on the Quality of life page), so the slots are there to
--- drop it on. If it opened the window and you put the item back without
+-- Cinematic: dragging something you can wear out of the bags opens the
+-- character window (dragEquipCharacter, on the Quality of life page), so the
+-- slots are there to drop it on. "Out of the bags" is the cursor reaching the
+-- game world: bags are UI however an addon draws them, so moving things
+-- between bags never opens it. If it opened the window and you put the item back without
 -- wearing it, the window closes again. Not in a fight (the window can't be
 -- opened by addons then without risk of blame, and most gear can't be changed).
 local _, ns = ...
@@ -34,16 +36,48 @@ local function CloseUnlessEquipped()
 	end
 end
 
+-- Waiting for the cursor to leave the UI (OnUpdate set only while an item that
+-- could open it is on the cursor).
+local LOOK_EVERY = 0.1
+local sinceLook = 0
+local waiter = CreateFrame("Frame")
+
+local function StopWaiting()
+	waiter:SetScript("OnUpdate", nil)
+end
+
+local function CanOpen()
+	return not openedIt and ns.db and ns.db.dragEquipCharacter and not CharacterShown()
+		and not InCombatLockdown() and ToggleCharacter and ns.MouseOverWorld
+end
+
+local Wait = ns.Profiled("Drag gear watch", function(_, elapsed)
+	sinceLook = sinceLook + elapsed
+	if sinceLook < LOOK_EVERY then
+		return
+	end
+	sinceLook = 0
+	if GetCursorInfo() ~= "item" or not CanOpen() then
+		StopWaiting()
+	elseif ns.MouseOverWorld() then
+		-- Out over the game world: past any bags, whichever addon draws them.
+		StopWaiting()
+		ToggleCharacter("PaperDollFrame")
+		openedIt, equipped = CharacterShown(), false
+	end
+end)
+
 local function CursorChanged()
 	local kind, itemID = GetCursorInfo()
 	if kind == "item" then
-		if openedIt or not (ns.db and ns.db.dragEquipCharacter) or CharacterShown()
-			or InCombatLockdown() or not Wearable(itemID) or not ToggleCharacter then
-			return
+		if CanOpen() and Wearable(itemID) then
+			sinceLook = 0
+			waiter:SetScript("OnUpdate", Wait)
 		end
-		ToggleCharacter("PaperDollFrame")
-		openedIt, equipped = CharacterShown(), false
-	elseif openedIt and not kind then
+	elseif not kind then
+		StopWaiting()
+	end
+	if openedIt and not kind then
 		-- Put down: back in the bags (or destroyed, or sold) closes it again.
 		-- (A moment later: putting it on may tell us just after the cursor empties.)
 		openedIt = false

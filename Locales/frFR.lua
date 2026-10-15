@@ -1189,8 +1189,8 @@ L["Lie down"] = "S'allonger"
 L["What clicking the Campfire button does. With more than one ticked, it's one of them at random each time."] = "Ce que fait un clic sur le bouton Feu de camp. Si plusieurs sont cochés, l'un d'eux au hasard à chaque fois."
 L["Clicking the Campfire button (Quality of life page). Once the campfire's buff comes, the first row's camera takes over. Moving, jumping or another emote ends it."] = "Cliquer sur le bouton Feu de camp (page Confort). Quand l'amélioration du feu arrive, la caméra de la première ligne prend le relais. Bouger, sauter ou une autre émote y met fin."
 L["Stand up once you get Camp Benefits"] = "Se lever une fois les Avantages du camp reçus"
-L["Open the character window when picking up gear"] = "Ouvrir la fenêtre du personnage en prenant de l'équipement"
-L["Picking up something you can wear opens the character window, so its slots are there to drop it on. Put it back without wearing it and the window closes again. Not in a fight."] = "Prendre un objet que vous pouvez porter ouvre la fenêtre du personnage, pour avoir ses emplacements où le déposer. Reposez-le sans l'équiper et la fenêtre se referme. Pas en combat."
+L["Open the character window when dragging gear out of your bags"] = "Ouvrir la fenêtre du personnage en sortant de l'équipement des sacs"
+L["Dragging something you can wear out of your bags, over the game world, opens the character window, so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it and the window closes again. Not in a fight."] = "Faire glisser un objet que vous pouvez porter hors de vos sacs, au-dessus du monde du jeu, ouvre la fenêtre du personnage, pour avoir ses emplacements où le déposer. Le déplacer entre les sacs ne l'ouvre pas. Reposez-le sans l'équiper et la fenêtre se referme. Pas en combat."
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "S'asseoir une minute près d'un Feu de camp accueillant donne les Avantages du camp : dès qu'ils arrivent, vous vous relevez, prêt à repartir."
 
 -- Options.lua: the Camera Settings page

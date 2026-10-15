@@ -1866,6 +1866,7 @@ local function MouseOverWorld()
 	local focus = MouseFocus()
 	return focus == nil or focus == WorldFrame
 end
+ns.MouseOverWorld = MouseOverWorld -- (DragEquip.lua too)
 
 -- Where the player is and faces. An object is only found by what's under the
 -- cursor, and a parked cursor stays still while flying or turning moves the

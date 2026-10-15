@@ -1190,8 +1190,8 @@ L["Lie down"] = "躺下"
 L["What clicking the Campfire button does. With more than one ticked, it's one of them at random each time."] = "点击篝火按钮时做的动作。勾选多个时，每次随机选其中一个。"
 L["Clicking the Campfire button (Quality of life page). Once the campfire's buff comes, the first row's camera takes over. Moving, jumping or another emote ends it."] = "点击篝火按钮（便利功能页面）。篝火增益出现后，由第一行的镜头接管。移动、跳跃或其他表情会结束它。"
 L["Stand up once you get Camp Benefits"] = "获得营地增益后站起"
-L["Open the character window when picking up gear"] = "拿起装备时打开角色窗口"
-L["Picking up something you can wear opens the character window, so its slots are there to drop it on. Put it back without wearing it and the window closes again. Not in a fight."] = "拿起可穿戴的物品时会打开角色窗口，方便把它放到栏位上。没穿上就放回去，窗口会再次关闭。战斗中不生效。"
+L["Open the character window when dragging gear out of your bags"] = "把装备拖出背包时打开角色窗口"
+L["Dragging something you can wear out of your bags, over the game world, opens the character window, so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it and the window closes again. Not in a fight."] = "把可穿戴的物品拖出背包、移到游戏世界上方时会打开角色窗口，方便把它放到栏位上。在背包之间移动不会打开。没穿上就放回去，窗口会再次关闭。战斗中不生效。"
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "在迎客篝火旁坐满一分钟会获得营地增益：获得时你会站起来，随时出发。"
 
 -- Options.lua: the Camera Settings page
