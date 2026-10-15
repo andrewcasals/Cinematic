@@ -1,11 +1,11 @@
 # Cinematic
 
-Immerse yourself in the World of Warcraft. Cinematic quietly fades your UI away whenever things are calm and brings it back the moment you need it. Meanwhile the camera, colour and music turn every flight, campfire, quest and stroll into a scene.
+Cinematic helps you immerse yourself in the world instead of staring at UI elements. Between fights it fades your UI away, adds letterbox bars and a colour tint that shifts with the time of day, and controls your cameras for flights, campfires, quest givers, going AFK and more. The music fades in as a camera starts, and the moment you're in a fight or need something, your UI comes right back.
 
 ## The UI gets out of the way
 
 * Fades the UI between fights, with letterbox bars sliding in. Combat, targeting an enemy or opening a window brings it straight back.
-* **Smart reveals:** hover over anything to see it, and hovering one frame can bring up a whole group with it. Chat pops up when a message arrives in a window you can see (you choose which message types and channels), your portrait shows while you're recovering, buffs and debuffs flash up when you gain one, your durability shows while your gear is damaged, and the quest tracker comes up as you make progress or pick up a quest.
+* **Smart reveals:** hover over anything to see it, and hovering one frame can bring up a whole group with it. Chat pops up when a message arrives in a window you can see (you choose which message types and channels), your portrait shows while you're recovering, buffs and debuffs flash up when you gain one, your durability shows while your gear is damaged, a hunter's pet frame stays up while the pet isn't happy (Classic clients), and the quest tracker comes up as you make progress or pick up a quest.
 * **Stay cinematic in combat** if you like, showing only the frames you choose for fights, enemy targets and friendly targets, and keeping them up for a while after the fight. The letterbox and tint can each stay or step aside during fights. Party and raid frames fade part by part (role icons, names, the threat glow), and the cast bar can stay hidden outside fights.
 * **Cooldown Manager:** in fights, show spells only when they're ready, or pick spells to show early as they come off cooldown.
 * **Swing timer** (Classic clients): choose which bars show, with the ranged bar on top for classes that use it.
@@ -31,7 +31,8 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Vista Cam:** `/stare` out at the view and the camera lines up behind you, lowers, and takes it in.
 * **Fish Cam:** cast Fishing and the camera settles behind you with the bobber in view. Right-click (or a gamepad button) to cast again.
 * **Quest Cam:** talk to a quest giver and the camera eases in close and comes round to a dialogue shot past your shoulder. It goes back when you close the window.
-* **Death Cam:** when you die, the camera rises and circles slowly round your body over a cold, dimmed screen, with a song of its own.
+* **Death Cam:** when you die, the camera rises and circles slowly round your body over a cold, dimmed screen, with a song of its own. You can also start it from a key or the camera wheel to see it without dying.
+* **Camera wheel:** hold its key and a ring of camera icons comes up round your cursor. Point at one and let go to start that camera, or tap the key and click one.
 * **Camera Triggers page:** pick which camera each event starts (or none), and whether it starts music. It starts right away, and moving ends it. With CineMode off, an event can bring CineMode on for as long as its camera runs: tick Stand still and Go AFK for a screensaver that only takes over once you've been idle.
 * **Depth of field:** a soft haze round the screen edges in the camera modes, set separately for each one.
 * **Indoor limits** keep the camera out of walls in buildings and caves.
@@ -59,14 +60,15 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Campfire Sit button:** hover a campfire and click the icon at your cursor to sit down by the fire, no `/sit` needed. It has its own camera trigger.
 * **Stand up with Camp Benefits:** once the buff arrives, you stand up again, ready to go.
 * **Fishing:** cast with right-click or a gamepad button, in CineMode or not.
+* **Hunters** (Classic clients): right-click an enemy to start Auto Shot, or swing in melee when it's too close, in a fight or out of one. A smart attack key starts Auto Shot on your target.
 
 ## Easy to tweak
 
 * **Profiles** to switch the whole setup at once: Immersive (everything, as the developer plays), Immersive (CDM) for the Cooldown Manager, Lite (just a few cameras), VFX Only (the look without fading anything), Camera Only (the normal UI until a camera starts), Solo Explorer and Pure Cinema, or make and name your own. New players pick one the first time they log in.
 * **Share profiles:** export your setup as a string and import a friend's.
 * **A minimap button** with quick switches for tint strength, music and combat.
-* **Full settings** under Options › AddOns › Cinematic, with a page for each camera plus Profiles, CineMode, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Mouseover, Minimap, Quest tracker, Swing timer, Cooldown Manager, Tooltips, Buffs/debuffs, Nameplates, Chat, Chat bubbles, Fishing, Quality of life, Visual Effects, Audio, Camera Modes, Camera Triggers and Keybinds. Each settings page has its own Reset button for just that page.
-* **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, start any camera on demand, or show hidden tooltips.
+* **Full settings** under Options › AddOns › Cinematic, with a search box to find any setting. The pages are Profiles, CineMode, Standard Frames, Gamepad (WoW Forever's gamepad mode), 3rd Party Frames, Mouseover, Minimap, Quest tracker, Swing timer, Cooldown Manager, Tooltips, Buffs/debuffs, Nameplates, Chat, Chat bubbles, Fishing, Quality of life, Visual Effects, Audio, Camera Modes, Camera Triggers, Camera Settings (one section per camera) and Keybinds. Each page, and each camera's section, has its own Reset button for just that part.
+* **Keybinds** to toggle CineMode, peek at the UI, hide the UI, trigger a fly-by, start any camera on demand (or pick one from the camera wheel), or show hidden tooltips.
 * **In your language:** English, Deutsch, Español, Français, Italiano, Português, Русский, 한국어, 简体中文 and 繁體中文, picked on the main settings page.
 * **`/cine`** for slash commands, and `/cine debug help` for troubleshooting.
 
