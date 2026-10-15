@@ -1601,6 +1601,130 @@ local function RandomPitchTarget()
 	return -down + math.random() * (up + down)
 end
 
+-- A Camp Tent by the cozy camera: the camera goes through tents, so the sway
+-- keeps clear of it. All that's known is which side of the screen it was on
+-- (Campfire.lua), so it's taken to be TENT_GUESS degrees round from where the
+-- camera was then, toward that side, and kept as a bearing so your turning
+-- doesn't lose it. (Tested in game: a positive turn, the "view left" command,
+-- carries the camera round away from a tent on the right of the screen, so
+-- that tent is at a negative angle. The orbit's angles also count the other
+-- way round from your facing, which turns left as it grows: hence the + below.)
+-- Angles here count as ns.orbit.angle does. (In a do block: this file is at
+-- Lua's 200-local limit.)
+do
+	local TENT_GUESS = 45 -- degrees round from the camera, toward the tent's side
+	local TENT_CLEAR = 90 -- degrees from the tent a sway's end keeps
+	local TENT_BRAKE = 2  -- seconds to slow a move heading for the tent to a stop
+	local lastSeq
+
+	local function Facing()
+		local ok, facing = pcall(GetPlayerFacing)
+		if ok and type(facing) == "number" and not (issecretvalue and issecretvalue(facing)) then
+			return math.deg(facing)
+		end
+	end
+
+	-- The tent's angle now, or nil. Picks up a new sighting: seen in the cozy
+	-- camera, from where the camera is; before it, from behind you (where the
+	-- cozy camera starts from) as you faced then.
+	function ns.CozyTentAngle()
+		local seq, side, facing, duringCozy
+		if ns.TentSighting then
+			seq, side, facing, duringCozy = ns.TentSighting()
+		end
+		if not seq then
+			ns.orbit.tentBearing, lastSeq = nil, nil
+			return nil
+		end
+		local now = Facing() or 0
+		if seq ~= lastSeq then
+			lastSeq = seq
+			local cozyOn = duringCozy and orbitPrefix == "cozyOrbit" and ns.orbit.level > 0
+			local angle = cozyOn and ns.orbit.angle or 0
+			ns.orbit.tentBearing = angle + (side == "right" and -TENT_GUESS or TENT_GUESS)
+				- (cozyOn and now or facing or now)
+			ns.orbit.tentNew = true
+		end
+		return WrapAngle(ns.orbit.tentBearing + now)
+	end
+
+	-- Whether a move from `from` by `delta` degrees passes the tent.
+	function ns.CozyTentOnPath(from, delta, tentAngle)
+		return ((tentAngle - from) * (delta >= 0 and 1 or -1)) % 360 <= math.abs(delta)
+	end
+
+	-- A sway target (relative to the centre) clear of the tent and not past it
+	-- from where the camera is: as picked, mirrored, or an edge of the swing;
+	-- failing those, the edge furthest from it.
+	function ns.CozyTentTarget(target, center, arc, tentAngle)
+		local from = ns.orbit.angle
+		local furthest, best = -1, target
+		for _, candidate in ipairs({ target, -target, arc, -arc }) do
+			local angle = center + candidate
+			local clear = math.abs(WrapAngle(angle - tentAngle))
+			if clear >= TENT_CLEAR and not ns.CozyTentOnPath(from, WrapAngle(angle - from), tentAngle) then
+				return candidate
+			end
+			if clear > furthest then
+				furthest, best = clear, candidate
+			end
+		end
+		return best
+	end
+
+	-- Every frame of the cozy camera (not the tele spin): a new sighting with a
+	-- move heading for the tent slows it to a stop over TENT_BRAKE (from the
+	-- speed it's going, so there's no jolt), and the move ends there; the next
+	-- one heads away. In a pause, the drift turns away. While braking, returns
+	-- the move's yaw speed (before the level) and signed tilt speed.
+	function ns.CozyTentBrake(elapsed)
+		local o = ns.orbit
+		local tentAngle = ns.CozyTentAngle()
+		if tentAngle and o.tentNew then
+			o.tentNew = false
+			local away = WrapAngle(o.angle - tentAngle) >= 0
+			local T = o.sweepTime
+			if o.phase == "move" and not o.spin and o.t < T and (o.yawDelta >= 0) ~= away then
+				local ease = o.ease or OrbitSetting("Ease")
+				local shape = EaseShape(o.t, T, ease) / (T * (1 - ease))
+				o.tentBrake = { t = 0, away = away, yaw = o.yawDelta * shape,
+					pitch = o.level * o.pitchDelta * shape }
+				ns.Log("orbit", ("cozy: Camp Tent at %.0f°, camera at %.0f°: braking, then away"):format(
+					WrapAngle(tentAngle - ArcCenter(orbitPrefix)), WrapAngle(o.angle - ArcCenter(orbitPrefix))))
+			elseif o.phase == "pause" then
+				o.driftPositive = away
+			end
+		end
+		local brake = o.tentBrake
+		if not brake then
+			return nil
+		end
+		brake.t = brake.t + elapsed
+		if o.phase ~= "move" then
+			o.tentBrake = nil
+			return nil
+		elseif brake.t >= TENT_BRAKE then
+			-- Stopped: the move's over (the pause and drift that follow head away).
+			o.tentBrake = nil
+			o.yawDelta, o.t = brake.away and 0.01 or -0.01, o.sweepTime
+			return nil
+		end
+		local f = (1 + math.cos(math.pi * brake.t / TENT_BRAKE)) / 2
+		return brake.yaw * f, brake.pitch * f
+	end
+
+	-- For /cine debug tent: the tent's and the camera's angles from the centre
+	-- of the sway (nil if no tent).
+	function ns.CozyTentDebug()
+		if ns.orbit.tentBearing then
+			local now = Facing() or 0
+			local center = ArcCenter("cozyOrbit")
+			return WrapAngle(ns.orbit.tentBearing + now - center), WrapAngle(ns.orbit.angle - center),
+				ns.orbit.tentBrake ~= nil
+		end
+	end
+end
+
 local function PlanNextSweep()
 	local mode = OrbitSetting("Mode")
 	ns.orbit.spin = false
@@ -1613,6 +1737,10 @@ local function PlanNextSweep()
 		local center = ArcCenter(orbitPrefix)
 		local relative = WrapAngle(ns.orbit.angle - center)
 		local target
+		-- (A Camp Tent nearby: kept clear of. Not by the tele spin.)
+		local tentAngle = orbitPrefix == "cozyOrbit" and not teleSwing and ns.CozyTentAngle()
+		ns.orbit.tentNew = false
+		local swingRound = false
 		if ARC_CENTER[orbitPrefix] and (math.abs(relative) > 2 * arc or teleSwing) then
 			-- Cozy, swinging round from far off: stop short at the near edge of the
 			-- sway, so it can flow on the same way across the centre.
@@ -1621,6 +1749,20 @@ local function PlanNextSweep()
 				ns.orbit.cozyDir = math.random() < 0.5 and 1 or -1
 			else
 				ns.orbit.cozyDir = relative < 0 and 1 or -1
+			end
+			-- (The tent that way round: the other way, the long way if need be.)
+			if tentAngle then
+				local edge = center - ns.orbit.cozyDir * arc * COZY_ARRIVE_EDGE
+				local delta = (edge - ns.orbit.angle) * ns.orbit.cozyDir % 360 * ns.orbit.cozyDir
+				local flipped = ns.CozyTentOnPath(ns.orbit.angle, delta, tentAngle)
+				if flipped then
+					ns.orbit.cozyDir = -ns.orbit.cozyDir
+				end
+				swingRound = true
+				-- (Positive: the "view left" command.)
+				ns.Log("orbit", ("cozy swing round with a Camp Tent at %.0f° (camera at %.0f°): %s, \"view %s\" command"):format(
+					tentAngle, ns.orbit.angle, flipped and "turned the other way" or "the short way was clear",
+					ns.orbit.cozyDir > 0 and "left" or "right"))
 			end
 			ns.orbit.cozyFollow = true
 			target = -ns.orbit.cozyDir * arc * COZY_ARRIVE_EDGE -- one side of your front
@@ -1637,7 +1779,16 @@ local function PlanNextSweep()
 			-- looks the way you're going.
 			target = target * (0.4 + 0.6 * math.abs(target) / arc)
 		end
+		if tentAngle and not swingRound then
+			target = ns.CozyTentTarget(target, center, arc, tentAngle)
+		end
 		ns.orbit.yawDelta = WrapAngle(center + target - ns.orbit.angle)
+		if swingRound and (ns.orbit.yawDelta >= 0) ~= (ns.orbit.cozyDir > 0) then
+			ns.orbit.yawDelta = ns.orbit.yawDelta + ns.orbit.cozyDir * 360 -- (the long way round)
+		elseif tentAngle and math.abs(ns.orbit.yawDelta) < 1 then
+			-- (Kept where it is, as far from the tent as it goes: the drift heads away.)
+			ns.orbit.yawDelta = WrapAngle(ns.orbit.angle - tentAngle) >= 0 and 0.01 or -0.01
+		end
 		if teleSwing and math.abs(ns.orbit.yawDelta) < 1 then
 			ns.orbit.yawDelta = ns.orbit.cozyDir -- (already there: the spin still needs a way to go)
 		end
@@ -1861,10 +2012,16 @@ local function PlanZoom(target)
 end
 
 -- The distance the zoom works around: your own, or for the cozy camera its
--- close-up distance (if you're further out than that).
+-- close-up distance (if you're further out than that), closer still with a
+-- Camp Tent seen nearby, before you sat or since (it'd be in the way: the
+-- camera goes through tents).
 local function ZoomBase()
 	if idleZoom.context == "cozy" then
-		return math.min(idleZoom.saved, ns.db.cozyZoomClose)
+		local close = ns.db.cozyZoomClose
+		if ns.TentNearby and ns.TentNearby() then
+			close = math.min(close, ns.db.cozyTentClose)
+		end
+		return math.min(idleZoom.saved, close)
 	end
 	return idleZoom.saved
 end
@@ -1882,6 +2039,8 @@ local function PlanRandomZoom()
 	local high = base + ZoomSetting("Distance")
 	if (idleZoom.context == "run" or idleZoom.context == "walk") and steeringNow then
 		high = math.min(high, base) -- steering a lot: stay close for control
+	elseif idleZoom.context == "cozy" and ns.TentNearby and ns.TentNearby() then
+		high = math.min(high, base) -- a tent behind: don't drift back out into it
 	end
 	local target = current
 	for _ = 1, 8 do -- a few tries for a change big enough to notice
@@ -2373,6 +2532,22 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 			idleZoom.calmOut = true
 			PlanPath(idleZoom.saved + ZoomSetting("Distance"), ZoomSetting("Time"), ZoomSetting("Ease"), "move")
 		end
+	end
+	-- A Camp Tent seen with the cozy zoom under way: in closer from here, over
+	-- what's left of the zoom in (a few seconds at least), if it's heading
+	-- further out than that.
+	if idleZoom.active and idleZoom.context == "cozy" then
+		local tent = ns.TentNearby and ns.TentNearby() or false
+		if tent and not idleZoom.tentClose then
+			local base = ZoomBase()
+			local moving = idleZoom.phase == "move"
+			local heading = moving and (idleZoom.from + idleZoom.delta) or GetCameraZoom()
+			if heading > base + 0.1 then
+				PlanPath(base, math.max(4, moving and (idleZoom.duration - idleZoom.t) or 0), COZY_ZOOM_EASE, "move")
+				ns.Log("zoom", ("cozy: Camp Tent seen, in to %.1f yards (was heading for %.1f)"):format(base, heading))
+			end
+		end
+		idleZoom.tentClose = tent
 	end
 	if (idleZoom.active or idleZoom.restoring) and not ns.travelHeld then
 		StepIdleZoom(elapsed) -- (held where it is while a window holds the travel cameras)
@@ -2887,6 +3062,12 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		return
 	end
 
+	-- A Camp Tent seen: a move heading for it slows to a stop (the next heads away).
+	local tentYaw, tentPitch
+	if orbitPrefix == "cozyOrbit" and not ns.IsTele() then
+		tentYaw, tentPitch = ns.CozyTentBrake(elapsed)
+	end
+
 	-- Drift: a steady creep that never stops. It runs under the moves too, so a
 	-- move starts and ends at drift speed instead of at a standstill, and it
 	-- changes speed or direction gradually (over about DRIFT_RAMP seconds).
@@ -2969,6 +3150,10 @@ function ns.UpdateOrbit(cinematic, elapsed)
 			if ns.orbit.special then
 				ns.OrbitSpecialMoveDone() -- (a fly-by's or the arrival's move)
 			end
+		elseif tentYaw then
+			yawVel = yawVel + tentYaw -- (braking for a tent)
+			MoveAxis(ns.pitchAxis, math.abs(tentPitch), tentPitch > 0)
+			ns.orbit.pitch = ns.orbit.pitch + tentPitch * elapsed
 		else
 			-- Each axis: cruise = distance / (T * (1 - ease)), shaped by the ease curve.
 			local ease = ns.orbit.ease or OrbitSetting("Ease")

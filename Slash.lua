@@ -75,6 +75,7 @@ local function PrintDebugHelp()
 	print("  /cine debug newplayer - back to no profile picked, as on a fresh install (the welcome window)")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
+	print("  /cine debug tent [seen|cozy [left|right]|clear] - whether a Camp Tent's been moused over near here (seen fakes one on that side of the screen, cozy also starts the cozy camera)")
 	print("  /cine debug fishing - the last red error message, and whether it paused right-click casting")
 	print("  /cine debug weapon - what the game says about your weapon, and the cozy weapon trigger")
 	print("  /cine debug quest - the quest cam: on or off, its zoom and the over-the-shoulder offset")
@@ -531,6 +532,56 @@ function ns.HandleSlash(msg)
 				print("  " .. line)
 			end
 		end)
+	elseif cmd == "debug" and (arg == "tent" or arg:find("^tent ")) then
+		-- Whether a Camp Tent's been seen near here; "seen" fakes one, "clear" forgets it.
+		-- (seen and cozy take the side of the screen it's on: right if not said.)
+		local how, side = arg:match("^tent%s+(%S+)%s*(%S*)$")
+		side = (side == "left" or side == "right") and side or nil
+		if how == "seen" or how == "clear" then
+			ns.TentTest(how == "clear", side)
+		elseif how == "cozy" then
+			-- A tent seen here, then the cozy camera (already on: it just picks the tent up).
+			ns.TentTest(false, side)
+			if ns.manualCam ~= "cozy" then
+				Cinematic_StartCam("cozy")
+			end
+		elseif how then
+			ns.Print("/cine debug tent [seen|cozy [left|right]|clear]")
+			return
+		end
+		local t, c = ns.GetTentDebug()
+		if t then
+			-- (Your side of it: the camera's behind you outside the cozy camera, in front in it.)
+			local yours = (t.side == "right") ~= (t.duringCozy and true or false) and "right" or "left"
+			ns.Print(("Camp Tent: to your %s (%s of the screen, with the camera %s you); seen %.0f sec ago (%s), you're %s from there; forgotten %d yards away"):format(
+				yours:upper(), t.side, t.duringCozy and "in front of" or "behind", t.ago, t.how,
+				t.distance and ("%.1f yards"):format(t.distance) or "an unknown distance", t.forget))
+		else
+			ns.Print("Camp Tent: none seen near here (/cine debug tent seen fakes one)")
+		end
+		if c then
+			ns.Print(("cozy camera: %s, %s"):format(
+				c.on and ("on for %.0f sec"):format(c.length)
+					or ("last one ran %.0f sec, ended %.0f sec ago"):format(c.length, c.endedAgo),
+				c.tentAtStart and "tent already seen as it started"
+					or c.tentAfter and ("tent first seen %.1f sec into it"):format(c.tentAfter)
+					or "no tent seen during it"))
+		else
+			ns.Print("cozy camera: none since loading in")
+		end
+		local zoom = ns.GetZoomDebug()
+		ns.Print(("camera distance now %.1f yards; cozy close-up %.1f, with a tent seen %.1f; cozy zoom %s%s"):format(
+			GetCameraZoom(), ns.db.cozyZoomClose, ns.db.cozyTentClose, zoom.active and zoom.context == "cozy" and "on" or "off",
+			zoom.active and zoom.context == "cozy" and zoom.phase == "move"
+				and (", heading for %.1f"):format(zoom.from + zoom.delta) or ""))
+		local tentAngle, cameraAngle, braking = ns.CozyTentDebug()
+		if tentAngle then
+			ns.Print(("cozy sway: tent guessed at %.0f°, camera at %.0f° (from in front of you), keeping 90° clear%s"):format(
+				tentAngle, cameraAngle, braking and "; braking away from it now" or ""))
+		else
+			ns.Print(t and "cozy sway: not going yet (it steers clear of the tent once the cozy camera starts)"
+				or "cozy sway: no tent to steer clear of")
+		end
 	elseif cmd == "debug" and arg == "weapon" then
 		local w = ns.GetWeaponDebug()
 		ns.Print(("weapon: GetSheathState %s, returned %s (1 sheathed, 2 melee, 3 ranged); drawn %s, drawn calmly %s; cozy now %s, weapon event camera %s"):format(

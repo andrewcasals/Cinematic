@@ -58,10 +58,13 @@ local function NearCenter(x, y)
 	return (x - width / 2) ^ 2 + (y - height / 2) ^ 2 <= reach * reach
 end
 
--- The world tooltip's first line, if it's a campfire's. (Lowered only when it
--- changes, so looking often makes no garbage.)
-local lastText, lastWasCampfire
-local function TooltipIsCampfire()
+local TENT_NAME = "camp tent" -- (English only for now)
+
+-- Whether a world tooltip is up and its first line can be read. What that line
+-- names (lastWasCampfire, lastWasTent) is worked out only when it changes, so
+-- looking often makes no garbage.
+local lastText, lastWasCampfire, lastWasTent
+local function LookAtTooltip()
 	if not ns.Flag(GameTooltip:IsShown()) then
 		return false
 	end
@@ -74,9 +77,17 @@ local function TooltipIsCampfire()
 		return false
 	end
 	if text ~= lastText then
-		lastText, lastWasCampfire = text, text:lower():find(campfireName, 1, true) ~= nil
+		local lower = text:lower()
+		lastText = text
+		lastWasCampfire = lower:find(campfireName, 1, true) ~= nil
+		lastWasTent = lower:find(TENT_NAME, 1, true) ~= nil
 	end
-	return lastWasCampfire
+	return true
+end
+
+-- The world tooltip's first line, if it's a campfire's.
+local function TooltipIsCampfire()
+	return LookAtTooltip() and lastWasCampfire
 end
 
 -- Times you can't (or wouldn't) sit down by a fire.
@@ -106,8 +117,129 @@ end
 -- Where you are, in yards; nil where the game won't say (some instances).
 local function PlayerPosition()
 	local ok, y, x = pcall(UnitPosition, "player")
-	if ok and type(y) == "number" and type(x) == "number" then
+	if ok and type(y) == "number" and type(x) == "number"
+		and not (issecretvalue and (issecretvalue(y) or issecretvalue(x))) then
 		return x, y
+	end
+end
+
+-- Camp Tents: nothing says one is near but its tooltip, so the cursor passing
+-- over one is noted, with where you stood, and it counts as near until you've
+-- moved TENT_FORGET yards from there (or, where the game won't say where you
+-- are, for TENT_FORGET_TIME seconds). For the cozy camera by a fire with a
+-- tent in the way. (/cine debug tent; /cine debug tent seen fakes one.)
+local TENT_FORGET = 15
+local TENT_FORGET_TIME = 60
+-- tent: { at = GetTime(), x, y = where you stood (yards, or nil), how =
+-- "tooltip"/"test", side = "left"/"right" of the screen, facing = yours then
+-- (degrees, or nil), duringCozy, seq = counts each new sighting or side }
+local tent
+local tentSeq = 0
+-- The latest cozy camera, for /cine debug tent: whether the tent was known
+-- as it started, or first seen during it (seconds in).
+local cozy = { on = false, at = nil, ended = nil, tentAtStart = false, tentAfter = nil }
+
+local function Facing()
+	local ok, facing = pcall(GetPlayerFacing)
+	if ok and type(facing) == "number" and not (issecretvalue and issecretvalue(facing)) then
+		return math.deg(facing)
+	end
+end
+
+-- side: which half of the screen it's on (by the cursor, if not given).
+local function SawTent(how, side)
+	side = side or (CursorPosition() > UIParent:GetWidth() / 2 and "right" or "left")
+	-- Where it was first seen is what counts: the sway moves the camera, so the
+	-- same tent crosses the screen, and taking each side afresh would turn the
+	-- camera back and forth. (A test sighting always counts afresh.)
+	if not tent or how == "test" then
+		tentSeq = tentSeq + 1
+		ns.Log("campfire", ("Camp Tent seen (%s), %s of the screen"):format(how, side))
+		tent = tent or {}
+		tent.side, tent.seq, tent.facing, tent.duringCozy = side, tentSeq, Facing(), cozy.on
+	end
+	tent.at, tent.how = GetTime(), how
+	tent.x, tent.y = PlayerPosition()
+	-- (A test sighting counts as seen while sitting even if one was known before.)
+	if cozy.on and (not cozy.tentAtStart or how == "test") and not cozy.tentAfter then
+		cozy.tentAfter = GetTime() - cozy.at
+		ns.Log("campfire", ("Camp Tent seen %.1f sec into the cozy camera"):format(cozy.tentAfter))
+	end
+end
+
+-- Following the cozy camera starting and ending (looked at every LOOK_EVERY).
+local function WatchCozy()
+	local now = ns.IsCozy and ns.IsCozy() or false
+	if now and not cozy.on then
+		cozy.on, cozy.at, cozy.ended, cozy.tentAtStart, cozy.tentAfter = true, GetTime(), nil, tent ~= nil, nil
+		ns.Log("campfire", "cozy camera started, Camp Tent " .. (tent and "already seen" or "not seen"))
+	elseif cozy.on and not now then
+		cozy.on, cozy.ended = false, GetTime()
+		ns.Log("campfire", ("cozy camera ended after %.0f sec"):format(cozy.ended - cozy.at))
+	end
+end
+
+-- Yards from where you stood when the tent was last seen (nil if unknown).
+local function TentDistance()
+	if not (tent and tent.x) then
+		return nil
+	end
+	local x, y = PlayerPosition()
+	if x then
+		return math.sqrt((x - tent.x) ^ 2 + (y - tent.y) ^ 2)
+	end
+end
+
+local function ForgetTentIfAway()
+	if not tent then
+		return
+	end
+	local distance = TentDistance()
+	if (distance and distance > TENT_FORGET) or (not distance and GetTime() - tent.at > TENT_FORGET_TIME) then
+		ns.Log("campfire", ("Camp Tent forgotten (%s)"):format(distance and ("%.0f yards away"):format(distance)
+			or "no position"))
+		tent = nil
+	end
+end
+
+-- Whether a Camp Tent has been seen near where you are (the cozy zoom then
+-- comes in closer: cozyTentClose).
+function ns.TentNearby()
+	return tent ~= nil
+end
+
+-- The latest sighting, for the cozy camera's sway: its number (new each
+-- sighting or change of side), the screen side, your facing then (degrees,
+-- or nil) and whether the cozy camera was on. Nil if none is remembered.
+function ns.TentSighting()
+	if tent then
+		return tent.seq, tent.side, tent.facing, tent.duringCozy
+	end
+end
+
+-- /cine debug tent: the tent (nil if none is remembered) and the latest cozy
+-- camera (nil if there's been none since loading in).
+function ns.GetTentDebug()
+	local seen, camera
+	if tent then
+		seen = { ago = GetTime() - tent.at, distance = TentDistance(), how = tent.how, forget = TENT_FORGET,
+			side = tent.side, duringCozy = tent.duringCozy }
+	end
+	if cozy.at then
+		camera = { on = cozy.on, length = (cozy.ended or GetTime()) - cozy.at,
+			endedAgo = cozy.ended and GetTime() - cozy.ended, tentAtStart = cozy.tentAtStart, tentAfter = cozy.tentAfter }
+	end
+	return seen, camera
+end
+
+-- /cine debug tent seen [left|right] (as if one had just been moused over
+-- there; right if not said) or clear.
+function ns.TentTest(clear, side)
+	if clear then
+		tent = nil
+		ns.Log("campfire", "Camp Tent cleared (test)")
+	else
+		SawTent("test", side or "right")
 	end
 end
 
@@ -146,6 +278,12 @@ local function OnUpdate(_, elapsed)
 	sinceLook = sinceLook + elapsed
 	if sinceLook >= LOOK_EVERY then
 		sinceLook = 0
+		WatchCozy()
+		-- (Sitting or not: a tent seen just after you sit counts too.)
+		if LookAtTooltip() and lastWasTent then
+			SawTent("tooltip")
+		end
+		ForgetTentIfAway()
 		local onFire = CanSit() and OnCampfire()
 		if not CanSit() then
 			lastSeen, dismissed, hoverSince = -math.huge, false, nil
@@ -207,7 +345,13 @@ end
 -- A campfire's tooltip appeared: noted where, in case Cinematic hides it at
 -- once (the Tooltips page), so the cursor still counts as on the fire.
 local function OnTooltipShow()
-	if TooltipIsCampfire() and not ns.Flag(UnitExists("mouseover")) then
+	if not LookAtTooltip() then
+		return
+	end
+	if lastWasTent then
+		SawTent("tooltip")
+	end
+	if lastWasCampfire and not ns.Flag(UnitExists("mouseover")) then
 		foundX, foundY = CursorPosition()
 		sinceLook = LOOK_EVERY -- (look now)
 	end

@@ -231,6 +231,7 @@ local DEFAULTS = {
 	hunterRightClickShot = true, -- hunters: right-click on an enemy starts Auto Shot, in combat too (Hunter.lua)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
 	cozyZoomClose = 10,       -- yards: the distance it zooms in to (if you're further out); far side of a fire
+	cozyTentClose = 7,        -- ...closer with a Camp Tent seen nearby (Campfire.lua), and no drifting further out
 	cozyLevel = 15,           -- degrees it brings the camera down toward the ground as it swings round
 	idleZoom = true,          -- slowly zoom out after standing still for idleOrbitDelay
 	taxiZoom = true,          -- the same slow zoom during flights
@@ -2618,6 +2619,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			"nameShowMobs", "nameShowNPCs", "nameShowOwn", "nameShowOther", "nameShowPets",
 			"nameShowMinions", "nameShowTotems", "nameShowSelf", -- (names outside cinematic mode are the game's own)
 			"cameraPauseAtNPCs", "cameraPauseCasting", "cameraPauseInMenus", -- (always on now)
+			"cozyTentZoom", -- (now cozyTentClose)
 		}) do
 			ns.db[key] = nil
 		end
