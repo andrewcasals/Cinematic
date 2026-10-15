@@ -838,7 +838,7 @@ function ns.HookCameraInput()
 	if JumpOrAscendStart then
 		hooksecurefunc("JumpOrAscendStart", function() -- jumping stands you up
 			emoteEvent = nil
-			ns.manualCam = nil
+			ns.manualCam, ns.deathTestUntil = nil, nil
 			ns.StopEventsOnMove()
 		end)
 	end
@@ -1927,7 +1927,8 @@ local TILT_RESTORE_DELAY = 0.3 -- seconds after stopping before your tilt speed 
 -- /cine deathtest, and real deaths after /cine debug death, print what the
 -- death camera does and when (seconds since you died).
 function ns.DeathTestLog(text)
-	if GetTime() < (ns.deathTestUntil or 0) or ns.deathDebug then
+	-- (Only for /cine deathtest: its key and the camera wheel run it quietly.)
+	if (ns.deathTestLoud and GetTime() < (ns.deathTestUntil or 0)) or ns.deathDebug then
 		ns.Print(("%.2fs %s"):format(GetTime() - (ns.orbit.deadSince or GetTime()), text))
 	end
 end
@@ -2557,6 +2558,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	if ns.playerMoving or onTaxi then
 		emoteEvent = nil
 		ns.manualCam = nil -- (and a camera started from a key binding)
+		ns.deathTestUntil = nil -- (the death camera test too)
 	end
 	-- An event (Camera Triggers page) for the cozy, vista or AFK camera: no waiting; the
 	-- AFK camera's timer counts as run, for the tint, tooltips and music too.
@@ -2678,7 +2680,9 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- would swing the camera round with you. It waits until you've stopped
 	-- turning for a moment. (Once running, turns are held and glided instead.)
 	local turnBlocksStart = travel and ns.orbit.level == 0 and now - lastAnyTurnAt < TRAVEL_START_AFTER_TURN
-	local want = (deathCam and ns.orbit.deathRisen and not adjusting)
+	-- (The death camera doesn't wait out a camera input pause: input from
+	-- before you died doesn't count, and input since hands you the camera.)
+	local want = (deathCam and ns.orbit.deathRisen)
 		or (cinematic and not adjusting and not InCombatLockdown() and not turnBlocksStart
 		and ((onTaxi and ns.db.taxiOrbit and ns.FlightCameraOn() and not ns.orbit.settling)
 			or (travel and ns.db[T.orbit] and not ns.travelHeld)

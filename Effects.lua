@@ -559,11 +559,15 @@ end
 -- off; the music manager (UpdateMusic) stands aside meanwhile, and the music
 -- settings it found are put back afterwards.
 function ns.SetDeathSong(on)
-	deathSong.file = on and ns.db.deathSong and ns.PickDeathSong() or nil
+	-- With CineMode music off (musicInCinematic), music is never switched on:
+	-- the song plays only if your game music is on already.
+	local musicOn = GetCVar("Sound_EnableMusic") == "1"
+	deathSong.file = on and ns.db.deathSong and (musicOn or ns.db.musicInCinematic) and ns.PickDeathSong() or nil
 	if on and ns.DeathTestLog then
 		ns.DeathTestLog(("death song: %s (song option %s, game music %s)"):format(
 			tostring(deathSong.file), tostring(ns.db.deathSong),
-			GetCVar("Sound_EnableMusic") == "1" and "on" or "off - switching it on"))
+			musicOn and "on" or ns.db.musicInCinematic and "off - switching it on"
+				or "off, and CineMode music off: no song"))
 	end
 end
 

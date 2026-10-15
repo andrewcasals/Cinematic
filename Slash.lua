@@ -104,6 +104,7 @@ local function PrintDebugHelp()
 	print("  /cine zoomtest, drifttest, pitchtest - camera movement tests")
 	print("  /cine doftest [seconds|strength <0-100>] - show the depth-of-field edge haze (30; again to stop)")
 	print("  /cine timetest [name] - show the time-of-day change title now (all: each in turn)")
+	print("  /cine tinttest [seconds] - each time of day's tint with its title, AFK camera on (8 each; again to stop)")
 	print("  /cine soundtest <id> - play a game sound by its ID (stops after 10 seconds)")
 	print("  /cine songtest [file ID] - play a random death song, or any music file (again to stop)")
 	logPrints = true
@@ -318,7 +319,7 @@ function ns.HandleSlash(msg)
 			ns.Print("the death camera is off: turn it on with /cine death first")
 		else
 			local seconds = num or 30
-			ns.deathTestUntil = GetTime() + seconds
+			ns.deathTestUntil, ns.deathTestLoud = GetTime() + seconds, true
 			ns.Print(("death camera test for %d seconds: stand still and it starts after %.1f sec. " ..
 				"/cine deathtest again stops it."):format(seconds, ns.db.deathOrbitDelay))
 		end
@@ -473,6 +474,29 @@ function ns.HandleSlash(msg)
 				math.floor(ns.FocusDemoStrength() * 100 + 0.5), num or 30))
 		else
 			ns.Print("depth of field demo stopped")
+		end
+	elseif cmd == "tinttest" then
+		-- Each time of day in turn: its tint and its title, with the AFK camera
+		-- circling meanwhile. Again to stop.
+		local seconds = tonumber(arg) or 8
+		local startedCam = false
+		local function StopCam()
+			if startedCam and ns.manualCam == "afk" then
+				Cinematic_StartCam("idle", true) -- (a second press stops it)
+			end
+		end
+		if ns.DaySweep(math.max(4, seconds), StopCam) then
+			if ns.manualCam ~= "afk" then
+				Cinematic_StartCam("idle")
+				startedCam = ns.manualCam == "afk"
+			end
+			ns.Print(("showing every time of day's tint, %d seconds each. /cine tinttest again stops it."):format(
+				math.max(4, seconds)))
+			if ns.db.visualEffects == false then
+				ns.Print("Visual effects are off, so the tint won't show: turn them on first")
+			end
+		else
+			ns.Print("time of day tint demo stopped")
 		end
 	elseif cmd == "timetest" then
 		-- Shows the time-of-day change title now; /cine timetest dusk shows "Dusk".

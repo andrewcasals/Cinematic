@@ -1608,32 +1608,37 @@ end
 -- Key bindings for the standing-still cameras: each starts its camera now, as
 -- if its event had happened, and pressing it again stops it. Moving or jumping
 -- ends it, like an emote. "death" runs the death camera test (/cine deathtest).
+-- quiet: no messages in chat (the camera wheel).
 local CAM_NAMES = { idle = "AFK camera", cozy = "cozy camera", vista = "vista camera", fish = "fish camera",
 	tele = "tele camera" }
-function Cinematic_StartCam(camera)
+function Cinematic_StartCam(camera, quiet)
 	if not ns.db then
 		return
 	end
+	local Print = quiet and function() end or ns.Print
 	local now = GetTime()
 	if camera == "death" then
 		if now < (ns.deathTestUntil or 0) then
 			ns.deathTestUntil = 0
-			ns.Print(L["death camera test stopped"])
+			Print(L["death camera test stopped"])
 		elseif not ns.db.deathOrbit then
-			ns.Print(L["the death camera is off: turn it on with /cine death first"])
+			Print(L["the death camera is off: turn it on with /cine death first"])
+		elseif ns.playerMoving then
+			-- (Moving ends the test, like the other cameras.)
+			Print(L["stand still to start the %s"]:format(L["death camera"]))
 		else
-			ns.deathTestUntil = now + 30
-			ns.Print(L["death camera test for 30 seconds: stand still and it starts after %.1f sec. " ..
+			ns.deathTestUntil, ns.deathTestLoud = now + 30, false
+			Print(L["death camera test for 30 seconds: stand still and it starts after %.1f sec. " ..
 				"Press the key again to stop it."]:format(ns.db.deathOrbitDelay))
 		end
 		return
 	end
 	if not ns.db.enabled then
-		ns.Print(L["Cinematic is off: turn it on first"])
+		Print(L["Cinematic is off: turn it on first"])
 		return
 	end
 	if ns.playerMoving or UnitOnTaxi("player") then
-		ns.Print(L["stand still to start the %s"]:format(L[CAM_NAMES[camera]]))
+		Print(L["stand still to start the %s"]:format(L[CAM_NAMES[camera]]))
 		return
 	end
 	local idleOn = camera == "idle" and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
@@ -1644,11 +1649,11 @@ function Cinematic_StartCam(camera)
 	if ns.manualCam == manual or idleOn then
 		ns.manualCam = nil
 		ns.stillSince = now -- the standing-still timer starts afresh
-		ns.Print(L["%s stopped"]:format(L[CAM_NAMES[camera]]))
+		Print(L["%s stopped"]:format(L[CAM_NAMES[camera]]))
 		return
 	end
 	if camera == "idle" and not ns.db.idleOrbit then
-		ns.Print(L["the AFK camera's rotation is off on its options page"])
+		Print(L["the AFK camera's rotation is off in Camera Settings"])
 		return
 	end
 	ns.manualCam = manual
@@ -1657,7 +1662,7 @@ function Cinematic_StartCam(camera)
 	end
 	ns.stillSince = now - ns.db.idleOrbitDelay -- counts as stood still long enough
 	lastBusy = 0 -- fade the UI now
-	ns.Print(L["%s on: move, jump or press the key again to stop it"]:format(L[CAM_NAMES[camera]]))
+	Print(L["%s on: move, jump or press the key again to stop it"]:format(L[CAM_NAMES[camera]]))
 end
 
 function Cinematic_ToggleUI()

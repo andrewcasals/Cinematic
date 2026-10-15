@@ -410,12 +410,11 @@ local function CreateScrollPage(noReset)
 	return canvas, content
 end
 
--- Size the scrolling content to reach just past its lowest widget, so the
--- scroll range always fits however many settings a page has.
-local function FitContentHeight(content)
+-- How far below its top a frame's widgets reach (nil before it's laid out).
+local function ContentDepth(content)
 	local top = content:GetTop()
 	if not top then
-		return
+		return nil
 	end
 	local lowest = top
 	local function consider(object)
@@ -434,7 +433,16 @@ local function FitContentHeight(content)
 		end
 	end
 	for _, region in ipairs({ content:GetRegions() }) do consider(region) end
-	content:SetHeight(top - lowest + 16)
+	return top - lowest
+end
+
+-- Size the scrolling content to reach just past its lowest widget, so the
+-- scroll range always fits however many settings a page has.
+local function FitContentHeight(content)
+	local depth = ContentDepth(content)
+	if depth then
+		content:SetHeight(depth + 16)
+	end
 end
 
 -- OnShow for a page: refresh, then fit the scroll height (again next frame,
@@ -479,7 +487,8 @@ local function BuildSearchIndex()
 		local function walk(frame)
 			-- (IsShown: the frame's own flag, so hidden rows are left out even on
 			-- pages that aren't open)
-			if frame.searchSkip or not frame:IsShown() then return end
+			-- (A closed section's settings count: finding one opens it.)
+			if frame.searchSkip or not (frame:IsShown() or frame.searchAlways) then return end
 			if frame.searchLabel then
 				add(frame.searchLabel, frame.searchTip, 1, frame.searchEdges)
 				return
@@ -562,6 +571,15 @@ end
 
 -- Opens a match's page, scrolled to it and highlighted.
 local function ShowMatch(entry)
+	-- In a closed section of the Camera Settings page: opened first.
+	local object = entry.edges and entry.edges.top
+	while object do
+		if object.openSection then
+			object.openSection()
+			break
+		end
+		object = object:GetParent()
+	end
 	ns.OpenOptions(entry.page.key)
 	if not entry.edges then return end
 	local canvas = entry.page.canvas
@@ -1590,6 +1608,114 @@ local PLACES = {
 	{ "Raids", L["Raids"] }, { "PvP", L["PvP"] },
 }
 
+-- The Camera Settings page: every camera's settings on one page, each in a
+-- section that opens and closes with a click on its name (all closed to
+-- start). Each camera is laid out on its section's body as it once was on a
+-- page of its own; CameraSection gives the body and the title to build under.
+local SECTION_HEADER = 30 -- height of a section's name row
+local SECTION_GAP = 6
+local cameraSections = {} -- in order: { frame, body, icon, open }
+local cameraSettingsContent, cameraSettingsTop -- the page's content, and what the first section goes under
+
+local function LayoutCameraSections()
+	for _, section in ipairs(cameraSections) do
+		section.body:SetShown(section.open)
+		local height = SECTION_HEADER
+		if section.open then
+			height = math.max(height, (ContentDepth(section.body) or 0) + 12)
+		end
+		section.frame:SetHeight(height)
+		section.icon:SetTexture(section.open and "Interface\\Buttons\\UI-MinusButton-Up"
+			or "Interface\\Buttons\\UI-PlusButton-Up")
+	end
+	if cameraSettingsContent then
+		FitContentHeight(cameraSettingsContent)
+	end
+end
+
+-- (Laid out again next frame too, once the opened settings have settled.)
+local function RelayoutCameraSections()
+	LayoutCameraSections()
+	C_Timer.After(0, LayoutCameraSections)
+end
+
+StaticPopupDialogs.CINEMATIC_RESET_SECTION = {
+	text = L["Put this camera's settings back to the profile's own?"],
+	button1 = YES, button2 = NO,
+	OnAccept = function(_, content) ResetPage(content) end,
+	timeout = 0, whileDead = true, hideOnEscape = true,
+}
+
+-- A new section at the bottom of the Camera Settings page: its body (where
+-- the camera's settings go) and an anchor where its title used to be (the
+-- title itself is in the name row).
+local function CameraSection(name)
+	local section = { open = false }
+	local frame = CreateFrame("Frame", nil, cameraSettingsContent)
+	local previous = cameraSections[#cameraSections]
+	if previous then
+		frame:SetPoint("TOPLEFT", previous.frame, "BOTTOMLEFT", 0, -SECTION_GAP)
+	else
+		frame:SetPoint("TOPLEFT", cameraSettingsTop, "BOTTOMLEFT", 0, -16)
+	end
+	frame:SetPoint("RIGHT", cameraSettingsContent, "RIGHT", -16, 0)
+	frame:SetHeight(SECTION_HEADER)
+
+	local body = CreateFrame("Frame", nil, frame)
+	body:SetPoint("TOPLEFT")
+	body:SetPoint("TOPRIGHT")
+	body:SetHeight(1)
+	body:Hide()
+	body.searchAlways = true
+
+	-- The name row: click to open or close (the +/- sits in the page margin).
+	local header = CreateFrame("Button", nil, frame)
+	header:SetPoint("TOPLEFT", -18, 0)
+	header:SetPoint("TOPRIGHT")
+	header:SetHeight(SECTION_HEADER)
+	header:SetFrameLevel(body:GetFrameLevel() + 5)
+	local band = header:CreateTexture(nil, "BACKGROUND")
+	band:SetAllPoints()
+	band:SetColorTexture(1, 1, 1, 0.05)
+	local hover = header:CreateTexture(nil, "HIGHLIGHT")
+	hover:SetAllPoints()
+	hover:SetColorTexture(1, 0.82, 0, 0.08)
+	local icon = header:CreateTexture(nil, "ARTWORK")
+	icon:SetSize(14, 14)
+	icon:SetPoint("LEFT", header, "LEFT", 1, 0)
+	local title = Label(header, "GameFontNormalLarge", name)
+	title:SetPoint("LEFT", header, "LEFT", 18, 0)
+	header:SetScript("OnClick", function()
+		section.open = not section.open
+		RelayoutCameraSections()
+	end)
+
+	local reset = CreateFrame("Button", nil, header, "UIPanelButtonTemplate")
+	reset:SetSize(90, 20)
+	reset:SetPoint("RIGHT", header, "RIGHT", -6, 0)
+	reset:SetText(L["Reset"])
+	reset.searchSkip = true
+	Tooltip(reset, L["Put this camera's settings back to the active profile's own values (the defaults, " ..
+		"or a built-in profile's)."])
+	reset:SetScript("OnClick", function()
+		StaticPopup_Show("CINEMATIC_RESET_SECTION", nil, nil, body)
+	end)
+
+	-- (Search: a setting found in here opens the section first.)
+	function body.openSection()
+		if not section.open then
+			section.open = true
+			RelayoutCameraSections()
+		end
+	end
+	section.frame, section.body, section.icon = frame, body, icon
+	cameraSections[#cameraSections + 1] = section
+	local anchor = body:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	anchor:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -SECTION_HEADER + 2)
+	anchor:SetSize(1, 1)
+	return body, anchor
+end
+
 -- Every camera mode's page is laid out the same way:
 --   Starting (full width): opts.top's own section first if any, then
 --     starting cinematic mode straight away, the
@@ -1599,17 +1725,14 @@ local PLACES = {
 --     sections (opts.extras: Height, Turning, Fly-bys, Landing).
 --   Right column: Zoom (and opts.zoomExtras), Depth of field.
 -- The opts functions take (content, stack) and add their controls to it.
--- The Death Cam and Quest Cam pages follow the same layout by hand.
+-- The Death, Quest and Tele Cam sections follow the same layout by hand.
 local ZOOM_TIP = L["The camera slowly pulls back, then (with random zoom) drifts in and out. Moving " ..
 	"glides it back to your distance; zooming yourself keeps your new distance."]
 local INPUT_PAUSE_TIP = L["After you drag the camera, use camera keys or zoom, this camera waits " ..
 	"this long, then carries on from your new view."]
 
 local function CreateCameraModePanel(opts)
-	local canvas, content = CreateScrollPage()
-
-	local title = Label(content, "GameFontNormalLarge", L[opts.name])
-	title:SetPoint("TOPLEFT", 16, -16)
+	local content, title = CameraSection(L[opts.name])
 
 	local subtitle = Label(content, "GameFontHighlightSmall", opts.description)
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
@@ -1665,10 +1788,6 @@ local function CreateCameraModePanel(opts)
 		"camera had focused on you. 0% leaves it off. Moving the slider shows it for a moment. " ..
 		"Needs \"Depth of field\" on the Visual Effects page."])
 	GreyUnless(dof, function(db) return db.visualEffects and db.depthOfField end)
-
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
-	canvas:Hide()
-	RegisterSubpage(canvas, opts.name)
 end
 
 -- The "Height" section of a camera mode's page: how far it lowers the camera.
@@ -1933,19 +2052,20 @@ local function CreateEventsPanel()
 		{ label = L["Auto-walk (RP walk)"], cameraKey = "walkCamera", choices = WALK_CAMERAS, off = "none",
 			key = "musicCamWalk", cineKey = "walkCine", delayKey = "walkCameraDelay",
 			delayLabel = L["After auto-walking for"],
-			tip = L["Auto-walking (auto-run in walk mode). The camera's settings are on the RP Walk Cam " ..
-				"page; Camera Modes turns it off in some places."] },
+			tip = L["Auto-walking (auto-run in walk mode). The camera's settings are under RP Walk Cam on " ..
+				"the Camera Settings page; Camera Modes turns it off in some places."] },
 		{ label = L["Auto-run"], cameraKey = "runCamera", choices = RUN_CAMERAS, off = "none", key = "musicCamRun",
 			cineKey = "runCine", delayKey = "runCameraDelay", delayLabel = L["After auto-running for"],
-			tip = L["Auto-running. The camera's settings are on the Auto-run Cam page; Camera Modes turns " ..
+			tip = L["Auto-running. The camera's settings are under Auto-run Cam on the Camera Settings page; Camera Modes turns " ..
 				"it off in some places."] },
 		{ label = L["Die"], cameraKey = "deathOrbit", choices = DEATH_CAMERAS, off = false, key = "deathSong",
 			cineKey = "deathCine",
 			deathSong = true,
-			tip = L["Dying, until you release or are resurrected. The camera's settings are on the Death " ..
-				"Cam page; Camera Modes turns it off in some places."],
+			tip = L["Dying, until you release or are resurrected. The camera's settings are under Death " ..
+				"Cam on the Camera Settings page; Camera Modes turns it off in some places."],
 			musicTip = L["A song of its own plays while the death camera runs, in place of the zone music " ..
-				"(pick the songs on the Death Cam page). Needs game music on, not CineMode's music."] },
+				"(pick the songs under Death Cam on the Camera Settings page). With CineMode music off, " ..
+				"only if your game music is on."] },
 	}) do
 		local label = Label(content, "GameFontHighlight", cam.label)
 		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -20)
@@ -2186,10 +2306,7 @@ end
 -- Not a CreateCameraModePanel page (no sway, zoom profile or music switch of
 -- its own), but laid out the same way.
 local function CreateDeathPanel()
-	local canvas, content = CreateScrollPage()
-
-	local title = Label(content, "GameFontNormalLarge", L["Death Cam"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	local content, title = CameraSection(L["Death Cam"])
 	local subtitle = Label(content, "GameFontHighlightSmall", L["When you die, the camera turns " ..
 		"slowly round your body until you release or are resurrected. CineMode stays on " ..
 		"(straight away), with the release button (and any soulstone or Reincarnation " ..
@@ -2249,7 +2366,8 @@ local function CreateDeathPanel()
 	rightStack:Header(content, L["Music"])
 	local song = rightStack:Add(Check(content, "deathSong", L["Play a death song"],
 		L["While the death camera runs, a song picked at random from the list below plays in place " ..
-		"of the zone music. Needs game music on. It stops when you release or come back."]), "check")
+		"of the zone music. With CineMode music off, only if your game music is on. It stops when you " ..
+		"release or come back."]), "check")
 	song:HookScript("OnClick", Refresh) -- grey out / enable the file box below
 	GreyUnless(song, IfOn)
 	local songBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
@@ -2272,10 +2390,6 @@ local function CreateDeathPanel()
 	Tooltip(songBox, L["Music file IDs, separated by commas; one is picked at random each time " ..
 		"you die (Wowhead lists the IDs on each sound's page). Try one with /cine songtest <ID>."])
 	rightStack:Note(content, L["Music file IDs, separated by commas. One is picked at random."])
-
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
-	canvas:Hide()
-	RegisterSubpage(canvas, L["Death Cam"])
 end
 
 -- Not a CreateCameraModePanel page either (QuestCam.lua, started by the quest
@@ -2287,10 +2401,7 @@ local QUEST_SIDES = {
 	{ value = "left", text = L["Your left"] },
 }
 local function CreateQuestPanel()
-	local canvas, content = CreateScrollPage()
-
-	local title = Label(content, "GameFontNormalLarge", L["Quest Cam"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	local content, title = CameraSection(L["Quest Cam"])
 	local subtitle = Label(content, "GameFontHighlightSmall", L["Talking to a quest giver, the " ..
 		"camera zooms in and swings round behind you, looking past you at them. It goes back " ..
 		"once you close the window or move off (your zoom stays if you zoomed yourself meanwhile). Works " ..
@@ -2394,17 +2505,10 @@ local function CreateQuestPanel()
 		"this slowly while you stand still (turning back behind you and tilting back up as it goes). " ..
 		"Walk off and it speeds up, back out in a moment."])
 	GreyUnless(zoomOutTime, IfOn)
-
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
-	canvas:Hide()
-	RegisterSubpage(canvas, L["Quest Cam"])
 end
 
 local function CreateTelePanel()
-	local canvas, content = CreateScrollPage()
-
-	local title = Label(content, "GameFontNormalLarge", L["Tele Cam"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	local content, title = CameraSection(L["Tele Cam"])
 	local subtitle = Label(content, "GameFontHighlightSmall", L["Casting your Hearthstone or a " ..
 		"teleport, the camera swings round in front of you, quickly enough to be there before you " ..
 		"go, then spins round you faster and faster as it zooms in. Cancel the cast and it goes " ..
@@ -2481,10 +2585,39 @@ local function CreateTelePanel()
 		0.5, 3, 0.25, L["%.2f sec"]), "slider")
 	Tooltip(zoomBack, L["Cancelling the cast, the camera zooms back out to your own distance this quickly."])
 	GreyUnless(zoomBack, IfZoom)
+end
 
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
+-- The Camera Settings page, with a section for each camera.
+local function CreateCameraSettingsPanel()
+	local canvas, content = CreateScrollPage(true) -- (each section has its own Reset)
+	cameraSettingsContent = content
+	local title = Label(content, "GameFontNormalLarge", L["Camera Settings"])
+	title:SetPoint("TOPLEFT", 16, -16)
+	local subtitle = Label(content, "GameFontHighlightSmall", L["Each camera's own settings. Click a " ..
+		"camera's name to open its settings, and again to close them. The Camera Modes page has the " ..
+		"settings they share, and Camera Triggers what starts each one."])
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+	cameraSettingsTop = subtitle
+
+	CreateFlightPanel()
+	CreateStandingPanel()
+	CreateCozyPanel()
+	CreateTelePanel()
+	CreateVistaPanel()
+	CreateFishPanel()
+	CreateWalkPanel()
+	CreateAutoRunPanel()
+	CreateDeathPanel()
+	CreateQuestPanel()
+
+	canvas:SetScript("OnShow", function()
+		Refresh()
+		RelayoutCameraSections()
+	end)
 	canvas:Hide()
-	RegisterSubpage(canvas, L["Tele Cam"])
+	RegisterSubpage(canvas, "Camera Settings")
 end
 
 -- Blizzard's colour picker; the setup API changed in newer clients.
@@ -6162,20 +6295,7 @@ ns.OnLanguage(function()
 	CreateAudioPanel()
 	CreateCameraPanel()
 	CreateEventsPanel()
-	-- Each camera mode's own page: hidden for now (too many pages for settings few
-	-- players change); their settings keep their defaults. True brings them back.
-	local SHOW_CAMERA_MODE_PAGES = false
-	if SHOW_CAMERA_MODE_PAGES then
-		CreateFlightPanel()
-		CreateStandingPanel()
-		CreateCozyPanel()
-		CreateTelePanel()
-		CreateVistaPanel()
-		CreateFishPanel()
-		CreateWalkPanel()
-		CreateAutoRunPanel()
-		CreateDeathPanel()
-		CreateQuestPanel()
-	end
+	-- Each camera's own settings, in a section apiece.
+	CreateCameraSettingsPanel()
 	CreateKeybindsPanel()
 end)

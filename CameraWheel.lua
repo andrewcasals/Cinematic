@@ -13,7 +13,7 @@ local CAMERAS = {
 	{ key = "vista", manual = "vista", label = "Vista camera", icon = "Interface\\Icons\\INV_Misc_Spyglass_03" },
 	{ key = "fish", manual = "fish", label = "Fish camera", icon = "Interface\\Icons\\Trade_Fishing" },
 	{ key = "tele", manual = "tele", label = "Tele camera", icon = "Interface\\Icons\\INV_Misc_Rune_01" },
-	{ key = "death", label = "Death camera test", icon = "Interface\\Icons\\Ability_Rogue_FeignDeath" },
+	{ key = "death", label = "Death camera", icon = "Interface\\Icons\\Ability_Rogue_FeignDeath" },
 }
 local MASK = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\RoundIcon" -- soft rounded corners
 local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask" -- (a round mask every client has)
@@ -53,7 +53,7 @@ local function CanStart(camera)
 		return false
 	end
 	if camera.key == "death" then
-		return db.deathOrbit and true or false
+		return db.deathOrbit and not ns.playerMoving
 	end
 	if not db.enabled or ns.playerMoving or ns.Flag(UnitOnTaxi("player")) then
 		return false
@@ -119,7 +119,7 @@ local function Choose(index)
 	Close()
 	local camera = index and CAMERAS[index]
 	if camera then
-		Cinematic_StartCam(camera.key)
+		Cinematic_StartCam(camera.key, true) -- (quietly: no chat messages)
 	end
 end
 
