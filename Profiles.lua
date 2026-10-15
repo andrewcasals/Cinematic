@@ -86,6 +86,8 @@ ns.BUILTIN_PROFILES = {
 			set("plateAlwaysGroupMinions", false)
 			set("plateGroupFriends", false)
 			set("plateGroupFriendlyMinions", false)
+			-- Chat doesn't peek for NPC speech (guards, vendors, ambient chatter).
+			set("chatPeekTypes", { npc = false })
 		end,
 	},
 	{
@@ -111,6 +113,8 @@ ns.BUILTIN_PROFILES = {
 			set("plateAlwaysGroupMinions", false)
 			set("plateGroupFriends", false)
 			set("plateGroupFriendlyMinions", false)
+			-- Chat doesn't peek for NPC speech (guards, vendors, ambient chatter).
+			set("chatPeekTypes", { npc = false })
 		end,
 	},
 	{
@@ -122,6 +126,8 @@ ns.BUILTIN_PROFILES = {
 			-- Chat shows for General, Trade and LocalDefense (others joined later stay off).
 			set("chatPeekChannelList", { General = true, Trade = true, LocalDefense = true,
 				Services = false, TradeLocal = false })
+			-- ...and not for NPC speech (guards, vendors, ambient chatter).
+			set("chatPeekTypes", { npc = false })
 		end,
 	},
 	{
@@ -168,6 +174,8 @@ ns.BUILTIN_PROFILES = {
 			end
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
+			-- NPCs talking nearby don't bring chat up over a camera shot.
+			set("chatPeekTypes", { npc = false })
 		end,
 	},
 	{
@@ -236,6 +244,8 @@ ns.BUILTIN_PROFILES = {
 			set("questTimerShow", false)
 			-- Chat doesn't peek for General or LocalDefense.
 			set("chatPeekChannelList", { General = false, LocalDefense = false })
+			-- Nor for NPC speech, should chat peeking be switched back on.
+			set("chatPeekTypes", { npc = false })
 		end,
 	},
 }
