@@ -25,7 +25,8 @@ local campfireName = CAMPFIRE_NAMES[GetLocale()] or "campfire"
 local CENTER_REACH = 0.1 -- how near the middle the cursor must be: this much of the screen's height
 local OBJECT_REACH = 40  -- UI units the cursor may wander from where a hidden tooltip's campfire was found
 local LINGER = 1.5       -- seconds a sighting of the fire counts for, to bring it up
-local REST = 5           -- seconds after it's gone before it can show again
+local REST = 2.5         -- seconds after it's gone before it can show again
+local REST_HOVER = 1     -- ...unless the cursor stays on the fire, near the middle, this long
 local WALK_OFF = 5       -- yards you can move from where it showed before it goes
 local LOOK_EVERY = 0.1   -- seconds between looks at the tooltip
 local FADE_TIME = 0.2
@@ -151,6 +152,10 @@ local function OnUpdate(_, elapsed)
 		elseif onFire and NearCenter(CursorPosition()) then
 			-- (Once it's up, staying on the fire keeps it there without the wait.)
 			hoverSince = hoverSince or now
+			-- (Kept on the fire for REST_HOVER since it went: back without the REST wait.)
+			if alpha == 0 and now < restUntil and now - hoverSince >= REST_HOVER then
+				restUntil = now
+			end
 			if now >= restUntil and (alpha > 0 or now - hoverSince >= HOVER) then
 				lastSeen = now
 			end
