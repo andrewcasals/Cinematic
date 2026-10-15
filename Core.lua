@@ -91,6 +91,7 @@ local DEFAULTS = {
 	alwaysShowWaypoint = true, -- keep retail's quest waypoint visible in cinematic mode
 	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (not retail)
 	durabilityShow = true,     -- keep the durability figure visible in cinematic mode while gear is damaged
+	durabilityHideInCam = true, -- ...except while a camera mode is running
 	-- Swing timer page (not retail), in CineMode and out:
 	swingSmartShow = true,     -- melee and ranged bars only while that weapon is in use
 	swingHideAfter = 5,        -- ...seconds after its last swing or shot (and the bar running down) it fades
@@ -2657,9 +2658,12 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		-- (say, a /reload mid-auto-run): moving for a moment with no movement key
 		-- held and not steering with both mouse buttons can only be auto-run.
 		local movementKeys = {}
+		-- Strafing doesn't end an auto-run (you drift sideways and carry on),
+		-- so once auto-run is on, the strafe keys don't count as moving by hand.
+		local STRAFE = { StrafeLeft = true, StrafeRight = true }
 		local function AnyMovementKey()
-			for _, held in pairs(movementKeys) do
-				if held then return true end
+			for key, held in pairs(movementKeys) do
+				if held and not (ns.autoRunning and STRAFE[key]) then return true end
 			end
 			if ns.PadMovementHeld and ns.PadMovementHeld() then -- (gamepad mode's left stick)
 				return true

@@ -335,6 +335,7 @@ L["After you come back to life, keep the portrait up until your health and power
 L["Your gear"] = "Deine Ausrüstung"
 L["Show the durability figure when gear is damaged"] = "Haltbarkeitsanzeige zeigen, wenn Ausrüstung beschädigt ist"
 L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, it fades with the rest of the UI."] = "Hält die Rüstungsfigur (an der Minikarte) in CineMode und im Kampf sichtbar, solange das Spiel sie zeigt: Ein Teil deiner Ausrüstung ist stark beschädigt (gelb) oder kaputt (rot). Sie verschwindet nach der Reparatur. Aus: Sie wird mit dem restlichen UI ausgeblendet."
+L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades with the rest of the UI. It comes back when the camera mode ends."] = "Während ein Kameramodus läuft (AFK, Autorennen, RP-Gehen, Flüge und der Rest), blendet die Figur mit dem Rest der Oberfläche aus. Sie kommt zurück, wenn der Kameramodus endet."
 L["Buffs/debuffs"] = "Stärkungs-/Schwächungszauber"
 L["Your buff and debuff icons. They fade with the UI in CineMode; these bring them back."] = "Die Symbole deiner Stärkungs- und Schwächungszauber. Sie werden in CineMode mit dem UI ausgeblendet; diese Optionen holen sie zurück."
 L["Show buffs when you gain or refresh one"] = "Stärkungszauber zeigen, wenn du einen erhältst oder auffrischst"

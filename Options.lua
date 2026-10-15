@@ -1078,6 +1078,13 @@ local function CreateRevealPanel()
 		"some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, " ..
 		"it fades with the rest of the UI."])
 	durability:SetPoint("TOPLEFT", gearHeader, "BOTTOMLEFT", -2, -6)
+	durability:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+	local durabilityCam = Check(content, "durabilityHideInCam", L["Hide in camera modes"],
+		L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades " ..
+		"with the rest of the UI. It comes back when the camera mode ends."])
+	durabilityCam:SetPoint("TOPLEFT", durability, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
+	GreyUnless(durabilityCam, function(db) return db.durabilityShow end)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()

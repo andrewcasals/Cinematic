@@ -335,6 +335,7 @@ L["After you come back to life, keep the portrait up until your health and power
 L["Your gear"] = "Votre équipement"
 L["Show the durability figure when gear is damaged"] = "Afficher l'indicateur de durabilité si l'équipement est abîmé"
 L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, it fades with the rest of the UI."] = "Garde la figurine d'armure (près de la minicarte) visible en CineMode, et en combat, tant que le jeu l'affiche : une partie de votre équipement est très abîmée (jaune) ou cassée (rouge). Elle disparaît après réparation. Désactivé, elle s'estompe avec le reste de l'interface."
+L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades with the rest of the UI. It comes back when the camera mode ends."] = "Pendant un mode de caméra (AFK, course automatique, marche RP, vols et le reste), la silhouette disparaît avec le reste de l'interface. Elle revient à la fin du mode de caméra."
 L["Buffs/debuffs"] = "Améliorations/affaiblissements"
 L["Your buff and debuff icons. They fade with the UI in CineMode; these bring them back."] = "Les icônes de vos améliorations et affaiblissements. Elles s'estompent avec l'interface en CineMode ; ces options les font revenir."
 L["Show buffs when you gain or refresh one"] = "Afficher les améliorations quand vous en gagnez ou renouvelez une"

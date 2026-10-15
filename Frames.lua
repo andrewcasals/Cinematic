@@ -3002,7 +3002,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local fadeChat = not (place and ns.db[ns.CHAT_IN[place]])
 	local keepMinimapForTracking = ns.IsKeepingMinimapForTracking(now)
 	local questTimerUp = ns.db.questTimerShow and HasQuestTimer()
-	local durabilityUp = ns.db.durabilityShow and ns.HasDurabilityAlert()
+	-- (Hide in camera modes: not while one is running, it goes with the rest.)
+	local durabilityUp = ns.db.durabilityShow and not (ns.db.durabilityHideInCam and ns.activeCam)
+		and ns.HasDurabilityAlert()
 	local questReveal = questRevealUntil > now
 	local padReveal = padRevealUntil > now
 	local pingReveal = pingRevealUntil > now

@@ -336,6 +336,7 @@ L["After you come back to life, keep the portrait up until your health and power
 L["Your gear"] = "내 장비"
 L["Show the durability figure when gear is damaged"] = "장비가 손상되면 내구도 표시"
 L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, it fades with the rest of the UI."] = "게임이 내구도 인형을 보여 주는 동안(장비 일부가 심하게 손상(노랑)되었거나 파손(빨강)되었을 때) CineMode와 전투 중에도 미니맵 옆의 방어구 인형을 띄워 둡니다. 수리하면 다시 사라집니다. 끄면 나머지 UI와 함께 흐려집니다."
+L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades with the rest of the UI. It comes back when the camera mode ends."] = "카메라 모드(자리 비움, 자동 달리기, RP 걷기, 비행 등)가 실행되는 동안 인형 표시가 나머지 UI와 함께 사라집니다. 카메라 모드가 끝나면 다시 나타납니다."
 L["Buffs/debuffs"] = "강화/약화 효과"
 L["Your buff and debuff icons. They fade with the UI in CineMode; these bring them back."] = "내 강화 효과와 약화 효과 아이콘입니다. CineMode에서는 UI와 함께 흐려지며, 아래 옵션으로 다시 보이게 합니다."
 L["Show buffs when you gain or refresh one"] = "강화 효과를 얻거나 갱신하면 표시"

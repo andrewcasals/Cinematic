@@ -335,6 +335,7 @@ L["After you come back to life, keep the portrait up until your health and power
 L["Your gear"] = "Ваше снаряжение"
 L["Show the durability figure when gear is damaged"] = "Показывать фигурку прочности при повреждении"
 L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, it fades with the rest of the UI."] = "Оставляет фигурку брони (у миникарты) в CineMode и в бою, пока ее показывает игра: часть снаряжения сильно повреждена (желтым) или сломана (красным). Пропадает после ремонта. Выкл.: скрывается вместе с остальным интерфейсом."
+L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades with the rest of the UI. It comes back when the camera mode ends."] = "Пока работает режим камеры (АФК, автобег, RP-шаг, полёты и прочее), фигурка исчезает вместе с остальным интерфейсом. Она возвращается, когда режим камеры заканчивается."
 L["Buffs/debuffs"] = "Баффы/дебаффы"
 L["Your buff and debuff icons. They fade with the UI in CineMode; these bring them back."] = "Значки ваших баффов и дебаффов. В CineMode они скрываются вместе с интерфейсом; эти параметры возвращают их."
 L["Show buffs when you gain or refresh one"] = "Показывать баффы при получении или обновлении"
