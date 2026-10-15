@@ -94,6 +94,7 @@ read_globals = {
 	"GetQuestLogTitle",
 	"GetQuestTimers",
 	"GetInventoryAlertStatus",
+	"GetPetHappiness",
 	"GetRealZoneText",
 	"GetSheathState",
 	"GetSpellInfo",

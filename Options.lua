@@ -1104,6 +1104,24 @@ local function CreateRevealPanel()
 	durabilityCam:SetPoint("TOPLEFT", durability, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(durabilityCam, function(db) return db.durabilityShow end)
 
+	-- Pet happiness: classic hunters only.
+	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
+		local petHeader = Header(content, L["Your pet"], durabilityCam, -24)
+		petHeader:SetPoint("TOPLEFT", durabilityCam, "BOTTOMLEFT", 2 - PORTRAIT_INDENT, -24)
+
+		local pet = Check(content, "petUnhappyShow", L["Show the pet frame when your pet isn't happy"],
+			L["Keeps your pet's portrait up in CineMode, and in fights, while its happiness isn't green: " ..
+			"content (yellow) or unhappy (red). It goes again once your pet is happy."])
+		pet:SetPoint("TOPLEFT", petHeader, "BOTTOMLEFT", -2, -6)
+		pet:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+		local petCam = Check(content, "petUnhappyHideInCam", L["Hide in camera modes"],
+			L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the pet frame fades " ..
+			"with the rest of the UI. It comes back when the camera mode ends."])
+		petCam:SetPoint("TOPLEFT", pet, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
+		GreyUnless(petCam, function(db) return db.petUnhappyShow end)
+	end
+
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "CineMode")

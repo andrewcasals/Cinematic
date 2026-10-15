@@ -519,6 +519,11 @@ local function AddFrame(frame, group)
 		and raidFrames:GetParent() == frame then
 		raidFrames:SetIgnoreParentAlpha(true)
 	end
+	-- Classic clients' pet frame sits inside the player frame: it fades on its
+	-- own, so an unhappy pet can stay up while the portrait goes.
+	if name == "PetFrame" and frame.SetIgnoreParentAlpha and frame:GetParent() == _G.PlayerFrame then
+		frame:SetIgnoreParentAlpha(true)
+	end
 
 	-- Chat frames manage their own alpha (the input bar sits faint until you
 	-- press Enter), and so do the waypoint (it dims as you look past it), the
@@ -2008,6 +2013,30 @@ end
 -- frames by default. Just the group's size changing, not every roster update.
 local rosterRevealUntil = 0
 do
+-- Hunter pet not happy (content or unhappy, not green): the pet frame stays up
+-- in CineMode while it is (petUnhappyShow). Not retail, which has no happiness.
+-- (A secret value counts as happy.)
+do
+	local unhappy = false
+	local function Check()
+		local happiness = GetPetHappiness and GetPetHappiness()
+		unhappy = type(happiness) == "number" and happiness < 3
+	end
+	local petWatcher = CreateFrame("Frame")
+	for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UNIT_PET", "UNIT_HAPPINESS", "PET_UI_UPDATE" }) do
+		pcall(petWatcher.RegisterEvent, petWatcher, event)
+	end
+	petWatcher:SetScript("OnEvent", function(_, event, unit)
+		if event == "UNIT_PET" and unit ~= "player" then
+			return
+		end
+		Check()
+	end)
+	function ns.IsPetUnhappy()
+		return unhappy
+	end
+end
+
 	local groupSize = GetNumGroupMembers and GetNumGroupMembers() or 0
 	local rosterRevealWatcher = CreateFrame("Frame")
 	rosterRevealWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")
@@ -3156,6 +3185,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 		-- shorter than the fade just starts the fade straight away.
 		local heldUntil = now + math.max(0, ns.HoldTime("mouseoverHold") - ns.FadeOutTime())
 		-- (Under the mouse counts even with no hold: the camera modes' is 0.)
+	local petUnhappyUp = ns.db.petUnhappyShow and not (ns.db.petUnhappyHideInCam and ns.activeCam)
+		and ns.IsPetUnhappy()
 		for row in pairs(mouseRows) do
 			hoverHeldUntil[row] = heldUntil
 			hovered[row] = true
@@ -3251,6 +3282,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			and not (combatShown and combatShown[GROUP_KEY[follows]]) then
 			target = 0
 		end
+			or (petUnhappyUp and entry.name == "PetFrame")
 		-- (/cine debug pad: why the gamepad bars come up, as they start to.)
 		if ns.padDebug and entry.group == "gamepadbars" then
 			local up = target > 0 and cinematic

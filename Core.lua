@@ -93,6 +93,8 @@ local DEFAULTS = {
 	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (not retail)
 	durabilityShow = true,     -- keep the durability figure visible in cinematic mode while gear is damaged
 	durabilityHideInCam = true, -- ...except while a camera mode is running
+	petUnhappyShow = true,     -- keep the pet frame visible in cinematic mode while a hunter's pet isn't happy (not retail)
+	petUnhappyHideInCam = true, -- ...except while a camera mode is running
 	-- Swing timer page (not retail), in CineMode and out:
 	swingSmartShow = true,     -- melee and ranged bars only while that weapon is in use
 	swingHideAfter = 5,        -- ...seconds after its last swing or shot (and the bar running down) it fades
