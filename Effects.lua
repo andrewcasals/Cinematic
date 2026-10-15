@@ -738,7 +738,9 @@ plateKeeper:SetScript("OnUpdate", ns.Profiled("Plate keeper", function(self)
 	for frame in pairs(fadedPlates) do
 		local wanted = frame.cinematicAlpha
 		if wanted then
-			if frame:GetAlpha() ~= wanted then
+			-- (A secret alpha can't be compared: set ours again.)
+			local alpha = frame:GetAlpha()
+			if (issecretvalue and issecretvalue(alpha)) or alpha ~= wanted then
 				frame:SetAlpha(wanted)
 			end
 		else
@@ -918,7 +920,7 @@ local function AlwaysShownTarget(unit)
 end
 
 local function TargetKeptUp()
-	return UnitExists("target") and AlwaysShownTarget("target")
+	return ns.Flag(UnitExists("target")) and AlwaysShownTarget("target")
 end
 
 -- The always-shown target's plate fades in (at the UI's fade-in time) rather
@@ -2002,7 +2004,7 @@ end
 
 local function StillOver(note)
 	if note.unit then
-		return UnitExists("mouseover")
+		return ns.Flag(UnitExists("mouseover"))
 	end
 	if not note.settled then
 		return GetTime() <= note.settleBy and MouseOverWorld() and not ViewMoved(note)

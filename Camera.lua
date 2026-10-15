@@ -591,7 +591,7 @@ do
 	end)
 	local OBJECT_REACH = 40 -- pixels (UI scale aside) the mouse can wander and still be on it
 	local function MouseOnSomething()
-		if UnitExists("mouseover") then
+		if ns.Flag(UnitExists("mouseover")) then
 			return true
 		end
 		if GetTime() - objectAt > 30 then
@@ -625,7 +625,7 @@ do
 		end
 		local fishCam = ns.IsFish and ns.IsFish()
 		local poleReady = ns.db and ns.db.fishPoleRightClickCast and poleEquipped and not fishCam
-			and not ns.playerMoving and not IsMounted() and not UnitOnTaxi("player")
+			and not ns.playerMoving and not ns.Flag(IsMounted()) and not UnitOnTaxi("player")
 			and not ns.Flag(UnitIsDeadOrGhost("player"))
 		-- (The Fishing page's switch off: no casting from here.)
 		local ready = ns.db and ns.db.handleFishing and not ns.Flag(UnitChannelInfo("player"))
@@ -633,13 +633,13 @@ do
 			and GetTime() - channelEndedAt >= (tonumber(ns.db.fishRecastDelay) or 0.5)
 			and GetTime() - missedAt >= (tonumber(ns.db.fishMissPause) or 30)
 			and GetTime() >= skillBlockedUntil
-			and not (LootFrame and LootFrame:IsShown())
+			and not (LootFrame and ns.Flag(LootFrame:IsShown()))
 			and not inCombat and GetTime() - combatSeenAt >= AFTER_COMBAT
 		-- (In the fish camera only units count: the spot you just looted the
 		-- bobber at would otherwise keep right-click from casting again there.)
 		-- (Left button held: right-click is the game's, so both together run you forward.)
 		local want = ready and ns.db.fishRightClickCast and not IsMouseButtonDown("LeftButton")
-			and ((fishCam and not UnitExists("mouseover")) or (poleReady and not MouseOnSomething()))
+			and ((fishCam and not ns.Flag(UnitExists("mouseover"))) or (poleReady and not MouseOnSomething()))
 		if not rightHeld then
 			SetRecast("BUTTON2", want and true or false)
 		end

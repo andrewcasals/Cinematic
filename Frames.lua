@@ -581,6 +581,12 @@ local function RecomputeNesting()
 	end
 end
 
+-- The minimap's size can't change in combat if an addon put a secure button
+-- on it (that makes it protected): the shrink waits for the fight to end.
+function ns.ScaleBlocked(frame)
+	return InCombatLockdown() and ns.Flag(frame:IsProtected())
+end
+
 local function RemoveFrame(frame)
 	for i, entry in ipairs(ns.managed) do
 		if entry.frame == frame then
@@ -592,7 +598,17 @@ local function RemoveFrame(frame)
 			end
 			frame:SetAlpha(frame.cinematicFishingHidden and 0 or entry.baseAlpha or 1)
 			if entry.looseParts then FadeLooseParts(entry, 1) end
-			if entry.shrunk then frame:SetScale(entry.savedScale or 1) end
+			if entry.shrunk and ns.ScaleBlocked(frame) then
+				local scale = entry.savedScale or 1
+				local waiter = CreateFrame("Frame")
+				waiter:RegisterEvent("PLAYER_REGEN_ENABLED")
+				waiter:SetScript("OnEvent", function(self)
+					self:UnregisterAllEvents()
+					frame:SetScale(scale)
+				end)
+			elseif entry.shrunk then
+				frame:SetScale(entry.savedScale or 1)
+			end
 			table.remove(ns.managed, i)
 			seen[frame] = nil
 			RecomputeNesting()
@@ -980,8 +996,16 @@ function ns.SetEntryAlpha(entry, alpha)
 	entry.alpha = alpha
 	if entry.shrinkWhenFaded then
 		if alpha > 0 then
-			if entry.shrunk and GetTime() - entry.shrunkAt >= MIN_SHRUNK_TIME then
+			-- (Blocked in combat: it stays shrunk, and grows back once the fight ends.)
+			if entry.shrunk and GetTime() - entry.shrunkAt >= MIN_SHRUNK_TIME and not ns.ScaleBlocked(entry.frame) then
 				UnshrinkEntry(entry)
+			end
+		elseif ns.ScaleBlocked(entry.frame) then
+			-- Can't shrink in combat: it sits at alpha 0 full size until the
+			-- fight ends (tried again each tick), and is redrawn once shown.
+			if not entry.shrunk and entry.frame == Minimap and Minimap.GetZoomLevels and IsIndoors
+				and ns.Flag(IsIndoors()) then
+				minimapNeedsRedraw = true
 			end
 		elseif not entry.shrunk then
 			-- Shrink in the same step it reaches 0, so it's never at alpha 0
@@ -1404,7 +1428,7 @@ end
 function ns.IsGamePadOn()
 	if not ns.isRetail then
 		local bar = _G.GamepadMainActionBarFrame
-		return bar ~= nil and bar:IsShown() and true or false
+		return bar ~= nil and ns.Flag(bar:IsShown())
 	end
 	return C_GamePad ~= nil and GetCVarBool("GamePadEnable")
 end
@@ -1989,6 +2013,46 @@ do
 	end
 end
 
+-- Hunter pet not happy (content or unhappy, not green): the pet frame stays up
+-- in CineMode while it is (petUnhappyShow). Not retail, which has no happiness.
+-- (A secret value counts as happy.) Forever has no GetPetHappiness: its pet
+-- frame's happiness icon asks with GetHappinessStats, and updates itself.
+do
+	local unhappy = false
+	local function Happiness()
+		if GetPetHappiness then
+			return GetPetHappiness()
+		end
+		local icon = _G.PetFrameHappiness
+		if icon and icon.GetHappinessStats then
+			local ok, happiness = pcall(icon.GetHappinessStats, icon)
+			return ok and happiness or nil
+		end
+	end
+	local function Check()
+		local happiness = Happiness()
+		unhappy = type(happiness) == "number" and happiness < 3
+	end
+	local icon = _G.PetFrameHappiness
+	if icon and icon.UpdateHappiness then
+		hooksecurefunc(icon, "UpdateHappiness", Check)
+	end
+	local petWatcher = CreateFrame("Frame")
+	for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UNIT_PET", "UNIT_HAPPINESS", "PET_UI_UPDATE" }) do
+		pcall(petWatcher.RegisterEvent, petWatcher, event)
+	end
+	petWatcher:SetScript("OnEvent", function(_, event, unit)
+		if event == "UNIT_PET" and unit ~= "player" then
+			return
+		end
+		Check()
+	end)
+	-- (Not while the pet is dead, or dismissed: nothing to feed.)
+	function ns.IsPetUnhappy()
+		return unhappy and ns.Flag(UnitExists("pet")) and not ns.Flag(UnitIsDead("pet"))
+	end
+end
+
 -- A group member pinging the minimap brings it up the same way
 -- (minimapRevealOnPing), even in a camera mode that hides it. Your own pings don't.
 local pingRevealUntil = 0
@@ -2013,30 +2077,6 @@ end
 -- frames by default. Just the group's size changing, not every roster update.
 local rosterRevealUntil = 0
 do
--- Hunter pet not happy (content or unhappy, not green): the pet frame stays up
--- in CineMode while it is (petUnhappyShow). Not retail, which has no happiness.
--- (A secret value counts as happy.)
-do
-	local unhappy = false
-	local function Check()
-		local happiness = GetPetHappiness and GetPetHappiness()
-		unhappy = type(happiness) == "number" and happiness < 3
-	end
-	local petWatcher = CreateFrame("Frame")
-	for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UNIT_PET", "UNIT_HAPPINESS", "PET_UI_UPDATE" }) do
-		pcall(petWatcher.RegisterEvent, petWatcher, event)
-	end
-	petWatcher:SetScript("OnEvent", function(_, event, unit)
-		if event == "UNIT_PET" and unit ~= "player" then
-			return
-		end
-		Check()
-	end)
-	function ns.IsPetUnhappy()
-		return unhappy
-	end
-end
-
 	local groupSize = GetNumGroupMembers and GetNumGroupMembers() or 0
 	local rosterRevealWatcher = CreateFrame("Frame")
 	rosterRevealWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")
@@ -2151,7 +2191,7 @@ local padRevealUntil = 0
 local CAST_WAIT = 0.25
 local pendingPress -- { at, button } while a press waits
 local function Fishing()
-	return (ns.IsFishingNow and ns.IsFishingNow()) or (LootFrame and LootFrame:IsShown()) or false
+	return (ns.IsFishingNow and ns.IsFishingNow()) or (LootFrame and ns.Flag(LootFrame:IsShown())) or false
 end
 local function DebugPress(button, text)
 	if ns.padDebug then
@@ -2260,7 +2300,7 @@ local function HasQuestTimer()
 		return select("#", GetQuestTimers()) > 0
 	end
 	local frame = _G.QuestTimerFrame
-	return frame ~= nil and frame:IsShown()
+	return frame ~= nil and ns.Flag(frame:IsShown())
 end
 
 -- A cooldown still recharging in the Cooldown Manager's spell bars (not its
@@ -3161,6 +3201,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- (Hide in camera modes: not while one is running, it goes with the rest.)
 	local durabilityUp = ns.db.durabilityShow and not (ns.db.durabilityHideInCam and ns.activeCam)
 		and ns.HasDurabilityAlert()
+	local petUnhappyUp = ns.db.petUnhappyShow and not (ns.db.petUnhappyHideInCam and ns.activeCam)
+		and ns.IsPetUnhappy()
 	local questReveal = questRevealUntil > now
 	local padReveal = padRevealUntil > now
 	local pingReveal = pingRevealUntil > now
@@ -3185,8 +3227,6 @@ function ns.UpdateFrames(cinematic, elapsed)
 		-- shorter than the fade just starts the fade straight away.
 		local heldUntil = now + math.max(0, ns.HoldTime("mouseoverHold") - ns.FadeOutTime())
 		-- (Under the mouse counts even with no hold: the camera modes' is 0.)
-	local petUnhappyUp = ns.db.petUnhappyShow and not (ns.db.petUnhappyHideInCam and ns.activeCam)
-		and ns.IsPetUnhappy()
 		for row in pairs(mouseRows) do
 			hoverHeldUntil[row] = heldUntil
 			hovered[row] = true
@@ -3258,6 +3298,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
 			or (questTimerUp and entry.group == "questtimer")
 			or (durabilityUp and entry.group == "misc")
+			or (petUnhappyUp and entry.name == "PetFrame")
 			or triggered[entry.row]
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown[GROUP_KEY[entry.group]])
@@ -3282,7 +3323,6 @@ function ns.UpdateFrames(cinematic, elapsed)
 			and not (combatShown and combatShown[GROUP_KEY[follows]]) then
 			target = 0
 		end
-			or (petUnhappyUp and entry.name == "PetFrame")
 		-- (/cine debug pad: why the gamepad bars come up, as they start to.)
 		if ns.padDebug and entry.group == "gamepadbars" then
 			local up = target > 0 and cinematic

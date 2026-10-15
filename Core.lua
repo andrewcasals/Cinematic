@@ -638,7 +638,7 @@ end
 local function AnyShown(names)
 	for _, name in ipairs(names) do
 		local frame = _G[name]
-		if frame and frame:IsShown() then
+		if frame and ns.Flag(frame:IsShown()) then
 			return true
 		end
 	end

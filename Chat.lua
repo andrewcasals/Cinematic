@@ -384,7 +384,7 @@ end
 function ns.HasUnreadWhisper()
 	for chatFrame in pairs(unreadWhispers) do
 		local tab = _G[chatFrame:GetName() .. "Tab"]
-		if IsWhisperTab(chatFrame) and tab and tab:IsShown() then
+		if IsWhisperTab(chatFrame) and tab and ns.Flag(tab:IsShown()) then
 			return true
 		end
 		unreadWhispers[chatFrame] = nil

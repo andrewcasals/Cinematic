@@ -1098,7 +1098,7 @@ local function PlaceTimeTitle()
 	local lowest, lowestScale
 	for _, name in ipairs(ZONE_LINES) do
 		local line = _G[name]
-		if line and line:IsVisible() and (line:GetText() or "") ~= "" then
+		if line and ns.Flag(line:IsVisible()) and (line:GetText() or "") ~= "" then
 			local bottom = line:GetBottom()
 			if bottom and (not lowest or bottom * line:GetEffectiveScale() < lowest * lowestScale) then
 				lowest, lowestScale = bottom, line:GetEffectiveScale()
@@ -1158,7 +1158,7 @@ function ns.ShowTimeOfDayTitle()
 	-- If the zone name never showed, don't leave the title waiting for the
 	-- next zone change.
 	C_Timer.After(10, function()
-		if not ZoneTextFrame:IsShown() then
+		if not ns.Flag(ZoneTextFrame:IsShown()) then
 			timeTitle.text:SetText("")
 		end
 	end)
@@ -1339,7 +1339,7 @@ C_Timer.NewTicker(CHANGE_CHECK, ns.Profiled("Time of day check", function()
 	local hour = GetClockTime()
 	local title = TimeTitleAt(hour)
 	if lastTitle and title ~= lastTitle and db.timeOfDayMessage and db.visualEffects ~= false
-		and not InCombatLockdown() and not (ZoneTextFrame and ZoneTextFrame:IsShown()) then
+		and not InCombatLockdown() and not (ZoneTextFrame and ns.Flag(ZoneTextFrame:IsShown())) then
 		ShowChangeTitle(title)
 	end
 	lastTitle = title
