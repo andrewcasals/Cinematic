@@ -141,6 +141,8 @@ read_globals = {
 	"NumTaxiNodes",
 	"PlayMusic",
 	"PlaySound",
+	"SOUNDKIT", "GameMenuFrame", "ShowUIPanel", "CloseMenus", "CloseAllWindows",
+	"AreAllPanelsDisallowed", "SettingsPanel",
 	"RELOADUI",
 	"ReloadUI",
 	"ResetView",

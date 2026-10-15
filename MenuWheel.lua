@@ -37,7 +37,9 @@ local BUTTONS = {
 	{ name = "WorldMapMicroButton", icon = "Interface\\Icons\\INV_Misc_Map02" },
 	{ name = "HelpMicroButton", icon = "Interface\\Icons\\INV_Misc_QuestionMark" },
 	{ name = "StoreMicroButton", icon = "Interface\\Icons\\INV_Misc_Coin_01" },
-	{ name = "MainMenuMicroButton", icon = "Interface\\Icons\\INV_Misc_Gear_01" },
+	-- (Clicking this one does nothing: the game's only acts with the mouse
+	-- over it, or on Classic on mouse down/up. The slot opens the menu itself.)
+	{ name = "MainMenuMicroButton", icon = "Interface\\Icons\\INV_Misc_Gear_01", gameMenu = true },
 }
 local KEY_BUTTON = "CinematicMenuWheelButton" -- its key binding clicks this
 local AREA = "CinematicMenuWheelArea" -- the click-catcher (Escape clicks it too)
@@ -50,7 +52,7 @@ local PICKED_SCALE = 1.25
 local DEAD_ZONE = 34   -- the cursor this near the middle picks nothing
 local FADE_TIME = 0.12
 
-local wheel, disc, centerText, stateText, keyButton, area
+local wheel, disc, centerText, stateText, keyButton, area, gameMenuButton
 local slots = {}         -- secure buttons, one per button the bar could have
 local shown = {}         -- the bar's buttons as last laid out, by slot
 local radius = MIN_RADIUS
@@ -229,8 +231,9 @@ local function Build()
 			local angle = math.rad(90 - (i - 1) * 360 / count)
 			slot:ClearAllPoints()
 			slot:SetPoint("CENTER", wheel, "CENTER", radius * math.cos(angle), radius * math.sin(angle))
-			slot:SetAttribute("clickbutton", item.button)
-			keyButton:SetAttribute("clickbutton-slot" .. i, item.button)
+			local target = item.entry.gameMenu and gameMenuButton or item.button
+			slot:SetAttribute("clickbutton", target)
+			keyButton:SetAttribute("clickbutton-slot" .. i, target)
 			slot:Show()
 		else
 			slot:SetAttribute("clickbutton", nil)
@@ -265,6 +268,26 @@ local function ShowUIFor(index)
 		ns.ToggleUI()
 	end
 end
+
+-- What the game menu's slot clicks: does what the game's button does.
+gameMenuButton = CreateFrame("Button") -- (no size: never seen)
+gameMenuButton:SetScript("OnClick", function()
+	if GameMenuFrame:IsShown() then
+		PlaySound(SOUNDKIT.IG_MAINMENU_QUIT)
+		HideUIPanel(GameMenuFrame)
+		return
+	end
+	if AreAllPanelsDisallowed and AreAllPanelsDisallowed() then
+		return
+	end
+	if SettingsPanel and SettingsPanel:IsShown() then
+		SettingsPanel:Close()
+	end
+	CloseMenus()
+	CloseAllWindows()
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPEN)
+	ShowUIPanel(GameMenuFrame)
+end)
 
 -- The wheel (secure, so the snippets can show, place and hide it in a fight;
 -- outside UIParent, so it shows with the UI hidden): icons round a dark
