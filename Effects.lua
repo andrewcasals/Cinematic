@@ -1495,7 +1495,7 @@ ns.lastCinematic = false
 -- Minimap blips (tracked herbs, party members) use a world-style tooltip; with
 -- the cursor on the minimap it's always left showing.
 local function OverMinimap()
-	return Minimap ~= nil and Minimap:IsVisible() and Minimap:IsMouseOver()
+	return Minimap ~= nil and ns.Flag(Minimap:IsVisible()) and ns.Flag(Minimap:IsMouseOver())
 end
 
 local function WorldOwned()

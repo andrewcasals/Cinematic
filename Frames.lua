@@ -729,7 +729,7 @@ end
 -- it shows, and addons build pages off-screen in hidden frames (EllesmereUI's
 -- search index), which crash the client when read mid-build.
 local function HasIssueReporterText(frame, depth)
-	if IsForbidden(frame) or not frame:IsShown() then
+	if IsForbidden(frame) or not ns.Flag(frame:IsShown()) then
 		return false
 	end
 	for _, region in ipairs(ReadParts(frame, "GetRegions") or {}) do
@@ -1049,8 +1049,9 @@ local BUFF_HOVER_DEPTH = 3
 local function IsNearIcon(depth, padX, padY, ...)
 	for i = 1, select("#", ...) do
 		local child = select(i, ...)
-		if not IsForbidden(child) and child:IsVisible() then
-			if child:IsMouseEnabled() and child:IsMouseOver(padY, -padY, -padX, padX) then
+		-- (Any of these can come back secret on Forever: ns.Flag reads that as false.)
+		if not IsForbidden(child) and ns.Flag(child:IsVisible()) then
+			if ns.Flag(child:IsMouseEnabled()) and ns.Flag(child:IsMouseOver(padY, -padY, -padX, padX)) then
 				return true
 			end
 			if depth > 1 and IsNearIcon(depth - 1, padX, padY, child:GetChildren()) then
@@ -1069,7 +1070,7 @@ function ns.IsEntryHovered(entry)
 		return IsCursorInSavedRect(entry)
 	end
 	if entry.group == "buffs" then
-		return entry.frame:IsVisible() and IsNearIcon(BUFF_HOVER_DEPTH,
+		return ns.Flag(entry.frame:IsVisible()) and IsNearIcon(BUFF_HOVER_DEPTH,
 			ns.db.buffHoverPadX or 20, ns.db.buffHoverPadY or 20, entry.frame:GetChildren())
 	end
 	-- (The mouse over the 3D world, as it mostly is in CineMode: none of the
@@ -1077,7 +1078,7 @@ function ns.IsEntryHovered(entry)
 	if entry.group ~= "chat" and not MouseFocus() then
 		return false
 	end
-	if not (entry.frame:IsVisible() and entry.frame:IsMouseOver()) then
+	if not (ns.Flag(entry.frame:IsVisible()) and ns.Flag(entry.frame:IsMouseOver())) then
 		return false
 	end
 	-- Container frames (the action bar holders, status bar managers, the
@@ -2669,7 +2670,7 @@ function ns.ReportUnfadedFrames()
 			width or 0, height or 0, parent and (parent:GetName() or parent:GetDebugName()) or "none")
 	end
 	for _, frame in ipairs({ UIParent:GetChildren() }) do
-		if not IsForbidden(frame) and not seen[frame] and frame:IsVisible() and frame ~= ns.letterbox then
+		if not IsForbidden(frame) and not seen[frame] and ns.Flag(frame:IsVisible()) and frame ~= ns.letterbox then
 			Report("unfaded: " .. Describe(frame))
 		end
 	end
@@ -2679,14 +2680,14 @@ function ns.ReportUnfadedFrames()
 	local function Textures(frame)
 		local list = {}
 		for _, region in ipairs(ReadParts(frame, "GetRegions") or {}) do
-			if not IsForbidden(region) and region.GetTexture and region:IsVisible() then
+			if not IsForbidden(region) and region.GetTexture and ns.Flag(region:IsVisible()) then
 				list[#list + 1] = tostring(region.GetAtlas and region:GetAtlas() or region:GetTexture())
 			end
 		end
 		return table.concat(list, ",")
 	end
 	local function AtCenter(frame, depth)
-		if IsForbidden(frame) or not frame:IsVisible() then
+		if IsForbidden(frame) or not ns.Flag(frame:IsVisible()) then
 			return
 		end
 		-- (Nameplates can't be measured: they error. They're reported below.)
@@ -2711,7 +2712,7 @@ function ns.ReportUnfadedFrames()
 	-- with what's shown inside them.
 	local function Inside(frame, depth, indent)
 		for _, child in ipairs(ReadParts(frame, "GetChildren") or {}) do
-			if not IsForbidden(child) and child:IsShown() then
+			if not IsForbidden(child) and ns.Flag(child:IsShown()) then
 				Report(("%s%s %s textures=%s"):format(indent, child:GetDebugName(), child:GetObjectType(),
 					Textures(child)))
 				if depth > 0 then
@@ -3214,7 +3215,7 @@ local function GetTopLevelFrameUnderCursor(accept)
 	local best, bestArea
 	for _, frame in ipairs({ UIParent:GetChildren() }) do
 		if not IsForbidden(frame) and frame ~= ns.letterbox and frame:GetName()
-			and frame:IsVisible() and frame:IsMouseOver() and (not accept or accept(frame)) then
+			and ns.Flag(frame:IsVisible()) and ns.Flag(frame:IsMouseOver()) and (not accept or accept(frame)) then
 			local width, height = frame:GetSize()
 			local area = (width or 0) * (height or 0)
 			if area > 0 and (not bestArea or area < bestArea) then
