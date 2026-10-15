@@ -5,6 +5,9 @@
 	<Binding name="CINEMATIC_HIDEUI" category="ADDONS">
 		Cinematic_ToggleUI()
 	</Binding>
+	<Binding name="CINEMATIC_CAMWHEEL" category="ADDONS" runOnUp="true">
+		Cinematic_CameraWheel(keystate)
+	</Binding>
 	<Binding name="CINEMATIC_CAM_IDLE" category="ADDONS">
 		Cinematic_StartCam("idle")
 	</Binding>

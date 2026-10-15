@@ -197,6 +197,7 @@ do
 	local BEHIND_TIME = 1.5 -- seconds the swing behind you takes where you arrive
 	local castEndsAt -- when the cast ends (GetTime), while casting one
 	local castCamera = false -- that cast's event has the tele camera
+	local pretending = false -- castEndsAt is a pretend cast's (the tele camera's key: PretendDepartCast)
 	-- "Hearth", "Teleport" or nil for a spell.
 	local function DepartEvent(spellID)
 		local ok, event = pcall(function()
@@ -299,6 +300,7 @@ do
 			end
 		end
 		if event == "UNIT_SPELLCAST_START" then
+			pretending = false
 			emoteEvent = depart
 			if ns.EndLogoutEvent then ns.EndLogoutEvent() end -- (casting calls a logout off)
 			castCamera, behindPending = ns.IsDepartEvent(), false
@@ -320,10 +322,27 @@ do
 	-- swing round (and zoom in) so it's in front of you before the cast ends;
 	-- nil otherwise.
 	function ns.DepartTimeLeft()
-		if (emoteEvent ~= "Hearth" and emoteEvent ~= "Teleport") or not castEndsAt then
+		if pretending and (ns.manualCam ~= "tele" or GetTime() >= castEndsAt) then
+			-- The pretend cast over (or stopped): like a cancelled one, the spin
+			-- turns back and the zoom goes back out, and the camera ends.
+			pretending, castEndsAt = false, nil
+			if ns.orbit.spin and ns.db.teleReturn then
+				ns.orbit.returnPending = true
+			end
+			if ns.manualCam == "tele" then
+				ns.manualCam = nil
+				ns.stillSince = GetTime() -- (no AFK camera straight after)
+			end
+		end
+		if not (emoteEvent == "Hearth" or emoteEvent == "Teleport" or pretending) or not castEndsAt then
 			return nil
 		end
 		return math.max(MIN_SWING, castEndsAt - GetTime() - ns.db.teleArriveEarly)
+	end
+	-- The tele camera started from its key (or the camera wheel): there's no
+	-- cast to time the spin and zoom by, so it pretends one of this long.
+	function ns.PretendDepartCast(seconds)
+		pretending, castEndsAt = true, GetTime() + seconds
 	end
 	-- ...and the seconds left on the cast itself (the zoom in takes them all).
 	function ns.DepartCastLeft()

@@ -5148,6 +5148,10 @@ local KEYBINDS = {
 			"and time-of-day title. Press again (or Blizzard's key) to bring it back."] },
 	{ action = "CINEMATIC_TOGGLE", label = L["Toggle CineMode"],
 		tip = L["Turns CineMode on or off, like /cine."] },
+	{ action = "CINEMATIC_CAMWHEEL", label = L["Camera wheel"],
+		tip = L["Hold to bring up a wheel of the cameras below, an icon for each: point at one and let go " ..
+			"to start it. Tap it instead and the wheel stays up for you to click one. Picking the camera " ..
+			"that's running stops it."] },
 	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"],
 		tip = L["Starts the AFK camera now, without waiting out its delay. " ..
 			"Press again, move or jump to stop it."] },

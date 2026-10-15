@@ -16,6 +16,7 @@ BINDING_HEADER_CINEMATIC = "Cinematic"
 local function SetBindingNames()
 	BINDING_NAME_CINEMATIC_TOGGLE = "Cinematic: " .. L["Toggle CineMode"]
 	BINDING_NAME_CINEMATIC_HIDEUI = "Cinematic: " .. L["Hide the UI (keep the look)"]
+	BINDING_NAME_CINEMATIC_CAMWHEEL = "Cinematic: " .. L["Camera wheel (hold)"]
 	BINDING_NAME_CINEMATIC_CAM_IDLE = "Cinematic: " .. L["Start the AFK camera"]
 	BINDING_NAME_CINEMATIC_CAM_COZY = "Cinematic: " .. L["Start the cozy camera"]
 	BINDING_NAME_CINEMATIC_CAM_VISTA = "Cinematic: " .. L["Start the vista camera"]
@@ -1651,6 +1652,9 @@ function Cinematic_StartCam(camera)
 		return
 	end
 	ns.manualCam = manual
+	if camera == "tele" then
+		ns.PretendDepartCast(10) -- (the usual Hearthstone cast: the spin and zoom need one)
+	end
 	ns.stillSince = now - ns.db.idleOrbitDelay -- counts as stood still long enough
 	lastBusy = 0 -- fade the UI now
 	ns.Print(L["%s on: move, jump or press the key again to stop it"]:format(L[CAM_NAMES[camera]]))

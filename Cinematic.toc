@@ -43,6 +43,7 @@ Frames.lua
 Chat.lua
 Bubbles.lua
 Campfire.lua
+CameraWheel.lua
 Effects.lua
 Camera.lua
 QuestCam.lua

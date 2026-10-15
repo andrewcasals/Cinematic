@@ -10,6 +10,7 @@ ignore = { "542", "212/self", "421", "422", "431" }
 globals = {
 	"CinematicDB", "CinematicCharDB", "SlashCmdList", "StaticPopupDialogs", "ColorPickerFrame", "DAMAGE_TEXT_FONT",
 	"Cinematic_Toggle", "Cinematic_ToggleUI", "Cinematic_StartCam", "Cinematic_FlyBy", "Cinematic_ShowTooltips", "Cinematic_ToggleTooltips",
+	"Cinematic_CameraWheel", "BINDING_NAME_CINEMATIC_CAMWHEEL",
 	"SLASH_CINEMATIC1", "SLASH_CINEMATIC2",
 	"BINDING_HEADER_CINEMATIC", "BINDING_NAME_CINEMATIC_SHOWTOOLTIPS", "BINDING_NAME_CINEMATIC_TOGGLETOOLTIPS",
 	"BINDING_NAME_CINEMATIC_TOGGLE", "BINDING_NAME_CINEMATIC_HIDEUI",
