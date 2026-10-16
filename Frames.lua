@@ -1195,6 +1195,8 @@ ns.COMBAT_SHOW = {
 	-- Always ticked to start with (CINE_SHOW_DEFAULT), as before it had a row:
 	-- untick it to hide your cast bar in CineMode but for fights.
 	{ key = "castbar", label = L["Cast bar"], default = true, frames = FRAME_GROUPS.castbar },
+	-- The game's own damage meter (made when first opened).
+	{ key = "meters", label = L["Damage meter (the game's)"], default = true, frames = FRAME_GROUPS.meters },
 	-- (handledBy: a master switch that, off, leaves its frames alone: its row greys out.)
 	{ key = "cooldowns", label = L["Cooldown Manager"], default = false, addon = "Blizzard_CooldownViewer",
 		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager", handledBy = "handleCooldowns" },
@@ -1256,7 +1258,7 @@ ns.COMBAT_SHOW = {
 -- above. (Kept in the order above within each.)
 local ROW_SECTIONS = {
 	player = "units", prd = "units", target = "units", tot = "units", focus = "units",
-	buffs = "combat", swing = "combat", castbar = "combat", cooldowns = "combat",
+	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
 	minimap = "interface", quests = "interface", waypoint = "interface", micro = "interface", xp = "interface",
@@ -1287,7 +1289,6 @@ local HOVER_EXTRA_ROWS = {
 	{ key = "chat", label = L["Chat tabs and buttons"], frames = FRAME_GROUPS.chat },
 	{ key = "questtimer", label = L["Quest timer"], frames = { "QuestTimerFrame" } },
 	{ key = "waypoint", label = L["Quest waypoint"], frames = { "SuperTrackedFrame" } },
-	{ key = "meters", label = L["Damage meter (the game's)"], frames = FRAME_GROUPS.meters },
 }
 ns.HOVER_ROWS = {}
 local HOVER_ROW_BY_NAME = {} -- frame name -> row key (the first row listing it)
@@ -1505,7 +1506,7 @@ function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SH
 -- stay shown all through CineMode there, in fights and out, as the Always
 -- column does everywhere. Grouped isn't a place: a party or raid, anywhere.
 -- Places as the Nameplates page has them (bar its PvP flagged column, which
--- goes with the open world here). All unticked to start with.
+-- goes with the open world here). Their defaults are below.
 ns.PLACE_SHOW = {
 	{ list = "bgShow", label = L["BGs & Arenas"], tip = L["Show all through CineMode in battlegrounds and arenas."] },
 	{ list = "worldShow", label = L["Open World"],
@@ -1516,11 +1517,12 @@ ns.PLACE_SHOW = {
 		tip = L["Show all through CineMode in dungeons, scenarios and raids."] },
 }
 local NO_DEFAULTS = {}
--- Ticked to start with: the raid and party frames in battlegrounds, arenas,
--- dungeons and raids, where you're always in a group.
+-- Ticked to start with: every row in dungeons, scenarios and raids (not
+-- 3rd party frames), and the raid and party frames in battlegrounds and
+-- arenas, where you're always in a group.
 local PLACE_SHOW_DEFAULTS = {
 	bgShow = { raidplayers = true, raidpets = true, party = true },
-	instanceShow = { raidplayers = true, raidpets = true, party = true },
+	instanceShow = setmetatable({}, { __index = function() return true end }),
 }
 local function PlaceDefaults(list)
 	return PLACE_SHOW_DEFAULTS[list] or NO_DEFAULTS
@@ -3953,6 +3955,9 @@ do
 		SortRaidPart((overlay and overlay.RoleIcon) or frame.RoleIcon or (name and _G[name .. "RoleIcon"]),
 			"partyroles")
 		SortRaidPart(frame.Name or (name and _G[name .. "Name"]), "partynames")
+		-- The icon for a member phased or elsewhere ignores its frame's alpha
+		-- (it stays bright as the frame dims), so it fades on its own.
+		SortRaidPart(frame.NotPresentIcon or (name and _G[name .. "NotPresentIcon"]), "party")
 	end
 
 	-- Retail's party frames (unnamed, from a pool) are in PartyFrame, and so

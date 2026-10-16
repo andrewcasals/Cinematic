@@ -221,6 +221,11 @@ ns.BUILTIN_PROFILES = {
 				mainbar = false, art = false, bottomleft = false, bottomright = false, pet = false, stance = false,
 				totems = false, micro = false, xp = false })
 			set("friendlyShow", { target = true, tot = true })
+			-- Nor in dungeons, scenarios and raids (the Instances column starts
+			-- all ticked): every row off there too.
+			local instances = {}
+			for _, row in ipairs(ns.COMBAT_SHOW) do instances[row.key] = false end
+			set("instanceShow", instances)
 			-- Standing still starts the AFK camera, and every event's camera can
 			-- start music.
 			set("eventStillCamera", "afk")
