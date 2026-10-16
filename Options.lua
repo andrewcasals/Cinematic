@@ -3749,6 +3749,15 @@ local function CreateQualityPanel()
 			"under the mouse a few times a second, so a very quick right-click on a new enemy can still be a " ..
 			"melee one.\n\nThere's also a key that starts Auto Shot on your target: set it under Key Bindings > " ..
 			"Cinematic (Hunter smart attack)."]), "check")
+		-- (HunterAmmo.lua.)
+		stack:Add(Check(content, "hunterAmmoSort", L["Smallest ammo stack first after Clean Up Bags"],
+			L["Clean Up Bags leaves the part stack of arrows or bullets last, but you shoot from the first stack, " ..
+			"so a full one would run down and leave you with two part stacks. Once the bags are cleaned up, the " ..
+			"smallest stack is moved first, to be shot first."]), "check")
+		stack:Add(Check(content, "hunterQuiverFill", L["Fill quiver button at vendors"],
+			L["Arrows and bullets at a vendor get a Fill button: it buys enough to fill your quiver or ammo pouch, " ..
+			"topping up its part stacks and filling its empty slots, as far as your money goes. Point at it to see " ..
+			"how many and the cost first."]), "check")
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
