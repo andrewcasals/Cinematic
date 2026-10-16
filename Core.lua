@@ -584,8 +584,8 @@ DEFAULTS.plateAlwaysGroupMinions = true
 -- The Plate Parts grid's rows (see PlateParts): each part of the plates that
 -- are up, with the same columns (keys plate<column>Part<part>). All shown
 -- everywhere to start with, as the game has them.
-ns.PLATE_PARTS = { "Health", "Name", "CastBar", "Auras", "RaidMarker", "Classification", "Level", "Threat",
-	"Highlight", "Widgets" }
+ns.PLATE_PARTS = { "Health", "Name", "CastBar", "Buffs", "Debuffs", "RaidMarker", "Classification", "Level",
+	"Threat", "Highlight", "Widgets" }
 for _, part in ipairs(ns.PLATE_PARTS) do
 	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
 		DEFAULTS[prefix .. "Part" .. part] = prefix == "plateAlways"
@@ -2662,6 +2662,29 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" and name ~= "Pure Cinema" then saved.deathOffInInstances = nil end
 			end
 			ns.db.deathInstancesV1 = true
+		end
+		-- The Plate Parts' Buffs/debuffs row (Part Auras) was split into Buffs
+		-- and Debuffs rows: each takes its boxes, in every profile.
+		local function SplitAuras(t)
+			local keys = {}
+			for key in pairs(t) do
+				if type(key) == "string" and key:match("^plate.+PartAuras$") then
+					keys[#keys + 1] = key
+				end
+			end
+			for _, key in ipairs(keys) do
+				local base = key:sub(1, -6)
+				for _, part in ipairs({ "Buffs", "Debuffs" }) do
+					if t[base .. part] == nil then
+						t[base .. part] = t[key]
+					end
+				end
+				t[key] = nil
+			end
+		end
+		SplitAuras(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then SplitAuras(saved) end
 		end
 		-- "Always show your target's nameplate" (plateTarget) was split into a
 		-- switch each for enemy and friendly targets, then into Enemy Target and

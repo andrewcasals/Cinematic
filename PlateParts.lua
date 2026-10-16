@@ -13,7 +13,11 @@ local PART_FRAMES = {
 	Health = { "HealthBarsContainer", "healthBar" },
 	Name = { "name" },
 	CastBar = { "CastBarsContainer", "castBar", "CastBar" },
-	Auras = { "AurasFrame", "BuffFrame" },
+	-- (Clients whose plates keep buffs and debuffs in one frame, BuffFrame,
+	-- mostly show your debuffs there: it goes with Debuffs.)
+	Buffs = { "AurasFrame.BuffListFrame" },
+	Debuffs = { "AurasFrame.DebuffListFrame", "AurasFrame.CrowdControlListFrame", all = true,
+		fallback = { "BuffFrame" } },
 	RaidMarker = { "RaidTargetFrame" },
 	Classification = { "ClassificationFrame", "classificationIndicator", all = true },
 	Level = { "PlayerLevelDiffFrame", "LevelFrame", "levelText" },
@@ -41,14 +45,26 @@ local function Field(unitFrame, field)
 	return value
 end
 
--- Calls fn(frame, ...) for each of a part's frames on a unit frame.
+-- Calls fn(frame, ...) for each of a part's frames on a unit frame (or its
+-- fallback's, when it has none of them).
 local function EachPartFrame(unitFrame, part, fn, ...)
 	local fields = PART_FRAMES[part]
+	local found = false
 	for _, field in ipairs(fields) do
 		local frame = Field(unitFrame, field)
 		if Usable(frame) then
+			found = true
 			fn(frame, ...)
 			if not fields.all then
+				return
+			end
+		end
+	end
+	if not found and fields.fallback then
+		for _, field in ipairs(fields.fallback) do
+			local frame = Field(unitFrame, field)
+			if Usable(frame) then
+				fn(frame, ...)
 				return
 			end
 		end
@@ -200,21 +216,15 @@ end
 function ns.DescribePlateParts(unitFrame)
 	local found = {}
 	for _, part in ipairs(ns.PLATE_PARTS) do
-		local fields = PART_FRAMES[part]
 		local names = {}
-		for _, field in ipairs(fields) do
-			local frame = Field(unitFrame, field)
-			if Usable(frame) then
-				-- (With its alpha now, and @ ours while held.)
-				local ok, alpha = pcall(function() return ("%.2f"):format(frame:GetAlpha()) end)
-				local wanted = held[frame]
-				names[#names + 1] = field .. " " .. (ok and alpha or "?")
-					.. (wanted and ("@" .. ("%.2f"):format(wanted)) or "")
-				if not fields.all then
-					break
-				end
-			end
-		end
+		EachPartFrame(unitFrame, part, function(frame)
+			-- (With its alpha now, and @ ours while held.)
+			local ok, alpha = pcall(function() return ("%.2f"):format(frame:GetAlpha()) end)
+			local wanted = held[frame]
+			local okName, name = pcall(frame.GetDebugName, frame)
+			names[#names + 1] = (okName and tostring(name):match("[^.]*%.?[^.]+$") or "?") .. " " .. (ok and alpha or "?")
+				.. (wanted and ("@" .. ("%.2f"):format(wanted)) or "")
+		end)
 		found[#found + 1] = part .. "=" .. (#names > 0 and table.concat(names, "+") or "NONE")
 	end
 	-- The health bar's container, the bar, and any frame on the bar (its border).
@@ -230,6 +240,11 @@ function ns.DescribePlateParts(unitFrame)
 				healthFields[#healthFields + 1] = "healthBar." .. field .. ": " .. ListFields(value)
 			end
 		end
+	end
+	-- And the auras' frame, whose lists are the Buffs and Debuffs parts.
+	local auras = unitFrame.AurasFrame
+	if type(auras) == "table" and auras.GetObjectType then
+		healthFields[#healthFields + 1] = "AurasFrame: " .. ListFields(auras)
 	end
 	healthFields = #healthFields > 0 and table.concat(healthFields, " | ") or "NONE"
 	return table.concat(found, ", "), ListFields(unitFrame), healthFields
