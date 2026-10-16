@@ -156,6 +156,13 @@ end
 local usingBugGrabber = false
 local original = geterrorhandler()
 seterrorhandler(function(message, ...)
+	-- (WoW Forever, once DragEquip.lua has opened or closed the character
+	-- window: it works, but Blizzard's player and pet health and mana text, now
+	-- counted as ours, can't compare their secret values. Only that is dropped.)
+	if type(message) == "string" and message:find("TextStatusBar", 1, true)
+		and message:find("secret", 1, true) and message:find("tainted by '" .. ADDON_NAME .. "'", 1, true) then
+		return
+	end
 	if not forwarding and not usingBugGrabber then
 		local stack = debugstack(2)
 		if IsOurs(message) or IsOurs(stack) then

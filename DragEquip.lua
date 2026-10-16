@@ -46,6 +46,14 @@ local function StopWaiting()
 	waiter:SetScript("OnUpdate", nil)
 end
 
+-- Opening and closing the window update the numbers on your player and pet
+-- frames' bars. On WoW Forever those are secret, and done by us, Blizzard's
+-- comparison errors (TextStatusBar.lua) though the window works fine: that
+-- one error is kept quiet (Diagnostics.lua).
+local function OpenCharacter()
+	pcall(ToggleCharacter, "PaperDollFrame")
+end
+
 local function CanOpen()
 	return not openedIt and ns.db and ns.db.dragEquipCharacter and not CharacterShown()
 		and not InCombatLockdown() and ToggleCharacter and ns.MouseOverWorld
@@ -62,7 +70,7 @@ local Wait = ns.Profiled("Drag gear watch", function(_, elapsed)
 	elseif ns.MouseOverWorld() then
 		-- Out over the game world: past any bags, whichever addon draws them.
 		StopWaiting()
-		ToggleCharacter("PaperDollFrame")
+		OpenCharacter()
 		openedIt, equipped = CharacterShown(), false
 	end
 end)
