@@ -240,6 +240,8 @@ ns.BUILTIN_PROFILES = {
 			end
 			set("runOffInCities", false)
 			set("runOffInInstances", false)
+			-- The death camera runs in instances too.
+			set("deathOffInInstances", false)
 			-- No minimap for tracking, nor hiding it on flights or while AFK; no
 			-- quest timer box.
 			set("minimapForTracking", false)

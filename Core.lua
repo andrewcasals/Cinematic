@@ -472,6 +472,7 @@ DEFAULTS.walkCameraDelay = 0
 DEFAULTS.runCameraDelay = 5
 DEFAULTS.walkOffInCities, DEFAULTS.walkOffInInstances = false, false
 DEFAULTS.runOffInCities, DEFAULTS.runOffInInstances = true, true
+DEFAULTS.deathOffInInstances = true -- (no death camera in dungeons and raids: the group's waiting)
 DEFAULTS.flightHideMinimap = true
 DEFAULTS.idleHideMinimap = true
 DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
@@ -2649,6 +2650,18 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then GroupedOn(saved) end
 			end
 			ns.db.groupFramesV1 = true
+		end
+		-- No death camera in instances by default (but in Pure Cinema): its
+		-- Instances box ticked in every profile too, whatever it had. Once.
+		-- (Saved profiles drop theirs, to follow their base.)
+		if not ns.db.deathInstancesV1 then
+			if (ns.db.liveProfile or ns.db.profile) ~= "Pure Cinema" then
+				ns.db.deathOffInInstances = true
+			end
+			for name, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" and name ~= "Pure Cinema" then saved.deathOffInInstances = nil end
+			end
+			ns.db.deathInstancesV1 = true
 		end
 		-- "Always show your target's nameplate" (plateTarget) was split into a
 		-- switch each for enemy and friendly targets, then into Enemy Target and
