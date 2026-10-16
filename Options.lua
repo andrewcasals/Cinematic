@@ -3738,6 +3738,26 @@ local function CreateQualityPanel()
 		L["Dragging something you can wear out of your bags, over the game world, opens the character window, " ..
 		"so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it " ..
 		"and the window closes again. Not in a fight."]), "check")
+	-- (CenterPanels.lua.)
+	stack:Add(Check(content, "centerPanels", L["Open windows in the middle of the screen"],
+		L["Windows the game opens on the left (quest log, group finder, character, spellbook and the like) " ..
+		"open in the middle of the screen instead. Two open at once still sit side by side, together in the " ..
+		"middle. Quest givers' windows open a little in from the left edge instead, out of the way of the " ..
+		"quest giver. A window another addon has moved stays where that addon put it."]), "check")
+	stack:Add(Check(content, "dragPanels", L["Drag windows to move them"],
+		L["Drag the game's windows (quest log, group finder, character, spellbook and the like) to move them. " ..
+		"A window opens where you last dropped it from then on, in this profile. Some windows can't be " ..
+		"moved in a fight."]), "check")
+	local putBack = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	putBack:SetSize(160, 22)
+	putBack:SetText(L["Put windows back"])
+	Tooltip(putBack, L["Forget where you've dragged the windows to: each opens in its usual place again."])
+	putBack:SetScript("OnClick", function()
+		if ns.ForgetPanelSpots then
+			ns.ForgetPanelSpots()
+		end
+	end)
+	stack:Add(putBack, "label", 24)
 
 	-- (Not on retail, where right-click already shoots. Shown on every class; Hunter.lua
 	-- only runs on hunters.)

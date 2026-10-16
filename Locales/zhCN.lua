@@ -1204,6 +1204,12 @@ L["Clicking the Campfire button (Quality of life page). Once the campfire's buff
 L["Stand up once you get Camp Benefits"] = "获得营地增益后站起"
 L["Open the character window when dragging gear out of your bags"] = "把装备拖出背包时打开角色窗口"
 L["Dragging something you can wear out of your bags, over the game world, opens the character window, so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it and the window closes again. Not in a fight."] = "把可穿戴的物品拖出背包、移到游戏世界上方时会打开角色窗口，方便把它放到栏位上。在背包之间移动不会打开。没穿上就放回去，窗口会再次关闭。战斗中不生效。"
+L["Open windows in the middle of the screen"] = "在屏幕中间打开窗口"
+L["Windows the game opens on the left (quest log, group finder, character, spellbook and the like) open in the middle of the screen instead. Two open at once still sit side by side, together in the middle. Quest givers' windows open a little in from the left edge instead, out of the way of the quest giver. A window another addon has moved stays where that addon put it."] = "游戏在左侧打开的窗口（任务日志、队伍查找器、角色、法术书等）改为在屏幕中间打开。同时打开两个时仍并排显示，一起居中。任务给予者的窗口则在离左边缘稍远处打开，以免挡住任务给予者。被其他插件移动过的窗口留在该插件放置的位置。"
+L["Drag windows to move them"] = "拖动窗口来移动它们"
+L["Drag the game's windows (quest log, group finder, character, spellbook and the like) to move them. A window opens where you last dropped it from then on, in this profile. Some windows can't be moved in a fight."] = "拖动游戏的窗口（任务日志、队伍查找器、角色、法术书等）来移动它们。此后窗口会在你上次放下的位置打开（本配置）。部分窗口在战斗中无法移动。"
+L["Put windows back"] = "窗口复位"
+L["Forget where you've dragged the windows to: each opens in its usual place again."] = "忘记你把窗口拖到了哪里：每个窗口重新在原来的位置打开。"
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "在迎客篝火旁坐满一分钟会获得营地增益：获得时你会站起来，随时出发。"
 
 -- Options.lua: the Camera Settings page

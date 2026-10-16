@@ -1204,6 +1204,12 @@ L["Clicking the Campfire button (Quality of life page). Once the campfire's buff
 L["Stand up once you get Camp Benefits"] = "야영지 혜택을 받으면 일어서기"
 L["Open the character window when dragging gear out of your bags"] = "가방 밖으로 장비를 끌면 캐릭터 창 열기"
 L["Dragging something you can wear out of your bags, over the game world, opens the character window, so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it and the window closes again. Not in a fight."] = "착용할 수 있는 물건을 가방 밖 게임 세계 위로 끌면 캐릭터 창이 열려 슬롯에 바로 놓을 수 있습니다. 가방 사이에서 옮길 때는 열리지 않습니다. 착용하지 않고 다시 내려놓으면 창이 다시 닫힙니다. 전투 중에는 동작하지 않습니다."
+L["Open windows in the middle of the screen"] = "창을 화면 가운데에 열기"
+L["Windows the game opens on the left (quest log, group finder, character, spellbook and the like) open in the middle of the screen instead. Two open at once still sit side by side, together in the middle. Quest givers' windows open a little in from the left edge instead, out of the way of the quest giver. A window another addon has moved stays where that addon put it."] = "게임이 왼쪽에 여는 창(퀘스트 목록, 파티 찾기, 캐릭터, 마법책 등)이 대신 화면 가운데에 열립니다. 두 창을 함께 열면 여전히 나란히, 함께 가운데에 놓입니다. 퀘스트 제공자의 창은 퀘스트 제공자를 가리지 않도록 왼쪽 가장자리에서 조금 안쪽에 열립니다. 다른 애드온이 옮긴 창은 그 애드온이 둔 자리에 그대로 있습니다."
+L["Drag windows to move them"] = "창을 끌어서 옮기기"
+L["Drag the game's windows (quest log, group finder, character, spellbook and the like) to move them. A window opens where you last dropped it from then on, in this profile. Some windows can't be moved in a fight."] = "게임 창(퀘스트 목록, 파티 찾기, 캐릭터, 마법책 등)을 끌어서 옮깁니다. 그 뒤로 창은 이 프로필에서 마지막으로 놓은 자리에 열립니다. 일부 창은 전투 중에 옮길 수 없습니다."
+L["Put windows back"] = "창 위치 되돌리기"
+L["Forget where you've dragged the windows to: each opens in its usual place again."] = "창을 끌어 놓은 자리를 잊습니다. 각 창이 다시 원래 자리에 열립니다."
 L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, you stand up again, ready to go."] = "환영의 모닥불 옆에 1분 동안 앉아 있으면 야영지 혜택을 받습니다. 혜택을 받는 즉시 다시 일어서서 바로 출발할 수 있습니다."
 
 -- Options.lua: the Camera Settings page

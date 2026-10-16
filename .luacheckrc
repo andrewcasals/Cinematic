@@ -81,7 +81,7 @@ read_globals = {
 	"GetChannelList", "C_FriendList", "IsInGuild", "GetNumGuildMembers", "GetGuildRosterInfo",
 	"GetCurrentBindingSet",
 	"GetCursorInfo",
-	"CharacterFrame", "HideUIPanel", "ToggleCharacter",
+	"CharacterFrame", "HideUIPanel", "ToggleCharacter", "GetUIPanel",
 	"C_Container", "PickupContainerItem", "GetContainerNumSlots", "GetContainerItemInfo", "NUM_BAG_SLOTS",
 	"ClearCursor", "SortBags",
 	"GetItemFamily", "GetContainerNumFreeSlots", "GetBagName", "C_MerchantFrame", "GetMerchantItemInfo",
