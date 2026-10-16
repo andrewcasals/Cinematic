@@ -139,12 +139,128 @@ local function AnyFaded()
 	return next(held) ~= nil
 end
 
--- A plate given a new unit takes the parts' alphas (or lets go of its last unit's).
+-- The class icon rows (ns.PLATE_CLASS_PARTS): our own icon left of a player's
+-- health bar, where Duel Vision's badge goes (and giving way to it), friendly
+-- and enemy players apart. Hidden unless ticked: in CineMode as its row says,
+-- outside it only with Always ticked.
+local CLASS_TEXTURE = "Interface\\TargetingFrame\\UI-Classes-Circles"
+local plateClass = {} -- [plate] = { part = row, class = file name }, or false for no icon
+local icons = {} -- [plate] = icon frame
+
+local function Known(value)
+	return not (issecretvalue and issecretvalue(value))
+end
+
+local function Ask(fn, ...)
+	local ok, value = pcall(fn, ...)
+	return ok and Known(value) and value and true or false
+end
+
+-- What icon a plate's unit has, if any: players' only. (Players that can't be
+-- attacked count as friendly.)
+local function ReadClass(plate)
+	local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+	if not unit or not Ask(UnitIsPlayer, unit) then
+		return false
+	end
+	local ok, _, class = pcall(UnitClass, unit)
+	if not (ok and Known(class) and type(class) == "string" and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]) then
+		return false
+	end
+	return { part = Ask(UnitCanAttack, "player", unit) and "ClassEnemy" or "ClassFriendly", class = class }
+end
+
+local function ClassIcon(plate)
+	local icon = icons[plate]
+	local unitFrame = plate.UnitFrame
+	if icon or not Usable(unitFrame) then
+		return icon
+	end
+	local bar = unitFrame.HealthBarsContainer or unitFrame.healthBar or unitFrame
+	icon = CreateFrame("Frame", nil, unitFrame)
+	icon:SetSize(22, 22)
+	icon:SetPoint("RIGHT", bar, "LEFT", -3, 0)
+	icon:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
+	icon.texture = icon:CreateTexture(nil, "OVERLAY")
+	icon.texture:SetAllPoints()
+	icon.texture:SetTexture(CLASS_TEXTURE)
+	icons[plate] = icon
+	return icon
+end
+
+-- Shows or hides a plate's class icon as its row and its unit say.
+function ns.RefreshClassIcon(plate)
+	if not plate or (plate.IsForbidden and plate:IsForbidden()) then
+		return
+	end
+	if plateClass[plate] == nil then
+		plateClass[plate] = ReadClass(plate)
+	end
+	local info = plateClass[plate]
+	local level = info and plate ~= PersonalPlate() and not ns.DuelBadgeShown(plate) and levels[info.part] or 0
+	local icon = icons[plate]
+	if level <= 0 then
+		if icon then
+			icon:Hide()
+		end
+		return
+	end
+	icon = ClassIcon(plate)
+	if icon then
+		icon.texture:SetTexCoord(unpack(CLASS_ICON_TCOORDS[info.class]))
+		icon:SetAlpha(level)
+		icon:Show()
+	end
+end
+
+local function RefreshClassIcons()
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+			ns.RefreshClassIcon(plate)
+		end
+	end
+end
+
+local function AnyClassIcons()
+	for _, part in ipairs(ns.PLATE_CLASS_PARTS) do
+		if (levels[part] or 0) > 0 then
+			return true
+		end
+	end
+	return false
+end
+
+-- A plate given a new unit takes the parts' alphas (or lets go of its last
+-- unit's), and its class icon. One whose player changes sides (a duel
+-- starting) swaps icon rows.
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-watcher:SetScript("OnEvent", function(_, _, unit)
-	if ns.db and AnyFaded() and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
-		ApplyPlate(C_NamePlate.GetNamePlateForUnit(unit), PersonalPlate())
+watcher:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+watcher:RegisterEvent("UNIT_FACTION")
+watcher:SetScript("OnEvent", function(_, event, unit)
+	if not (ns.db and C_NamePlate and C_NamePlate.GetNamePlateForUnit) then
+		return
+	end
+	if event == "UNIT_FACTION" and not (type(unit) == "string" and unit:find("^nameplate")) then
+		return
+	end
+	local plate = C_NamePlate.GetNamePlateForUnit(unit)
+	if not plate then
+		return
+	end
+	if event == "NAME_PLATE_UNIT_REMOVED" then
+		plateClass[plate] = nil
+		if icons[plate] then
+			icons[plate]:Hide()
+		end
+		return
+	end
+	plateClass[plate] = nil
+	if AnyClassIcons() or icons[plate] then
+		ns.RefreshClassIcon(plate)
+	end
+	if event == "NAME_PLATE_UNIT_ADDED" and AnyFaded() then
+		ApplyPlate(plate, PersonalPlate())
 	end
 end)
 
@@ -165,6 +281,30 @@ function ns.UpdatePlateParts(active, elapsed)
 	end
 	if changed then
 		ApplyAll()
+	end
+	-- The class icons: shown nowhere with the page's master switch off.
+	local iconsChanged = false
+	for _, part in ipairs(ns.PLATE_CLASS_PARTS) do
+		local wanted
+		if not ns.db.handlePlates then
+			wanted = false
+		elseif active then
+			wanted = ns.PlateRowWanted("Part" .. part)
+		else
+			wanted = ns.db["plateAlwaysPart" .. part]
+		end
+		local target = wanted and 1 or 0
+		local level = levels[part]
+		if level == nil then
+			levels[part] = target
+			iconsChanged = iconsChanged or target > 0
+		elseif level ~= target then
+			levels[part] = ns.Approach(level, target, elapsed, target > level and ns.FadeInTime() or ns.FadeOutTime())
+			iconsChanged = true
+		end
+	end
+	if iconsChanged then
+		RefreshClassIcons()
 	end
 end
 

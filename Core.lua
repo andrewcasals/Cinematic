@@ -607,6 +607,17 @@ for _, part in ipairs(ns.PLATE_PARTS) do
 		DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
 	end
 end
+-- And two rows of our own: a class icon by friendly and by enemy players'
+-- health bars (as Duel Vision shows). Off everywhere to start with.
+ns.PLATE_CLASS_PARTS = { "ClassFriendly", "ClassEnemy" }
+for _, part in ipairs(ns.PLATE_CLASS_PARTS) do
+	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
+		DEFAULTS[prefix .. "Part" .. part] = false
+	end
+	for _, suffix in ipairs(ns.PLATE_PLACES) do
+		DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
+	end
+end
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
 for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
 	DEFAULTS["nameCombat" .. key], DEFAULTS["nameCombatPvP" .. key] = false, false

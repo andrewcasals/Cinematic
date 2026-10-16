@@ -4396,14 +4396,19 @@ local function CreatePlatesPanel()
 		{ "Threat", L["Threat Glow"], L[" The glow while a mob has you (or is about to) as its target."] },
 		{ "Highlight", L["Target Highlight"], L[" The border round your target's or mouseover's plate."] },
 		{ "Widgets", L["Quest/Widget Icons"], L[" Quest objective icons and other widgets over the plate."] },
+		{ "ClassFriendly", L["Class Icon (Friendly)"], L[" A class icon beside friendly players' health bars."], icon = true },
+		{ "ClassEnemy", L["Class Icon (Enemy)"], L[" A class icon beside enemy players' health bars."], icon = true },
 	}
+	-- (The class icons are the addon's own: off unless ticked, and outside
+	-- CineMode shown only with Always ticked.)
+	local iconTip = L[" Off unless ticked. In CineMode, on the nameplates that are up; outside it, only with Always ticked."]
 	local partsHeader = Header(content, L["Plate Parts"], lastLabel, -24)
 	local partsTop = TableTop(partsHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 	local r = 0
 	for _, part in ipairs(PARTS) do
 		if not (part[1] == "Level" and ns.isRetail) then
 			r = r + 1
-			UNIT_ROW_TIPS["Part" .. part[1]] = part[3] .. partTip
+			UNIT_ROW_TIPS["Part" .. part[1]] = part[3] .. (part.icon and iconTip or partTip)
 			AddPlateRow(partsTop, r, { "Part" .. part[1], part[2] })
 		end
 	end

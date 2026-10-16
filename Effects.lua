@@ -1322,6 +1322,13 @@ do
 		end
 		overlay.info = info
 		overlay:Show()
+		ns.RefreshClassIcon(plate) -- (the Plate Parts class icon gives way to the badge)
+	end
+
+	-- Whether a plate has a duel's border and badge on it.
+	function ns.DuelBadgeShown(plate)
+		local overlay = overlays[plate]
+		return overlay ~= nil and overlay.info ~= nil
 	end
 
 	-- A plate given a new unit (or let go of): its duel and its border go.
@@ -1331,6 +1338,7 @@ do
 		if overlay then
 			overlay.info = nil
 			overlay:Hide()
+			ns.RefreshClassIcon(plate)
 		end
 	end
 
