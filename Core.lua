@@ -239,7 +239,7 @@ local DEFAULTS = {
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
 	cozyZoomClose = 10,       -- yards: the distance it zooms in to (if you're further out); far side of a fire
-	cozyTentClose = 7,        -- ...closer with a Camp Tent seen nearby (Campfire.lua), and no drifting further out
+	cozyTentClose = 8,        -- ...closer with a Camp Tent seen nearby (Campfire.lua), and no drifting further out
 	cozyLevel = 15,           -- degrees it brings the camera down toward the ground as it swings round
 	idleZoom = true,          -- slowly zoom out after standing still for idleOrbitDelay
 	taxiZoom = true,          -- the same slow zoom during flights
@@ -2891,6 +2891,18 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then SayOn(saved) end
 			end
 			ns.db.chatSayOnV1 = true
+		end
+		-- The cozy camera by a tent: 8 yards, not 7. Once, in every profile still
+		-- at the old default (there's no slider for it).
+		if not ns.db.cozyTentCloseV1 then
+			local function TentEight(t)
+				if t.cozyTentClose == 7 then t.cozyTentClose = nil end -- (8 by default)
+			end
+			TentEight(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then TentEight(saved) end
+			end
+			ns.db.cozyTentCloseV1 = true
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.

@@ -1,7 +1,7 @@
 -- Cinematic: the Campfire button. Hovering a campfire with the cursor near
--- the middle of the screen brings up a campfire icon right under the cursor;
--- clicking it sits, kneels or lies down (as ticked), so you needn't type the
--- emote. Moving the cursor off it puts it away.
+-- the middle of the screen, standing still, brings up a campfire icon right
+-- under the cursor; clicking it sits, kneels or lies down (as ticked), so you
+-- needn't type the emote. Moving the cursor off it, or moving, puts it away.
 -- (campfireSitButton, on the Quality of life page; WoW Forever only.)
 local ADDON_NAME, ns = ...
 
@@ -30,6 +30,7 @@ local REST_HOVER = 1     -- ...unless the cursor stays on the fire, near the mid
 local WALK_OFF = 5       -- yards you can move from where it showed before it goes
 local LOOK_EVERY = 0.1   -- seconds between looks at the tooltip
 local FADE_TIME = 0.5
+local MOVE_FADE_TIME = 0.15 -- ...going as you move: quicker, out of the way
 local ICON = "Interface\\Icons\\Spell_Fire_Fire" -- Basic Campfire's icon
 local MASK = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\RoundIcon" -- soft rounded corners (Media/make_round_mask.py)
 local SIZE = 40
@@ -40,10 +41,10 @@ local lastSeen = -math.huge
 local dismissed = false  -- clicked: not again until the cursor has left the campfire
 local restUntil = 0      -- shown and gone again: not again until then (REST)
 local alpha, sinceLook = 0, 0
-local HOVER = 0.5        -- seconds the cursor must stay on the campfire before it shows
+local HOVER = 0.5        -- seconds the cursor must stay on the campfire, you standing still, before it shows
 local hoverSince         -- when the cursor came onto the campfire (near the middle), or nil
 local shownX, shownY     -- where you stood as it showed (yards)
-local walkedOff = false  -- moved WALK_OFF from there: going, whatever the cursor's on
+local walkedOff = false  -- moved (or WALK_OFF from there): going, whatever the cursor's on
 local leftIcon = false   -- the cursor has moved off it: going
 local blockedLogged, fadingLogged = false, false -- (logged once each, for /cine log)
 
@@ -59,7 +60,9 @@ local function NearCenter(x, y)
 	return (x - width / 2) ^ 2 + (y - height / 2) ^ 2 <= reach * reach
 end
 
-local TENT_NAME = "camp tent" -- (English only for now)
+-- What counts as a tent: things the camera goes through that sit beside a
+-- fire. (English only for now)
+local TENT_NAMES = { "camp tent", "tanning rack" }
 
 -- Whether a world tooltip is up and its first line can be read. What that line
 -- names (lastWasCampfire, lastWasTent) is worked out only when it changes, so
@@ -81,7 +84,13 @@ local function LookAtTooltip()
 		local lower = text:lower()
 		lastText = text
 		lastWasCampfire = lower:find(campfireName, 1, true) ~= nil
-		lastWasTent = lower:find(TENT_NAME, 1, true) ~= nil
+		lastWasTent = false
+		for _, name in ipairs(TENT_NAMES) do
+			if lower:find(name, 1, true) then
+				lastWasTent = true
+				break
+			end
+		end
 	end
 	return true
 end
@@ -137,7 +146,7 @@ local function PlayerPosition()
 	end
 end
 
--- Camp Tents: nothing says one is near but its tooltip, so the cursor passing
+-- Camp Tents (and Tanning Racks): nothing says one is near but its tooltip, so the cursor passing
 -- over one is noted, with where you stood, and it counts as near until you've
 -- moved TENT_FORGET yards from there (or, where the game won't say where you
 -- are, for TENT_FORGET_TIME seconds). For the cozy camera by a fire with a
@@ -333,7 +342,7 @@ local function OnUpdate(_, elapsed)
 					tostring(IsMounted and ns.Flag(IsMounted()))))
 			end
 			lastSeen, dismissed, hoverSince = -math.huge, false, nil
-		elseif onFire and NearCenter(CursorPosition()) then
+		elseif onFire and not ns.playerMoving and NearCenter(CursorPosition()) then
 			blockedLogged = false
 			-- (Once it's up, staying on the fire keeps it there without the wait.)
 			if not hoverSince and alpha == 0 then
@@ -355,7 +364,9 @@ local function OnUpdate(_, elapsed)
 				blockedLogged = false
 			end
 		end
-		if alpha > 0 and not walkedOff and WalkedOff() then
+		-- (Moving at all puts it away; WalkedOff for moves the game doesn't
+		-- report, like a knockback.)
+		if alpha > 0 and not walkedOff and (ns.playerMoving or WalkedOff()) then
 			walkedOff = true
 		end
 	end
@@ -386,7 +397,7 @@ local function OnUpdate(_, elapsed)
 			ns.Log("campfire", ("button going: clicked %s, walked off %s, cursor left %s, can sit %s"):format(
 				tostring(dismissed), tostring(walkedOff), tostring(leftIcon), tostring(CanSit())))
 		end
-		alpha = math.max(0, alpha - elapsed / FADE_TIME)
+		alpha = math.max(0, alpha - elapsed / (walkedOff and MOVE_FADE_TIME or FADE_TIME))
 		if alpha == 0 then
 			fadingLogged = false
 			restUntil, walkedOff, leftIcon, shownX, shownY = now + REST, false, false, nil, nil
