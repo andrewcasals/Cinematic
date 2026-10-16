@@ -1,5 +1,6 @@
 -- Cinematic: chat bubbles. Where the game shows them (say and yell, party; by
--- place, as the page's grid says), and how they look (text only, text size).
+-- place, as the page's grid says), and how they look (text only, outline,
+-- text size).
 local _, ns = ...
 
 -- Where the bubbles show is the game's own two settings, written as you
@@ -33,13 +34,51 @@ local function RestoreCVars()
 end
 
 -- The look: each bubble's background and border (every texture in it) faded
--- out for text only, and its text scaled. Bubbles are reused, so each is
+-- out for text only (its text outlined in black, if ticked), and its text
+-- scaled. Bubbles are reused, so each is
 -- looked at again as it shows. Bubbles the game keeps from addons (in
 -- instances, on retail) are left as they are.
 local hidden = setmetatable({}, { __mode = "k" }) -- texture -> true, while faded out
 local scaled = setmetatable({}, { __mode = "k" }) -- font string -> true, while scaled
+-- font string -> its own font flags and shadow, while outlined
+local outlined = setmetatable({}, { __mode = "k" })
 
-local function Style(textOnly, scale, ...)
+-- Outline thickness (bubblesTextOutlineSize) -> the font flags, and whether
+-- it has a drop shadow too.
+local OUTLINE_FLAGS = { "OUTLINE", "THICKOUTLINE", "THICKOUTLINE" }
+local SHADOW_X, SHADOW_Y = 2, -2
+
+-- size: 1-3 outlines it (see OUTLINE_FLAGS); nil puts its own look back.
+local function Outline(region, size)
+	local file, height, flags = region:GetFont()
+	if not file then return end
+	local own = outlined[region]
+	if size then
+		if not own then
+			local x, y = region:GetShadowOffset()
+			own = { flags = flags or "", x = x, y = y, color = { region:GetShadowColor() } }
+			outlined[region] = own
+		end
+		local want = OUTLINE_FLAGS[size] or OUTLINE_FLAGS[1]
+		if flags ~= want then -- (the game can set the font again as it reuses a bubble)
+			region:SetFont(file, height, want)
+		end
+		if size == 3 then
+			region:SetShadowColor(0, 0, 0, 1)
+			region:SetShadowOffset(SHADOW_X, SHADOW_Y)
+		else
+			region:SetShadowColor(unpack(own.color))
+			region:SetShadowOffset(own.x, own.y)
+		end
+	elseif own then
+		region:SetFont(file, height, own.flags)
+		region:SetShadowColor(unpack(own.color))
+		region:SetShadowOffset(own.x, own.y)
+		outlined[region] = nil
+	end
+end
+
+local function Style(textOnly, outline, scale, ...)
 	for i = 1, select("#", ...) do
 		local region = select(i, ...)
 		local kind = region:GetObjectType()
@@ -51,8 +90,11 @@ local function Style(textOnly, scale, ...)
 				hidden[region] = nil
 				region:SetAlpha(1)
 			end
-		elseif kind == "FontString" and region.SetTextScale then
-			if scale ~= 1 or scaled[region] then
+		elseif kind == "FontString" then
+			if outline or outlined[region] then
+				Outline(region, outline)
+			end
+			if region.SetTextScale and (scale ~= 1 or scaled[region]) then
 				region:SetTextScale(scale)
 				scaled[region] = scale ~= 1 or nil
 			end
@@ -60,12 +102,12 @@ local function Style(textOnly, scale, ...)
 	end
 end
 
-local function StyleFrame(frame, textOnly, scale)
-	Style(textOnly, scale, frame:GetRegions())
+local function StyleFrame(frame, textOnly, outline, scale)
+	Style(textOnly, outline, scale, frame:GetRegions())
 	for i = 1, select("#", frame:GetChildren()) do
 		local child = select(i, frame:GetChildren())
 		if not (child.IsForbidden and child:IsForbidden()) then
-			StyleFrame(child, textOnly, scale)
+			StyleFrame(child, textOnly, outline, scale)
 		end
 	end
 end
@@ -77,13 +119,14 @@ local function StyleBubbles()
 	local db = ns.db
 	local on = db.handleBubbles
 	local textOnly = on and db.bubblesTextOnly or false
+	local outline = textOnly and db.bubblesTextOutline and (tonumber(db.bubblesTextOutlineSize) or 2) or nil
 	local scale = on and tonumber(db.bubblesTextScale) or 1
-	if not on and not next(hidden) and not next(scaled) then
+	if not on and not next(hidden) and not next(scaled) and not next(outlined) then
 		return
 	end
 	for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles(false)) do
 		if not (bubble.IsForbidden and bubble:IsForbidden()) then
-			StyleFrame(bubble, textOnly, scale)
+			StyleFrame(bubble, textOnly, outline, scale)
 		end
 	end
 end
@@ -131,7 +174,7 @@ watcher:SetScript("OnEvent", ns.Profiled("chat bubbles event", function(self, ev
 	-- (Also while any bubble is still styled from before: the game hides
 	-- bubbles and reuses them, and those only come back as they show again.)
 	elseif ns.db and (ns.db.handleBubbles and (ns.db.bubblesTextOnly or ns.db.bubblesTextScale ~= 1)
-		or next(hidden) or next(scaled)) then
+		or next(hidden) or next(scaled) or next(outlined)) then
 		watchLeft = WATCH_FOR
 		self:SetScript("OnUpdate", OnUpdate)
 	end

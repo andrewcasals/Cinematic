@@ -3836,9 +3836,26 @@ local function CreateBubblesPanel()
 	stack:Continue(lastGridRow, "label")
 
 	stack:Header(content, L["Look"])
-	stack:Add(BubbleCheck("bubblesTextOnly", L["Text only (no background or border)"],
+	local textOnly = stack:Add(BubbleCheck("bubblesTextOnly", L["Text only (no background or border)"],
 		L["Bubbles show just their text, floating over the speaker. (Not in instances on retail: " ..
 		"the game doesn't let addons change bubbles there.)"]), "check")
+	textOnly:HookScript("OnClick", Refresh) -- grey out / enable the outline
+	local outline = stack:Add(BubbleCheck("bubblesTextOutline", L["Black outline round the text"],
+		L["A thin black border round the letters, so the text stands out against the world."]), "check", 24)
+	GreyUnless(outline, function(db) return db.bubblesTextOnly end)
+	outline:HookScript("OnClick", Refresh) -- grey out / enable the thickness
+	-- Its thickness, on the same line: the game's two outlines, then the
+	-- thick one with a drop shadow. The value shows to its right.
+	local OUTLINE_SIZES = { L["Thin"], L["Thick"], L["Thick + shadow"] }
+	local thickness = Slider(content, "bubblesTextOutlineSize", "", 1, 3, 1,
+		function(value) return OUTLINE_SIZES[value] or "" end, 1, Changed)
+	thickness:SetWidth(90)
+	thickness:SetPoint("LEFT", outline.Text or outline.text, "RIGHT", 16, 0)
+	thickness.title:ClearAllPoints()
+	thickness.title:SetPoint("LEFT", thickness, "RIGHT", 10, 0)
+	Tooltip(thickness, L["How thick the outline is. Thick + shadow also drops a shadow below and to " ..
+		"the right of the letters."])
+	GreyUnless(thickness, function(db) return db.bubblesTextOnly and db.bubblesTextOutline end)
 	local size = stack:Add(Slider(content, "bubblesTextScale", L["Text size"], 50, 200, 5, "%d%%", 100,
 		Changed), "slider")
 	Tooltip(size, L["How big the bubbles' text is. (Not in instances on retail.)"])

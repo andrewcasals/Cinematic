@@ -550,6 +550,8 @@ for _, kind in ipairs({ "Say", "Party" }) do
 	end
 end
 DEFAULTS.bubblesTextOnly = false -- no background or border, just the text
+DEFAULTS.bubblesTextOutline = true -- with text only: a black outline round the letters
+DEFAULTS.bubblesTextOutlineSize = 2 -- 1 thin, 2 thick, 3 thick with a drop shadow
 DEFAULTS.bubblesTextScale = 1
 -- Graphics+ page (Graphics.lua): off, each setting ticked (so switching it on
 -- uses them all). Each slider's value (graphicsPlus<name>) has no default: nil
