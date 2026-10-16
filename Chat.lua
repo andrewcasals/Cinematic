@@ -429,6 +429,43 @@ function ns.HasUnreadWhisper()
 	return false
 end
 
+-- LocalDefense warnings ("Dun Algaz is under attack!") also show as a title
+-- where the zone name appears (db.chatAttackAlert). The channel is told by its
+-- zone channel number, which every language shares, or else its English name;
+-- the game sends these with no sender, so players' lines there are skipped.
+-- The same place repeats at most once every ATTACK_REPEAT seconds.
+do
+	local LOCAL_DEFENSE_ID = 22
+	local ATTACK_REPEAT = 90
+	local shownAt = {} -- [text] = GetTime() it last showed
+
+	local function OnChannelMessage(_, _, text, _, _, channelString, _, _, zoneChannelID, _, channelBaseName,
+			_, _, guid)
+		if not (ns.db and ns.db.chatAttackAlert and ns.db.handleChat ~= false) or not Readable(text) then
+			return
+		end
+		if guid ~= nil and not (Readable(guid) and guid == "") then
+			return -- (a player, not the game)
+		end
+		if not (type(zoneChannelID) == "number" and not (issecretvalue and issecretvalue(zoneChannelID))
+				and zoneChannelID == LOCAL_DEFENSE_ID)
+			and ChannelBaseName(Readable(channelBaseName) and channelBaseName or nil,
+				Readable(channelString) and channelString or nil) ~= "LocalDefense" then
+			return
+		end
+		local now = GetTime()
+		if shownAt[text] and now - shownAt[text] < ATTACK_REPEAT then
+			return
+		end
+		shownAt[text] = now
+		ns.ShowAlertTitle(text)
+	end
+
+	local frame = CreateFrame("Frame")
+	frame:RegisterEvent("CHAT_MSG_CHANNEL")
+	frame:SetScript("OnEvent", ns.Profiled("Attack alert", OnChannelMessage))
+end
+
 function ns.RegisterChatPeek()
 	local addFilter = ChatFrame_AddMessageEventFilter
 		or (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter)

@@ -123,8 +123,9 @@ ns.BUILTIN_PROFILES = {
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
 		apply = function(set)
 			CamsOff(set, { "cozy", "vista", "fish", "walk", "run", "death", "quest" })
-			-- Chat shows for General, Trade and LocalDefense (others joined later stay off).
-			set("chatPeekChannelList", { General = true, Trade = true, LocalDefense = true,
+			-- Chat shows for General and Trade (others joined later stay off; LocalDefense
+			-- attacks show on the screen instead).
+			set("chatPeekChannelList", { General = true, Trade = true, LocalDefense = false,
 				Services = false, TradeLocal = false })
 			-- ...and not for NPC speech (guards, vendors, ambient chatter).
 			set("chatPeekTypes", { npc = false })

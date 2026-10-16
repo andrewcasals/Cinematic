@@ -1258,8 +1258,8 @@ local TIME_SOUND_LENGTH = 3      -- seconds before a time-of-day sound is faded 
 local TIME_SOUND_FADE_MS = 1000  -- ...over this long (4 seconds in all)
 local timeSoundHandle
 
-local function PlayTimeSound(title)
-	local sound = TIME_SOUNDS[title]
+local function PlayTimeSound(title) -- (a time of day, or "bell")
+	local sound = TIME_SOUNDS[title] or title
 	if sound == "bell" then
 		sound = BELLS[UnitFactionGroup("player") or ""] or BELLS.Alliance
 	end
@@ -1283,7 +1283,8 @@ local function PlayTimeSound(title)
 end
 local changeTitle, lastTitle
 
-local function ShowChangeTitle(text)
+-- The title itself: text fades in where the zone title appears, in this colour.
+local function ShowTitle(text, r, g, b)
 	if not changeTitle then
 		changeTitle = CreateFrame("Frame", nil, UIParent)
 		changeTitle:SetSize(1, 1)
@@ -1291,7 +1292,6 @@ local function ShowChangeTitle(text)
 		changeTitle.text = changeTitle:CreateFontString(nil, "OVERLAY")
 		changeTitle.text:SetFontObject(_G.ZoneTextFont or GameFontNormalHuge or GameFontNormalLarge)
 		changeTitle.text:SetShadowOffset(1, -1)
-		changeTitle.text:SetTextColor(1, 0.86, 0.6)
 		changeTitle.text:SetPoint("CENTER")
 		ns.AddOverlay(changeTitle)
 		changeTitle:SetScript("OnUpdate", function(self, elapsed)
@@ -1316,13 +1316,25 @@ local function ShowChangeTitle(text)
 	else
 		changeTitle:SetPoint("CENTER", UIParent, "TOP", 0, -200)
 	end
-	changeTitle.text:SetText(L[text])
+	changeTitle.text:SetTextColor(r, g, b)
+	changeTitle.text:SetText(text)
 	changeTitle.t = 0
 	changeTitle:SetAlpha(0)
 	changeTitle:Show()
+end
+
+local function ShowChangeTitle(text)
+	ShowTitle(L[text], 1, 0.86, 0.6)
 	if db and db.timeOfDayMessage and db.visualEffects ~= false then
 		PlayTimeSound(text)
 	end
+end
+
+-- Warnings from the game ("Dun Algaz is under attack!") in the same place,
+-- in red, with your faction's city bell.
+function ns.ShowAlertTitle(text)
+	ShowTitle(text, 1, 0.3, 0.2)
+	PlayTimeSound("bell")
 end
 
 -- /cine timetest: show it now (the current time of day, or a given name).

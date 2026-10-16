@@ -193,6 +193,7 @@ local DEFAULTS = {
 	chatPeekTime = 8,         -- seconds the chat window stays up
 	chatUntilWhisperRead = true, -- keep chat up while a whisper tab is flashing (until it's clicked)
 	chatHideOwn = true, -- your own messages (emotes, say, party...) don't show chat
+	chatAttackAlert = true, -- LocalDefense "... is under attack!" also shows as a title
 	chatInCities = false,     -- keep chat visible in capital cities
 	chatInDungeons = false,   -- ...in dungeons and scenarios
 	chatInRaids = false,
@@ -1725,7 +1726,7 @@ function ns.EnsureTables()
 	ns.db.addonSuitesClosed = nil -- (a test build's: they started open then)
 	ns.db.savedCVars = ns.db.savedCVars or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
-	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = false, LocalDefense = true }
+	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = false, LocalDefense = false }
 	ns.db.flightTimes = ns.db.flightTimes or {}
 	ns.db.zoneTints = ns.db.zoneTints or {} -- zone name -> "none", a mood key or { r, g, b }
 	ns.db.zoneTintStrength = ns.db.zoneTintStrength or {} -- zone name -> strength (0-1) for the Zone presets
@@ -2810,6 +2811,26 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				NeutralFromHostile(saved)
 				TargetRowsFromMyTarget(saved)
 			end
+		end
+		-- LocalDefense attacks now show as a title on the screen (Show attacks
+		-- on the screen), so the channel no longer brings up chat. Once, in
+		-- every profile. (A profile without its own channel list uses the
+		-- defaults, which have it off now.)
+		if not ns.db.chatAttackAlertV1 then
+			local function LocalDefenseOff(t)
+				if type(t.chatPeekChannelList) == "table" then
+					t.chatPeekChannelList.LocalDefense = false
+				end
+			end
+			ns.db.chatAttackAlert = true
+			LocalDefenseOff(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then
+					saved.chatAttackAlert = nil -- (on by default)
+					LocalDefenseOff(saved)
+				end
+			end
+			ns.db.chatAttackAlertV1 = true
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.

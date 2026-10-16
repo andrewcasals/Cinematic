@@ -4378,8 +4378,14 @@ local function CreateChatPanel()
 	hideOwn:SetPoint("TOPLEFT", untilRead, "BOTTOMLEFT", 0, -2)
 	GreyUnless(hideOwn, IfPeek)
 
-	local typesHeader = Header(chatPanel, L["Show chat for these messages"], hideOwn, -24)
-	typesHeader:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
+	local attackAlert = Check(chatPanel, "chatAttackAlert", L["Show attacks on the screen"],
+		L["When the LocalDefense channel says a place is under attack (\"Dun Algaz is under attack!\"), " ..
+		"it also shows in red where the zone name appears, with your faction's city bell. The same " ..
+		"place shows at most once every 90 seconds. /cine attacktest shows one."])
+	attackAlert:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 0, -2)
+
+	local typesHeader = Header(chatPanel, L["Show chat for these messages"], attackAlert, -24)
+	typesHeader:SetPoint("TOPLEFT", attackAlert, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
 	local previous, previousIsHeader, section = typesHeader, true, nil
 	for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 		if peekType.section == "game" and section ~= "game" then

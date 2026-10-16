@@ -107,6 +107,7 @@ read_globals = {
 	"GetInventoryAlertStatus",
 	"GetPetHappiness",
 	"GetRealZoneText",
+	"GetMinimapZoneText",
 	"GetSheathState",
 	"GetSpellInfo",
 	"GetSubZoneText",

@@ -108,6 +108,7 @@ local function PrintDebugHelp()
 	print("  /cine zoomtest, drifttest, pitchtest - camera movement tests")
 	print("  /cine doftest [seconds|strength <0-100>] - show the depth-of-field edge haze (30; again to stop)")
 	print("  /cine timetest [name] - show the time-of-day change title now (all: each in turn)")
+	print("  /cine attacktest [text] - show a LocalDefense attack warning now")
 	print("  /cine tinttest [seconds] - each time of day's tint with its title, AFK camera on (8 each; again to stop)")
 	print("  /cine soundtest <id> - play a game sound by its ID (stops after 10 seconds)")
 	print("  /cine songtest [file ID] - play a random death song, or any music file (again to stop)")
@@ -550,6 +551,13 @@ function ns.HandleSlash(msg)
 		end
 		local text = arg ~= "" and (arg:gsub("^%l", string.upper)) or nil
 		ns.TestTimeChangeTitle(text)
+	elseif cmd == "attacktest" then
+		-- Shows an attack warning now, as LocalDefense would (here, or the text given,
+		-- taken before lowercasing).
+		local text = msg:match("^%s*%S+%s+(.-)%s*$") or ""
+		local place = GetMinimapZoneText and GetMinimapZoneText() or ""
+		ns.ShowAlertTitle(text ~= "" and text or L["%s is under attack!"]:format(place ~= "" and place
+			or GetRealZoneText()))
 	elseif cmd == "debug" and arg == "tooltip" then
 		-- Traces tooltip hiding for 10 seconds (hover a herb meanwhile).
 		ns.tooltipTrace = { started = GetTime() }
