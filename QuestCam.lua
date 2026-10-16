@@ -689,6 +689,9 @@ local function OnEvent(_, event)
 			and not GossipHasQuests() then
 			return -- an innkeeper or the like: not a quest giver
 		end
+		if not cam.since and not (ns.Flag(UnitExists("npc")) and not ns.Flag(UnitIsPlayer("npc"))) then
+			return -- shared by a player, or from an item: nobody to talk to
+		end
 		if not cam.since then
 			cam.since, cam.cancelled = GetTime(), nil -- a new conversation
 			-- Opened by clicking them (not an interact key): the side they were on.
