@@ -934,8 +934,8 @@ end
 -- players, both in combat, who can attack each other. Not in cities,
 -- instances, free-for-all areas (anyone can attack anyone there) or on
 -- flights, nor while you're fighting or dueling yourself. Each duel has a
--- colour, a border round both players' health bars with a crossed swords
--- badge, so it's clear who's fighting whom. The game's "has defeated ... in a
+-- colour, a border round both players' health bars, with a class icon
+-- badge beside each, so it's clear who's fighting whom. The game's "has defeated ... in a
 -- duel" line ends it: the winner's badge turns to a crown, the loser's to a
 -- cross, for a few seconds before their plates fade out.
 local duels = {
@@ -1221,7 +1221,7 @@ do
 	end
 
 	-- Each duelist's plate: a border in the duel's colour round the health
-	-- bar, and a badge beside it (crossed swords; a crown or a cross once it's
+	-- bar, and a badge beside it (their class icon; a crown or a cross once it's
 	-- over, with Won or Lost below). On the plate's unit frame, so it fades
 	-- with the plate. [plate] = frame.
 	local overlays = {}
@@ -1292,13 +1292,32 @@ do
 			text:SetText(pair.fled and L["Fled"] or L["Lost"])
 			text:SetTextColor(0.6, 0.6, 0.6)
 		else
-			-- The crossed swords from the player frame's combat icon, in the duel's colour.
-			-- (The swords fill little of their square: drawn larger to match.)
-			badge:SetSize(40, 40)
-			badge:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
-			badge:SetTexCoord(0.55, 0.95, 0.04, 0.445)
-			badge:SetDesaturated(true)
-			badge:SetVertexColor(r, g, b)
+			-- The player's class icon (kept once read, for a plate that's lost
+			-- its unit); the crossed swords from the player frame's combat icon,
+			-- in the duel's colour, if the class can't be read.
+			if not info.class then
+				local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+				local class
+				if unit then
+					class = select(2, UnitClass(unit))
+				end
+				info.class = Known(class) and type(class) == "string" and class or nil
+			end
+			local coords = CLASS_ICON_TCOORDS and info.class and CLASS_ICON_TCOORDS[info.class]
+			if coords then
+				badge:SetSize(22, 22)
+				badge:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+				badge:SetTexCoord(unpack(coords))
+				badge:SetDesaturated(false)
+				badge:SetVertexColor(1, 1, 1)
+			else
+				-- (The swords fill little of their square: drawn larger to match.)
+				badge:SetSize(40, 40)
+				badge:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
+				badge:SetTexCoord(0.55, 0.95, 0.04, 0.445)
+				badge:SetDesaturated(true)
+				badge:SetVertexColor(r, g, b)
+			end
 			text:SetText("")
 		end
 		overlay.info = info
