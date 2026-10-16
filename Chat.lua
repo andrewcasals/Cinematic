@@ -287,14 +287,34 @@ local function PeekWindow(chatFrame)
 	end
 end
 
+-- With "Hide your messages" (db.chatHideOwn), your own lines don't peek: your
+-- emotes ("You bow.", the campfire button's sit or kneel), says, party lines...
+-- You know you did them. Told by the sender's GUID, or by name where a client
+-- doesn't pass one.
+
+local function IsFromPlayer(author, guid)
+	if type(guid) == "string" and guid ~= "" and not (issecretvalue and issecretvalue(guid)) then
+		return guid == UnitGUID("player")
+	end
+	if type(author) ~= "string" or (issecretvalue and issecretvalue(author)) then
+		return false
+	end
+	local name = UnitName("player")
+	local realm = GetNormalizedRealmName and GetNormalizedRealmName()
+	return author == name or (realm ~= nil and author == name .. "-" .. realm)
+end
+
 -- Message filters run once per chat window that will show the message, which
 -- tells us exactly which window to reveal. Never filters anything out.
-local function ChatPeekFilter(chatFrame, event, text, _, _, channelString, _, _, _, _, channelBaseName)
+local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, _, _, _, _, channelBaseName,
+		_, _, guid)
 	if not ns.db.chatPeek then
 		return false
 	end
 	local wanted
-	if event == "CHAT_MSG_CHANNEL" then
+	if ns.db.chatHideOwn and IsFromPlayer(author, guid) then
+		wanted = false
+	elseif event == "CHAT_MSG_CHANNEL" then
 		wanted = ns.IsChannelPeekOn(ChannelBaseName(channelBaseName, channelString))
 	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < ns.levelUpUntil and IsPeekTypeOn("levelup") then
 		wanted = true

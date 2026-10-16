@@ -192,6 +192,7 @@ local DEFAULTS = {
 	chatPeekChannels = false, -- old "include public channels"; now the default for channels not yet set
 	chatPeekTime = 8,         -- seconds the chat window stays up
 	chatUntilWhisperRead = true, -- keep chat up while a whisper tab is flashing (until it's clicked)
+	chatHideOwn = true, -- your own messages (emotes, say, party...) don't show chat
 	chatInCities = false,     -- keep chat visible in capital cities
 	chatInDungeons = false,   -- ...in dungeons and scenarios
 	chatInRaids = false,

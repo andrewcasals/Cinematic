@@ -201,6 +201,7 @@ read_globals = {
 	"UnitExists",
 	"UnitFactionGroup",
 	"UnitGUID",
+	"GetNormalizedRealmName",
 	"UnitHealth",
 	"UnitHealthMax",
 	"UnitIsAFK",

@@ -4372,8 +4372,14 @@ local function CreateChatPanel()
 		"looking at don't flash, so they just show as above."])
 	untilRead:SetPoint("TOPLEFT", peekTime, "BOTTOMLEFT", -4, -18)
 
-	local typesHeader = Header(chatPanel, L["Show chat for these messages"], untilRead, -24)
-	typesHeader:SetPoint("TOPLEFT", untilRead, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
+	local hideOwn = Check(chatPanel, "chatHideOwn", L["Hide your messages"],
+		L["Your own messages don't show chat: your emotes (a /bow, or sitting or kneeling at the " ..
+		"campfire), and what you say in /say, party, guild and so on. Other people's still do."])
+	hideOwn:SetPoint("TOPLEFT", untilRead, "BOTTOMLEFT", 0, -2)
+	GreyUnless(hideOwn, IfPeek)
+
+	local typesHeader = Header(chatPanel, L["Show chat for these messages"], hideOwn, -24)
+	typesHeader:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
 	local previous, previousIsHeader, section = typesHeader, true, nil
 	for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 		if peekType.section == "game" and section ~= "game" then
