@@ -32,7 +32,9 @@ end
 
 local function CloseUnlessEquipped()
 	if not openedIt and not equipped and not GetCursorInfo() and CharacterShown() and not InCombatLockdown() then
-		HideUIPanel(CharacterFrame)
+		ns.togglingCharacter = true
+		pcall(HideUIPanel, CharacterFrame)
+		ns.togglingCharacter = false
 	end
 end
 
@@ -46,12 +48,15 @@ local function StopWaiting()
 	waiter:SetScript("OnUpdate", nil)
 end
 
--- Opening and closing the window update the numbers on your player and pet
--- frames' bars. On WoW Forever those are secret, and done by us, Blizzard's
--- comparison errors (TextStatusBar.lua) though the window works fine: that
--- one error is kept quiet (Diagnostics.lua).
+-- Opening and closing the window update your player and pet frames' bars
+-- (health, heal prediction, the numbers). On WoW Forever those are secret, and
+-- done by us, Blizzard's comparison errors (TextStatusBar.lua, HealthBar.lua,
+-- UnitFrame.lua) though the window works fine: secret-value errors during
+-- these calls are kept quiet (ns.togglingCharacter, Diagnostics.lua).
 local function OpenCharacter()
+	ns.togglingCharacter = true
 	pcall(ToggleCharacter, "PaperDollFrame")
+	ns.togglingCharacter = false
 end
 
 local function CanOpen()
