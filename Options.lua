@@ -3907,10 +3907,11 @@ local function CreateQualityPanel()
 		"and the window closes again. Not in a fight."]), "check")
 	-- (CenterPanels.lua.)
 	stack:Add(Check(content, "centerPanels", L["Open windows in the middle of the screen"],
-		L["Windows the game opens on the left (quest log, group finder, character, spellbook and the like) " ..
-		"open in the middle of the screen instead. Two open at once still sit side by side, together in the " ..
-		"middle. Quest givers' windows open a little in from the left edge instead, out of the way of the " ..
-		"quest giver. A window another addon has moved stays where that addon put it."]), "check")
+		L["Windows the game opens on the left (quest log, group finder, spellbook and the like) " ..
+			"open in the middle of the screen instead. Two open at once still sit side by side, together in the " ..
+			"middle. Narrow ones on their own (character, trade, merchant, mail) and quest givers' windows open " ..
+			"a little in from the left edge instead, leaving the world and the quest giver in view. A window " ..
+			"another addon has moved stays where that addon put it."]), "check")
 	stack:Add(Check(content, "dragPanels", L["Drag windows to move them"],
 		L["Drag the game's windows (quest log, group finder, character, spellbook and the like) to move them. " ..
 		"A window opens where you last dropped it from then on, in this profile. Some windows can't be " ..

@@ -9,6 +9,9 @@
 -- Talking to a quest giver is the exception: the middle is where they stand,
 -- so a row with a quest window in it sits a little in from the left edge
 -- instead (far enough in to show it isn't stuck there: it can be dragged).
+-- So does a narrow row (the character, trade, merchant or mail window on its
+-- own): in the middle it only covers your character, and to the side it
+-- leaves the world in view.
 --
 -- dragPanels: drag a window to move it. It opens where it was last dropped
 -- from then on, saved in the profile (panelSpots, window name -> where; the
@@ -29,6 +32,11 @@ local AREAS = { "left", "center", "right", "doublewide" }
 -- with one of them starts (a share of the screen's width).
 local TALK = { QuestFrame = true, GossipFrame = true }
 local TALK_LEFT = 0.12
+
+-- Rows narrower than this (UIParent's units) sit there too. Retail's
+-- character window with its stats open is 540 wide; the group finder, 563,
+-- stays in the middle.
+local NARROW = 560
 
 local function Number(value)
 	if issecretvalue and issecretvalue(value) then
@@ -184,7 +192,8 @@ local function CenterRow()
 		rowLeft = rowLeft and math.min(rowLeft, left) or left
 		rowRight = rowRight and math.max(rowRight, right) or right
 	end
-	local target = talk and screenWidth * TALK_LEFT or (screenWidth - (rowRight - rowLeft)) / 2
+	local side = talk or rowRight - rowLeft < NARROW
+	local target = side and screenWidth * TALK_LEFT or (screenWidth - (rowRight - rowLeft)) / 2
 	-- A row wider than the screen keeps its left edge on it.
 	local shift = math.max(target - rowLeft, -rowLeft)
 	if math.abs(shift) < 1 then
