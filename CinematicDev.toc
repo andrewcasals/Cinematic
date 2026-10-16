@@ -40,6 +40,7 @@ DragEquip.lua
 CameraWheel.lua
 MenuWheel.lua
 Effects.lua
+PlateParts.lua
 Camera.lua
 QuestCam.lua
 Tint.lua

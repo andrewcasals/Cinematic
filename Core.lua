@@ -580,6 +580,19 @@ for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
 end
 DEFAULTS.plateAlwaysGroupMembers = true
 DEFAULTS.plateAlwaysGroupMinions = true
+-- The Plate Parts grid's rows (see PlateParts): each part of the plates that
+-- are up, with the same columns (keys plate<column>Part<part>). All shown
+-- everywhere to start with, as the game has them.
+ns.PLATE_PARTS = { "Health", "Name", "CastBar", "Auras", "RaidMarker", "Classification", "Level", "Threat",
+	"Highlight", "Widgets" }
+for _, part in ipairs(ns.PLATE_PARTS) do
+	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
+		DEFAULTS[prefix .. "Part" .. part] = prefix == "plateAlways"
+	end
+	for _, suffix in ipairs(ns.PLATE_PLACES) do
+		DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
+	end
+end
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
 for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
 	DEFAULTS["nameCombat" .. key], DEFAULTS["nameCombatPvP" .. key] = false, false

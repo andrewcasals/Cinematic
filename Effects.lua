@@ -889,6 +889,7 @@ local function UnitRowWanted(row)
 	end
 	return KeptHere(row) or (ns.FightLingering() and ShownInFights(row))
 end
+ns.PlateRowWanted = UnitRowWanted -- (the Plate Parts rows go by the same columns: see PlateParts)
 
 -- Whether a unit row has anyone to show now (your target's has its own fade, below).
 local function UnitRowActive(row)
@@ -1251,6 +1252,9 @@ function ns.PrintPlatesDebug()
 			ns.Print(("  plate shown=%s alpha=%.2f, frame shown=%s alpha=%.2f, health bar shown=%s"):format(
 				tostring(plate:IsShown()), plate:GetAlpha(), tostring(frame:IsShown()), frame:GetAlpha(),
 				tostring(frame.healthBar and frame.healthBar:IsShown())))
+			local parts, fields = ns.DescribePlateParts(frame)
+			ns.Print("  parts: " .. parts)
+			ns.Print("  fields: " .. fields)
 		end
 	end
 	-- Every nameplate setting this client has, for comparing.
@@ -1470,6 +1474,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 		if not platesReleased then
 			ReleasePlates()
 		end
+		ns.UpdatePlateParts(false, elapsed)
 		return
 	end
 	platesReleased = false
@@ -1554,6 +1559,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 		RefreshAllPlates()
 	end
 	platesWereFiltered = filtered
+	ns.UpdatePlateParts(platesActive, elapsed)
 
 	if hide and not keep and ns.plates.level == 0 and not ns.plates.off and not InCombatLockdown() then
 		ns.ApplyCVarSet(PLATE_CVARS, true)

@@ -4138,7 +4138,8 @@ local function CreatePlatesPanel()
 		local pvpCheck
 		local alwaysKey = "plateAlways" .. kind[1]
 		local rowTip = UNIT_ROW_TIPS[kind[1]]
-		local tip = rowTip and kind[1]:find("Target$") and rowTip or (rowTip or "") .. tip
+		local part = kind[1]:find("^Part") -- (Plate Parts rows: no game settings of their own)
+		local tip = rowTip and (part or kind[1]:find("Target$")) and rowTip or (rowTip or "") .. tip
 		local groupColumn
 		for _, place in ipairs(PLACE_COLUMNS) do
 			if place.always then
@@ -4162,7 +4163,7 @@ local function CreatePlatesPanel()
 		-- Greyed out where this client has no such setting.
 		-- (The rest also while Always is ticked.)
 		local function Available()
-			return ns.HasPlateSettings(kind[1])
+			return part or ns.HasPlateSettings(kind[1])
 		end
 		for c, check in ipairs(checks) do
 			GreyUnless(check, function(db)
@@ -4183,6 +4184,33 @@ local function CreatePlatesPanel()
 		AddPlateRow(targetTop, r, kind)
 	end
 	local lastTargetRow = lastLabel
+
+	-- The parts of the plates that are up (see PlateParts), laid out the same
+	-- way. Retail's plates have no level.
+	local partTip = L[" In CineMode, on the nameplates that are up."]
+	local PARTS = {
+		{ "Health", L["Health Bar"], L[" The health bar."] },
+		{ "Name", L["Name"], L[" The name on the plate (the Names grid below is for names without a plate)."] },
+		{ "CastBar", L["Cast Bar"], L[" The cast bar."] },
+		{ "Auras", L["Buffs/debuffs"], L[" The buffs and debuffs shown on the plate."] },
+		{ "RaidMarker", L["Raid Marker"], L[" The raid target marker (skull, star...)."] },
+		{ "Classification", L["Elite/Rare Icon"], L[" The elite, rare or boss icon."] },
+		{ "Level", L["Level"], L[" The level."] },
+		{ "Threat", L["Threat Glow"], L[" The glow while a mob has you (or is about to) as its target."] },
+		{ "Highlight", L["Target Highlight"], L[" The border round your target's or mouseover's plate."] },
+		{ "Widgets", L["Quest/Widget Icons"], L[" Quest objective icons and other widgets over the plate."] },
+	}
+	local partsHeader = Header(content, L["Plate Parts"], lastLabel, -24)
+	local partsTop = TableTop(partsHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local r = 0
+	for _, part in ipairs(PARTS) do
+		if not (part[1] == "Level" and ns.isRetail) then
+			r = r + 1
+			UNIT_ROW_TIPS["Part" .. part[1]] = part[3] .. partTip
+			AddPlateRow(partsTop, r, { "Part" .. part[1], part[2] })
+		end
+	end
+	local lastPartRow = lastLabel
 
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
@@ -4231,12 +4259,13 @@ local function CreatePlatesPanel()
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 
-	-- Laid out top to bottom: the master switch, then the three grids
-	-- (nameplates, your target's, then names).
+	-- Laid out top to bottom: the master switch, then the four grids
+	-- (nameplates, your target's, their parts, then names).
 	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
 	-- (Lined up with the nameplate grid, so the grids' columns match.)
 	targetHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
-	namesHeader:SetPoint("TOPLEFT", lastTargetRow, "BOTTOMLEFT", 0, -24)
+	partsHeader:SetPoint("TOPLEFT", lastTargetRow, "BOTTOMLEFT", 0, -24)
+	namesHeader:SetPoint("TOPLEFT", lastPartRow, "BOTTOMLEFT", 0, -24)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
