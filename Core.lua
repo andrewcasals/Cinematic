@@ -84,10 +84,10 @@ local DEFAULTS = {
 	innGlow = true,        -- indoors in an inn: lift the outdoor tint and add a warm glow
 	innGlowAmount = 0.02,  -- light the inn glow adds at its brightest (0.1 = 10%)
 	weatherTint = true,    -- rain, snow and sandstorms grey or colour the scene (clients with C_Weather)
-	weatherTintStrength = 0.6,
+	weatherTintStrength = 1,
 	tintClock = "game",    -- time-of-day tint follows "game" (realm) time or "local" (computer) time
 	timeTintStrength = 0.5,-- how strongly the time-of-day colour applies (both time presets)
-	tintPreviewHour = -1,  -- options-page preview of the time-of-day tint at this hour (-1 = now)
+	tintPreviewHour = -2,  -- options-page preview of the time-of-day tint at this hour (-1 = now, -2 = not picked)
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
 	alwaysShowWaypoint = true, -- keep retail's quest waypoint visible in cinematic mode
 	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (not retail)
@@ -461,8 +461,9 @@ end
 -- The Minimap page's "Hide in camera modes": <cam>HideMinimap fades the
 -- minimap while that camera runs, whatever would keep it up (hovering still
 -- shows it).
+-- Every camera but auto-run and the quest camera hides it.
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
-	DEFAULTS[cam[1] .. "HideMinimap"] = false
+	DEFAULTS[cam[1] .. "HideMinimap"] = cam[1] ~= "run" and cam[1] ~= "quest"
 end
 -- No auto-run camera in capital cities or instances. RP walking is
 -- deliberate, so its camera runs everywhere.
@@ -477,8 +478,6 @@ DEFAULTS.runCameraDelay = 5
 DEFAULTS.walkOffInCities, DEFAULTS.walkOffInInstances = false, false
 DEFAULTS.runOffInCities, DEFAULTS.runOffInInstances = true, true
 DEFAULTS.deathOffInInstances = true -- (no death camera in dungeons and raids: the group's waiting)
-DEFAULTS.flightHideMinimap = true
-DEFAULTS.idleHideMinimap = true
 DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
 DEFAULTS.deathScreenStrength = 1
 DEFAULTS.deathZoom = 4             -- yards it pulls back meanwhile
@@ -530,7 +529,6 @@ end
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
-DEFAULTS.plateDistanceOn = false -- how far away nameplates show: plateDistance (nil till moved: the game's own)
 DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
 -- The other pages' master switches likewise (see ns.HANDLE_SWITCHES): off,
 -- CineMode leaves that part of the UI to the game.
@@ -2676,6 +2674,15 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.deathInstancesV1 = true
 		end
+		-- The weather tint now shows at full strength by default: into every
+		-- profile too, whatever it had. Once.
+		if not ns.db.weatherStrengthV1 then
+			ns.db.weatherTintStrength = 1
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then saved.weatherTintStrength = 1 end
+			end
+			ns.db.weatherStrengthV1 = true
+		end
 		-- The Plate Parts' Buffs/debuffs row (Part Auras) was split into Buffs
 		-- and Debuffs rows: each takes its boxes, in every profile.
 		local function SplitAuras(t)
@@ -2840,6 +2847,20 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 			ns.db.chatAttackAlertV1 = true
+		end
+		-- Say no longer brings up chat (it's off by default now). Once, in
+		-- every profile.
+		if not ns.db.chatSayOffV1 then
+			local function SayOff(t)
+				if type(t.chatPeekTypes) == "table" then
+					t.chatPeekTypes.say = nil -- (off by default)
+				end
+			end
+			SayOff(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then SayOff(saved) end
+			end
+			ns.db.chatSayOffV1 = true
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.

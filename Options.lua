@@ -1061,8 +1061,7 @@ local function CreateRevealPanel()
 		"restart the game; /reload isn't enough."])
 	worldText:SetPoint("TOPLEFT", combatText, "BOTTOMLEFT", 0, -2)
 	worldText:HookScript("OnClick", function()
-		ns.Print(ns.db.hideWorldText and L["restart the game (not just /reload) for floating text to be hidden"]
-			or L["restart the game (not just /reload) for floating text to be shown"])
+		StaticPopup_Show("CINEMATIC_WORLD_TEXT_RESTART")
 	end)
 
 	local yoursHeader = Header(content, L["Your portrait"], worldText, -24)
@@ -2676,9 +2675,8 @@ local function CreateTintPanel()
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		L["How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the " ..
 		"main page): letterbox bars, colour " ..
-		"grading, vignette, inn glow and weather. The UI isn't tinted. While this page is open " ..
-		"the tint is previewed behind the options window. Names and nameplates are on the " ..
-		"Nameplates page."])
+		"grading, vignette, inn glow and weather. The UI isn't tinted. Names and nameplates are " ..
+		"on the Nameplates page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -2814,6 +2812,7 @@ local function CreateTintPanel()
 		presetControl:SetPoint("TOPLEFT", lookHeader, "BOTTOMLEFT", 0, -8)
 
 		-- Time of day only: preview the tint at any hour (until you leave the page).
+		-- Empty (-2) until you pick one; Current time (-1) shows no preview.
 		local hours = { { value = -1, text = L["Current time"] } }
 		for hour = 0, 23 do
 			hours[#hours + 1] = {
@@ -2824,6 +2823,9 @@ local function CreateTintPanel()
 		local previewTime = Dropdown(content, "tintPreviewHour", hours, 200, ns.RefreshTint)
 		if previewTime then
 			previewTime:SetPoint("LEFT", presetControl, "RIGHT", 16, 0)
+			if previewTime.SetDefaultText then
+				previewTime:SetDefaultText("") -- (shown until an hour or Current time is picked)
+			end
 			local previewLabel = Label(content, "GameFontHighlightSmall", L["Preview time"])
 			previewLabel:SetPoint("BOTTOMLEFT", previewTime, "TOPLEFT", 2, 2)
 			local refreshMenu = previewTime.Refresh
@@ -3427,25 +3429,32 @@ local function CreateGraphicsPanel()
 			"fade out. Much higher costs a lot of frame rate for little to see."] },
 		graphicsPlusCreatures = { L["Creature detail distance"], L["How far away creatures and characters keep " ..
 			"their full detail before they're swapped for simpler models."] },
+		graphicsPlusPlateDistance = { L["Nameplate distance"], L["How far away nameplates show, in yards. " ..
+			"The game won't go past its own limit. Reset page puts the game's default back."] },
 		graphicsPlusShadows = { L["Shadow sharpness"], L["The size of the game's shadow maps: bigger gives " ..
 			"crisper shadow edges, smaller saves frame rate. Players found nothing more above 2048, so 4096 may " ..
 			"look the same. Needs shadows on in the game's menu."] },
 	}
 	stack:Header(content, L["Settings"])
 	local any = false
+	-- Each setting's tick and slider share a row: the sliders lined up past
+	-- the longest label, each one's value to its right.
+	local rows = {}
 	for _, setting in ipairs(ns.GRAPHICS_PLUS) do
 		if ns.GraphicsPlusExists(setting.cvar) then
 			any = true
 			local text = LABELS[setting.key]
-			local tip = text[2] .. " " .. (setting.min == 0
-				and L["The game's menu doesn't change it: it's %s."]:format(setting.menu)
+			local tip = text[2] .. " " .. ((setting.noMenu
+				and L["The game's menu doesn't change it. Its default is %s."]:format(
+					tostring(ns.GraphicsPlusDefault(setting.cvar))))
+				or (setting.min == 0 and L["The game's menu doesn't change it: it's %s."]:format(setting.menu))
 				or L["The game's menu goes from %s to %s."]:format(setting.min, setting.menu))
 			-- (The game's name for the setting beside it, in grey, as typed after /console.)
 			local names = setting.cvar
 			for _, cvar in ipairs(setting.also or {}) do
 				names = names .. ", " .. cvar
 			end
-			stack:Add(Check(content, setting.key .. "On", text[1] .. " |cff9d9d9d(" .. names .. ")|r",
+			local check = stack:Add(Check(content, setting.key .. "On", text[1] .. " |cff9d9d9d(" .. names .. ")|r",
 				tip, function(value)
 				ns.GetDB()[setting.key .. "On"] = value
 				Changed()
@@ -3473,7 +3482,7 @@ local function CreateGraphicsPanel()
 				set = function(value) ns.GetDB()[setting.key] = values and values[value] or value end,
 			}
 			local slider
-			slider = stack:Add(Slider(content, access, "", values and 1 or setting.min,
+			slider = Slider(content, access, "", values and 1 or setting.min,
 				values and #values or setting.max, values and 1 or setting.step,
 				function(position)
 					local value = values and values[position] or position
@@ -3487,15 +3496,29 @@ local function CreateGraphicsPanel()
 				end, nil, function()
 					Changed()
 					slider:Refresh() -- (its label: moved now, and against the game's own)
-				end), "slider", 24)
+				end)
+			slider:SetWidth(130)
+			slider.title:ClearAllPoints()
+			slider.title:SetPoint("LEFT", slider, "RIGHT", 10, 0)
+			rows[#rows + 1] = { check = check, slider = slider }
 			RecordKey(content, setting.key) -- (for Reset page: back to unmoved)
 			Tooltip(slider, tip)
 			GreyUnless(slider, function(db) return db[setting.key .. "On"] end)
 		end
 	end
+	local labelWidth = 0
+	for _, row in ipairs(rows) do
+		local label = row.check.Text or row.check.text
+		labelWidth = math.max(labelWidth, label and label:GetStringWidth() or 0)
+	end
+	for _, row in ipairs(rows) do
+		row.slider:SetPoint("LEFT", row.check, "LEFT", 26 + labelWidth + 20, 0)
+	end
 	if not any then
 		stack:Note(content, L["This game version has none of these settings."], 420)
 	end
+	-- (Reset page: those marked so go back to the game's default, before the rest are put back.)
+	resetHooks[content] = ns.GraphicsPlusResetDefaults
 	stack:Note(content, L["Ground clutter changes show as the ground around you loads again: move on a " ..
 		"little, or /reload. Changing the game's Graphics menu doesn't undo these: they're written again " ..
 		"over its new settings."], 420)
@@ -4167,47 +4190,6 @@ local function CreatePlatesPanel()
 		"and loser show when it ends."])
 	duelCheck:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -2)
 
-	-- How far away nameplates show, as on the Graphics+ page: unmoved, the
-	-- slider shows the game's own and changes nothing (see Effects).
-	local distanceTip = L["How far away nameplates show, in yards. Untick to put the game's own back. " ..
-		"The game won't go past its own limit (it says what it kept)."]
-	local distanceCheck = Check(content, "plateDistanceOn",
-		L["Nameplate distance"] .. " |cff9d9d9d(nameplateMaxDistance)|r", distanceTip, function(value)
-			ns.GetDB().plateDistanceOn = value
-			Refresh() -- grey out / enable its slider
-		end)
-	distanceCheck:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 0, -2)
-	local function OwnDistance()
-		return ns.PlateDistanceOwn and ns.PlateDistanceOwn() or 60
-	end
-	local distanceSlider
-	distanceSlider = Slider(content, {
-		get = function() return ns.GetDB().plateDistance or math.floor(OwnDistance() + 0.5) end,
-		set = function(value) ns.GetDB().plateDistance = value end,
-	}, "", 10, 100, 5, function(value)
-		local own = OwnDistance()
-		local db = ns.GetDB()
-		if db.plateDistance == nil then
-			return ("|cffffffff%d|r  |cff9d9d9d"):format(value) .. L["(game's own)"]
-		end
-		-- (What the game kept, where it capped ours.)
-		local kept = db.plateDistanceOn and tonumber(GetCVar("nameplateMaxDistance"))
-		local cap = (kept and math.abs(kept - value) >= 1) and
-			("  |cffff8040" .. L["(game keeps %s)"]:format(("%d"):format(kept + 0.5)) .. "|r") or ""
-		return ("%d|r  |cff9d9d9d"):format(value) .. L["(game's own: %s)"]:format(("%d"):format(own + 0.5)) .. cap
-	end, nil, function()
-		C_Timer.After(0.1, function() distanceSlider:Refresh() end) -- (its label, once the game has it)
-	end)
-	distanceSlider:SetPoint("TOPLEFT", distanceCheck, "BOTTOMLEFT", 4, -24)
-	RecordKey(content, "plateDistance") -- (for Reset page: back to unmoved)
-	-- (and the game's setting back to its default, which this page shows as its own)
-	resetHooks[content] = function()
-		ns.ResetPlateDistance()
-		C_Timer.After(0.1, function() distanceSlider:Refresh() end)
-	end
-	Tooltip(distanceSlider, distanceTip)
-	GreyUnless(distanceSlider, function(db) return db.plateDistanceOn end)
-
 	-- Nameplates and names each get a table: a row per kind of unit, a column
 	-- per situation. A narrower table can set its first column apart (gap).
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 120, 24
@@ -4458,7 +4440,7 @@ local function CreatePlatesPanel()
 
 	-- Laid out top to bottom: the master switch, then the four grids
 	-- (nameplates, your target's, their parts, then names).
-	showHeader:SetPoint("TOPLEFT", distanceSlider, "BOTTOMLEFT", -2, -18)
+	showHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -14)
 	-- (Lined up with the nameplate grid, so the grids' columns match.)
 	targetHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
 	partsHeader:SetPoint("TOPLEFT", lastTargetRow, "BOTTOMLEFT", 0, -24)
@@ -6560,6 +6542,13 @@ ns.OnLanguage(function()
 		text = L["Cinematic's language changes after a reload. Reload now?"],
 		button1 = RELOADUI or L["Reload"], button2 = L["Later"],
 		OnAccept = ReloadUI,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+	-- The game keeps the floating-text font it first loaded, so only a fresh start applies it
+	StaticPopupDialogs.CINEMATIC_WORLD_TEXT_RESTART = {
+		text = L["Floating text changes after you fully restart the game (/reload isn't enough). Exit the game now?"],
+		button1 = EXIT_GAME or L["Exit game"], button2 = L["Later"],
+		OnAccept = Quit,
 		timeout = 0, whileDead = true, hideOnEscape = true,
 	}
 

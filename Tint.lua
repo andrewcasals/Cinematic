@@ -449,10 +449,12 @@ local function GetClockTime()
 	return GetGameTime()
 end
 
--- Showing a preview: the Visual Effects page is open, or a quick preview from
--- the minimap menu is running.
+-- Showing a preview: an hour picked in the Visual Effects page's Preview time
+-- (just opening the page shows nothing), or a quick preview from the minimap
+-- menu is running.
 local function Previewing()
-	return tintPreview or GetTime() < menuPreviewUntil or daySweep ~= nil
+	return (tintPreview and (db.tintPreviewHour or -1) >= 0) or GetTime() < menuPreviewUntil
+		or daySweep ~= nil
 end
 
 -- A phase's colour: your own if you picked one, else the built-in.
@@ -983,7 +985,7 @@ ns.GetWeatherDebug = function()
 	info.target, info.shown = weatherTarget, weatherColor
 	return info
 end
--- While the Visual Effects page is open, show the tint at full strength.
+-- The Visual Effects page is open: its Preview time can show the tint.
 ns.SetTintPreview = function(on)
 	tintPreview = on
 	tintDirty = true
@@ -992,7 +994,7 @@ ns.SetTintPreview = function(on)
 		-- once while the options load, before saved settings exist.)
 		db = db or ns.GetDB()
 		if db then
-			db.tintPreviewHour = -1
+			db.tintPreviewHour = -2 -- (the box starts empty next time)
 		end
 	end
 end

@@ -17,8 +17,13 @@ local _, ns = ...
 -- on WoW Forever with /cine debug cvars); max: as far as the slider goes (from
 -- players' testing: past it there's nothing more to see, or a crash). values:
 -- the only ones it takes, in place of a range. also: settings written the
--- same value alongside it, but only ever raised.
+-- same value alongside it, but only ever raised. noMenu: not in the Graphics
+-- menu at all. secure: can't change in a fight (it waits). resetToDefault:
+-- Reset page puts the game's default back, not just its own.
 ns.GRAPHICS_PLUS = {
+	-- (How far away nameplates show, in yards. The game caps it at its own limit.)
+	{ key = "graphicsPlusPlateDistance", cvar = "nameplateMaxDistance", min = 10, menu = 60, max = 100, step = 5,
+		noMenu = true, secure = true, resetToDefault = true },
 	{ key = "graphicsPlusClutter", cvar = "groundEffectDensity", min = 16, menu = 48, max = 256, step = 8 },
 	{ key = "graphicsPlusClutterDistance", cvar = "groundEffectDist", min = 40, menu = 320, max = 500, step = 20 },
 	-- (Not set by the menu, always 70: where the grass starts thinning out, towards groundEffectDist.)
@@ -91,7 +96,7 @@ function ns.ApplyGraphicsPlus()
 	db.graphicsPlusWritten = db.graphicsPlusWritten or {}
 	local saved, written = db.graphicsPlusSaved, db.graphicsPlusWritten
 	for _, setting in ipairs(ns.GRAPHICS_PLUS) do
-		if Exists(setting.cvar) then
+		if Exists(setting.cvar) and not (setting.secure and InCombatLockdown()) then
 			local wanted = db.graphicsPlus and db[setting.key .. "On"] and db[setting.key] or nil
 			ApplyOne(setting.cvar, wanted, false, saved, written)
 			for _, cvar in ipairs(setting.also or {}) do
@@ -102,6 +107,33 @@ function ns.ApplyGraphicsPlus()
 		end
 	end
 end
+
+-- Reset page: settings marked resetToDefault go back to the game's default
+-- (after a fight, for those that can't change in one).
+local toDefault = false
+local function GameDefault(cvar)
+	local GetDefault = (C_CVar and C_CVar.GetCVarDefault) or GetCVarDefault
+	return GetDefault and GetDefault(cvar)
+end
+ns.GraphicsPlusDefault = GameDefault
+
+local function WriteDefaults()
+	toDefault = false
+	for _, setting in ipairs(ns.GRAPHICS_PLUS) do
+		if setting.resetToDefault and Exists(setting.cvar) then
+			if setting.secure and InCombatLockdown() then
+				toDefault = true
+			else
+				local default = GameDefault(setting.cvar)
+				if default and not Same(GetCVar(setting.cvar), default) then
+					ns.Log("graphics", ("%s reset to the game's default %s"):format(setting.cvar, tostring(default)))
+					Write(setting.cvar, default)
+				end
+			end
+		end
+	end
+end
+ns.GraphicsPlusResetDefaults = WriteDefaults
 
 -- The game's own value of a setting: as noted while ours is written, else as it stands.
 function ns.GraphicsPlusOwn(setting)
@@ -142,9 +174,15 @@ hooksecurefunc("SetCVar", Recheck)
 
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("PLAYER_LOGIN")
+watcher:RegisterEvent("PLAYER_REGEN_ENABLED") -- (settings that wait for a fight to end)
 watcher:RegisterEvent("CVAR_UPDATE")
 watcher:SetScript("OnEvent", ns.Profiled("Graphics+ event", function(_, event, name)
-	if event == "PLAYER_LOGIN" then
+	if event == "PLAYER_REGEN_ENABLED" then
+		if toDefault then
+			WriteDefaults()
+		end
+		ns.ApplyGraphicsPlus()
+	elseif event == "PLAYER_LOGIN" then
 		ns.ApplyGraphicsPlus()
 	else
 		Recheck(name)

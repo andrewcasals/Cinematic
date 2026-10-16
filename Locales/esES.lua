@@ -330,8 +330,7 @@ L["Hide combat text out of combat"] = "Ocultar el texto de combate fuera de comb
 L["No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic mode while you're out of combat. They come back the moment a fight starts and stay for the Calm Timer after it, and your combat text settings are put back when the UI returns."] = "Sin números flotantes de daño ni de sanación (como \"+10\" de una sanación o regeneración) en el modo cinemático mientras estás fuera de combate. Vuelven en cuanto empieza un combate y se quedan durante el Temporizador de calma posterior, y tus ajustes de texto de combate se restauran cuando vuelve la interfaz."
 L["Hide all floating text: XP, damage, healing (restart required)"] = "Ocultar todo el texto flotante: PX, daño, sanación (requiere reiniciar)"
 L["The game has no way to hide just the XP you gain over your character: it draws that, the damage and healing numbers, misses and the like all in one font. This blanks that font, so they all go, always (not just in CineMode). Takes effect after you fully restart the game; /reload isn't enough."] = "El juego no permite ocultar solo la experiencia que ganas sobre tu personaje: la dibuja junto con los números de daño y sanación, los fallos y demás, todo con una misma fuente. Esto deja esa fuente en blanco, así que desaparece todo, siempre (no solo en CineMode). Surte efecto tras reiniciar el juego del todo; /reload no basta."
-L["restart the game (not just /reload) for floating text to be hidden"] = "reinicia el juego (no basta con /reload) para que el texto flotante se oculte"
-L["restart the game (not just /reload) for floating text to be shown"] = "reinicia el juego (no basta con /reload) para que el texto flotante se muestre"
+L["Floating text changes after you fully restart the game (/reload isn't enough). Exit the game now?"] = "El texto flotante cambia cuando reinicias el juego por completo (no basta con /reload). ¿Salir del juego ahora?"
 L["Your portrait"] = "Tu retrato"
 L["Show your portrait until health and power are full"] = "Mostrar tu retrato hasta tener la salud y el poder al máximo"
 L["Keeps your player portrait up while you're recovering. Rage and runic power don't count, so a warrior's portrait hides once their health is full."] = "Mantiene visible tu retrato mientras te recuperas. La ira y el poder rúnico no cuentan, así que el retrato de un guerrero se oculta cuando tiene la salud al máximo."
@@ -437,7 +436,7 @@ L["An event set to the AFK camera starts it without waiting out Stand still's ti
 L["Strength"] = "Intensidad"
 L["%.2f sec"] = "%.2f s"
 L["Visual Effects"] = "Efectos visuales"
-L["How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the main page): letterbox bars, colour grading, vignette, inn glow and weather. The UI isn't tinted. While this page is open the tint is previewed behind the options window. Names and nameplates are on the Nameplates page."] = "Cómo se ve el mundo del juego en CineMode (o sobre la interfaz normal, con Empezar en CineMode desactivado en la página principal): franjas de cine, gradación de color, viñeta, brillo de posada y clima. La interfaz no se tiñe. Mientras esta página está abierta, el tinte se previsualiza detrás de la ventana de opciones. Los nombres y las placas de nombre están en la página Placas de nombre."
+L["How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the main page): letterbox bars, colour grading, vignette, inn glow and weather. The UI isn't tinted. Names and nameplates are on the Nameplates page."] = "Cómo se ve el mundo del juego en CineMode (o sobre la interfaz normal, con Empezar en CineMode desactivado en la página principal): franjas de cine, gradación de color, viñeta, brillo de posada y clima. La interfaz no se tiñe. Los nombres y las placas de nombre están en la página Placas de nombre."
 L["Enable visual effects"] = "Activar los efectos visuales"
 L["Turns everything on this page on or off at once: the letterbox, tint, time of day, zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for when you turn this back on."] = "Activa o desactiva todo lo de esta página a la vez: las franjas, el tinte, la hora del día, los tintes de zona, la viñeta, el brillo de posada, el clima y la profundidad de campo. Cada uno conserva sus ajustes para cuando vuelvas a activarlo."
 L["Ticked, that effect doesn't show there. Always: not at all. Combat: it goes for fights, and comes back once the Calm Timer (CineMode page) has run out after. Outside camera modes: it only shows while a camera mode runs (flights, AFK, cozy and the rest)."] = "Marcado, ese efecto no se muestra ahí. Siempre: nunca. Combate: se va en los combates y vuelve cuando el Temporizador de calma (página CineMode) se agota después. Fuera de los modos de cámara: solo se muestra mientras funciona un modo de cámara (vuelos, AFK, acogedora y los demás)."
@@ -615,11 +614,11 @@ L["Won"] = "Ganó"
 L["Lost"] = "Perdió"
 L["Fled"] = "Huyó"
 L["Nameplate distance"] = "Distancia de las placas de nombre"
-L["How far away nameplates show, in yards. Untick to put the game's own back. " ..
-	"The game won't go past its own limit (it says what it kept)."] =
-	"Hasta qué distancia se ven las placas de nombre, en metros. Desmárcalo para volver a la del juego. " ..
-	"El juego no pasa de su propio límite (dice cuál ha dejado)."
-L["(game keeps %s)"] = "(el juego deja %s)"
+L["How far away nameplates show, in yards. " ..
+	"The game won't go past its own limit. Reset page puts the game's default back."] =
+	"Hasta qué distancia se ven las placas de nombre, en metros. " ..
+	"El juego no pasa de su propio límite. Restablecer página vuelve a poner el valor por defecto del juego."
+L["The game's menu doesn't change it. Its default is %s."] = "El menú del juego no lo cambia. Su valor por defecto es %s."
 L["On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, and the game's own options decide, in CineMode and out."] = "Activado: CineMode desvanece las placas de nombre y los nombres según esta página. Desactivado: los deja en paz y deciden las opciones del propio juego, con CineMode y sin él."
 L["Show in fights, and for the Calm Timer after."] = "Se muestran en combate, y durante el Temporizador de calma posterior."
 L["Show in fights while you're PvP flagged, and for the Calm Timer after."] = "Se muestran en combate mientras tienes el JcJ activado, y durante el Temporizador de calma posterior."

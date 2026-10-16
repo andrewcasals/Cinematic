@@ -15,7 +15,7 @@ end
 -- missing = db.chatPeekChannels). "game" types are game events rather than
 -- conversation; the noisy ones default off.
 ns.CHAT_PEEK_TYPES = {
-	{ key = "say", label = L["Say"], events = { "CHAT_MSG_SAY" } },
+	{ key = "say", label = L["Say"], default = false, events = { "CHAT_MSG_SAY" } },
 	{ key = "yell", label = L["Yell"], events = { "CHAT_MSG_YELL" } },
 	{ key = "emote", label = L["Emotes"], events = { "CHAT_MSG_EMOTE", "CHAT_MSG_TEXT_EMOTE" } },
 	{ key = "whisper", label = L["Whispers"], events = { "CHAT_MSG_WHISPER", "CHAT_MSG_BN_WHISPER" } },

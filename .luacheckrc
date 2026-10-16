@@ -155,6 +155,8 @@ read_globals = {
 	"AreAllPanelsDisallowed", "SettingsPanel",
 	"RELOADUI",
 	"ReloadUI",
+	"EXIT_GAME",
+	"Quit",
 	"ResetView",
 	"SERVER_MESSAGE_PREFIX",
 	"SPELL_FAILED_NOT_FISHABLE",
