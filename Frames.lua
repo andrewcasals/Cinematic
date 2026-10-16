@@ -587,6 +587,49 @@ function ns.ScaleBlocked(frame)
 	return InCombatLockdown() and ns.Flag(frame:IsProtected())
 end
 
+-- Shrunk, the minimap still collapses into its anchor corner, where its
+-- player arrow (which ignores alpha) shows as a single pixel. So while shrunk
+-- it's also moved off the right edge of the screen, and its own anchors are
+-- put back when it grows. (The offset is in its shrunk scale: 20000 is a few
+-- hundred pixels.)
+do -- (a block: this file is at Lua's 200-local cap)
+local PARK_OFFSET = 20000
+
+function ns.ParkShrunk(entry)
+	local frame = entry.frame
+	local points = {}
+	for i = 1, frame:GetNumPoints() do
+		local ok, point, relativeTo, relativePoint, x, y = pcall(frame.GetPoint, frame, i)
+		if not ok or type(point) ~= "string" then
+			return -- (can't read them back: leave it where it is)
+		end
+		points[i] = { point, relativeTo, relativePoint, x, y }
+	end
+	entry.savedPoints = points
+	frame:ClearAllPoints()
+	frame:SetPoint("TOPLEFT", UIParent, "TOPRIGHT", PARK_OFFSET, 0)
+end
+
+-- Something laid it out again while shrunk (it's back on its own anchors).
+function ns.IsParked(entry)
+	local ok, _, relativeTo, _, x = pcall(entry.frame.GetPoint, entry.frame, 1)
+	return ok and relativeTo == UIParent and x == PARK_OFFSET
+end
+
+function ns.UnparkShrunk(entry)
+	local points = entry.savedPoints
+	entry.savedPoints = nil
+	if not points or not ns.IsParked(entry) then
+		return
+	end
+	local frame = entry.frame
+	frame:ClearAllPoints()
+	for _, p in ipairs(points) do
+		frame:SetPoint(p[1], p[2], p[3], p[4], p[5])
+	end
+end
+end
+
 local function RemoveFrame(frame)
 	for i, entry in ipairs(ns.managed) do
 		if entry.frame == frame then
@@ -605,9 +648,11 @@ local function RemoveFrame(frame)
 				waiter:SetScript("OnEvent", function(self)
 					self:UnregisterAllEvents()
 					frame:SetScale(scale)
+					ns.UnparkShrunk(entry)
 				end)
 			elseif entry.shrunk then
 				frame:SetScale(entry.savedScale or 1)
+				ns.UnparkShrunk(entry)
 			end
 			table.remove(ns.managed, i)
 			entry.removed = true -- (for script hooks still holding it: see HookPartyScripts)
@@ -944,9 +989,17 @@ local MIN_SHRUNK_TIME = 0.5
 local function ShrinkEntry(entry)
 	local frame = entry.frame
 	entry.savedScale = frame:GetScale()
-	entry.savedRect = { frame:GetRect() }
-	entry.savedEffectiveScale = frame:GetEffectiveScale()
+	-- (Shrunk again while still parked: it only had its size put back, so its
+	-- saved place and rect still stand.)
+	local parked = entry.savedPoints and ns.IsParked(entry)
+	if not parked then
+		entry.savedRect = { frame:GetRect() }
+		entry.savedEffectiveScale = frame:GetEffectiveScale()
+	end
 	frame:SetScale(SHRUNK_SCALE)
+	if not parked then
+		ns.ParkShrunk(entry)
+	end
 	entry.shrunk = true
 	entry.shrunkAt = GetTime()
 end
@@ -984,6 +1037,7 @@ end
 
 local function UnshrinkEntry(entry)
 	entry.frame:SetScale(entry.savedScale or 1)
+	ns.UnparkShrunk(entry)
 	entry.shrunk = false
 	if entry.frame == Minimap and Minimap.GetZoomLevels and IsIndoors and ns.Flag(IsIndoors()) then
 		minimapNeedsRedraw = true
@@ -1016,6 +1070,9 @@ function ns.SetEntryAlpha(entry, alpha)
 			-- Something put its size back (EllesmereUI does when it lays the
 			-- minimap out again): take that as its size and shrink it again.
 			ShrinkEntry(entry)
+		elseif entry.savedPoints and not ns.IsParked(entry) then
+			-- Laid out again at its shrunk size: back off the screen.
+			ns.ParkShrunk(entry)
 		end
 	end
 	ApplyAlpha(entry)
