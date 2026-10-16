@@ -108,7 +108,7 @@ local HANDLE_RIGHT = 64
 
 local handles = {} -- frame -> its title bar strip
 
-local function MakeDraggable(frame)
+local function MakeDraggable(frame, left)
 	if hooked[frame] or Locked(frame) then
 		return
 	end
@@ -120,7 +120,7 @@ local function MakeDraggable(frame)
 	frame:HookScript("OnDragStop", DragStop)
 	frame:HookScript("OnHide", Closed)
 	local handle = CreateFrame("Frame", nil, frame)
-	handle:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+	handle:SetPoint("TOPLEFT", frame, "TOPLEFT", left or 0, 0)
 	handle:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -HANDLE_RIGHT, 0)
 	handle:SetHeight(HANDLE_HEIGHT)
 	handle:SetFrameLevel(frame:GetFrameLevel() + 10)
@@ -235,11 +235,38 @@ local function Arrange()
 	end
 end
 
+-- The combined backpack (one bag window for all the bags) isn't one of the
+-- game's windows: the game stacks the bags up from the bottom right on its
+-- own whenever one opens or closes. It's put back where it was dropped after
+-- that; the other bags open next to it (the game anchors them to it). Not
+-- separate bags: there are too many of them to move one at a time. Its
+-- portrait, top left, opens the bag menu: the strip starts after it.
+local BAG_LEFT = 48
+
+local function PlaceBag()
+	local bag = ContainerFrameCombinedBags
+	if not (ns.db and bag and bag.GetPoint) then
+		return
+	end
+	if ns.db.dragPanels then
+		MakeDraggable(bag, BAG_LEFT)
+	end
+	if handles[bag] then
+		handles[bag]:SetShown(ns.db.dragPanels and true or false)
+	end
+	local spot = Spot(bag)
+	if spot and not moving[bag] and ns.Flag(bag:IsShown()) and not Locked(bag) then
+		bag:ClearAllPoints()
+		bag:SetPoint(spot[1], UIParent, spot[2], spot[3], spot[4])
+	end
+end
+
 -- Again a frame later: some windows settle their width once shown.
 local again = false
 local function ArrangeAgain()
 	again = false
 	Arrange()
+	PlaceBag()
 end
 
 local function Placed()
@@ -247,6 +274,7 @@ local function Placed()
 		return
 	end
 	Arrange()
+	PlaceBag()
 	if not again then
 		again = true
 		C_Timer.After(0, ArrangeAgain)
@@ -282,6 +310,15 @@ function ns.PrintPanelsDebug()
 	if not any then
 		ns.Print("no game windows open")
 	end
+	local bag = ContainerFrameCombinedBags
+	if bag and bag.GetPoint then
+		local point, relativeTo, relativePoint, x, y = bag:GetPoint(1)
+		local relativeName = relativeTo and (relativeTo == UIParent and "UIParent"
+			or relativeTo.GetName and relativeTo:GetName()) or tostring(relativeTo)
+		ns.Print(("combined backpack: shown %s, hooked %s, saved spot %s, %s %s %s %s %s"):format(
+			tostring(ns.Flag(bag:IsShown())), tostring(hooked[bag] or false), tostring(Spot(bag) ~= nil),
+			tostring(point), tostring(relativeName), tostring(relativePoint), tostring(Number(x)), tostring(Number(y))))
+	end
 	local focus
 	if GetMouseFoci then
 		focus = GetMouseFoci()[1]
@@ -311,6 +348,12 @@ if GetUIPanel then
 		if _G[name] then
 			hooksecurefunc(name, Placed)
 		end
+	end
+	if UpdateContainerFrameAnchors then
+		hooksecurefunc("UpdateContainerFrameAnchors", Placed)
+	end
+	if ContainerFrameCombinedBags then
+		ContainerFrameCombinedBags:HookScript("OnShow", Placed)
 	end
 	local events = CreateFrame("Frame")
 	events:RegisterEvent("PLAYER_REGEN_ENABLED")

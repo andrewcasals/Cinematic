@@ -82,6 +82,7 @@ read_globals = {
 	"GetCurrentBindingSet",
 	"GetCursorInfo",
 	"CharacterFrame", "HideUIPanel", "ToggleCharacter", "GetUIPanel",
+	"ContainerFrameCombinedBags", "UpdateContainerFrameAnchors",
 	"C_Container", "PickupContainerItem", "GetContainerNumSlots", "GetContainerItemInfo", "NUM_BAG_SLOTS",
 	"ClearCursor", "SortBags",
 	"GetItemFamily", "GetContainerNumFreeSlots", "GetBagName", "C_MerchantFrame", "GetMerchantItemInfo",
