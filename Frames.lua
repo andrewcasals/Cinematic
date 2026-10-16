@@ -1518,10 +1518,12 @@ ns.PLACE_SHOW = {
 }
 local NO_DEFAULTS = {}
 -- Ticked to start with: every row in dungeons, scenarios and raids (not
--- 3rd party frames), and the raid and party frames in battlegrounds and
--- arenas, where you're always in a group.
+-- 3rd party frames), the raid and party frames in battlegrounds and
+-- arenas, where you're always in a group, and the party frames and raid
+-- frames' players whenever you're grouped.
 local PLACE_SHOW_DEFAULTS = {
 	bgShow = { raidplayers = true, raidpets = true, party = true },
+	groupShow = { raidplayers = true, party = true },
 	instanceShow = setmetatable({}, { __index = function() return true end }),
 }
 local function PlaceDefaults(list)

@@ -2636,6 +2636,20 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.metersCombatV1 = true
 		end
+		-- The party frames and raid frames' players show while you're grouped
+		-- by default: their Grouped boxes ticked in every profile too. Once.
+		if not ns.db.groupFramesV1 then
+			local function GroupedOn(t)
+				if type(t.groupShow) ~= "table" then t.groupShow = {} end
+				t.groupShow.party = true
+				t.groupShow.raidplayers = true
+			end
+			GroupedOn(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then GroupedOn(saved) end
+			end
+			ns.db.groupFramesV1 = true
+		end
 		-- "Always show your target's nameplate" (plateTarget) was split into a
 		-- switch each for enemy and friendly targets, then into Enemy Target and
 		-- Friendly Target rows in the Nameplates grid: one switch again, on if
