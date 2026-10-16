@@ -131,6 +131,50 @@ local function StyleBubbles()
 	end
 end
 
+-- Whether a bubble saying exactly this text is showing on screen (so its chat
+-- line needn't show the chat window). Bubbles the game keeps from addons can't
+-- be read, so those count as not showing.
+local function SaysText(frame, text)
+	for i = 1, select("#", frame:GetRegions()) do
+		local region = select(i, frame:GetRegions())
+		if region:GetObjectType() == "FontString" then
+			local shown = region:GetText()
+			if type(shown) == "string" and not (issecretvalue and issecretvalue(shown)) and shown == text then
+				return true
+			end
+		end
+	end
+	for i = 1, select("#", frame:GetChildren()) do
+		local child = select(i, frame:GetChildren())
+		if not (child.IsForbidden and child:IsForbidden()) and SaysText(child, text) then
+			return true
+		end
+	end
+	return false
+end
+
+function ns.IsBubbleOnScreen(text)
+	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles) then
+		return false
+	end
+	local width, height = WorldFrame:GetWidth(), WorldFrame:GetHeight()
+	for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles(false)) do
+		if not (bubble.IsForbidden and bubble:IsForbidden()) and ns.Flag(bubble:IsVisible())
+			and SaysText(bubble, text) then
+			-- (Its centre in the world frame's own units, inside the screen.)
+			local x, y = bubble:GetCenter()
+			local scale = bubble:GetEffectiveScale() / WorldFrame:GetEffectiveScale()
+			if type(x) == "number" and not (issecretvalue and issecretvalue(x)) then
+				x, y = x * scale, y * scale
+				if x >= 0 and x <= width and y >= 0 and y <= height then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
 -- A bubble appears a frame or so after its chat message: the bubbles are
 -- looked at for a short while after each one.
 local BUBBLE_EVENTS = {

@@ -193,6 +193,7 @@ local DEFAULTS = {
 	chatPeekTime = 8,         -- seconds the chat window stays up
 	chatUntilWhisperRead = true, -- keep chat up while a whisper tab is flashing (until it's clicked)
 	chatHideOwn = true, -- your own messages (emotes, say, party...) don't show chat
+	chatHideBubbled = true, -- say/yell you can see as a bubble on screen doesn't show chat
 	chatAttackAlert = true, -- LocalDefense "... is under attack!" also shows as a title
 	chatInCities = false,     -- keep chat visible in capital cities
 	chatInDungeons = false,   -- ...in dungeons and scenarios
@@ -2874,6 +2875,22 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then SayOff(saved) end
 			end
 			ns.db.chatSayOffV1 = true
+		end
+		-- ...and back on, now that says you can see as a bubble on screen don't
+		-- bring up chat (Hide speech you can see as a bubble, on too). Once, in
+		-- every profile.
+		if not ns.db.chatSayOnV1 then
+			local function SayOn(t)
+				if type(t.chatPeekTypes) == "table" then
+					t.chatPeekTypes.say = nil -- (on by default)
+				end
+				t.chatHideBubbled = nil -- (on by default)
+			end
+			SayOn(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then SayOn(saved) end
+			end
+			ns.db.chatSayOnV1 = true
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.

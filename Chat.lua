@@ -15,7 +15,7 @@ end
 -- missing = db.chatPeekChannels). "game" types are game events rather than
 -- conversation; the noisy ones default off.
 ns.CHAT_PEEK_TYPES = {
-	{ key = "say", label = L["Say"], default = false, events = { "CHAT_MSG_SAY" } },
+	{ key = "say", label = L["Say"], events = { "CHAT_MSG_SAY" } },
 	{ key = "yell", label = L["Yell"], events = { "CHAT_MSG_YELL" } },
 	{ key = "emote", label = L["Emotes"], events = { "CHAT_MSG_EMOTE", "CHAT_MSG_TEXT_EMOTE" } },
 	{ key = "whisper", label = L["Whispers"], events = { "CHAT_MSG_WHISPER", "CHAT_MSG_BN_WHISPER" } },
@@ -304,6 +304,46 @@ local function IsFromPlayer(author, guid)
 	return author == name or (realm ~= nil and author == name .. "-" .. realm)
 end
 
+-- With "Hide speech you can see as a bubble" (db.chatHideBubbled), speech you
+-- can see as a bubble on screen (a yell from someone in view) doesn't need the
+-- chat window: such a line waits BUBBLE_WAIT seconds for its
+-- bubble (it shows a frame or so after the message), and peeks only if none
+-- with its text showed on screen. Bubbles switched off, or kept from addons
+-- (in instances, on retail), peek as before.
+local BUBBLE_SPEECH = {
+	CHAT_MSG_SAY = true, CHAT_MSG_YELL = true, CHAT_MSG_MONSTER_SAY = true, CHAT_MSG_MONSTER_YELL = true,
+}
+local BUBBLE_WAIT = 0.3
+local waiting = {} -- { chatFrame, text, until }
+local bubbleWatch = CreateFrame("Frame")
+
+local function WatchBubbles()
+	local now = GetTime()
+	for i = #waiting, 1, -1 do
+		local line = waiting[i]
+		if ns.IsBubbleOnScreen and ns.IsBubbleOnScreen(line[2]) then
+			table.remove(waiting, i)
+		elseif now >= line[3] then
+			table.remove(waiting, i)
+			PeekWindow(line[1])
+		end
+	end
+	if #waiting == 0 then
+		bubbleWatch:SetScript("OnUpdate", nil)
+	end
+end
+local OnBubbleWatch = ns.Profiled("Bubble watch", WatchBubbles)
+
+local function PeekUnlessBubble(chatFrame, event, text)
+	if not (ns.db.chatHideBubbled and BUBBLE_SPEECH[event] and type(text) == "string" and not (issecretvalue and issecretvalue(text))
+			and GetCVarBool and GetCVarBool("chatBubbles")) then
+		PeekWindow(chatFrame)
+		return
+	end
+	waiting[#waiting + 1] = { chatFrame, text, GetTime() + BUBBLE_WAIT }
+	bubbleWatch:SetScript("OnUpdate", OnBubbleWatch)
+end
+
 -- Message filters run once per chat window that will show the message, which
 -- tells us exactly which window to reveal. Never filters anything out.
 local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, _, _, _, _, channelBaseName,
@@ -330,7 +370,7 @@ local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, 
 		wanted = IsPeekTypeOn(EVENT_PEEK_TYPE[event])
 	end
 	if wanted then
-		PeekWindow(chatFrame)
+		PeekUnlessBubble(chatFrame, event, text)
 	end
 	return false
 end

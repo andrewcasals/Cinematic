@@ -4559,11 +4559,17 @@ local function CreateChatPanel()
 	hideOwn:SetPoint("TOPLEFT", untilRead, "BOTTOMLEFT", 0, -2)
 	GreyUnless(hideOwn, IfPeek)
 
+	local hideBubbled = Check(chatPanel, "chatHideBubbled", L["Hide speech you can see as a bubble"],
+		L["Says and yells (people's and NPCs') don't show chat when their chat bubble shows on your " ..
+		"screen: you can read it there. Ones from out of view, or where bubbles are off, still do."])
+	hideBubbled:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 0, -2)
+	GreyUnless(hideBubbled, IfPeek)
+
 	local attackAlert = Check(chatPanel, "chatAttackAlert", L["Show attacks on the screen"],
 		L["When the LocalDefense channel says a place is under attack (\"Dun Algaz is under attack!\"), " ..
 		"it also shows in red where the zone name appears, with your faction's city bell. The same " ..
 		"place shows at most once every 90 seconds. /cine attacktest shows one."])
-	attackAlert:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 0, -2)
+	attackAlert:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 0, -2)
 
 	local typesHeader = Header(chatPanel, L["Show chat for these messages"], attackAlert, -24)
 	typesHeader:SetPoint("TOPLEFT", attackAlert, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
