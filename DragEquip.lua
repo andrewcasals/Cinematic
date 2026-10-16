@@ -52,7 +52,8 @@ end
 -- (health, heal prediction, the numbers). On WoW Forever those are secret, and
 -- done by us, Blizzard's comparison errors (TextStatusBar.lua, HealthBar.lua,
 -- UnitFrame.lua) though the window works fine: secret-value errors during
--- these calls are kept quiet (ns.togglingCharacter, Diagnostics.lua).
+-- these calls, and those bars' later ones, are kept quiet (ns.togglingCharacter,
+-- Diagnostics.lua).
 local function OpenCharacter()
 	ns.togglingCharacter = true
 	pcall(ToggleCharacter, "PaperDollFrame")
