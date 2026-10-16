@@ -341,3 +341,88 @@ function ns.ClearLog()
 	ns.db.log = {}
 	ns.Log("session", "log cleared")
 end
+
+-- Graphics CVars (/cine debug cvars) ------------------------------------------
+-- Which graphics settings the game's own menu reaches, for a possible "beyond
+-- Ultra" page. The first run logs the candidates (there or not, now, default)
+-- and notes every CVar's value; move the Graphics sliders, run it again, and
+-- the log lists each CVar the menu changed. Ones that never change are console only.
+do
+	local CANDIDATES = {
+		"farclip", "horizonStart", "entityLodDist", "terrainLodDist", "wmoLodDist",
+		"lodObjectCullSize", "lodObjectMinSize", "lodObjectFadeScale",
+		"groundEffectDensity", "groundEffectDist", "renderScale", "ResampleSharpness",
+		"MSAAQuality", "ffxAntiAliasingMode", "textureFilteringMode", "shadowMode",
+		"shadowTextureSize", "shadowSoft", "shadowRt", "ssao", "sunShafts", "depthEffects",
+		"refraction", "projectedTextures", "particleDensity", "weatherDensity",
+		"waterDetail", "reflectionMode", "rippleDetail",
+	}
+	local snapshot -- name -> value, from the first run
+
+	local function Value(get, name)
+		local ok, value = pcall(get, name)
+		if ok and type(value) == "string" then return value end
+	end
+
+	-- Every CVar name the client lists (older clients: just the candidates).
+	local function AllNames()
+		local names = {}
+		local list = C_Console and C_Console.GetAllCommands and select(2, pcall(C_Console.GetAllCommands))
+			or (ConsoleGetAllCommands and select(2, pcall(ConsoleGetAllCommands)))
+		local cvarType = Enum and Enum.ConsoleCommandType and Enum.ConsoleCommandType.Cvar
+		if type(list) == "table" then
+			for _, info in ipairs(list) do
+				if type(info) == "table" and type(info.command) == "string"
+					and (cvarType == nil or info.commandType == cvarType) then
+					names[#names + 1] = info.command
+				end
+			end
+		end
+		if #names == 0 then
+			for _, name in ipairs(CANDIDATES) do names[#names + 1] = name end
+		end
+		return names
+	end
+
+	function ns.CVarsDebug()
+		local get = (C_CVar and C_CVar.GetCVar) or GetCVar
+		local getDefault = (C_CVar and C_CVar.GetCVarDefault) or GetCVarDefault
+		if not snapshot then
+			local missing = 0
+			for _, name in ipairs(CANDIDATES) do
+				local value = Value(get, name)
+				if value then
+					ns.Log("cvars", ("%s = %s (default %s)"):format(name, value,
+						tostring(getDefault and Value(getDefault, name))))
+				else
+					missing = missing + 1
+					ns.Log("cvars", name .. ": not on this client")
+				end
+			end
+			snapshot = {}
+			local count = 0
+			for _, name in ipairs(AllNames()) do
+				local value = Value(get, name)
+				if value then
+					snapshot[name] = value
+					count = count + 1
+				end
+			end
+			ns.Print(("cvars: %d of %d candidates on this client (in /cine log). Noted %d CVars: now open"
+				.. " the game's Graphics settings, move each slider to its highest, apply, then"
+				.. " /cine debug cvars again"):format(#CANDIDATES - missing, #CANDIDATES, count))
+			return
+		end
+		local changed = 0
+		for name, before in pairs(snapshot) do
+			local now = Value(get, name)
+			if now and now ~= before then
+				changed = changed + 1
+				ns.Log("cvars", ("menu changed %s: %s -> %s"):format(name, before, now))
+			end
+		end
+		snapshot = nil
+		ns.Print(("cvars: %d changed since the first run (in /cine log). Run it again to start over")
+			:format(changed))
+	end
+end

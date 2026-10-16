@@ -30,6 +30,7 @@ Locales\zhCN.lua
 Locales\zhTW.lua
 Diagnostics.lua
 Profiler.lua
+Graphics.lua
 Core.lua
 HideUI.lua
 AddonSupport.lua

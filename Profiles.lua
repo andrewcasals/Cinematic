@@ -265,7 +265,8 @@ function ns.IsBuiltinProfile(name)
 end
 
 local function IsProfileKey(key)
-	return not GLOBAL_KEYS[key] and not key:find("^debug")
+	-- (Graphics+ is the machine's: a shared or switched profile leaves it as it is.)
+	return not GLOBAL_KEYS[key] and not key:find("^debug") and not key:find("^graphicsPlus")
 end
 
 local function CopyTable(source)

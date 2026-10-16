@@ -76,6 +76,8 @@ read_globals = {
 	"GetBindingText",
 	"GetBuildInfo",
 	"GetCVar",
+	"GetCVarDefault",
+	"ConsoleGetAllCommands",
 	"GetCVarBool",
 	"GetCameraZoom",
 	"GetChannelList", "C_FriendList", "IsInGuild", "GetNumGuildMembers", "GetGuildRosterInfo",

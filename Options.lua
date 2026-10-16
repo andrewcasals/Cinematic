@@ -366,6 +366,7 @@ local function ResetPage(content)
 	ns.letterboxDirty = true
 	if ns.RefreshTint then ns.RefreshTint() end
 	if ns.ApplyBubbles then ns.ApplyBubbles() end
+	if ns.ApplyGraphicsPlus then ns.ApplyGraphicsPlus() end
 	Refresh()
 end
 
@@ -3376,6 +3377,129 @@ local function CreateTintPanel()
 	canvas:SetScript("OnHide", function() ns.SetTintPreview(false) end)
 	canvas:Hide()
 	RegisterSubpage(canvas, L["Visual Effects"])
+end
+
+-- Sub-page: Graphics+, the game's graphics settings past its menu's most
+-- (Graphics.lua). Each slider only on clients that have its setting.
+local function CreateGraphicsPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Graphics+"])
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		L["The game's own graphics settings one by one, past its Graphics menu either way: higher for a better " ..
+		"look, lower for a faster game. They're this computer's: the same in every profile."])
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local function Changed() ns.ApplyGraphicsPlus() end
+	local switch = PageSwitch(content, "graphicsPlus", L["Use Graphics+"],
+		L["On: the settings below, as you've set them. Off: the game's own settings, put back as they were."],
+		subtitle, Changed)
+	local stack = Stack(switch, "check")
+	stack:Note(content, L["A slider changes nothing until you move it. Higher (in gold) costs frame rate, lower " ..
+		"(in blue) saves it. Tick and untick a setting to compare it with the game's own; Reset page leaves them " ..
+		"all alone again."], 420)
+
+	local LABELS = {
+		graphicsPlusClutter = { L["Ground clutter density"], L["How thickly grass, flowers and stones grow " ..
+			"on the ground."] },
+		graphicsPlusClutterDistance = { L["Ground clutter distance"], L["How far away grass and flowers still " ..
+			"show."] },
+		graphicsPlusClutterFade = { L["Ground clutter fade"], L["How far away grass and flowers grow full " ..
+			"before they start thinning out towards the clutter distance. Above the clutter distance it makes " ..
+			"no more difference."] },
+		graphicsPlusView = { L["View distance"], L["How far away the land is drawn in full before it turns " ..
+			"into the flat, faded horizon, and how far anything is drawn at all. Very demanding: with terrain " ..
+			"and building detail turned up too, most of all."] },
+		graphicsPlusTerrain = { L["Terrain detail distance"], L["How far away the land keeps its full shape " ..
+			"before it turns low detail."] },
+		graphicsPlusBuildings = { L["Building detail distance"], L["How far away buildings keep their full " ..
+			"detail."] },
+		graphicsPlusObjects = { L["Object detail distance"], L["How far away trees, rocks and other objects " ..
+			"keep their full detail before they're swapped for simpler ones or fade out."] },
+		graphicsPlusObjectFade = { L["Object fade distance"], L["How far away small objects stay before they " ..
+			"fade out. Much higher costs a lot of frame rate for little to see."] },
+		graphicsPlusCreatures = { L["Creature detail distance"], L["How far away creatures and characters keep " ..
+			"their full detail before they're swapped for simpler models."] },
+		graphicsPlusShadows = { L["Shadow sharpness"], L["The size of the game's shadow maps: bigger gives " ..
+			"crisper shadow edges, smaller saves frame rate. Players found nothing more above 2048, so 4096 may " ..
+			"look the same. Needs shadows on in the game's menu."] },
+	}
+	stack:Header(content, L["Settings"])
+	local any = false
+	for _, setting in ipairs(ns.GRAPHICS_PLUS) do
+		if ns.GraphicsPlusExists(setting.cvar) then
+			any = true
+			local text = LABELS[setting.key]
+			local tip = text[2] .. " " .. (setting.min == 0
+				and L["The game's menu doesn't change it: it's %s."]:format(setting.menu)
+				or L["The game's menu goes from %s to %s."]:format(setting.min, setting.menu))
+			-- (The game's name for the setting beside it, in grey, as typed after /console.)
+			local names = setting.cvar
+			for _, cvar in ipairs(setting.also or {}) do
+				names = names .. ", " .. cvar
+			end
+			stack:Add(Check(content, setting.key .. "On", text[1] .. " |cff9d9d9d(" .. names .. ")|r",
+				tip, function(value)
+				ns.GetDB()[setting.key .. "On"] = value
+				Changed()
+				Refresh() -- grey out / enable its slider
+			end), "check")
+			-- Unmoved (nil), the slider shows the game's own value and changes
+			-- nothing. A setting with a few values (shadows) slides over their
+			-- places in the list.
+			local values = setting.values
+			local function Own()
+				return tonumber(ns.GraphicsPlusOwn(setting)) or setting.menu
+			end
+			local function Place(value)
+				local best = 1
+				for i, v in ipairs(values) do
+					if math.abs(v - value) < math.abs(values[best] - value) then best = i end
+				end
+				return best
+			end
+			local access = {
+				get = function()
+					local value = ns.GetDB()[setting.key] or Own()
+					return values and Place(value) or value
+				end,
+				set = function(value) ns.GetDB()[setting.key] = values and values[value] or value end,
+			}
+			local slider
+			slider = stack:Add(Slider(content, access, "", values and 1 or setting.min,
+				values and #values or setting.max, values and 1 or setting.step,
+				function(position)
+					local value = values and values[position] or position
+					local own = Own()
+					if ns.GetDB()[setting.key] == nil then
+						return ("|cffffffff%d|r  |cff9d9d9d"):format(value) .. L["(game's own)"]
+					end
+					-- (Lower than the game's own in blue: it saves frame rate.)
+					return (value < own and "|cff4fb3ff%d|r" or "%d|r"):format(value) .. "  |cff9d9d9d" ..
+						L["(game's own: %s)"]:format(("%d"):format(own + 0.5))
+				end, nil, function()
+					Changed()
+					slider:Refresh() -- (its label: moved now, and against the game's own)
+				end), "slider", 24)
+			RecordKey(content, setting.key) -- (for Reset page: back to unmoved)
+			Tooltip(slider, tip)
+			GreyUnless(slider, function(db) return db[setting.key .. "On"] end)
+		end
+	end
+	if not any then
+		stack:Note(content, L["This game version has none of these settings."], 420)
+	end
+	stack:Note(content, L["Ground clutter changes show as the ground around you loads again: move on a " ..
+		"little, or /reload. Changing the game's Graphics menu doesn't undo these: they're written again " ..
+		"over its new settings."], 420)
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Graphics+")
 end
 
 -- Sub-page for audio: music during cinematic mode.
@@ -6426,6 +6550,7 @@ ns.OnLanguage(function()
 	CreateFishingPanel()
 	CreateQualityPanel()
 	CreateTintPanel()
+	CreateGraphicsPanel()
 	CreateAudioPanel()
 	CreateCameraPanel()
 	CreateEventsPanel()

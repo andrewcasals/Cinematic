@@ -552,6 +552,13 @@ for _, kind in ipairs({ "Say", "Party" }) do
 end
 DEFAULTS.bubblesTextOnly = false -- no background or border, just the text
 DEFAULTS.bubblesTextScale = 1
+-- Graphics+ page (Graphics.lua): off, each setting ticked (so switching it on
+-- uses them all). Each slider's value (graphicsPlus<name>) has no default: nil
+-- until it's moved, it changes nothing. Not in profiles.
+DEFAULTS.graphicsPlus = false
+for _, setting in ipairs(ns.GRAPHICS_PLUS) do
+	DEFAULTS[setting.key .. "On"] = true
+end
 DEFAULTS.handleSwing = true -- Swing timer
 -- Swing timer page: the ranged bar on top (it and the main hand's trade
 -- places), per class so one profile suits them all. To start with, the
