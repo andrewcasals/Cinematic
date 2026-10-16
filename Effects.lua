@@ -1252,9 +1252,10 @@ function ns.PrintPlatesDebug()
 			ns.Print(("  plate shown=%s alpha=%.2f, frame shown=%s alpha=%.2f, health bar shown=%s"):format(
 				tostring(plate:IsShown()), plate:GetAlpha(), tostring(frame:IsShown()), frame:GetAlpha(),
 				tostring(frame.healthBar and frame.healthBar:IsShown())))
-			local parts, fields = ns.DescribePlateParts(frame)
+			local parts, fields, healthFields = ns.DescribePlateParts(frame)
 			ns.Print("  parts: " .. parts)
 			ns.Print("  fields: " .. fields)
+			ns.Print("  health bar fields: " .. healthFields)
 		end
 	end
 	-- Every nameplate setting this client has, for comparing.

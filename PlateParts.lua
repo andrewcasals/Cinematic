@@ -8,6 +8,7 @@ local _, ns = ...
 -- (all) every one of them, for parts drawn by several textures. The
 -- containers (health and cast bars with their borders) go first. WoW
 -- Forever's level is the PlayerLevelDiffFrame box (its LevelFrame stays hidden).
+-- A dotted field is one on a frame on the unit frame.
 local PART_FRAMES = {
 	Health = { "HealthBarsContainer", "healthBar" },
 	Name = { "name" },
@@ -17,7 +18,8 @@ local PART_FRAMES = {
 	Classification = { "ClassificationFrame", "classificationIndicator", all = true },
 	Level = { "PlayerLevelDiffFrame", "LevelFrame", "levelText" },
 	Threat = { "aggroHighlight", "aggroHighlightBase", "aggroHighlightAdditive", "aggroFlash", all = true },
-	Highlight = { "selectionHighlight" },
+	-- (Forever's is the health bar's gold border, on your target.)
+	Highlight = { "selectionHighlight", "healthBar.selectedBorder", all = true },
 	Widgets = { "WidgetContainer" },
 }
 
@@ -28,11 +30,22 @@ local function Usable(frame)
 	return type(frame) == "table" and frame.SetAlpha and not (frame.IsForbidden and frame:IsForbidden())
 end
 
+local function Field(unitFrame, field)
+	local value = unitFrame
+	for name in field:gmatch("[^.]+") do
+		if type(value) ~= "table" then
+			return nil
+		end
+		value = value[name]
+	end
+	return value
+end
+
 -- Calls fn(frame, ...) for each of a part's frames on a unit frame.
 local function EachPartFrame(unitFrame, part, fn, ...)
 	local fields = PART_FRAMES[part]
 	for _, field in ipairs(fields) do
-		local frame = unitFrame[field]
+		local frame = Field(unitFrame, field)
 		if Usable(frame) then
 			fn(frame, ...)
 			if not fields.all then
@@ -141,16 +154,60 @@ end
 
 -- For /cine debug plates: which of each part's frames the plate has, then
 -- every frame and text on it, for finding parts a client names otherwise.
+-- One frame or texture for the debug listing: its type, whether it's shown,
+-- a text's words and a texture's colour. (Not everything can say:
+-- animations, say. Anything that errors is listed bare.)
+local function Entry(name, value)
+	local okType, kind = pcall(value.GetObjectType, value)
+	local okShown, shown = pcall(function() return value:IsShown() end)
+	local okText, text = pcall(function() return kind == "FontString" and value:GetText() or nil end)
+	if okText and issecretvalue and issecretvalue(text) then
+		text = "(secret)"
+	end
+	local okColor, color = pcall(function()
+		if kind ~= "Texture" then
+			return nil
+		end
+		local r, g, b = value:GetVertexColor()
+		return ("%.2f/%.2f/%.2f"):format(r, g, b)
+	end)
+	return name .. ":" .. (okType and tostring(kind) or "?")
+		.. ((okShown and not ns.Flag(shown)) and "(hidden)" or "")
+		.. ((okText and text) and (' "' .. text .. '"') or "")
+		.. ((okColor and color) and (" " .. color) or "")
+end
+
+-- Every frame and texture on a frame: by its field, then its textures and
+-- texts that have none (numbered).
+local function ListFields(frame)
+	local children, named = {}, {}
+	for field, value in pairs(frame) do
+		if type(field) == "string" and type(value) == "table" and value.GetObjectType then
+			named[value] = true
+			children[#children + 1] = Entry(field, value)
+		end
+	end
+	table.sort(children)
+	local ok, regions = pcall(function() return { frame:GetRegions() } end)
+	for i, region in ipairs(ok and regions or {}) do
+		if not named[region] then
+			children[#children + 1] = Entry("#" .. i, region)
+		end
+	end
+	return table.concat(children, ", ")
+end
+
 function ns.DescribePlateParts(unitFrame)
 	local found = {}
 	for _, part in ipairs(ns.PLATE_PARTS) do
 		local fields = PART_FRAMES[part]
 		local names = {}
 		for _, field in ipairs(fields) do
-			if Usable(unitFrame[field]) then
+			local frame = Field(unitFrame, field)
+			if Usable(frame) then
 				-- (With its alpha now, and @ ours while held.)
-				local ok, alpha = pcall(function() return ("%.2f"):format(unitFrame[field]:GetAlpha()) end)
-				local wanted = held[unitFrame[field]]
+				local ok, alpha = pcall(function() return ("%.2f"):format(frame:GetAlpha()) end)
+				local wanted = held[frame]
 				names[#names + 1] = field .. " " .. (ok and alpha or "?")
 					.. (wanted and ("@" .. ("%.2f"):format(wanted)) or "")
 				if not fields.all then
@@ -160,21 +217,20 @@ function ns.DescribePlateParts(unitFrame)
 		end
 		found[#found + 1] = part .. "=" .. (#names > 0 and table.concat(names, "+") or "NONE")
 	end
-	local children = {}
-	for field, value in pairs(unitFrame) do
-		if type(field) == "string" and type(value) == "table" and value.GetObjectType then
-			-- (Not everything there can say: animations, say. Anything that errors is listed bare.)
-			local okType, kind = pcall(value.GetObjectType, value)
-			local okShown, shown = pcall(function() return value:IsShown() end)
-			local okText, text = pcall(function() return kind == "FontString" and value:GetText() or nil end)
-			if okText and issecretvalue and issecretvalue(text) then
-				text = "(secret)"
+	-- The health bar's container, the bar, and any frame on the bar (its border).
+	local healthFields = {}
+	local container, bar = unitFrame.HealthBarsContainer, unitFrame.healthBar
+	if type(container) == "table" and container.GetObjectType then
+		healthFields[#healthFields + 1] = "container: " .. ListFields(container)
+	end
+	if type(bar) == "table" and bar.GetObjectType then
+		healthFields[#healthFields + 1] = "healthBar: " .. ListFields(bar)
+		for field, value in pairs(bar) do
+			if type(field) == "string" and type(value) == "table" and value.GetRegions then
+				healthFields[#healthFields + 1] = "healthBar." .. field .. ": " .. ListFields(value)
 			end
-			children[#children + 1] = field .. ":" .. (okType and tostring(kind) or "?")
-				.. ((okShown and not ns.Flag(shown)) and "(hidden)" or "")
-				.. ((okText and text) and (' "' .. text .. '"') or "")
 		end
 	end
-	table.sort(children)
-	return table.concat(found, ", "), table.concat(children, ", ")
+	healthFields = #healthFields > 0 and table.concat(healthFields, " | ") or "NONE"
+	return table.concat(found, ", "), ListFields(unitFrame), healthFields
 end
