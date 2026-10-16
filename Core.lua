@@ -2623,6 +2623,19 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.runCameraDelayV1 = true
 		end
+		-- The game's damage meter no longer comes up in fights by default: its
+		-- In combat box unticked in every profile too, whatever it had. Once.
+		if not ns.db.metersCombatV1 then
+			local function MetersOff(t)
+				if type(t.combatShow) ~= "table" then t.combatShow = {} end
+				t.combatShow.meters = false
+			end
+			MetersOff(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then MetersOff(saved) end
+			end
+			ns.db.metersCombatV1 = true
+		end
 		-- "Always show your target's nameplate" (plateTarget) was split into a
 		-- switch each for enemy and friendly targets, then into Enemy Target and
 		-- Friendly Target rows in the Nameplates grid: one switch again, on if

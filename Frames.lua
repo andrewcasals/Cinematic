@@ -1196,7 +1196,7 @@ ns.COMBAT_SHOW = {
 	-- untick it to hide your cast bar in CineMode but for fights.
 	{ key = "castbar", label = L["Cast bar"], default = true, frames = FRAME_GROUPS.castbar },
 	-- The game's own damage meter (made when first opened).
-	{ key = "meters", label = L["Damage meter (the game's)"], default = true, frames = FRAME_GROUPS.meters },
+	{ key = "meters", label = L["Damage meter (the game's)"], default = false, frames = FRAME_GROUPS.meters },
 	-- (handledBy: a master switch that, off, leaves its frames alone: its row greys out.)
 	{ key = "cooldowns", label = L["Cooldown Manager"], default = false, addon = "Blizzard_CooldownViewer",
 		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager", handledBy = "handleCooldowns" },
