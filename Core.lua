@@ -549,7 +549,7 @@ for _, kind in ipairs({ "Say", "Party" }) do
 		DEFAULTS["bubbles" .. kind .. "OffIn" .. where] = false
 	end
 end
-DEFAULTS.bubblesTextOnly = false -- no background or border, just the text
+DEFAULTS.bubblesTextOnly = true -- no background or border, just the text
 DEFAULTS.bubblesTextOutline = true -- with text only: a black outline round the letters
 DEFAULTS.bubblesTextOutlineSize = 2 -- 1 thin, 2 thick, 3 thick with a drop shadow
 DEFAULTS.bubblesTextScale = 1
