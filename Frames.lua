@@ -3347,6 +3347,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 
 	-- Dead, with the death camera watching: everything goes, quickly, whatever
 	-- would normally keep it up (the release button is a popup: it stays).
+	-- Hovering still shows it.
 	local deathFade = cinematic and ns.IsDeathCinematic and ns.IsDeathCinematic()
 
 	-- Hide in camera modes (Minimap page): the camera running now fades the
@@ -3384,7 +3385,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			and not fightingShown and (fadeChat or entry.group ~= "chat") then
 			target = 0
 		end
-		if deathFade and not (typing and entry.group == "chat") then
+		if deathFade and not hovered[entry.row] and not (typing and entry.group == "chat") then
 			target = 0
 		end
 		-- (Swing timer page: in CineMode and out, hovering included.)
