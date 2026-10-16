@@ -2002,7 +2002,54 @@ local function ReleasePlates()
 	platesReleased = not ns.plates.off and not locked and not duels.on
 end
 
+-- How far away nameplates show (plateDistanceOn, plateDistance: Nameplates
+-- page), in CineMode and out. Unmoved (nil), the game's own; ticked and
+-- moved, ours, the game's own noted first and put back when it's unticked or
+-- the page's switch goes off. Plate settings can't change in a fight: then
+-- it waits.
+local plateDistance = { secure = true, values = {} }
+local plateDistanceToDefault = false -- (Reset page in a fight: the game's default once it's over)
+
+local function UpdatePlateDistance()
+	local value = ns.db.handlePlates and ns.db.plateDistanceOn and ns.db.plateDistance
+	local text = value and tostring(value) or nil
+	if InCombatLockdown() then
+		return
+	end
+	if plateDistanceToDefault then
+		plateDistanceToDefault = false
+		ns.ApplyCVarSet(plateDistance, false)
+		plateDistance.value = nil
+		local GetDefault = (C_CVar and C_CVar.GetCVarDefault) or GetCVarDefault
+		local default = GetDefault and GetDefault("nameplateMaxDistance")
+		if default then
+			SetCVar("nameplateMaxDistance", default)
+		end
+	end
+	if text == plateDistance.value then
+		return
+	end
+	ns.ApplyCVarSet(plateDistance, false)
+	if text then
+		plateDistance.values.nameplateMaxDistance = text
+		ns.ApplyCVarSet(plateDistance, true)
+	end
+	plateDistance.value = text
+end
+
+-- Reset page: the slider back to unmoved, and the game's setting to its default.
+function ns.ResetPlateDistance()
+	plateDistanceToDefault = true
+	UpdatePlateDistance()
+end
+
+-- The game's own plate distance: as noted while ours is written, else as it stands.
+function ns.PlateDistanceOwn()
+	return tonumber(ns.db.savedCVars.nameplateMaxDistance or GetCVar("nameplateMaxDistance"))
+end
+
 function ns.UpdatePlates(cinematic, elapsed)
+	UpdatePlateDistance()
 	if not ns.db.handlePlates then
 		if not platesReleased then
 			ReleasePlates()

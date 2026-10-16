@@ -336,6 +336,8 @@ local SCROLLBAR_WIDTH = 26
 -- Lists whose defaults are in code and that are nil until changed (emptied,
 -- they'd be an empty list rather than the defaults).
 local RESET_TO_NIL = { hoverGroups = true }
+-- More for a page's reset to do: [page content] = fn, after its settings are back.
+local resetHooks = {}
 local function ResetPage(content)
 	local db = ns.GetDB()
 	local base = ns.ProfileBase() -- (the active profile's values, not just the defaults)
@@ -364,6 +366,7 @@ local function ResetPage(content)
 		end
 	end
 	ns.letterboxDirty = true
+	if resetHooks[content] then resetHooks[content]() end
 	if ns.RefreshTint then ns.RefreshTint() end
 	if ns.ApplyBubbles then ns.ApplyBubbles() end
 	if ns.ApplyGraphicsPlus then ns.ApplyGraphicsPlus() end
@@ -4157,12 +4160,53 @@ local function CreatePlatesPanel()
 	RegisterPageSwitch(content, "handlePlates", handleCheck)
 
 	-- Duels near you: the two players' plates show (see Effects).
-	local duelCheck = Check(content, "duelPlates", L["Show nameplates of duels near you"],
+	local duelCheck = Check(content, "duelPlates", L["Duel Vision"],
 		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
 		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
 		"kept invisible and click-through bar the duelists'. Each duel has its own colour, and the winner " ..
 		"and loser show when it ends."])
 	duelCheck:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -2)
+
+	-- How far away nameplates show, as on the Graphics+ page: unmoved, the
+	-- slider shows the game's own and changes nothing (see Effects).
+	local distanceTip = L["How far away nameplates show, in yards. Untick to put the game's own back. " ..
+		"The game won't go past its own limit (it says what it kept)."]
+	local distanceCheck = Check(content, "plateDistanceOn",
+		L["Nameplate distance"] .. " |cff9d9d9d(nameplateMaxDistance)|r", distanceTip, function(value)
+			ns.GetDB().plateDistanceOn = value
+			Refresh() -- grey out / enable its slider
+		end)
+	distanceCheck:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 0, -2)
+	local function OwnDistance()
+		return ns.PlateDistanceOwn and ns.PlateDistanceOwn() or 60
+	end
+	local distanceSlider
+	distanceSlider = Slider(content, {
+		get = function() return ns.GetDB().plateDistance or math.floor(OwnDistance() + 0.5) end,
+		set = function(value) ns.GetDB().plateDistance = value end,
+	}, "", 10, 100, 5, function(value)
+		local own = OwnDistance()
+		local db = ns.GetDB()
+		if db.plateDistance == nil then
+			return ("|cffffffff%d|r  |cff9d9d9d"):format(value) .. L["(game's own)"]
+		end
+		-- (What the game kept, where it capped ours.)
+		local kept = db.plateDistanceOn and tonumber(GetCVar("nameplateMaxDistance"))
+		local cap = (kept and math.abs(kept - value) >= 1) and
+			("  |cffff8040" .. L["(game keeps %s)"]:format(("%d"):format(kept + 0.5)) .. "|r") or ""
+		return ("%d|r  |cff9d9d9d"):format(value) .. L["(game's own: %s)"]:format(("%d"):format(own + 0.5)) .. cap
+	end, nil, function()
+		C_Timer.After(0.1, function() distanceSlider:Refresh() end) -- (its label, once the game has it)
+	end)
+	distanceSlider:SetPoint("TOPLEFT", distanceCheck, "BOTTOMLEFT", 4, -24)
+	RecordKey(content, "plateDistance") -- (for Reset page: back to unmoved)
+	-- (and the game's setting back to its default, which this page shows as its own)
+	resetHooks[content] = function()
+		ns.ResetPlateDistance()
+		C_Timer.After(0.1, function() distanceSlider:Refresh() end)
+	end
+	Tooltip(distanceSlider, distanceTip)
+	GreyUnless(distanceSlider, function(db) return db.plateDistanceOn end)
 
 	-- Nameplates and names each get a table: a row per kind of unit, a column
 	-- per situation. A narrower table can set its first column apart (gap).
@@ -4414,7 +4458,7 @@ local function CreatePlatesPanel()
 
 	-- Laid out top to bottom: the master switch, then the four grids
 	-- (nameplates, your target's, their parts, then names).
-	showHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -14)
+	showHeader:SetPoint("TOPLEFT", distanceSlider, "BOTTOMLEFT", -2, -18)
 	-- (Lined up with the nameplate grid, so the grids' columns match.)
 	targetHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
 	partsHeader:SetPoint("TOPLEFT", lastTargetRow, "BOTTOMLEFT", 0, -24)
