@@ -894,12 +894,12 @@ local function CreatePanel()
 	local defaults = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	defaults:SetSize(140, 22)
 	defaults:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -16, -12)
-	defaults:SetText(L["Reset profile"])
+	defaults:SetText(L["Reset addon"])
 	defaults.searchSkip = true
-	Tooltip(defaults, L["Put the active profile's settings back to how it started (a built-in profile's " ..
-		"own values, or the defaults). Frames you added or stopped fading are kept."])
+	Tooltip(defaults, L["Put Cinematic back to a fresh install: every profile, built-in or your own, " ..
+		"and every setting goes, including frames you added or stopped fading. The UI reloads."])
 	defaults:SetScript("OnClick", function()
-		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ActiveProfile())
+		StaticPopup_Show("CINEMATIC_ADDON_RESET")
 	end)
 	-- The active profile, under the button (picked on the Profiles page).
 	local profileLabel = Label(panel, "GameFontHighlightSmall")
@@ -5606,6 +5606,12 @@ StaticPopupDialogs.CINEMATIC_PROFILE_RESET = {
 	end,
 	timeout = 0, whileDead = true, hideOnEscape = true,
 }
+StaticPopupDialogs.CINEMATIC_ADDON_RESET = {
+	text = L["Reset Cinematic? Every profile and setting goes, your own profiles too, and the UI reloads."],
+	button1 = YES, button2 = NO,
+	OnAccept = function() ns.ResetAddon() end,
+	timeout = 0, whileDead = true, hideOnEscape = true,
+}
 
 local function CreateProfilesPanel()
 	local canvas, content = CreateScrollPage(true)
@@ -6308,7 +6314,8 @@ ns.OnLanguage(function()
 	ns.TranslateFields(THIRD_PARTY_COLUMNS, 1) -- (the rest are FRAME_COLUMNS' own)
 	ns.TranslateFields(KEYBINDS, "label", "tip")
 	for _, popup in ipairs({ "CINEMATIC_RESET_PAGE", "CINEMATIC_PROFILE_NEW", "CINEMATIC_PROFILE_RENAME",
-		"CINEMATIC_PROFILE_NOTE", "CINEMATIC_PROFILE_DELETE", "CINEMATIC_PROFILE_RESET" }) do
+		"CINEMATIC_PROFILE_NOTE", "CINEMATIC_PROFILE_DELETE", "CINEMATIC_PROFILE_RESET",
+		"CINEMATIC_ADDON_RESET" }) do
 		StaticPopupDialogs[popup].text = L[StaticPopupDialogs[popup].text]
 	end
 	StaticPopupDialogs.CINEMATIC_LANGUAGE_RELOAD = {

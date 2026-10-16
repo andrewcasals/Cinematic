@@ -466,6 +466,15 @@ function ns.ResetProfile()
 	SettingsChanged()
 end
 
+-- Everything back to a fresh install: every profile and setting goes, and the
+-- UI reloads so it starts over (the welcome window too). Other characters'
+-- own profile picks fall back to the account's next login.
+function ns.ResetAddon()
+	CinematicDB, CinematicCharDB = nil, nil
+	ns.db.profiles = {} -- (so logout's ns.SaveProfile writes into nothing kept)
+	ReloadUI()
+end
+
 -- Settings changed from the active profile's base, for the Profiles page's
 -- "(changed)". (Not the lists: those are tables whatever's in them.)
 function ns.ProfileChanged()
