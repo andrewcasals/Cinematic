@@ -84,6 +84,7 @@ local function PrintDebugHelp()
 	print("  /cine debug zoom - the slow zoom's state")
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
+	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
 	print("  /cine debug flight - the flight route, its known time and when the camera settles")
@@ -715,6 +716,8 @@ function ns.HandleSlash(msg)
 			ns.GetDB().weatherTint and "on" or "off", rgb(w.target), rgb(w.shown)))
 	elseif cmd == "debug" and arg == "plates" then
 		ns.PrintPlatesDebug()
+	elseif cmd == "debug" and arg == "duels" then
+		ns.PrintDuelsDebug()
 	elseif cmd == "debug" and arg == "panels" then
 		ns.PrintPanelsDebug()
 	elseif cmd == "facing" then

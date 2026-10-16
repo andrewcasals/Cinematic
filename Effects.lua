@@ -927,8 +927,496 @@ local function UnitRowAlpha(unit, kind)
 	return alpha
 end
 
+-- Duels nearby (duelPlates, Nameplates page). In CineMode, in the open world
+-- and out of fights, friendly players' plates are switched on but kept
+-- invisible (and click-through), and the two players in a duel near you get
+-- theirs back, so you can watch their health. A duel is two of your faction's
+-- players, both in combat, who can attack each other. Not in cities,
+-- instances, free-for-all areas (anyone can attack anyone there) or on
+-- flights, nor while you're fighting or dueling yourself. Each duel has a
+-- colour, a border round both players' health bars with a crossed swords
+-- badge, so it's clear who's fighting whom. The game's "has defeated ... in a
+-- duel" line ends it: the winner's badge turns to a crown, the loser's to a
+-- cross, for a few seconds before their plates fade out.
+local duels = {
+	on = false, -- friendly plates switched on (and click-through) for watching
+	watching = false,
+	-- How far each duelist's plate is held up, 0 to 1, by name (by plate when
+	-- the game won't say), so a plate taken away and given back (the player
+	-- behind the camera a moment) comes back where it was, not faded in again.
+	levels = {}, -- [name or plate] = 0 to 1
+	keyOf = {}, -- [plate] = its key in levels
+	shown = {}, -- [plate] = { pair = duel, name = player's name }: at the last scan
+	infoByName = {}, -- [name] = the same, for a plate given to a duelist between scans
+	pairs = {}, -- [key] = { color, names, seen, and once over: endedAt, winner, loser, fled }
+	ended = {}, -- [name] = when their duel ended (not picked again while they cool down)
+	scanAt = 0,
+	selfUntil = 0, -- dueling yourself (asked or asking) until then, or until it ends
+	cvars = { secure = true, playerWins = true,
+		values = { nameplateShowFriends = "1", nameplateShowFriendlyPlayers = "1" } },
+}
+do
+	local SCAN_EVERY = 0.5
+	local ENDED_COOLDOWN = 10
+	local RESULT_TIME = 6 -- seconds the winner and loser show after a duel
+	-- A duel with no sign of going on for this long is let go (out of plate
+	-- range, or walked off). Signs: the two can attack each other, or one has
+	-- the other targeted.
+	local LOST_TIME = 10
+	local NO_DUEL_ZONES = { arena = true, combat = true, sanctuary = true }
+	local NO_DUEL_PLACES = { city = true, dungeon = true, raid = true, pvp = true }
+	local ZonePvPInfo = (C_PvP and C_PvP.GetZonePVPInfo) or GetZonePVPInfo
+	-- Each duel's colour, the first free one (not red or green: those read as
+	-- enemy and friend).
+	local COLORS = {
+		{ 1, 0.82, 0 }, { 0.2, 0.85, 0.95 }, { 0.75, 0.45, 1 }, { 1, 0.55, 0.15 }, { 1, 0.45, 0.75 },
+		{ 1, 1, 1 },
+	}
+
+	-- A global string such as DUEL_WINNER ("%1$s has defeated %2$s in a duel")
+	-- as a pattern catching both names, and which argument each catch is.
+	local function DuelPattern(text)
+		if type(text) ~= "string" then
+			return nil
+		end
+		local order, n = {}, 0
+		local marked = text:gsub("%%(%d?)%$?s", function(index)
+			n = n + 1
+			order[n] = tonumber(index) or n
+			return "\001"
+		end)
+		local pattern = marked:gsub("[%%%(%)%.%+%-%*%?%[%]%^%$]", "%%%0"):gsub("\001", "(.+)")
+		return { pattern = "^" .. pattern .. "$", order = order }
+	end
+	-- DUEL_WINNER: winner, then loser. DUEL_FLED: who fled, then who won.
+	-- (WoW Forever has neither: its lines are in English.)
+	local WINNER = DuelPattern(DUEL_WINNER or "%1$s has defeated %2$s in a duel")
+	local FLED = DuelPattern(DUEL_FLED or "%1$s has fled from %2$s in a duel")
+
+	-- A name from the duel line as UnitName gives it: no realm, and on WoW
+	-- Forever no surname ("Unholy Might" is Unholy). Names have no spaces.
+	local function ShortName(name)
+		return name and name:match("^[^%-%s]+")
+	end
+
+	-- The names a line catches, by argument: { [1] = ..., [2] = ... }.
+	local function Catch(text, format)
+		if not format then
+			return nil
+		end
+		local caught = { text:match(format.pattern) }
+		if #caught < 2 then
+			return nil
+		end
+		local names = {}
+		for i, value in ipairs(caught) do
+			names[format.order[i] or i] = ShortName(value)
+		end
+		return names
+	end
+
+	local function PairKey(a, b)
+		return a < b and (a .. "\n" .. b) or (b .. "\n" .. a)
+	end
+
+	local function FreeColor()
+		local used = {}
+		for _, pair in pairs(duels.pairs) do
+			used[pair.color] = true
+		end
+		for i = 1, #COLORS do
+			if not used[i] then
+				return i
+			end
+		end
+		return 1
+	end
+
+	local function PairFor(key, a, b)
+		local pair = duels.pairs[key]
+		if not pair then
+			pair = { color = FreeColor(), names = { a, b } }
+			duels.pairs[key] = pair
+		end
+		return pair
+	end
+
+	-- A duel's end: who won and who lost (or fled), shown for a while.
+	local function DuelEnded(winner, loser, fled)
+		if not (winner and loser) then
+			return
+		end
+		local now = GetTime()
+		local pair = PairFor(PairKey(winner, loser), winner, loser)
+		if pair.endedAt and now - pair.endedAt < RESULT_TIME then
+			return -- (the same line again)
+		end
+		pair.winner, pair.loser, pair.fled, pair.endedAt = winner, loser, fled, now
+		duels.ended[winner], duels.ended[loser] = now, now
+		duels.scanAt = 0
+	end
+
+	-- A line that may be a duel's end (source, for /cine debug duels). True
+	-- if it was one.
+	local function DuelLine(text, source)
+		local names = Catch(text, WINNER)
+		local fled = false
+		if not names then
+			names, fled = Catch(text, FLED), true
+		end
+		if not names then
+			return false
+		end
+		duels.lastResult = { text = text, source = source, at = GetTime() }
+		if fled then
+			DuelEnded(names[2], names[1], true)
+		else
+			DuelEnded(names[1], names[2], false)
+		end
+		return true
+	end
+
+	local watcher = CreateFrame("Frame")
+	for _, event in ipairs({ "CHAT_MSG_SYSTEM", "DUEL_REQUESTED", "DUEL_FINISHED" }) do
+		pcall(watcher.RegisterEvent, watcher, event)
+	end
+	watcher:SetScript("OnEvent", function(_, event, text)
+		if event == "DUEL_REQUESTED" then
+			duels.selfUntil = GetTime() + 60
+		elseif event == "DUEL_FINISHED" then
+			duels.selfUntil = 0
+		elseif Known(text) and type(text) == "string" then
+			duels.lastSystem = text
+			DuelLine(text, "event")
+		else
+			duels.lastSystem = "(unreadable: " .. type(text) .. ")"
+		end
+	end)
+
+	-- Asking someone to a duel yourself.
+	if StartDuel then
+		hooksecurefunc("StartDuel", function()
+			duels.selfUntil = GetTime() + 60
+		end)
+	end
+
+	-- Why duels aren't watched now (nil: they are).
+	local function NotWatchingWhy()
+		if not ns.db.duelPlates then
+			return "option off"
+		elseif not platesActive then
+			return "not in CineMode"
+		elseif InCombatLockdown() or Ask(UnitAffectingCombat, "player") then
+			return "in combat"
+		elseif GetTime() < duels.selfUntil then
+			return "dueling yourself"
+		elseif Ask(UnitOnTaxi, "player") then
+			return "on a flight"
+		elseif NO_DUEL_PLACES[ns.GetPlaceType() or ""] then
+			return "no duels here (" .. ns.GetPlaceType() .. ")"
+		elseif (UnitIsPVPFreeForAll and Ask(UnitIsPVPFreeForAll, "player"))
+			or (ZonePvPInfo and NO_DUEL_ZONES[ZonePvPInfo() or ""]) then
+			return "free-for-all or no-duel zone"
+		end
+		return nil
+	end
+	duels.NotWatchingWhy = NotWatchingWhy
+
+	local function SetClickThrough(on)
+		local set = C_NamePlate and C_NamePlate.SetNamePlateFriendlyClickThrough
+		local get = C_NamePlate and C_NamePlate.GetNamePlateFriendlyClickThrough
+		if not (set and get) then
+			return
+		end
+		if on then
+			if ns.db.duelClickThrough == nil then
+				ns.db.duelClickThrough = get() and true or false
+			end
+			pcall(set, true)
+		elseif ns.db.duelClickThrough ~= nil then
+			pcall(set, ns.db.duelClickThrough)
+			ns.db.duelClickThrough = nil
+		end
+	end
+
+	-- Friendly plates on or off for watching (from ns.UpdatePlates, before the
+	-- other plate settings). Plate settings can't change in a fight: then it
+	-- waits. Any plate switch-off goes first, so the two don't save each
+	-- other's values.
+	function duels.Sync(want)
+		if InCombatLockdown() then
+			return
+		end
+		if want and not duels.on then
+			ns.ShowPlatesNow()
+		end
+		ns.ApplyCVarSet(duels.cvars, want)
+		duels.on = duels.cvars.active or false
+		SetClickThrough(duels.on) -- (also puts back one left over from a reload)
+	end
+
+	-- Whether a unit has the named player targeted, and can attack them.
+	local function Targets(unit, name)
+		if not name then
+			return false
+		end
+		local target = unit .. "target"
+		local targetName = Ask(UnitExists, target) and UnitName(target)
+		return Known(targetName) and targetName == name and Ask(UnitCanAttack, unit, target)
+	end
+
+	-- The duels near you: [plate] = { pair, name } for each player in one
+	-- (or whose one just ended), and the friendly players in combat looked at.
+	function duels.Scan()
+		local now = GetTime()
+		local fighters, byName = {}, {}
+		for _, plate in ipairs(C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}) do
+			local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+			if unit and Ask(UnitIsPlayer, unit) and Ask(UnitIsFriend, "player", unit)
+				and not Ask(UnitIsUnit, unit, "player") then
+				local name = UnitName(unit)
+				name = Known(name) and name or nil
+				if name then
+					byName[name] = { plate = plate, unit = unit }
+				end
+				local ended = name and duels.ended[name]
+				if Ask(UnitAffectingCombat, unit) and not Ask(UnitIsCharmed, unit)
+					and not (ended and now - ended < ENDED_COOLDOWN) then
+					fighters[#fighters + 1] = { plate = plate, unit = unit, name = name }
+				end
+			end
+		end
+		local shown = {}
+		for i = 1, #fighters do
+			for j = i + 1, #fighters do
+				local a, b = fighters[i], fighters[j]
+				if Ask(UnitCanAttack, a.unit, b.unit) then
+					-- (Names the game won't give: the pair goes by its plates.)
+					local key = (a.name and b.name) and PairKey(a.name, b.name)
+						or PairKey(tostring(a.plate), tostring(b.plate))
+					local pair = PairFor(key, a.name, b.name)
+					pair.seen = now
+					shown[a.plate] = { pair = pair, name = a.name }
+					shown[b.plate] = { pair = pair, name = b.name }
+				end
+			end
+		end
+		-- A duel already found stays up until LOST_TIME passes with no sign of
+		-- it going on, fighting or not (a few quiet seconds drop them out of
+		-- combat), and one of them can stay up with the other's plate gone;
+		-- once it's over, while its result shows.
+		for _, pair in pairs(duels.pairs) do
+			local a, b = byName[pair.names[1] or ""], byName[pair.names[2] or ""]
+			if not pair.endedAt and ((a and b and Ask(UnitCanAttack, a.unit, b.unit))
+				or (a and Targets(a.unit, pair.names[2])) or (b and Targets(b.unit, pair.names[1]))) then
+				pair.seen = now
+			end
+			for i, found in ipairs({ a or false, b or false }) do
+				if found then
+					shown[found.plate] = { pair = pair, name = pair.names[i] }
+				end
+			end
+		end
+		return shown, fighters
+	end
+
+	-- Each duelist's plate: a border in the duel's colour round the health
+	-- bar, and a badge beside it (crossed swords; a crown or a cross once it's
+	-- over, with Won or Lost below). On the plate's unit frame, so it fades
+	-- with the plate. [plate] = frame.
+	local overlays = {}
+
+	local function Overlay(plate)
+		local unitFrame = plate.UnitFrame
+		if not unitFrame or (plate.IsForbidden and plate:IsForbidden())
+			or (unitFrame.IsForbidden and unitFrame:IsForbidden()) then
+			return nil
+		end
+		local overlay = overlays[plate]
+		if overlay then
+			return overlay
+		end
+		local bar = unitFrame.HealthBarsContainer or unitFrame.healthBar or unitFrame
+		overlay = CreateFrame("Frame", nil, unitFrame)
+		overlay:SetPoint("TOPLEFT", bar, "TOPLEFT", -2, 2)
+		overlay:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 2, -2)
+		overlay:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
+		overlay.edges = {}
+		for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+			local edge = overlay:CreateTexture(nil, "OVERLAY")
+			edge:SetColorTexture(1, 1, 1)
+			if side == "TOP" or side == "BOTTOM" then
+				edge:SetPoint(side .. "LEFT")
+				edge:SetPoint(side .. "RIGHT")
+				edge:SetHeight(2)
+			else
+				edge:SetPoint("TOP" .. side)
+				edge:SetPoint("BOTTOM" .. side)
+				edge:SetWidth(2)
+			end
+			overlay.edges[#overlay.edges + 1] = edge
+		end
+		overlay.badge = overlay:CreateTexture(nil, "OVERLAY")
+		overlay.badge:SetPoint("RIGHT", overlay, "LEFT", -1, 0)
+		overlay.result = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		overlay.result:SetPoint("TOP", overlay, "BOTTOM", 0, -1)
+		overlays[plate] = overlay
+		return overlay
+	end
+
+	local function ShowOverlay(plate, info)
+		local overlay = Overlay(plate)
+		if not overlay then
+			return
+		end
+		local pair = info.pair
+		local r, g, b = unpack(COLORS[pair.color] or COLORS[1])
+		for _, edge in ipairs(overlay.edges) do
+			edge:SetVertexColor(r, g, b)
+		end
+		local badge, text = overlay.badge, overlay.result
+		if pair.endedAt and info.name and info.name == pair.winner then
+			badge:SetSize(24, 24)
+			badge:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
+			badge:SetTexCoord(0, 1, 0, 1)
+			badge:SetDesaturated(false)
+			badge:SetVertexColor(1, 1, 1)
+			text:SetText(L["Won"])
+			text:SetTextColor(1, 0.82, 0)
+		elseif pair.endedAt and info.name and info.name == pair.loser then
+			badge:SetSize(24, 24)
+			badge:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
+			badge:SetTexCoord(0, 1, 0, 1)
+			badge:SetDesaturated(false)
+			badge:SetVertexColor(1, 1, 1)
+			text:SetText(pair.fled and L["Fled"] or L["Lost"])
+			text:SetTextColor(0.6, 0.6, 0.6)
+		else
+			-- The crossed swords from the player frame's combat icon, in the duel's colour.
+			-- (The swords fill little of their square: drawn larger to match.)
+			badge:SetSize(40, 40)
+			badge:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
+			badge:SetTexCoord(0.55, 0.95, 0.04, 0.445)
+			badge:SetDesaturated(true)
+			badge:SetVertexColor(r, g, b)
+			text:SetText("")
+		end
+		overlay.info = info
+		overlay:Show()
+	end
+
+	-- A plate given a new unit (or let go of): its duel and its border go.
+	function duels.Forget(plate)
+		duels.keyOf[plate], duels.shown[plate] = nil, nil
+		local overlay = overlays[plate]
+		if overlay then
+			overlay.info = nil
+			overlay:Hide()
+		end
+	end
+
+	-- A plate just given to a duelist (as the player comes back into view):
+	-- their border, at once, and their plate where it was.
+	function duels.Attach(plate, unit)
+		local name = unit and UnitName(unit)
+		local info = Known(name) and name and duels.watching and duels.infoByName[name]
+		if info then
+			duels.shown[plate], duels.keyOf[plate] = info, name
+			ShowOverlay(plate, info)
+		end
+	end
+
+	function duels.Level(plate)
+		local key = plate and duels.keyOf[plate]
+		return key and duels.levels[key] or 0
+	end
+
+	function duels.Clear()
+		for plate in pairs(overlays) do
+			duels.Forget(plate)
+		end
+		wipe(duels.levels)
+		wipe(duels.keyOf)
+		wipe(duels.shown)
+		wipe(duels.infoByName)
+		wipe(duels.pairs)
+	end
+
+	-- Moves the duelists' plates' fades on; true while any of them is moving.
+	function duels.Update(elapsed)
+		local now = GetTime()
+		duels.watching = duels.on and NotWatchingWhy() == nil
+		for key, pair in pairs(duels.pairs) do
+			if (pair.endedAt and now - pair.endedAt >= RESULT_TIME)
+				or (not pair.endedAt and now - (pair.seen or 0) >= LOST_TIME) then
+				duels.pairs[key] = nil
+			end
+		end
+		for name, at in pairs(duels.ended) do
+			if now - at >= ENDED_COOLDOWN then
+				duels.ended[name] = nil
+			end
+		end
+		if not duels.watching then
+			wipe(duels.shown)
+			wipe(duels.infoByName)
+		elseif now >= duels.scanAt then
+			duels.scanAt = now + SCAN_EVERY
+			duels.shown = duels.Scan()
+			wipe(duels.infoByName)
+			for plate, info in pairs(duels.shown) do
+				duels.keyOf[plate] = info.name or plate
+				if info.name then
+					duels.infoByName[info.name] = info
+				end
+				ShowOverlay(plate, info)
+			end
+		end
+		local moving = false
+		local wanted = {}
+		for plate in pairs(duels.shown) do
+			local key = duels.keyOf[plate]
+			wanted[key] = true
+			duels.levels[key] = duels.levels[key] or 0
+		end
+		-- Both players of a duel still going stay held up with their plates
+		-- gone (off screen, behind the camera), so a plate given back shows at
+		-- once rather than fading in again.
+		if duels.watching then
+			for _, pair in pairs(duels.pairs) do
+				for _, name in ipairs(pair.names) do
+					if duels.levels[name] then
+						wanted[name] = true
+						duels.infoByName[name] = duels.infoByName[name] or { pair = pair, name = name }
+					end
+				end
+			end
+		end
+		for key, level in pairs(duels.levels) do
+			local target = wanted[key] and 1 or 0
+			if level ~= target then
+				duels.levels[key] = ns.Approach(level, target, elapsed,
+					target > level and ns.FadeInTime() or ns.FadeOutTime())
+				moving = true
+			elseif target == 0 then
+				duels.levels[key] = nil
+			end
+		end
+		-- (Borders stay as they last were while a plate fades out.)
+		for plate, overlay in pairs(overlays) do
+			if overlay.info and not duels.shown[plate] and duels.Level(plate) <= 0 then
+				duels.Forget(plate)
+			end
+		end
+		return moving
+	end
+end
+
 -- Any kind kept up in cinematic mode keeps the plates switched on.
 local function AnyPlatesKeptCinematic()
+	if duels.on or next(duels.levels) then
+		return true
+	end
 	for row, level in pairs(unitRowLevel) do
 		if level > 0 or UnitRowActive(row) then
 			return true
@@ -1139,7 +1627,7 @@ local function PlateAlpha(unit, plate)
 	if plate == targetFade.plate and not (unit and IsTarget(unit) and AlwaysShownTarget(unit)) then
 		return alpha -- a frame before the target fade catches up with a new target
 	end
-	return math.max(alpha, TargetPlateLevel(plate))
+	return math.max(alpha, TargetPlateLevel(plate), duels.Level(plate))
 end
 
 -- Leaves a plate's alpha to the game (or its nameplate addon) again.
@@ -1162,6 +1650,8 @@ function ns.RefreshPlate(plate, unit)
 	end
 	unit = unit or plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 	ForgetTargetFade(plate) -- only called for a plate given a new unit
+	duels.Forget(plate)
+	duels.Attach(plate, unit)
 	local alpha = PlateAlpha(unit, plate)
 	if alpha < 1 or PlatesFiltered() then
 		ns.SetPlateAlpha(plate, alpha)
@@ -1267,6 +1757,46 @@ function ns.PrintPlatesDebug()
 		end
 	end
 	ns.Print(table.concat(names, ", "))
+end
+
+-- For /cine debug duels: whether duels are watched (or why not), and each
+-- friendly player in combat with a plate, against the others.
+function ns.PrintDuelsDebug()
+	local why = duels.NotWatchingWhy()
+	ns.Print(("duel plates: on=%s, watching=%s%s, friendly plates=%s/%s, click-through=%s"):format(
+		tostring(duels.on), tostring(duels.watching), why and (" (" .. why .. ")") or "",
+		tostring(GetCVar("nameplateShowFriends")), tostring(GetCVar("nameplateShowFriendlyPlayers")),
+		tostring(C_NamePlate and C_NamePlate.GetNamePlateFriendlyClickThrough
+			and C_NamePlate.GetNamePlateFriendlyClickThrough())))
+	local found, fighters = duels.Scan()
+	ns.Print(("%d friendly players in combat with a plate"):format(#fighters))
+	for i, a in ipairs(fighters) do
+		if i > 10 then break end
+		local canAttack = {}
+		for _, b in ipairs(fighters) do
+			if b ~= a then
+				local ok, value = pcall(UnitCanAttack, a.unit, b.unit)
+				canAttack[#canAttack + 1] = ("%s=%s"):format(Known(b.name) and tostring(b.name) or "?",
+					ok and (Known(value) and tostring(value) or "secret") or "error")
+			end
+		end
+		local info = found[a.plate]
+		ns.Print(("  %s (%s)%s, can attack: %s, shown %.2f"):format(Known(a.name) and tostring(a.name) or "?",
+			a.unit, info and (" DUELING (colour " .. info.pair.color .. ")") or "",
+			#canAttack > 0 and table.concat(canAttack, ", ") or "-", duels.Level(a.plate)))
+	end
+	ns.Print(("duel lines: %s / %s (the game's own; nil: English used)"):format(tostring(DUEL_WINNER),
+		tostring(DUEL_FLED)))
+	ns.Print("last system line: " .. tostring(duels.lastSystem))
+	local result = duels.lastResult
+	ns.Print(result and ("last result caught %.0fs ago from %s: %s"):format(GetTime() - result.at, result.source,
+		result.text) or "no duel result caught yet")
+	for _, pair in pairs(duels.pairs) do
+		if pair.endedAt then
+			ns.Print(("  %s %s %s %.0fs ago"):format(tostring(pair.winner), pair.fled and "saw off" or "beat",
+				tostring(pair.loser), GetTime() - pair.endedAt))
+		end
+	end
 end
 
 function ns.ShowPlatesNow()
@@ -1451,6 +1981,8 @@ end
 local platesReleased = false
 local function ReleasePlates()
 	platesActive = false
+	duels.Sync(false)
+	duels.Clear()
 	UpdateLockedPlates()
 	ns.ShowPlatesNow()
 	ns.plates.level = 1
@@ -1467,7 +1999,7 @@ local function ReleasePlates()
 	for _, set in pairs(LOCKED_PLATE_SETS) do
 		locked = locked or set.active or false
 	end
-	platesReleased = not ns.plates.off and not locked
+	platesReleased = not ns.plates.off and not locked and not duels.on
 end
 
 function ns.UpdatePlates(cinematic, elapsed)
@@ -1481,6 +2013,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 	platesReleased = false
 	platesActive = cinematic and true or false
 	placeSuffix = ns.PlateSuffix()
+	duels.Sync(duels.NotWatchingWhy() == nil)
 	UpdateLockedPlates()
 	-- Plates show for every fight (bar kinds cinematic mode hides in fights)
 	-- and hide again afterwards. Just after a fight, kinds ticked for fights
@@ -1501,6 +2034,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 
 	local target = hide and 0 or 1
 	local changed = UpdateTargetFade(elapsed)
+	changed = duels.Update(elapsed) or changed
 	changed = ns.plates.level ~= target or changed
 	if changed then
 		local duration = target > ns.plates.level and ns.FadeInTime() or ns.FadeOutTime()

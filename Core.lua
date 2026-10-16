@@ -529,6 +529,7 @@ for _, key in ipairs({ "plateCombatPvPEnemies", "plateCombatPvPFriends", "plateC
 end
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
+DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
 DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
 -- The other pages' master switches likewise (see ns.HANDLE_SWITCHES): off,
 -- CineMode leaves that part of the UI to the game.

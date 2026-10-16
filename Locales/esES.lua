@@ -602,6 +602,18 @@ L["How long the gamepad action bars take to fade out."] = "Cuánto tardan las ba
 L["Nameplates"] = "Placas de nombre"
 L["Which nameplates and names stay up in CineMode: in groups, in fights and in each kind of place."] = "Qué placas de nombre y nombres siguen visibles en CineMode: en grupo, en combate y en cada tipo de lugar."
 L["Let CineMode handle nameplates and names"] = "Dejar que CineMode gestione las placas de nombre y los nombres"
+L["Show nameplates of duels near you"] = "Mostrar las placas de nombre de los duelos cercanos"
+L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
+	"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
+	"kept invisible and click-through bar the duelists'. Each duel has its own colour, and the winner " ..
+	"and loser show when it ends."] =
+	"En CineMode se muestran las placas de nombre de dos jugadores que se baten en duelo cerca de ti, para ver su salud. " ..
+	"Solo en el mundo abierto y fuera de combate. Mientras vigila, activa las placas de jugadores amistosos, " ..
+	"invisibles y sin bloquear clics salvo las de los duelistas. Cada duelo tiene su propio color, y al terminar " ..
+	"se muestra quién ganó y quién perdió."
+L["Won"] = "Ganó"
+L["Lost"] = "Perdió"
+L["Fled"] = "Huyó"
 L["On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, and the game's own options decide, in CineMode and out."] = "Activado: CineMode desvanece las placas de nombre y los nombres según esta página. Desactivado: los deja en paz y deciden las opciones del propio juego, con CineMode y sin él."
 L["Show in fights, and for the Calm Timer after."] = "Se muestran en combate, y durante el Temporizador de calma posterior."
 L["Show in fights while you're PvP flagged, and for the Calm Timer after."] = "Se muestran en combate mientras tienes el JcJ activado, y durante el Temporizador de calma posterior."

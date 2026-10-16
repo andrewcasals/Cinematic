@@ -4032,6 +4032,14 @@ local function CreatePlatesPanel()
 	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
 	RegisterPageSwitch(content, "handlePlates", handleCheck)
 
+	-- Duels near you: the two players' plates show (see Effects).
+	local duelCheck = Check(content, "duelPlates", L["Show nameplates of duels near you"],
+		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
+		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
+		"kept invisible and click-through bar the duelists'. Each duel has its own colour, and the winner " ..
+		"and loser show when it ends."])
+	duelCheck:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -2)
+
 	-- Nameplates and names each get a table: a row per kind of unit, a column
 	-- per situation. A narrower table can set its first column apart (gap).
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 120, 24
@@ -4282,7 +4290,7 @@ local function CreatePlatesPanel()
 
 	-- Laid out top to bottom: the master switch, then the four grids
 	-- (nameplates, your target's, their parts, then names).
-	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
+	showHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -14)
 	-- (Lined up with the nameplate grid, so the grids' columns match.)
 	targetHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
 	partsHeader:SetPoint("TOPLEFT", lastTargetRow, "BOTTOMLEFT", 0, -24)
