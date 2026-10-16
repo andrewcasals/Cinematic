@@ -14,9 +14,9 @@
 local ADDON_NAME, ns = ...
 local L = ns.L
 
--- Our icon for each button the game might have (in the bar's order, for a
--- client whose buttons have no layoutIndex). One we don't know uses the
--- button's own art; so does one whose icon file this client lacks.
+-- Each button the game might have (in the bar's order, for a client whose
+-- buttons have no layoutIndex). The wheel shows the button's own art; our
+-- icon is for one that has none.
 local BUTTONS = {
 	-- (On Classic this one acts on mouse down/up, not a click: where it has no
 	-- OnClick, the slot opens the window itself.)
@@ -190,18 +190,18 @@ local function SetIcon(slot, entry, button)
 		SetPortrait(slot)
 		return
 	end
-	-- (SetTexture says false for a file this client doesn't have.)
-	if entry.icon and icon:SetTexture(entry.icon) ~= false then
-		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) -- (trims the icon's own edge)
-		return
-	end
+	-- The button's own art first, so the wheel looks like the bar.
 	local normal = button.GetNormalTexture and button:GetNormalTexture()
 	local atlas = normal and normal.GetAtlas and normal:GetAtlas()
+	local file = normal and normal:GetTexture()
 	if type(atlas) == "string" and atlas ~= "" then
 		icon:SetAtlas(atlas)
-	elseif normal then
-		icon:SetTexture(normal:GetTexture())
+	elseif type(file) == "number" or (type(file) == "string" and file ~= "") then
+		icon:SetTexture(file)
 		icon:SetTexCoord(normal:GetTexCoord())
+	-- (SetTexture says false for a file this client doesn't have.)
+	elseif entry.icon and icon:SetTexture(entry.icon) ~= false then
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) -- (trims the icon's own edge)
 	else
 		icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
 		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
