@@ -355,6 +355,7 @@ local function SettingsChanged()
 	if ns.RefreshTint then ns.RefreshTint() end
 	if ns.BuildManagedList then ns.BuildManagedList() end
 	if ns.ApplyBubbles then ns.ApplyBubbles() end
+	if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
 	if ns.RefreshOptions then ns.RefreshOptions() end
 end
 

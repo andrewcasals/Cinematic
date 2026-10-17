@@ -369,6 +369,7 @@ local function ResetPage(content)
 	if resetHooks[content] then resetHooks[content]() end
 	if ns.RefreshTint then ns.RefreshTint() end
 	if ns.ApplyBubbles then ns.ApplyBubbles() end
+	if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
 	if ns.ApplyGraphicsPlus then ns.ApplyGraphicsPlus() end
 	Refresh()
 end
@@ -959,12 +960,18 @@ local subpages = {}
 -- HubAdd(canvas, name, searchPage) takes a page into its hub (false: in none);
 -- HubTab(name) shows a page in its hub and gives the hub's name (false: in none).
 do
-	-- Each hub (by English name) and its pages in order, with their icons.
+	-- Each hub (by English name) and its pages in order, with their icons
+	-- (or a function that gives one).
 	local HUBS = {
 		{ name = "Frame Manager", pages = {
-			{ "Standard Frames", "Interface\\Icons\\INV_Misc_Head_Human_01" },
+			-- (A standard: your faction's battle banner.)
+			{ "Standard Frames", function()
+				return UnitFactionGroup("player") == "Horde" and "Interface\\Icons\\INV_BannerPVP_01"
+					or "Interface\\Icons\\INV_BannerPVP_02"
+			end },
 			{ "3rd Party Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
 			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot" },
+			{ "Portraits", "Interface\\Icons\\INV_Misc_Head_Dwarf_01" },
 			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision" },
 			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01" },
 			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01" },
@@ -975,7 +982,6 @@ do
 			{ "Chat", "Interface\\Icons\\INV_Scroll_03" },
 			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout" },
 			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01" },
-			{ "Misc", "Interface\\Icons\\INV_Misc_Bag_08" },
 		} },
 		{ name = "Camera", pages = {
 			{ "Camera Modes", "Interface\\Icons\\INV_Misc_Spyglass_03" },
@@ -1124,7 +1130,8 @@ do
 					canvas:Hide()
 					-- An icon for the page, or one for each of its tabs (canvas.hubTabs:
 					-- { name, icon, onSelect, resetContent, setSelect }, sharing the page).
-					local tabs = canvas.hubTabs or { { name = english, icon = page[2] } }
+					local icon = type(page[2]) == "function" and page[2]() or page[2]
+					local tabs = canvas.hubTabs or { { name = english, icon = icon } }
 					for i, tab in ipairs(tabs) do
 						local tile = CreateTile(hub, canvas, tab.name, tab.icon)
 						tile.order = order + i / 100
@@ -1168,7 +1175,9 @@ do
 	function ns.PageIcon(name)
 		for _, hub in ipairs(HUBS) do
 			for _, page in ipairs(hub.pages) do
-				if page[1] == name then return page[2] end
+				if page[1] == name then
+					return type(page[2]) == "function" and page[2]() or page[2]
+				end
 			end
 		end
 	end
@@ -4007,17 +4016,18 @@ local function CreateCombatPanel()
 	RegisterSubpage(canvas, L["Standard Frames"])
 end
 
--- Sub-page: frames kept up while they have something to say - your portrait
--- while you recover, the durability figure, an unhappy pet.
-local function CreateMiscPanel()
+-- Sub-page: your portrait - kept up in CineMode while you recover (and a
+-- hunter's pet's while it isn't happy) - and the Unit frame parts grid: the
+-- pieces of the player, target and focus frames each kind of unit shows.
+local function CreatePortraitsPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Misc"])
+	local title = Label(content, "GameFontNormalLarge", L["Portraits"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall",
-		L["Frames CineMode brings back while they have something to tell you. Always keeping a frame " ..
-		"up, or in fights, is on the Standard Frames page."])
+		L["Your portrait in CineMode, and which parts of the player, target and focus frames show. " ..
+		"Always keeping a frame up, or in fights, is on the Standard Frames page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -4044,27 +4054,15 @@ local function CreateMiscPanel()
 		"however long that takes."])
 	afterResurrect:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(afterResurrect, function(db) return db.portraitWhenNotFull and db.portraitAfterCombat end)
-
-	-- (Back at the column edge, out from under the indented options above.)
-	local durability = Check(content, "durabilityShow", L["Show the durability figure when gear is damaged"],
-		L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: " ..
-		"some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, " ..
-		"it fades with the rest of the UI."])
-	durability:SetPoint("TOPLEFT", afterResurrect, "BOTTOMLEFT", -2 * PORTRAIT_INDENT, -10)
-	durability:HookScript("OnClick", Refresh) -- grey out / enable the option below
-
-	local durabilityCam = Check(content, "durabilityHideInCam", L["Hide in camera modes"],
-		L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades " ..
-		"with the rest of the UI. It comes back when the camera mode ends."])
-	durabilityCam:SetPoint("TOPLEFT", durability, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
-	GreyUnless(durabilityCam, function(db) return db.durabilityShow end)
+	-- The lowest option so far, and how far in from the column edge it sits.
+	local last, lastIndent = afterResurrect, 2 * PORTRAIT_INDENT
 
 	-- Pet happiness: classic hunters only.
 	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
 		local pet = Check(content, "petUnhappyShow", L["Show the pet frame when your pet isn't happy"],
 			L["Keeps your pet's portrait up in CineMode, and in fights, while its happiness isn't green: " ..
 			"content (yellow) or unhappy (red). It goes again once your pet is happy."])
-		pet:SetPoint("TOPLEFT", durabilityCam, "BOTTOMLEFT", -PORTRAIT_INDENT, -10)
+		pet:SetPoint("TOPLEFT", afterResurrect, "BOTTOMLEFT", -2 * PORTRAIT_INDENT, -10)
 		pet:HookScript("OnClick", Refresh) -- grey out / enable the option below
 
 		local petCam = Check(content, "petUnhappyHideInCam", L["Hide in camera modes"],
@@ -4072,11 +4070,63 @@ local function CreateMiscPanel()
 			"with the rest of the UI. It comes back when the camera mode ends."])
 		petCam:SetPoint("TOPLEFT", pet, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 		GreyUnless(petCam, function(db) return db.petUnhappyShow end)
+		last, lastIndent = petCam, PORTRAIT_INDENT
+	end
+
+	-- The Unit frame parts grid (frames laid out as retail's: see
+	-- ns.ApplyUnitFrameParts): a row per kind of unit, a column per part.
+	if ns.HasUnitFrameParts and ns.HasUnitFrameParts() then
+		local header = Header(content, L["Unit frame parts"], last)
+		header:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 2 - lastIndent, -24)
+		local note = Label(content, "GameFontHighlightSmall",
+			L["Which parts of the unit frames show, CineMode or not: your own frame, and the target and " ..
+			"focus frames by who they show. Untick parts to keep just the bars. The frame art is the " ..
+			"portrait ring, the name box and the bars' borders: the game draws them as one picture."])
+		note:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
+		note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+		note:SetJustifyV("TOP")
+
+		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 160, 80, 24
+		local COLUMNS = {
+			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
+			{ "Art", L["Frame art"] },
+		}
+		local ROWS = {
+			{ "Self", L["You"], L["Your own frame."] },
+			{ "EnemyPlayer", L["Enemy Players"], L["Players you can attack."] },
+			{ "EnemyNPC", L["Hostile NPCs"], L["NPCs you can attack (neutral ones have their own row)."] },
+			{ "NeutralPlayer", L["Neutral Players"], L["The other faction's players you can't attack."] },
+			{ "NeutralNPC", L["Neutral NPCs"], L["NPCs the game calls neutral (yellow names)."] },
+			{ "FriendlyPlayer", L["Friendly Players"], L["Players on your side."] },
+			{ "FriendlyNPC", L["Friendly NPCs"], L["NPCs on your side."] },
+		}
+		local top = CreateFrame("Frame", nil, content)
+		top:SetSize(1, 1)
+		top:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -10)
+		for c, column in ipairs(COLUMNS) do
+			local text = Label(content, "GameFontNormalSmall", column[2])
+			text:SetWidth(COLUMN_WIDTH)
+			text:SetJustifyH("CENTER")
+			text:SetPoint("TOPLEFT", top, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+		end
+		for r, row in ipairs(ROWS) do
+			local y = -16 - (r - 1) * ROW_HEIGHT
+			local rowLabel = Label(content, "GameFontHighlight", row[2])
+			rowLabel:SetPoint("TOPLEFT", top, "TOPLEFT", 0, y - 5)
+			for c, column in ipairs(COLUMNS) do
+				local key = "unitPart" .. row[1] .. column[1]
+				local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
+					ns.GetDB()[key] = value
+					ns.ApplyUnitFrameParts()
+				end)
+				cb:SetPoint("TOPLEFT", top, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
+			end
+		end
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Misc")
+	RegisterSubpage(canvas, "Portraits")
 end
 
 -- Sub-page: chat bubbles (where they show, and how they look).
@@ -5279,13 +5329,32 @@ local function CreateQuestTrackerPanel()
 	combatCalm:SetPoint("TOPLEFT", progressCalm, "BOTTOMLEFT", -QUEST_INDENT, -2)
 	GreyUnless(combatCalm, function(db) return db.stayInCombat end)
 
+	local lastQuest = combatCalm
 	-- Classic's quest timer box (retail shows timers in the tracker itself).
 	if ns.OptionAvailable({ retail = false }) then
 		local timer = Check(content, "questTimerShow", L["Show the quest timer while one is running"],
 			L["Keeps the quest timer box up in CineMode, and in fights, while a timed quest " ..
 			"counts down. Just the timer: the quest tracker stays faded."])
 		timer:SetPoint("TOPLEFT", combatCalm, "BOTTOMLEFT", 0, -2)
+		lastQuest = timer
 	end
+
+	-- The durability figure: not the quest tracker's, so the page's switch
+	-- leaves it be (pageSwitch = false).
+	local durability = Check(content, "durabilityShow", L["Show the durability figure when gear is damaged"],
+		L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: " ..
+		"some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, " ..
+		"it fades with the rest of the UI."])
+	durability:SetPoint("TOPLEFT", lastQuest, "BOTTOMLEFT", 0, -16)
+	durability:HookScript("OnClick", Refresh) -- grey out / enable the option below
+	durability.pageSwitch = false
+
+	local durabilityCam = Check(content, "durabilityHideInCam", L["Hide in camera modes"],
+		L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades " ..
+		"with the rest of the UI. It comes back when the camera mode ends."])
+	durabilityCam:SetPoint("TOPLEFT", durability, "BOTTOMLEFT", QUEST_INDENT, -2)
+	GreyUnless(durabilityCam, function(db) return db.durabilityShow end)
+	durabilityCam.pageSwitch = false
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -7007,7 +7076,7 @@ ns.OnLanguage(function()
 	-- keybinds. (Standard Frames and 3rd Party Frames come right after CineMode.)
 	CreateRevealPanel()
 	CreateCombatPanel()
-	CreateMiscPanel()
+	CreatePortraitsPanel()
 	-- WoW Forever's gamepad mode (retail's has no frames of its own).
 	if C_GamePad and not ns.isRetail then
 		CreateGamepadPanel()

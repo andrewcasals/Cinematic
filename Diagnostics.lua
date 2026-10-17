@@ -465,3 +465,100 @@ do
 			:format(changed))
 	end
 end
+
+-- Unit frames -----------------------------------------------------------------
+
+-- /cine debug unitframes: every part of the player and target frames, as a
+-- tree in the log (field name, type, shown, size, texture or atlas, text), to
+-- find which pieces are the portrait, level, name and borders on clients
+-- whose frames are laid out their own way (WoW Forever's).
+do
+	local function Safe(fn, ...)
+		local ok, a, b = pcall(fn, ...)
+		if not ok or (issecretvalue and (issecretvalue(a) or issecretvalue(b))) then
+			return nil
+		end
+		return a, b
+	end
+
+	-- The key its parent keeps it under (frame.healthbar and the like).
+	local function FieldName(parent, object)
+		for key, value in pairs(parent) do
+			if value == object and type(key) == "string" then
+				return key
+			end
+		end
+	end
+
+	local function Describe(object, parent)
+		local name = Safe(object.GetName, object)
+		local field = parent and FieldName(parent, object)
+		local kind = Safe(object.GetObjectType, object) or "?"
+		local w, h = Safe(object.GetSize, object)
+		local parts = { ("%s%s %s"):format(name or "-", field and (" ." .. field) or "", kind) }
+		parts[#parts + 1] = Safe(object.IsShown, object) and "shown" or "hidden"
+		if w then
+			parts[#parts + 1] = ("%.0fx%.0f"):format(w, h)
+		end
+		local alpha = Safe(object.GetAlpha, object)
+		if alpha and alpha < 1 then
+			parts[#parts + 1] = ("alpha %.2f"):format(alpha)
+		end
+		if object.GetAtlas then
+			local atlas = Safe(object.GetAtlas, object)
+			if atlas then
+				parts[#parts + 1] = "atlas " .. atlas
+			end
+		end
+		if object.GetTexture then
+			local texture = Safe(object.GetTexture, object)
+			if texture then
+				parts[#parts + 1] = "texture " .. tostring(texture)
+			end
+		end
+		if object.GetText then
+			local text = Safe(object.GetText, object)
+			if type(text) == "string" and text ~= "" then
+				parts[#parts + 1] = ("text %q"):format(text)
+			end
+		end
+		return table.concat(parts, ", ")
+	end
+
+	local function Walk(object, parent, depth, count)
+		if count[1] > 400 then
+			return
+		end
+		count[1] = count[1] + 1
+		ns.Log("unitframes", ("%s%s"):format(("  "):rep(depth), Describe(object, parent)))
+		if depth >= 6 then
+			return
+		end
+		if object.GetRegions then
+			for _, region in ipairs(Safe(function() return { object:GetRegions() } end) or {}) do
+				count[1] = count[1] + 1
+				ns.Log("unitframes", ("%s%s"):format(("  "):rep(depth + 1), Describe(region, object)))
+			end
+		end
+		if object.GetChildren then
+			for _, child in ipairs(Safe(function() return { object:GetChildren() } end) or {}) do
+				Walk(child, object, depth + 1, count)
+			end
+		end
+	end
+
+	function ns.LogUnitFrames()
+		local total = 0
+		for _, name in ipairs({ "PlayerFrame", "TargetFrame" }) do
+			local frame = _G[name]
+			if frame then
+				local count = { 0 }
+				Walk(frame, nil, 0, count)
+				total = total + count[1]
+			else
+				ns.Log("unitframes", name .. ": not on this client")
+			end
+		end
+		ns.Print(("unitframes: logged %d parts of the player and target frames (have a target). /reload to write the log"):format(total))
+	end
+end

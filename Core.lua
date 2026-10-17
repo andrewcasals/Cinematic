@@ -612,6 +612,17 @@ for _, part in ipairs(ns.PLATE_PARTS) do
 		DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
 	end
 end
+-- The Portraits page's Unit frame parts grid (see Frames): a row per kind
+-- of unit the player, target and focus frames show, a column per part (keys
+-- unitPart<row><part>). All shown to start with, as the game has them.
+ns.UNIT_PART_ROWS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer",
+	"FriendlyNPC" }
+ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art" }
+for _, row in ipairs(ns.UNIT_PART_ROWS) do
+	for _, part in ipairs(ns.UNIT_PARTS) do
+		DEFAULTS["unitPart" .. row .. part] = true
+	end
+end
 -- And two rows of our own: a class icon by friendly and by enemy players'
 -- health bars (as Duel Vision shows). Off everywhere to start with.
 ns.PLATE_CLASS_PARTS = { "ClassFriendly", "ClassEnemy" }

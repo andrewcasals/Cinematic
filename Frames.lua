@@ -4258,3 +4258,155 @@ do
 		end)
 	end)
 end
+
+-- Unit frame parts (Portraits page): pieces of the player, target and focus
+-- frames hidden, CineMode or not, for those who only want the bars. A grid:
+-- a row per kind of unit (you, then enemy, neutral and friendly players and
+-- NPCs), a column per part; the target and focus frames go by the unit they
+-- show. One texture (FrameTexture) draws the portrait ring, the name box and
+-- the bars' borders, so the frame art goes as a whole. Frames laid out as
+-- retail's (and WoW Forever's) only: others haven't these fields.
+do
+	local PLAYER = {
+		Portrait = { "PlayerFrameContainer.PlayerPortrait" },
+		Level = { "PlayerFrameContent.PlayerFrameContentMain.LevelBackgroundCircle", "_G.PlayerLevelText" },
+		Name = { "_G.PlayerName" },
+		-- (Each frame art the game swaps in: vehicle, class resource bar.)
+		Art = { "PlayerFrameContainer.FrameTexture", "PlayerFrameContainer.AlternatePowerFrameTexture",
+			"PlayerFrameContainer.VehicleFrameTexture", "PlayerFrameContainer.FrameFlash",
+			"PlayerFrameContent.PlayerFrameContentMain.StatusTexture",
+			"PlayerFrameContent.PlayerFrameContentContextual.PlayerPortraitCornerIcon" },
+	}
+	-- (Fields on TargetFrame, and on FocusFrame, built the same way.)
+	local TARGET = {
+		Portrait = { "TargetFrameContainer.Portrait" },
+		Level = { "TargetFrameContent.TargetFrameContentMain.LevelBackgroundCircle",
+			"TargetFrameContent.TargetFrameContentMain.LevelText",
+			"TargetFrameContent.TargetFrameContentContextual.HighLevelTexture" },
+		-- (The coloured strip behind it with it.)
+		Name = { "TargetFrameContent.TargetFrameContentMain.Name",
+			"TargetFrameContent.TargetFrameContentMain.ReputationColor" },
+		Art = { "TargetFrameContainer.FrameTexture", "TargetFrameContainer.Flash",
+			"TargetFrameContainer.BossPortraitFrameTexture" },
+	}
+	-- Each frame: its parts and the unit it shows.
+	local FRAMES = {
+		{ "PlayerFrame", PLAYER, "player" },
+		{ "TargetFrame", TARGET, "target" },
+		{ "FocusFrame", TARGET, "focus" },
+	}
+
+	-- A field on a frame (_G. for a global of its own).
+	local function Field(frame, path)
+		local value = frame
+		for name in path:gmatch("[^.]+") do
+			if name == "_G" and value == frame then
+				value = _G
+			elseif type(value) ~= "table" then
+				return nil
+			else
+				value = value[name]
+			end
+		end
+		if type(value) == "table" and value.SetAlpha then
+			return value
+		end
+	end
+
+	local function Ask(fn, ...)
+		local ok, value = pcall(fn, ...)
+		if not ok or (issecretvalue and issecretvalue(value)) then
+			return nil
+		end
+		return value
+	end
+
+	-- The grid row a unit goes by: Self, or Enemy, Neutral or Friendly then
+	-- Player or NPC, as the Target Nameplate grid splits them (Enemy: those
+	-- you can attack; Neutral: NPCs the game calls neutral, and the other
+	-- faction's players you can't attack). nil when the game won't say.
+	local function Row(unit)
+		if unit == "player" or Ask(UnitIsUnit, unit, "player") then
+			return "Self"
+		end
+		local enemy = ns.IsEnemyUnit(unit)
+		if enemy == nil then
+			return nil
+		end
+		local who = Ask(UnitIsPlayer, unit) and "Player" or "NPC"
+		if not enemy then
+			return "Friendly" .. who
+		end
+		local neutral
+		if who == "Player" then
+			neutral = not Ask(UnitCanAttack, "player", unit)
+		else
+			neutral = Ask(UnitReaction, unit, "player") == 4
+		end
+		return (neutral and "Neutral" or "Enemy") .. who
+	end
+
+	-- [region] = the alpha to put back. While hidden, the game setting the
+	-- alpha (the rest glow pulses) is undone.
+	local hidden, hooked = {}, {}
+	local setting = false
+	local function KeepHidden(region)
+		if hidden[region] and not setting then
+			setting = true
+			region:SetAlpha(0)
+			setting = false
+		end
+	end
+
+	local function SetHidden(region, hide)
+		if hide and not hidden[region] then
+			hidden[region] = region:GetAlpha()
+			if not hooked[region] then
+				hooked[region] = true
+				hooksecurefunc(region, "SetAlpha", KeepHidden)
+			end
+			KeepHidden(region)
+		elseif not hide and hidden[region] then
+			local alpha = hidden[region]
+			hidden[region] = nil
+			region:SetAlpha(alpha)
+		end
+	end
+
+	-- Whether this client's frames have the parts (the Portraits page shows the grid then).
+	function ns.HasUnitFrameParts()
+		return _G.PlayerFrame ~= nil and Field(_G.PlayerFrame, PLAYER.Portrait[1]) ~= nil
+	end
+
+	-- (Settings unitPart<row><part>, ticked = shown: see ns.UNIT_PART_ROWS.)
+	function ns.ApplyUnitFrameParts()
+		if not ns.db then
+			return
+		end
+		for _, entry in ipairs(FRAMES) do
+			local frame = _G[entry[1]]
+			if frame then
+				local row = Ask(UnitExists, entry[3]) and Row(entry[3])
+				for _, part in ipairs(ns.UNIT_PARTS) do
+					local hide = row and ns.db["unitPart" .. row .. part] == false or false
+					for _, path in ipairs(entry[2][part]) do
+						local region = Field(frame, path)
+						if region then
+							SetHidden(region, hide)
+						end
+					end
+				end
+			end
+		end
+	end
+
+	local watcher = CreateFrame("Frame")
+	watcher:RegisterEvent("PLAYER_LOGIN")
+	watcher:RegisterEvent("PLAYER_TARGET_CHANGED")
+	watcher:RegisterEvent("PLAYER_FOCUS_CHANGED")
+	-- (A unit turning hostile, or a duel starting.)
+	watcher:RegisterUnitEvent("UNIT_FACTION", "target", "focus")
+	watcher:SetScript("OnEvent", function()
+		ns.ApplyUnitFrameParts()
+	end)
+end

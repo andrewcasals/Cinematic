@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-17", page = "Portraits", title = "Unit frame parts",
+		text = "Pick which parts of your frame and the target and focus frames show - portrait, name, " ..
+		"level, frame art - for you and each kind of unit, to keep just the bars." },
 	{ date = "2026-10-17", page = "Chat", title = "Update notices",
 		text = "After an update with new features, a line in chat at login says so, with a link to " ..
 		"What's new. Turn it off on the Chat page." },
@@ -21,7 +24,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-17", page = "Quest tracker", title = "Quest tracker stays up longer",
 		text = "Accepting a quest, or progress on one, can keep the tracker up for the Calm Timer " ..
 		"instead of the mouseover time." },
-	{ date = "2026-10-17", page = "Misc", title = "Misc page",
+	{ date = "2026-10-17", page = "Portraits", title = "Misc page",
 		text = "Your portrait, durability figure and pet happiness options have a page of their own " ..
 		"in Frame Manager." },
 	{ date = "2026-10-17", page = "Frame Manager", title = "Settings in hubs",
@@ -71,7 +74,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-15", page = "Hunter", client = "forever", title = "Hunter helpers",
 		text = "Right-click pulls with Auto Shot, a smart attack key, smallest ammo stack first, and a " ..
 		"Fill quiver button at vendors." },
-	{ date = "2026-10-15", page = "Misc", client = "forever", title = "Unhappy pet",
+	{ date = "2026-10-15", page = "Portraits", client = "forever", title = "Unhappy pet",
 		text = "A hunter's pet frame stays up while the pet isn't happy." },
 	{ date = "2026-10-15", page = "Camera Settings", title = "Camera Settings page",
 		text = "Each camera's own settings in one place, a section apiece." },
@@ -97,7 +100,7 @@ ns.CHANGELOG_FEATURES = {
 		text = "Hide tooltips in combat or in CineMode, with a key to hold that shows them anyway." },
 	{ date = "2026-10-13", page = "CineMode", title = "Hide all floating text",
 		text = "An option on the CineMode page hides XP, damage and healing numbers." },
-	{ date = "2026-10-13", page = "Misc", title = "Durability figure",
+	{ date = "2026-10-13", page = "Quest tracker", title = "Durability figure",
 		text = "The armor figure by the minimap shows in CineMode while your gear is damaged or broken." },
 	{ date = "2026-10-13", page = "Camera Triggers", title = "Events can start CineMode",
 		text = "Tick an event in the CineMode column and it brings CineMode on while its camera runs." },

@@ -85,6 +85,7 @@ local function PrintDebugHelp()
 	print("  /cine debug questlog - save every frame of the next quest cams (for tracking down snaps)")
 	print("  /cine debug zoom - the slow zoom's state")
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
+	print("  /cine debug unitframes - log every part of the player and target frames (names, textures, sizes) to the saved log")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
 	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
@@ -722,6 +723,8 @@ local function HandleSlash(msg)
 		end
 		ns.Print(("weather tint: %s, aiming for %s, showing %s"):format(
 			ns.GetDB().weatherTint and "on" or "off", rgb(w.target), rgb(w.shown)))
+	elseif cmd == "debug" and arg == "unitframes" then
+		ns.LogUnitFrames()
 	elseif cmd == "debug" and arg == "plates" then
 		ns.PrintPlatesDebug()
 	elseif cmd == "debug" and arg == "duels" then
