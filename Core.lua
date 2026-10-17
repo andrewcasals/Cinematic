@@ -2989,10 +2989,12 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			ns.db[key] = nil
 		end
 		-- New settings start as the active profile has them (a built-in's
-		-- changes to the defaults included).
+		-- changes to the defaults included). A fresh install (or Reset addon)
+		-- starts with all of them so: the once-only updates above write theirs
+		-- into an empty db too, which made the profile show "(changed)".
 		local base = ns.ProfileBase and ns.ProfileBase() or DEFAULTS
 		for k, v in pairs(DEFAULTS) do
-			if ns.db[k] == nil then
+			if ns.db[k] == nil or (ns.newInstall and type(ns.db[k]) ~= "table") then
 				if base[k] ~= nil and type(base[k]) ~= "table" then ns.db[k] = base[k] else ns.db[k] = v end
 			end
 		end

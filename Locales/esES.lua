@@ -875,6 +875,7 @@ L["Delete the active profile (your own ones only), switching to %s."] = "Borra e
 L["Put the active profile back to how it started: a built-in profile's own values, or the defaults for one of yours."] = "Devuelve el perfil activo a como empezó: los valores propios de un perfil integrado, o los predeterminados para uno tuyo."
 L["Your own profile. Pick it, then Description to say what it's for."] = "Tu propio perfil. Elígelo y luego pulsa Descripción para indicar para qué sirve."
 L["Mouseover groups"] = "Grupos al pasar el ratón"
+L["Frame Manager"] = "Gestor de marcos"
 L["Frames in the same group come up together when you mouse over any of them. A frame can be in more than one group; one in no group comes up on its own."] = "Los marcos del mismo grupo aparecen juntos cuando pasas el ratón por encima de cualquiera de ellos. Un marco puede estar en más de un grupo; uno que no está en ningún grupo aparece solo."
 L["Let CineMode reveal frames on mouseover"] = "Dejar que CineMode muestre los marcos al pasar el ratón"
 L["Pointing at a faded frame shows it, with the rest of its groups."] = "Apuntar a un marco desvanecido lo muestra, con el resto de sus grupos."

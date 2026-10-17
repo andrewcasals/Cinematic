@@ -825,6 +825,7 @@ L["Delete the active profile (your own ones only), switching to %s."] = "刪除�
 L["Put the active profile back to how it started: a built-in profile's own values, or the defaults for one of yours."] = "將目前的設定檔還原為初始狀態:內建設定檔本身的值,或你自己設定檔的預設值。"
 L["Your own profile. Pick it, then Description to say what it's for."] = "你自己的設定檔。選擇它,然後點擊「描述」說明它的用途。"
 L["Mouseover groups"] = "滑鼠指向群組"
+L["Frame Manager"] = "框架管理器"
 L["Frames in the same group come up together when you mouse over any of them. A frame can be in more than one group; one in no group comes up on its own."] = "滑鼠指向同一群組中的任一框架時,該群組的框架會一起顯示。一個框架可以屬於多個群組;不屬於任何群組的框架會單獨顯示。"
 L["Let CineMode reveal frames on mouseover"] = "讓 CineMode 在滑鼠指向時顯示框架"
 L["Pointing at a faded frame shows it, with the rest of its groups."] = "指向已淡出的框架會顯示它,以及其所屬群組的其他框架。"

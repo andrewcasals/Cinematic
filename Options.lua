@@ -475,11 +475,12 @@ end
 
 -- Every page's settings, headings and notes as they are now (pages show and
 -- hide rows as settings change). rank: 0 a page, 1 a label or heading, 3 a note.
--- onlyPage: just that page's (a sub-page's own search box).
-local function BuildSearchIndex(onlyPage)
+-- pages: just those pages' (a sub-page's or hub's own search box).
+local function BuildSearchIndex(pages)
 	Refresh() -- (slider titles and some rows are only filled in on refresh)
 	local entries = {}
-	for _, page in ipairs(onlyPage and { onlyPage } or searchPages) do
+	local named = not pages or #pages > 1 -- (pages to pick among: their names count too)
+	for _, page in ipairs(pages or searchPages) do
 		local seen = {}
 		local function add(text, tip, rank, edges)
 			text = SearchText(text)
@@ -489,7 +490,7 @@ local function BuildSearchIndex(onlyPage)
 			entries[#entries + 1] = { page = page, text = text, lower = text:lower(),
 				tip = tip and tip:lower(), rank = rank, edges = edges, order = #entries }
 		end
-		if not onlyPage then add(page.name or "Cinematic", nil, 0) end
+		if named then add(page.name or "Cinematic", nil, 0) end
 		local function walk(frame)
 			-- (IsShown: the frame's own flag, so hidden rows are left out even on
 			-- pages that aren't open)
@@ -575,9 +576,13 @@ local function Highlight(canvas, edges)
 	glow:Show()
 end
 
+-- Hubs (below): HubTab(name) shows a page in its hub.
+local HubAdd, HubTab
+
 -- Opens a match's page, scrolled to it and highlighted. onPage: it's
--- already open (found by its own search box).
+-- already open (found by its own search box, or its hub's).
 local function ShowMatch(entry, onPage)
+	HubTab(entry.page.key) -- (a hub's page: its tab picked)
 	-- In a closed section of the Camera Settings page: opened first.
 	local object = entry.edges and entry.edges.top
 	while object do
@@ -604,8 +609,10 @@ end
 local SEARCH_ROWS = 12
 
 -- The search box, with its matches listed in a box below it (over the page).
--- page: searches just that page (a sub-page's box, top right beside Reset page).
-local function CreateSearch(canvas, parent, page)
+-- pages: searches just those (a sub-page's or hub's box, top right beside Reset page).
+local function CreateSearch(canvas, parent, pages)
+	local page = pages and true -- (a box for some pages, not the main one)
+	local named = not pages or #pages ~= 1 -- (matches show their page's name; a hub's list grows)
 	local ok, box = pcall(CreateFrame, "EditBox", nil, parent, "SearchBoxTemplate")
 	if not ok or not box then
 		box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
@@ -670,7 +677,7 @@ local function CreateSearch(canvas, parent, page)
 			local text = entry.text
 			if #text > 70 then text = text:sub(1, 67) .. "..." end
 			row.entry = entry
-			row.text:SetText(page and text or
+			row.text:SetText(not named and text or
 				("|cffffd100" .. (entry.page.name or "Cinematic") .. ":|r  " .. text))
 			row:Show()
 		end
@@ -699,7 +706,7 @@ local function CreateSearch(canvas, parent, page)
 			list:Hide()
 			return
 		end
-		index = index or BuildSearchIndex(page)
+		index = index or BuildSearchIndex(pages)
 		matches = SearchMatches(index, query)
 		offset = 0
 		Draw()
@@ -945,6 +952,213 @@ end
 -- Each sub-page by name, for ns.OpenOptions: its category, or its frame on
 -- clients with the old options window.
 local subpages = {}
+
+-- Hubs: a sub-page holding several pages, picked from a row of icons at its
+-- top (the page shows under them, its name on the icon's mouseover). Above
+-- the icons, a search box for all its pages and Reset page for the one shown.
+-- HubAdd(canvas, name, searchPage) takes a page into its hub (false: in none);
+-- HubTab(name) shows a page in its hub and gives the hub's name (false: in none).
+do
+	-- Each hub (by English name) and its pages in order, with their icons.
+	local HUBS = {
+		{ name = "Frame Manager", pages = {
+			{ "Standard Frames", "Interface\\Icons\\INV_Misc_Head_Human_01" },
+			{ "3rd Party Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
+			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot" },
+			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision" },
+			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01" },
+			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01" },
+			{ "Swing timer", "Interface\\Icons\\INV_Sword_04" },
+			{ "Cooldown Manager", "Interface\\Icons\\INV_Misc_PocketWatch_01" },
+			{ "Tooltips", "Interface\\Icons\\INV_Misc_Book_09" },
+			{ "Buffs/debuffs", "Interface\\Icons\\Spell_Holy_WordFortitude" },
+			{ "Chat", "Interface\\Icons\\INV_Scroll_03" },
+			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout" },
+			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01" },
+		} },
+		{ name = "Camera", pages = {
+			{ "Camera Modes", "Interface\\Icons\\INV_Misc_Spyglass_03" },
+			{ "Camera Triggers", "Interface\\Icons\\Spell_Nature_Lightning" },
+			{ "Camera Settings", "Interface\\Icons\\Trade_Engineering" }, -- (an icon per camera instead)
+		} },
+		{ name = "Quality of life", pages = {
+			{ "General", "Interface\\Icons\\INV_Misc_Bag_07" },
+			{ "Fishing", "Interface\\Icons\\Trade_Fishing" },
+			{ "Hunter", "Interface\\Icons\\INV_Weapon_Bow_07" },
+		} },
+	}
+	local TILE, TILE_GAP, EDGE = 36, 6, 12
+	local BAR = 30 -- (the search box and Reset page, above the icons)
+	local byName = {} -- tile by the name its page was registered under (English or shown)
+
+	local function Select(tile)
+		local hub = tile.hub
+		if hub.current == tile then return end
+		local previous = hub.current
+		if previous then
+			if previous.canvas ~= tile.canvas then previous.canvas:Hide() end
+			previous.border:SetColorTexture(0.45, 0.38, 0.2, 1)
+			previous.icon:SetDesaturated(true)
+		end
+		hub.current = tile
+		tile.border:SetColorTexture(1, 0.82, 0, 1)
+		tile.icon:SetDesaturated(false)
+		if tile.onSelect then tile.onSelect() end
+		tile.canvas:Show()
+		-- (Reset page: for a page with settings of its own)
+		hub.reset:SetShown(pageKeys[tile.resetContent or tile.canvas.content] ~= nil)
+	end
+
+	-- Icons in rows across the page's width, the picked page filling the rest.
+	local function Layout(hub)
+		local width = hub.frame:GetWidth()
+		if not width or width <= 0 then return end
+		local perRow = math.max(1, math.floor((width - 2 * EDGE + TILE_GAP) / (TILE + TILE_GAP)))
+		for i, tile in ipairs(hub.tiles) do
+			local column, row = (i - 1) % perRow, math.floor((i - 1) / perRow)
+			tile:ClearAllPoints()
+			tile:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", EDGE + column * (TILE + TILE_GAP),
+				-BAR - EDGE - row * (TILE + TILE_GAP))
+		end
+		local rows = math.ceil(#hub.tiles / perRow)
+		hub.host:ClearAllPoints()
+		hub.host:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", 0,
+			-BAR - EDGE - rows * (TILE + TILE_GAP) + TILE_GAP - 4)
+		hub.host:SetPoint("BOTTOMRIGHT")
+	end
+
+	-- (made when its first page comes, so it's listed where that page would be)
+	local function CreateHub(hub)
+		local frame = CreateFrame("Frame")
+		frame.name = L[hub.name]
+		frame.parent = "Cinematic"
+		hub.frame, hub.tiles = frame, {}
+		hub.host = CreateFrame("Frame", nil, frame)
+		hub.host:SetPoint("TOPLEFT", 0, -EDGE)
+		hub.host:SetPoint("BOTTOMRIGHT")
+		-- Reset page (the page shown), and left of it a search box for all its pages.
+		local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+		reset:SetSize(100, 22)
+		reset:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
+		reset:SetText(L["Reset page"])
+		Tooltip(reset, L["Put this page's settings back to the active profile's own values (the defaults, " ..
+			"or a built-in profile's)."])
+		reset:SetScript("OnClick", function()
+			if hub.current then
+				StaticPopup_Show("CINEMATIC_RESET_PAGE", nil, nil,
+					hub.current.resetContent or hub.current.canvas.content)
+			end
+		end)
+		hub.reset = reset
+		hub.searchPages = {}
+		local box = CreateSearch(frame, frame, hub.searchPages)
+		box:SetPoint("RIGHT", reset, "LEFT", -12, 0)
+		frame:SetScript("OnSizeChanged", function() Layout(hub) end)
+		frame:SetScript("OnShow", function()
+			Layout(hub)
+			if not hub.current and hub.tiles[1] then Select(hub.tiles[1]) end
+		end)
+		frame:Hide()
+		if category and Settings and Settings.RegisterCanvasLayoutSubcategory then
+			local sub = Settings.RegisterCanvasLayoutSubcategory(category, frame, L[hub.name])
+			Settings.RegisterAddOnCategory(sub)
+			subpages[hub.name] = sub
+		else
+			subpages[hub.name] = frame
+			if InterfaceOptions_AddCategory then InterfaceOptions_AddCategory(frame) end
+		end
+	end
+
+	local function CreateTile(hub, canvas, english, iconFile)
+		local tile = CreateFrame("Button", nil, hub.frame)
+		tile.hub, tile.canvas = hub, canvas
+		tile:SetSize(TILE, TILE)
+		tile.border = tile:CreateTexture(nil, "BACKGROUND")
+		tile.border:SetAllPoints()
+		tile.border:SetColorTexture(0.45, 0.38, 0.2, 1)
+		local bg = tile:CreateTexture(nil, "BORDER")
+		bg:SetPoint("TOPLEFT", 1, -1)
+		bg:SetPoint("BOTTOMRIGHT", -1, 1)
+		bg:SetColorTexture(0.06, 0.05, 0.04, 0.95)
+		local icon = tile:CreateTexture(nil, "ARTWORK")
+		icon:SetPoint("TOPLEFT", 2, -2)
+		icon:SetPoint("BOTTOMRIGHT", -2, 2)
+		-- (iconFile can be a function: picked again each time it shows)
+		local function Paint()
+			icon:SetTexture(type(iconFile) == "function" and iconFile() or iconFile)
+		end
+		Paint()
+		tile:SetScript("OnShow", Paint)
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		icon:SetDesaturated(true) -- (in colour once picked)
+		tile.icon = icon
+		local hl = tile:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints(icon)
+		hl:SetColorTexture(1, 1, 1, 0.15)
+		-- Its page's name on mouseover.
+		tile:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+			GameTooltip:SetText(L[english], 1, 0.82, 0)
+			GameTooltip:Show()
+		end)
+		tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		tile:SetScript("OnClick", function(self) Select(self) end)
+		return tile
+	end
+
+	function HubAdd(canvas, name, searchPage)
+		for _, hub in ipairs(HUBS) do
+			for order, page in ipairs(hub.pages) do
+				local english = page[1]
+				if name == english or name == L[english] then
+					if not hub.frame then CreateHub(hub) end
+					canvas:SetParent(hub.host)
+					canvas:ClearAllPoints()
+					canvas:SetAllPoints(hub.host)
+					canvas:Hide()
+					-- An icon for the page, or one for each of its tabs (canvas.hubTabs:
+					-- { name, icon, onSelect, resetContent, setSelect }, sharing the page).
+					local tabs = canvas.hubTabs or { { name = english, icon = page[2] } }
+					for i, tab in ipairs(tabs) do
+						local tile = CreateTile(hub, canvas, tab.name, tab.icon)
+						tile.order = order + i / 100
+						tile.onSelect, tile.resetContent = tab.onSelect, tab.resetContent
+						if tab.setSelect then
+							tab.setSelect(function() Select(tile) end)
+						end
+						hub.tiles[#hub.tiles + 1] = tile
+						if i == 1 then
+							byName[name], byName[english] = tile, tile
+						end
+					end
+					table.sort(hub.tiles, function(a, b) return a.order < b.order end)
+					-- (its search: the hub's box; its Reset page: the hub's)
+					searchPage.order = order
+					hub.searchPages[#hub.searchPages + 1] = searchPage
+					table.sort(hub.searchPages, function(a, b) return a.order < b.order end)
+					if canvas.resetButton then
+						canvas.resetButton:HookScript("OnShow", canvas.resetButton.Hide)
+						canvas.resetButton:Hide()
+					end
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	function HubTab(name)
+		local tile = byName[name]
+		if not tile then return false end
+		-- (already on that page, at another of its tabs: left there)
+		local current = tile.hub.current
+		if not (current and current.canvas == tile.canvas) then
+			Select(tile)
+		end
+		return tile.hub.name
+	end
+end
+
 -- (name in English, as ns.OpenOptions takes it; shown in the game's language.)
 local function RegisterSubpage(subpanel, name)
 	subpanel.name = L[name]
@@ -952,9 +1166,15 @@ local function RegisterSubpage(subpanel, name)
 	subpages[name] = subpanel
 	local page = { name = L[name], key = name, canvas = subpanel }
 	searchPages[#searchPages + 1] = page
+	-- (a hub's page: shown in its place there, not listed on its own; the hub
+	-- has the search box and Reset page)
+	if HubAdd(subpanel, name, page) then
+		subpages[name] = nil
+		return
+	end
 	-- Its own search box, for just its settings, left of Reset page.
 	if subpanel.content and subpanel.resetButton then
-		local box = CreateSearch(subpanel, subpanel.content, page)
+		local box = CreateSearch(subpanel, subpanel.content, { page })
 		box:SetPoint("RIGHT", subpanel.resetButton, "LEFT", -12, 0)
 	end
 	if category and Settings and Settings.RegisterCanvasLayoutSubcategory then
@@ -1653,19 +1873,43 @@ local PLACES = {
 -- page of its own; CameraSection gives the body and the title to build under.
 local SECTION_HEADER = 30 -- height of a section's name row
 local SECTION_GAP = 6
-local cameraSections = {} -- in order: { frame, body, icon, open }
+-- In order: { frame, body, icon, reset, name, open }. cameraSections.focus: the
+-- one camera shown (its icon picked in the Camera hub), open, the rest hidden.
+local cameraSections = {}
 local cameraSettingsContent, cameraSettingsTop -- the page's content, and what the first section goes under
 
 local function LayoutCameraSections()
+	local focus = cameraSections.focus
+	-- (one camera on its own: its name row is the page's title)
+	cameraSettingsTop:SetShown(not focus)
+	cameraSettingsTop.title:SetShown(not focus)
+	local above
 	for _, section in ipairs(cameraSections) do
-		section.body:SetShown(section.open)
+		local shown, open = not focus or focus == section, section.open or focus == section
+		section.frame:SetShown(shown)
+		if shown then
+			section.frame:ClearAllPoints()
+			if above then
+				section.frame:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -SECTION_GAP)
+			elseif focus then
+				section.frame:SetPoint("TOPLEFT", cameraSettingsContent, "TOPLEFT", 16, -12)
+			else
+				section.frame:SetPoint("TOPLEFT", cameraSettingsTop, "BOTTOMLEFT", 0, -16)
+			end
+			section.frame:SetPoint("RIGHT", cameraSettingsContent, "RIGHT", -16, 0)
+			above = section.frame
+		end
+		section.body:SetShown(open)
 		local height = SECTION_HEADER
-		if section.open then
+		if open then
 			height = math.max(height, (ContentDepth(section.body) or 0) + 12)
 		end
 		section.frame:SetHeight(height)
-		section.icon:SetTexture(section.open and "Interface\\Buttons\\UI-MinusButton-Up"
+		section.icon:SetTexture(open and "Interface\\Buttons\\UI-MinusButton-Up"
 			or "Interface\\Buttons\\UI-PlusButton-Up")
+		-- (on its own: it can't close, and the hub's Reset page resets it)
+		section.icon:SetShown(not focus)
+		section.reset:SetShown(not focus)
 	end
 	if cameraSettingsContent then
 		FitContentHeight(cameraSettingsContent)
@@ -1725,6 +1969,7 @@ local function CameraSection(name)
 	local title = Label(header, "GameFontNormalLarge", name)
 	title:SetPoint("LEFT", header, "LEFT", 18, 0)
 	header:SetScript("OnClick", function()
+		if cameraSections.focus then return end
 		section.open = not section.open
 		RelayoutCameraSections()
 	end)
@@ -1740,14 +1985,17 @@ local function CameraSection(name)
 		StaticPopup_Show("CINEMATIC_RESET_SECTION", nil, nil, body)
 	end)
 
-	-- (Search: a setting found in here opens the section first.)
+	-- (Search: a setting found in here opens the section first, or in the
+	-- Camera hub picks its icon.)
 	function body.openSection()
-		if not section.open then
+		if section.selectTab then
+			section.selectTab()
+		elseif not section.open then
 			section.open = true
 			RelayoutCameraSections()
 		end
 	end
-	section.frame, section.body, section.icon = frame, body, icon
+	section.frame, section.body, section.icon, section.reset, section.name = frame, body, icon, reset, name
 	cameraSections[#cameraSections + 1] = section
 	local anchor = body:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	anchor:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -SECTION_HEADER + 2)
@@ -2639,6 +2887,7 @@ local function CreateCameraSettingsPanel()
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
 	cameraSettingsTop = subtitle
+	subtitle.title = title
 
 	CreateFlightPanel()
 	CreateStandingPanel()
@@ -2656,6 +2905,39 @@ local function CreateCameraSettingsPanel()
 		RelayoutCameraSections()
 	end)
 	canvas:Hide()
+	-- In the Camera hub, an icon per camera, each showing just that camera.
+	local ICONS = {
+		-- (a gryphon for the Alliance, a bat otherwise)
+		["Flight Cam"] = function()
+			return UnitFactionGroup("player") == "Alliance" and "Interface\\Icons\\Ability_Mount_Gryphon_01"
+				or "Interface\\Icons\\Ability_Hunter_Pet_Bat"
+		end,
+		["AFK Cam"] = "Interface\\Icons\\Spell_Nature_Sleep",
+		["Cozy Cam"] = "Interface\\Icons\\Spell_Fire_Fire",
+		["Tele Cam"] = "Interface\\Icons\\Spell_Arcane_TeleportStormWind",
+		["Vista Cam"] = "Interface\\Icons\\Ability_Hunter_EagleEye",
+		["Fish Cam"] = "Interface\\Icons\\Trade_Fishing",
+		["RP Walk Cam"] = "Interface\\Icons\\INV_Boots_01",
+		["Auto-run Cam"] = "Interface\\Icons\\Ability_Rogue_Sprint",
+		["Death Cam"] = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01",
+		["Quest Cam"] = "Interface\\Icons\\INV_Misc_Book_08",
+	}
+	canvas.hubTabs = {}
+	for _, section in ipairs(cameraSections) do
+		local english = section.name
+		for key in pairs(ICONS) do
+			if section.name == L[key] then english = key end
+		end
+		canvas.hubTabs[#canvas.hubTabs + 1] = {
+			name = english, icon = ICONS[english], resetContent = section.body,
+			onSelect = function()
+				cameraSections.focus = section
+				canvas.scroll:SetVerticalScroll(0)
+				RelayoutCameraSections()
+			end,
+			setSelect = function(select) section.selectTab = select end,
+		}
+	end
 	RegisterSubpage(canvas, "Camera Settings")
 end
 
@@ -3889,7 +4171,7 @@ end
 local function CreateQualityPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Quality of life"])
+	local title = Label(content, "GameFontNormalLarge", L["General"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = Label(content, "GameFontHighlightSmall", L["Small helpers for getting about the world."])
@@ -3898,7 +4180,6 @@ local function CreateQualityPanel()
 	subtitle:SetJustifyV("TOP")
 
 	local stack = Stack(subtitle, "label")
-	stack:Header(content, L["General"])
 	-- (WoW Forever only: Campfire.lua.)
 	if not ns.isRetail then
 		local sit = stack:Add(Check(content, "campfireSitButton", L["Campfire button"],
@@ -3908,10 +4189,18 @@ local function CreateQualityPanel()
 		sit:HookScript("OnClick", Refresh) -- grey out / enable the options below
 		local EMOTE_TIP = L["What clicking the Campfire button does. With more than one ticked, it's one of " ..
 			"them at random each time."]
+		-- (on one row, each right of the one before)
+		local previous
 		for _, emote in ipairs({ { "campfireSit", L["Sit"] }, { "campfireKneel", L["Kneel"] },
 			{ "campfireLie", L["Lie down"] } }) do
-			local check = stack:Add(Check(content, emote[1], emote[2], EMOTE_TIP), "check", 24)
+			local check = Check(content, emote[1], emote[2], EMOTE_TIP)
+			if previous then
+				check:SetPoint("LEFT", previous.Text or previous.text, "RIGHT", 16, 0)
+			else
+				stack:Add(check, "check", 24)
+			end
 			GreyUnless(check, function(db) return db.campfireSitButton end)
+			previous = check
 		end
 		local stand = stack:Add(Check(content, "campfireStandUp", L["Stand up once you get Camp Benefits"],
 			L["Sitting by a Welcoming Campfire for its minute gives you Camp Benefits: as it arrives, " ..
@@ -3957,10 +4246,18 @@ local function CreateQualityPanel()
 	end)
 	stack:Add(putBack, "label", 24)
 
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	-- (Quality of life's first page: "General" there.)
+	RegisterSubpage(canvas, "General")
+
 	-- (Not on retail, where right-click already shoots. Shown on every class; Hunter.lua
 	-- only runs on hunters.)
 	if not ns.isRetail then
-		stack:Header(content, L["Hunter"])
+		canvas, content = CreateScrollPage()
+		title = Label(content, "GameFontNormalLarge", L["Hunter"])
+		title:SetPoint("TOPLEFT", 16, -16)
+		stack = Stack(title, "label")
 		stack:Add(Check(content, "hunterRightClickShot", L["Right click attack also uses Auto-shot"],
 			L["Right-clicking an enemy targets it and attacks: Auto Shot when it's far enough away to shoot, " ..
 			"a melee swing when it's too close, in a fight or out of one. In a fight the game only checks what's " ..
@@ -3976,11 +4273,10 @@ local function CreateQualityPanel()
 			L["Arrows and bullets at a vendor get a Fill button: it buys enough to fill your quiver or ammo pouch, " ..
 			"topping up its part stacks and filling its empty slots, as far as your money goes. Point at it to see " ..
 			"how many and the cost first."]), "check")
+		canvas:SetScript("OnShow", PageShown(Refresh, content))
+		canvas:Hide()
+		RegisterSubpage(canvas, "Hunter")
 	end
-
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
-	canvas:Hide()
-	RegisterSubpage(canvas, "Quality of life")
 end
 
 -- Sub-page: fishing (casting with right-click or a gamepad button, the cast bar).
@@ -5750,14 +6046,22 @@ local function CreateKeybindsPanel()
 	RegisterSubpage(canvas, "Keybinds")
 end
 
--- The settings window can't open in combat (the game blocks it, "Interface
--- action failed because of an AddOn"): just say so.
 ns.RefreshOptions = function() Refresh() end
 
 -- Opens the settings, at a sub-page by name if given (else the main page).
+-- In combat Settings.OpenToCategory is blocked for addons ("Interface action
+-- failed because of an AddOn": its ShowUIPanel is), but showing the window
+-- itself isn't, so it's shown and the page picked directly.
 function ns.OpenOptions(page)
+	-- (a Frame Manager page: that page, then Frame Manager open at it)
+	page = page and HubTab(page) or page
 	if InCombatLockdown() then
-		ns.Print(L["settings can't be opened in combat"])
+		if category and SettingsPanel and SettingsPanel.SelectCategory then
+			SettingsPanel:Show()
+			SettingsPanel:SelectCategory(subpages[page] or category)
+		else
+			ns.Print(L["settings can't be opened in combat"])
+		end
 		return
 	end
 	if category and Settings and Settings.OpenToCategory then

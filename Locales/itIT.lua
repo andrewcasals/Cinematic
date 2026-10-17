@@ -826,6 +826,7 @@ L["Delete the active profile (your own ones only), switching to %s."] = "Elimina
 L["Put the active profile back to how it started: a built-in profile's own values, or the defaults for one of yours."] = "Riporta il profilo attivo a com'era all'inizio: i valori di un profilo integrato, o quelli predefiniti per uno dei tuoi."
 L["Your own profile. Pick it, then Description to say what it's for."] = "Un tuo profilo. Sceglilo, poi usa Descrizione per dire a cosa serve."
 L["Mouseover groups"] = "Gruppi al passaggio del mouse"
+L["Frame Manager"] = "Gestore dei riquadri"
 L["Frames in the same group come up together when you mouse over any of them. A frame can be in more than one group; one in no group comes up on its own."] = "I riquadri dello stesso gruppo compaiono insieme quando passi il mouse su uno qualsiasi di essi. Un riquadro può stare in più gruppi; uno che non è in nessun gruppo compare da solo."
 L["Let CineMode reveal frames on mouseover"] = "Lascia che CineMode mostri i riquadri al passaggio del mouse"
 L["Pointing at a faded frame shows it, with the rest of its groups."] = "Puntare un riquadro dissolto lo mostra, insieme al resto dei suoi gruppi."
