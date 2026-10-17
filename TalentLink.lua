@@ -32,6 +32,52 @@ local function Enabled()
 end
 
 local inspected -- the unit whose talents we opened, for the way back
+local inspectedGUID -- ...and who it was then (the unit may be someone else by now)
+
+-- Who a unit is, or nil where the game won't say.
+local function GUID(unit)
+	local guid = UnitGUID(unit)
+	if issecretvalue and issecretvalue(guid) then
+		return nil
+	end
+	return guid
+end
+
+-- A unit for the player `guid` now, else nil. The unit they were inspected by
+-- may be someone else by now (target changed) or gone (mouseover): they're
+-- found again by who they are (target, focus, group, nameplates...) where
+-- the game can. Without a guid, `unit` as it is.
+local function UnitFor(guid, unit)
+	if guid and UnitTokenFromGUID then
+		local ok, token = pcall(UnitTokenFromGUID, guid)
+		if ok and type(token) == "string" and not (issecretvalue and issecretvalue(token)) then
+			unit = token
+		end
+	end
+	if not (unit and UnitExists(unit)) then
+		return nil
+	end
+	local now = GUID(unit)
+	if guid and now and now ~= guid then
+		return nil
+	end
+	return unit
+end
+
+-- Who the inspect window is showing (set as they're inspected).
+local shownGUID
+if InspectUnit then
+	hooksecurefunc("InspectUnit", function(unit)
+		shownGUID = unit and GUID(unit)
+	end)
+end
+
+-- A unit for the player we opened the talents of, while they can be
+-- inspected again, else nil.
+local function BackUnit()
+	local unit = UnitFor(inspectedGUID, inspected)
+	return unit and CanInspect(unit) and unit or nil
+end
 local SetUpTalents -- (below)
 
 local lastError -- why opening their talents last failed (/cine debug talents)
@@ -65,11 +111,13 @@ local function OpenTalents()
 	if InCombatLockdown() or not InspectFrame then
 		return
 	end
-	local unit = InspectFrame.unit
+	lastError = nil
+	local unit = UnitFor(shownGUID, InspectFrame.unit)
 	if not unit then
+		lastError = "can't find who's inspected"
+		ns.Print(ns.L["Can't find them now: target them, or get them on screen, to see their talents."])
 		return
 	end
-	lastError = nil
 	local ok, err
 	local button = TalentsButton()
 	if button and button.Click then
@@ -93,7 +141,7 @@ local function OpenTalents()
 		lastError = tostring(err)
 		return
 	end
-	inspected = unit
+	inspected, inspectedGUID = unit, shownGUID or GUID(unit)
 	-- (Whichever talents window it opened, once it's up.)
 	C_Timer.After(0.1, SetUpTalents)
 end
@@ -102,16 +150,18 @@ local function BackToInspect()
 	if InCombatLockdown() then
 		return
 	end
-	local unit = inspected
+	-- (Reopening the inspect window without inspecting again errors: the
+	-- game has forgotten who it showed. So only while they can be inspected.)
+	local unit = BackUnit()
+	if not unit then
+		ns.Print(ns.L["Can't inspect them from here: too far away, or gone."])
+		return
+	end
 	local talents = TalentFrame()
 	if talents then
 		pcall(HideUIPanel, talents)
 	end
-	if unit and UnitExists(unit) and CanInspect(unit) then
-		pcall(InspectUnit, unit)
-	elseif InspectFrame then
-		pcall(ShowUIPanel, InspectFrame)
-	end
+	pcall(InspectUnit, unit)
 end
 
 local function MakeButton(parent, tip, onClick)
@@ -174,8 +224,9 @@ local function SetUpInspect()
 	PlaceTalentButton()
 end
 
--- On the talents window, only when we opened it from the inspect window:
--- their portrait, in the empty band under the title.
+-- On the talents window, while it shows someone else's talents (opened by
+-- our button or the game's View Talents): their portrait, in the empty band
+-- under the title.
 local backButtons = {} -- talents window -> its button
 
 local function ShowBackButton(frame)
@@ -183,33 +234,55 @@ local function ShowBackButton(frame)
 	if not button then
 		return
 	end
-	local show = Enabled() and inspected and UnitExists(inspected) and true or false
+	local show = Enabled() and inspected and true or false
 	button:SetShown(show)
-	if show then
-		SetPortraitTexture(button.icon, inspected)
+	local unit = show and BackUnit()
+	if unit then
+		SetPortraitTexture(button.icon, unit)
+	else
+		button.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
 	end
 end
 
-function SetUpTalents()
-	local frame = TalentFrame()
-	if not frame then
+local function SetUpTalentFrame(frame)
+	if backButtons[frame] then
 		return
 	end
-	if not backButtons[frame] then
-		local button = MakeButton(frame, INSPECT or "Inspect", BackToInspect)
-		button:SetSize(SIZE + 8, SIZE + 8)
-		button:SetPoint("TOPLEFT", frame, "TOPLEFT", 70, -40)
-		-- (The talents window's own layers sit thousands of levels up: its
-		-- border at 5500.)
-		button:SetFrameLevel(math.min(frame:GetFrameLevel() + 6000, 9000))
-		backButtons[frame] = button
-		frame:HookScript("OnShow", ShowBackButton)
-		frame:HookScript("OnHide", function()
-			-- (Opened some other way next time: no way back to show.)
-			inspected = nil
+	local button = MakeButton(frame, INSPECT or "Inspect", BackToInspect)
+	button:SetSize(SIZE + 8, SIZE + 8)
+	button:SetPoint("TOPLEFT", frame, "TOPLEFT", 70, -40)
+	-- (The talents window's own layers sit thousands of levels up: its
+	-- border at 5500.)
+	button:SetFrameLevel(math.min(frame:GetFrameLevel() + 6000, 9000))
+	backButtons[frame] = button
+	-- Whoever opens it on someone (the game's View Talents too) says who.
+	-- (nil: your own talents.)
+	if frame.SetInspecting then
+		hooksecurefunc(frame, "SetInspecting", function(_, unit)
+			if type(unit) == "string" and UnitExists(unit) then
+				inspected, inspectedGUID = unit, GUID(unit)
+			else
+				inspected, inspectedGUID = nil, nil
+			end
+			ShowBackButton(frame)
 		end)
 	end
+	frame:HookScript("OnShow", ShowBackButton)
+	frame:HookScript("OnHide", function()
+		-- (Opened on your own talents next time: no way back to show.)
+		inspected, inspectedGUID = nil, nil
+	end)
 	ShowBackButton(frame)
+end
+
+-- The talents windows loaded so far (the ones that can show someone else's).
+function SetUpTalents()
+	for _, name in ipairs(TALENT_FRAMES) do
+		local frame = _G[name]
+		if type(frame) == "table" and frame.HookScript and frame.SetInspecting then
+			SetUpTalentFrame(frame)
+		end
+	end
 end
 
 local watcher = CreateFrame("Frame")
@@ -217,7 +290,8 @@ watcher:RegisterEvent("PLAYER_LOGIN")
 watcher:RegisterEvent("ADDON_LOADED")
 watcher:SetScript("OnEvent", function()
 	SetUpInspect()
-	if talentButton then
+	SetUpTalents()
+	if talentButton and next(backButtons) then
 		watcher:UnregisterAllEvents()
 	end
 end)
