@@ -2846,6 +2846,66 @@ function ns.ReportFrames(text)
 	end
 end
 
+-- /cine debug minimap: the settings that decide it, then the minimap itself:
+-- shown, alpha, size, where it's anchored, and whether it's shrunk and moved
+-- off the screen (with the anchors it gets back when it grows).
+function ns.ReportMinimap()
+	local db = ns.db
+	local function Value(value)
+		if issecretvalue and issecretvalue(value) then
+			return "secret"
+		end
+		return type(value) == "number" and ("%.2f"):format(value) or tostring(value)
+	end
+	local function Point(p)
+		local relativeTo = p[2]
+		local ok, name = pcall(function()
+			return relativeTo and (relativeTo:GetName() or relativeTo:GetDebugName()) or "screen"
+		end)
+		return ("%s to %s %s %s, %s"):format(tostring(p[1]), ok and tostring(name) or "?", tostring(p[3]),
+			Value(p[4]), Value(p[5]))
+	end
+	ns.Print(("minimap settings: profile %s, Standard Frames switch %s, Minimap page switch %s, Always %s, " ..
+		"In combat %s"):format(tostring(ns.ActiveProfile()), tostring(db.handleFrames), tostring(db.handleMinimap),
+		tostring(ns.IsCineShowOn("minimap")), tostring(ns.IsCombatShowOn("minimap"))))
+	ns.Print(("addon on %s, keep up indoors %s, always show (old setting) %s"):format(
+		tostring(db.enabled), tostring(db.minimapIndoors), tostring(db.alwaysShowMinimap)))
+	local frame = Minimap
+	ns.Print(("Minimap shown=%s visible=%s alpha %s, on screen %s, scale %s, size %s x %s"):format(
+		Value(frame:IsShown()), Value(frame:IsVisible()), Value(frame:GetAlpha()),
+		Value(frame.GetEffectiveAlpha and frame:GetEffectiveAlpha()), Value(frame:GetScale()),
+		Value(frame:GetWidth()), Value(frame:GetHeight())))
+	local count = frame:GetNumPoints()
+	ns.Print(("  %d anchor%s"):format(count, count == 1 and "" or "s"))
+	for i = 1, count do
+		local ok, point, relativeTo, relativePoint, x, y = pcall(frame.GetPoint, frame, i)
+		ns.Print("    " .. (ok and Point({ point, relativeTo, relativePoint, x, y }) or "can't read"))
+	end
+	local parent = frame:GetParent()
+	ns.Print(("  parent %s (shown=%s, alpha %s)"):format(parent and (parent:GetName() or parent:GetDebugName()) or "none",
+		Value(parent and parent:IsShown()), Value(parent and parent:GetAlpha())))
+	local entry
+	for _, managed in ipairs(ns.managed) do
+		if managed.frame == frame then
+			entry = managed
+		end
+	end
+	if not entry then
+		ns.Print("  not faded by Cinematic now")
+		return
+	end
+	ns.Print(("  faded: fade %s, applied %s, shrunk %s (shrunk scale %s), moved off the screen %s, hooked %s"):format(
+		Value(entry.alpha), Value(entry.applied), tostring(entry.shrunk or false), Value(SHRUNK_SCALE),
+		tostring(ns.IsParked(entry)), tostring(alphaHooked[frame] == entry)))
+	ns.Print(("  size to grow back to %s"):format(Value(entry.savedScale)))
+	if entry.savedPoints then
+		ns.Print(("  anchors to put back (%d):"):format(#entry.savedPoints))
+		for _, p in ipairs(entry.savedPoints) do
+			ns.Print("    " .. Point(p))
+		end
+	end
+end
+
 -- /cine debug frames: the shown top-level frames not faded, and every global
 -- frame with GamePad in its name, to the log (and chat), for finding frames
 -- a client feature adds (WoW Forever's gamepad mode).

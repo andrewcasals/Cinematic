@@ -66,6 +66,7 @@ local function PrintDebugHelp()
 	print("  /cine debug record - also log game setting changes and music in detail (again to stop)")
 	print("  /cine debug cpu [seconds|stop] - time what the addon spends its time on (30 seconds), report in the log")
 	print("  /cine debug frame <name> - how faded frames with <name> in their name stand")
+	print("  /cine debug minimap - the minimap's settings, where it's anchored, and whether it's shrunk and moved off the screen")
 	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
 	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
@@ -331,6 +332,8 @@ function ns.HandleSlash(msg)
 		else
 			ns.Print("/cine debug group party, raid or off")
 		end
+	elseif cmd == "debug" and arg == "minimap" then
+		ns.ReportMinimap()
 	elseif cmd == "debug" and arg == "questtimer" then
 		ns.ReportQuestTimer()
 	elseif cmd == "debug" and arg == "death" then
