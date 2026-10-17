@@ -9,7 +9,8 @@
 -- under it too: their times are part of its time, and may overlap each other.
 -- Memory is how much Lua memory grew over each call, roughly the garbage it
 -- made (a collection step running in the middle can hide some).
--- The full report goes in the log (/cine log); chat gets the top of it.
+-- The full report goes in the log (/cine log) and opens in its window to copy;
+-- chat gets the top of it.
 local ADDON_NAME, ns = ...
 
 local DEFAULT_SECONDS = 30
@@ -269,7 +270,9 @@ function ns.StopProfile()
 			end
 		end
 	end
-	ns.Print("the full report is in /cine log")
+	ns.Print("the full report is open to copy, and in /cine log")
+	ns.ShowText("/cine debug cpu: press Ctrl+C to copy",
+		("/cine debug cpu (Cinematic %s)\n%s"):format(ns.Version(), table.concat(lines, "\n")))
 	run = nil
 	return true
 end

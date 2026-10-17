@@ -1241,9 +1241,16 @@ do
 		overlay:SetPoint("TOPLEFT", bar, "TOPLEFT", -2, 2)
 		overlay:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 2, -2)
 		overlay:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
+		-- The border is on the bar itself, so it hides and fades with it: a
+		-- name-only plate (a friendly player's) or a faded Health part would
+		-- otherwise leave an empty box that looks like a bar at 0%.
+		local border = CreateFrame("Frame", nil, bar)
+		border:SetAllPoints(overlay)
+		border:SetFrameLevel(overlay:GetFrameLevel())
+		overlay.border = border
 		overlay.edges = {}
 		for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-			local edge = overlay:CreateTexture(nil, "OVERLAY")
+			local edge = border:CreateTexture(nil, "OVERLAY")
 			edge:SetColorTexture(1, 1, 1)
 			if side == "TOP" or side == "BOTTOM" then
 				edge:SetPoint(side .. "LEFT")
@@ -1322,6 +1329,7 @@ do
 		end
 		overlay.info = info
 		overlay:Show()
+		overlay.border:Show()
 		ns.RefreshClassIcon(plate) -- (the Plate Parts class icon gives way to the badge)
 	end
 
@@ -1338,6 +1346,7 @@ do
 		if overlay then
 			overlay.info = nil
 			overlay:Hide()
+			overlay.border:Hide()
 			ns.RefreshClassIcon(plate)
 		end
 	end
@@ -1718,6 +1727,12 @@ function ns.PrintPlatesDebug()
 	end
 	if #extra > 0 then
 		ns.Print(table.concat(extra, ", "))
+	end
+	-- Name-only friendly players have no health bar, target or not.
+	if GetCVar("nameplateShowOnlyNameForFriendlyPlayerUnits") == "1" then
+		ns.Print("friendly players' plates are names only (the game's setting, not ours): no health bar, even on your target"
+			.. (ns.AddOnLoaded("EllesmereUINameplates")
+				and " - EllesmereUI sets it: untick its Make Friendly Nameplates Name Only (Nameplates, General)" or ""))
 	end
 	ns.Print(("fade level=%.2f, switched off=%s, filtered=%s, kept in cinematic=%s, cinematic=%s, combat=%s"):format(
 		ns.plates.level, tostring(ns.plates.off), tostring(PlatesFiltered()),

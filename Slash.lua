@@ -119,7 +119,7 @@ local function PrintDebugHelp()
 	logPrints = true
 end
 
-function ns.HandleSlash(msg)
+local function HandleSlash(msg)
 	local cmd, arg = msg:lower():match("^%s*(%S*)%s*(.-)%s*$")
 	local num = tonumber(arg)
 	if cmd ~= "log" then
@@ -1005,5 +1005,14 @@ function ns.HandleSlash(msg)
 		end
 	else
 		PrintHelp()
+	end
+end
+
+function ns.HandleSlash(msg)
+	local cmd, arg = msg:lower():match("^%s*(%S*)%s*(.-)%s*$")
+	if (cmd == "debug" and arg ~= "help") or cmd == "list" then
+		ns.CaptureDebug("/cine " .. msg:match("^%s*(.-)%s*$"), function() HandleSlash(msg) end)
+	else
+		HandleSlash(msg)
 	end
 end

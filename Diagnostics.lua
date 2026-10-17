@@ -24,6 +24,7 @@ local OVERLAPPING = {
 }
 
 local pending = {} -- lines logged before the saved settings load
+local captured -- while a /cine debug command runs: what it prints, for the copy window
 
 local GetMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 local IsLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
@@ -35,6 +36,10 @@ local function Plain(text)
 end
 
 function ns.Log(category, text)
+	-- (What's printed to chat is caught at print, below; this adds what only goes in the log.)
+	if captured and category ~= "chat" and category ~= "cmd" then
+		captured[#captured + 1] = Plain(text)
+	end
 	local line = ("%s %s: %s"):format(date("%H:%M:%S"), category, Plain(text))
 	local log = ns.db and ns.db.log
 	if not log then
@@ -296,7 +301,7 @@ local function CreateWindow()
 
 	local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	title:SetPoint("TOPLEFT", 14, -12)
-	title:SetText("Cinematic log: press Ctrl+C to copy, then paste it into your bug report")
+	window.title = title
 
 	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
 	close:SetPoint("TOPRIGHT", -2, -2)
@@ -324,17 +329,51 @@ local function CreateWindow()
 	window.box = box
 end
 
-function ns.ShowLog()
+-- The window with any text, selected and ready to copy.
+local shownCount = 0 -- (so a debug command that opens it itself isn't covered over)
+local function ShowText(title, text)
 	if not window then
 		CreateWindow()
 	end
-	local log = ns.db.log or {}
-	window.text = ("%s\n\n--- log (%d lines, newest last) ---\n%s"):format(Summary(), #log,
-		table.concat(log, "\n"))
+	shownCount = shownCount + 1
+	window.title:SetText(title)
+	window.text = text
 	window:Show()
-	window.box:SetText(window.text)
+	window.box:SetText(text)
 	window.box:SetFocus()
 	window.box:HighlightText()
+end
+
+ns.ShowText = ShowText
+
+function ns.ShowLog()
+	local log = ns.db.log or {}
+	ShowText("Cinematic log: press Ctrl+C to copy, then paste it into your bug report",
+		("%s\n\n--- log (%d lines, newest last) ---\n%s"):format(Summary(), #log, table.concat(log, "\n")))
+end
+
+-- /cine debug commands (and /cine list): what one prints or logs at once also
+-- opens in the window, for copying (not the toggles' line or two, nor what
+-- timed ones print later). Every print counts, not just ns.Print's.
+function ns.CaptureDebug(command, run)
+	captured = {}
+	local print = _G.print
+	_G.print = function(...)
+		local parts = {}
+		for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+		captured[#captured + 1] = (Plain(table.concat(parts, " ")):gsub("^Cinematic: ", ""))
+		return print(...)
+	end
+	local before = shownCount
+	local ok, err = pcall(run)
+	_G.print = print
+	local lines = captured
+	captured = nil
+	if #lines >= 3 and shownCount == before then
+		ShowText(("%s: press Ctrl+C to copy"):format(command),
+			("%s (Cinematic %s)\n%s"):format(command, Version(), table.concat(lines, "\n")))
+	end
+	if not ok then error(err, 0) end
 end
 
 function ns.ClearLog()

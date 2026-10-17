@@ -991,7 +991,7 @@ local function CreateRevealPanel()
 
 	local fadeOut = Slider(content, "fadeOutTime", L["Fade out time"], 0, 10, 0.1, L["%.1f sec"])
 	fadeOut:SetPoint("TOPLEFT", fadeIn, "BOTTOMLEFT", 0, -34)
-	Tooltip(fadeOut, L["How long the UI takes to fade out. The mouseover time (Mouseover page) includes it: " ..
+	Tooltip(fadeOut, L["How long the UI takes to fade out. The mouseover time (Mouseover groups page) includes it: " ..
 		"a time shorter than the fade just fades straight away."])
 
 	local combatFadeIn = Slider(content, "combatFadeInTime", L["Combat fade in time"], 0, 10, 0.1, L["%.1f sec"])
@@ -4106,7 +4106,7 @@ local function CreateGamepadPanel()
 	prompt:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", -2, -16)
 	local press = Check(content, "gamepadPressReveal", L["Show the action bars when you press a button"],
 		L["Gamepad mode's mouseover: pressing any gamepad button brings the action bars up, and " ..
-		"they fade out again your \"stays after mouseover\" time later (Mouseover page). " ..
+		"they fade out again your \"stays after mouseover\" time later (Mouseover groups page). " ..
 		"Each press starts that time again. Choose the buttons in the list below. Presses that " ..
 		"make you jump don't count (whichever button jumps), nor presses while you fish (the " ..
 		"fish camera on, a cast going, or looting)."])
@@ -4834,7 +4834,7 @@ local function CreateMinimapPanel()
 	local ping = Check(content, "minimapRevealOnPing", L["Reveal when a group member pings it"],
 		L["Someone in your party or raid pinging the minimap shows it as if you'd hovered it, so " ..
 		"you can see where, with the rest of the Mouseover groups that have Minimap ping ticked: it " ..
-		"goes after \"Stays after mouseover\" (Mouseover page). Your own pings don't count."])
+		"goes after \"Stays after mouseover\" (Mouseover groups page). Your own pings don't count."])
 	if aboveTracking then
 		ping:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
 	else
@@ -4921,7 +4921,7 @@ local function CreateQuestTrackerPanel()
 	local reveal = Check(content, "questRevealOnAccept", L["Reveal on new quest"],
 		L["Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the " ..
 		"Mouseover groups that have Quest progress ticked): it goes after \"Stays after " ..
-		"mouseover\" (Mouseover page)."])
+		"mouseover\" (Mouseover groups page)."])
 	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -48)
 	PageSwitch(content, "handleQuests", L["Let CineMode handle the quest tracker"],
 		L["On: CineMode fades the quest tracker (and the quest timer and waypoint) as this page and its " ..
@@ -5012,7 +5012,7 @@ local function CreateCooldownPanel()
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		L["When the Cooldown Manager comes up in CineMode (Enhanced Cooldown Manager's bars too). Hovering " ..
 		"it always shows it. To keep it up all the time, or in fights, see the Standard Frames page; " ..
-		"what comes up with it is on the Mouseover page."])
+		"what comes up with it is on the Mouseover groups page."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	subtitle:SetJustifyV("TOP")
@@ -6067,7 +6067,7 @@ local function CreateMouseoverPanel()
 	local LEFT, WIDTH, ROW = 16, 560, 22
 	local RESULTS_SHOWN = 8
 
-	local title = Label(content, "GameFontNormalLarge", L["Mouseover"])
+	local title = Label(content, "GameFontNormalLarge", L["Mouseover groups"])
 	title:SetPoint("TOPLEFT", LEFT, -16)
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		L["Frames in the same group come up together when you mouse over any of them. A frame can " ..
@@ -6527,7 +6527,7 @@ local function CreateMouseoverPanel()
 	end)
 	canvas:SetScript("OnHide", function() results:Hide() end)
 	canvas:Hide()
-	RegisterSubpage(canvas, "Mouseover")
+	RegisterSubpage(canvas, "Mouseover groups")
 end
 
 -- WoW Forever freezes closing Settings in gamepad mode once one of our

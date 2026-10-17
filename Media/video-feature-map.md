@@ -49,7 +49,7 @@ segment that compares them.
 ## 3. Smart reveals (the UI when you need it)
 
 - [ ] **Hover anything** to see it (unit frames, bars, minimap)
-- [ ] **Mouseover groups**: hovering one frame brings up its group (Mouseover page)
+- [ ] **Mouseover groups**: hovering one frame brings up its group (Mouseover groups page)
 - [ ] **Chat pops up** on a new message - choose message types and channels; only for windows you can see; whisper tabs keep chat up until read
 - [ ] Chat peeks on group loot rolls, level-up, skill-up, guild members
 - [ ] **Portrait** shows while you recover (health/mana)
