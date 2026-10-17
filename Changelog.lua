@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-17", page = "Mouseover groups", title = "Mouseover group icons",
+		text = "Every Mouseover group has its own icon, in a row at the top of the page: click one to go " ..
+		"to that group. Groups you make get an icon you pick." },
 	{ date = "2026-10-17", page = "Standard Frames", title = "Minimap header pieces",
 		text = "The zone name, tracking button, calendar and clock over the minimap fade on rows of their " ..
 		"own, and the frame behind the tracking button goes with the header bar." },

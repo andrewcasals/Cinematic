@@ -1519,27 +1519,93 @@ ns.HOVER_TRIGGERS = {
 
 -- What it's like before you change anything: today's groups that do
 -- something (more than one frame, or brought up by more than the mouse).
+-- (preset: which default group it is, kept in the player's copy; icon: its
+-- picture on the Mouseover groups page, one of HOVER_GROUP_ICONS for groups
+-- you make.)
 ns.HOVER_GROUPS_DEFAULT = {
-	{ name = L["Action bars"], members = { "mainbar", "bottomleft", "bottomright",
-		"pet", "stance", "totems", "micro", "xp", "extra" } },
-	{ name = L["Action bars 6-8"], members = { "bar6", "bar7", "bar8" } },
-	{ name = L["Side bars"], members = { "right1", "right2" } },
-	{ name = L["Player"], members = { "player", "petframe", "prd", "totemtimers", "castbar" } },
-	{ name = L["Target and focus"], members = { "target", "tot", "focus" } },
+	{ preset = "bars", icon = "Interface\\Icons\\INV_Sword_04", name = L["Action bars"],
+		members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "micro", "xp", "extra" } },
+	{ preset = "side", icon = "Interface\\Icons\\Ability_Warrior_DefensiveStance", name = L["Side bars"],
+		members = { "right1", "right2" } },
+	{ preset = "bars68", icon = "Interface\\Icons\\Ability_DualWield", name = L["Action bars 6-8"],
+		members = { "bar6", "bar7", "bar8" } },
+	{ preset = "player", icon = "Interface\\Icons\\INV_Misc_Head_Human_01", name = L["Player"],
+		members = { "player", "petframe", "prd", "totemtimers", "castbar" } },
+	{ preset = "target", icon = "Interface\\Icons\\Ability_Hunter_SniperShot", name = L["Target and focus"],
+		members = { "target", "tot", "focus" } },
 	-- (Raid-style party frames are the raid frames; the Raid Frame Manager
 	-- goes with both.)
-	{ name = L["Raid frames"], members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidnames",
-		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
-	{ name = L["Party frames"], members = { "party", "partyroles", "partynames", "raidmanager" },
-		triggers = { roster = true } },
-	{ name = L["Minimap"], members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock" },
+	{ preset = "raid", icon = "Interface\\Icons\\Spell_Holy_PrayerOfFortitude", name = L["Raid frames"],
+		members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidnames", "raidpetnames", "raidtitles",
+		"raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
+	{ preset = "party", icon = "Interface\\Icons\\Spell_Holy_PrayerOfHealing02", name = L["Party frames"],
+		members = { "party", "partyroles", "partynames", "raidmanager" }, triggers = { roster = true } },
+	{ preset = "minimap", icon = "Interface\\Icons\\INV_Misc_Map_01", name = L["Minimap"],
+		members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock" },
 		triggers = { ping = true, tracking = true } },
-	{ name = L["Buffs"], members = { "buffs" }, triggers = { aura = true } },
-	{ name = L["Quest tracker"], members = { "quests" }, triggers = { quest = true } },
-	{ name = L["Gamepad action bars"], members = { "gamepadbars" }, triggers = { gamepad = true } },
-	{ name = L["Chat"], members = { "chat" }, triggers = { whisper = true, typing = true } },
-	{ name = L["Cooldowns"], members = { "cooldowns", "addon:fecm" }, triggers = { cooldown = true } },
+	{ preset = "buffs", icon = "Interface\\Icons\\Spell_Holy_WordFortitude", name = L["Buffs"],
+		members = { "buffs" }, triggers = { aura = true } },
+	{ preset = "quests", icon = "Interface\\Icons\\INV_Misc_Note_01", name = L["Quest tracker"],
+		members = { "quests" }, triggers = { quest = true } },
+	{ preset = "gamepad", icon = "Interface\\Icons\\INV_Gizmo_01", name = L["Gamepad action bars"],
+		members = { "gamepadbars" }, triggers = { gamepad = true } },
+	{ preset = "chat", icon = "Interface\\Icons\\INV_Scroll_03", name = L["Chat"],
+		members = { "chat" }, triggers = { whisper = true, typing = true } },
+	{ preset = "cooldowns", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", name = L["Cooldowns"],
+		members = { "cooldowns", "addon:fecm" }, triggers = { cooldown = true } },
 }
+
+-- The icons a group you make can have (the Mouseover groups page's picker).
+ns.HOVER_GROUP_ICONS = {
+	"Interface\\Icons\\INV_Misc_QuestionMark", "Interface\\Icons\\INV_Misc_Gear_01",
+	"Interface\\Icons\\INV_Misc_Bag_07", "Interface\\Icons\\INV_Misc_Coin_01",
+	"Interface\\Icons\\INV_Misc_Key_03", "Interface\\Icons\\INV_Misc_Rune_01",
+	"Interface\\Icons\\INV_Misc_Book_09", "Interface\\Icons\\INV_Misc_Book_11",
+	"Interface\\Icons\\INV_Misc_Gift_01", "Interface\\Icons\\INV_Misc_Spyglass_03",
+	"Interface\\Icons\\INV_Misc_Gem_Emerald_01", "Interface\\Icons\\INV_Potion_01",
+	"Interface\\Icons\\INV_Ore_Copper_01", "Interface\\Icons\\INV_Misc_Pelt_Wolf_01",
+	"Interface\\Icons\\INV_Weapon_Bow_07", "Interface\\Icons\\Spell_Holy_MindVision",
+	"Interface\\Icons\\Spell_Holy_HolyBolt", "Interface\\Icons\\Spell_Holy_PowerWordShield",
+	"Interface\\Icons\\Spell_Fire_FlameBolt", "Interface\\Icons\\Spell_Frost_FrostBolt02",
+	"Interface\\Icons\\Spell_Shadow_ShadowBolt", "Interface\\Icons\\Spell_Nature_Lightning",
+	"Interface\\Icons\\Spell_Nature_HealingTouch", "Interface\\Icons\\Spell_Nature_Regeneration",
+	"Interface\\Icons\\Spell_Nature_Polymorph", "Interface\\Icons\\Spell_Arcane_Blink",
+	"Interface\\Icons\\Ability_Warrior_BattleShout", "Interface\\Icons\\Ability_Rogue_Sprint",
+	"Interface\\Icons\\Ability_Stealth", "Interface\\Icons\\Ability_Ambush",
+	"Interface\\Icons\\Ability_Mount_RidingHorse", "Interface\\Icons\\Ability_Hunter_Pet_Wolf",
+	"Interface\\Icons\\Trade_Engineering", "Interface\\Icons\\Trade_Fishing",
+	"Interface\\Icons\\Trade_Alchemy", "Interface\\Icons\\Trade_BlackSmithing",
+	"Interface\\Icons\\Trade_Tailoring", "Interface\\Icons\\Trade_Herbalism",
+	"Interface\\Icons\\Trade_Mining", "Interface\\Icons\\INV_BannerPVP_01",
+}
+
+do
+	-- The default group a group is (its preset; copies made before presets
+	-- were kept are found by name), or nil for one you made.
+	local byPreset, byName = {}, {}
+	for _, group in ipairs(ns.HOVER_GROUPS_DEFAULT) do
+		byPreset[group.preset], byName[group.name] = group, group
+	end
+	function ns.HoverGroupPreset(group)
+		return (group.preset and byPreset[group.preset]) or (not group.preset and byName[group.name]) or nil
+	end
+
+	-- A group's icon: a default group's own, or the one picked for it.
+	function ns.HoverGroupIcon(group)
+		local preset = ns.HoverGroupPreset(group)
+		return preset and preset.icon or group.icon or ns.HOVER_GROUP_ICONS[1]
+	end
+
+	-- An icon no group has yet (for a new one), else the first.
+	function ns.UnusedHoverGroupIcon()
+		local used = {}
+		for _, group in ipairs(ns.GetHoverGroups()) do used[ns.HoverGroupIcon(group)] = true end
+		for i = 2, #ns.HOVER_GROUP_ICONS do
+			if not used[ns.HOVER_GROUP_ICONS[i]] then return ns.HOVER_GROUP_ICONS[i] end
+		end
+		return ns.HOVER_GROUP_ICONS[1]
+	end
+end
 
 -- The groups in use: the player's (db.hoverGroups), or the defaults until
 -- they change them.
@@ -1554,7 +1620,9 @@ function ns.CopyHoverGroups()
 		local members, triggers = {}, {}
 		for i, key in ipairs(group.members or {}) do members[i] = key end
 		for key, on in pairs(group.triggers or {}) do triggers[key] = on end
-		copy[#copy + 1] = { name = group.name, members = members, triggers = triggers }
+		local preset = ns.HoverGroupPreset(group)
+		copy[#copy + 1] = { name = group.name, members = members, triggers = triggers,
+			preset = preset and preset.preset or nil, icon = not preset and group.icon or nil }
 	end
 	return copy
 end

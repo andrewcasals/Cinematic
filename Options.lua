@@ -6529,7 +6529,8 @@ local function CreateMouseoverPanel()
 	title:SetPoint("TOPLEFT", LEFT, -16)
 	local subtitle = Label(content, "GameFontHighlightSmall",
 		L["Frames in the same group come up together when you mouse over any of them. A frame can " ..
-		"be in more than one group; one in no group comes up on its own."])
+		"be in more than one group; one in no group comes up on its own."] .. " " ..
+		L["Click a group's icon below to go to it, or the + to make one of your own."])
 	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	subtitle:SetWidth(WIDTH)
 	subtitle:SetJustifyV("TOP")
@@ -6798,9 +6799,121 @@ local function CreateMouseoverPanel()
 	newGroup:SetText(L["New group"])
 	newGroup:SetScript("OnClick", function()
 		local groups = Writable()
-		groups[#groups + 1] = { name = L["Group %d"]:format(#groups + 1), members = {}, triggers = {} }
+		groups[#groups + 1] = { name = L["Group %d"]:format(#groups + 1), members = {}, triggers = {},
+			icon = ns.UnusedHoverGroupIcon() }
 		Layout()
 	end)
+
+	-- The icon picker for a group you made: a grid of icons under the one
+	-- clicked. (On the canvas, like the search results.)
+	local PICK, PICK_GAP, PICK_PER_ROW = 30, 4, 10
+	local picker = CreateFrame("Frame", nil, canvas)
+	picker:SetFrameStrata("DIALOG")
+	picker:EnableMouse(true)
+	local pickerRows = math.ceil(#ns.HOVER_GROUP_ICONS / PICK_PER_ROW)
+	picker:SetSize(PICK_PER_ROW * (PICK + PICK_GAP) + PICK_GAP, pickerRows * (PICK + PICK_GAP) + PICK_GAP)
+	local pickerBg = picker:CreateTexture(nil, "BACKGROUND")
+	pickerBg:SetAllPoints()
+	pickerBg:SetColorTexture(0.05, 0.05, 0.05, 0.95)
+	local pickerEdge = picker:CreateTexture(nil, "BACKGROUND", nil, -1)
+	pickerEdge:SetPoint("TOPLEFT", -1, 1)
+	pickerEdge:SetPoint("BOTTOMRIGHT", 1, -1)
+	pickerEdge:SetColorTexture(0.4, 0.4, 0.4, 1)
+	picker:Hide()
+	local pickerButtons = {}
+	for i, file in ipairs(ns.HOVER_GROUP_ICONS) do
+		local button = CreateFrame("Button", nil, picker)
+		button:SetSize(PICK, PICK)
+		button:SetPoint("TOPLEFT", PICK_GAP + ((i - 1) % PICK_PER_ROW) * (PICK + PICK_GAP),
+			-PICK_GAP - math.floor((i - 1) / PICK_PER_ROW) * (PICK + PICK_GAP))
+		button.border = button:CreateTexture(nil, "BACKGROUND")
+		button.border:SetAllPoints()
+		local icon = button:CreateTexture(nil, "ARTWORK")
+		icon:SetPoint("TOPLEFT", 2, -2)
+		icon:SetPoint("BOTTOMRIGHT", -2, 2)
+		icon:SetTexture(file)
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		local hl = button:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints(icon)
+		hl:SetColorTexture(1, 1, 1, 0.2)
+		button.file = file
+		button:SetScript("OnClick", function()
+			local group = picker.index and Writable()[picker.index]
+			if group then group.icon = file end
+			picker:Hide()
+			Layout()
+		end)
+		pickerButtons[i] = button
+	end
+	-- Closes on a click anywhere else.
+	picker:SetScript("OnUpdate", function(self)
+		if not self:IsMouseOver() and not (self.owner and self.owner:IsMouseOver())
+			and (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) then
+			self:Hide()
+		end
+	end)
+	local function ShowPicker(owner, index)
+		if picker:IsShown() and picker.index == index then
+			picker:Hide()
+			return
+		end
+		results:Hide()
+		picker.owner, picker.index = owner, index
+		local current = ns.HoverGroupIcon(Groups()[index])
+		for _, button in ipairs(pickerButtons) do
+			-- (Gold round the one it has.)
+			if button.file == current then
+				button.border:SetColorTexture(1, 0.82, 0, 1)
+			else
+				button.border:SetColorTexture(0.45, 0.38, 0.2, 1)
+			end
+		end
+		picker:ClearAllPoints()
+		picker:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
+		picker:Show()
+	end
+
+	-- A square icon: gold edge, a darker one when dim. (The row of groups at
+	-- the top, and each group's heading.)
+	local function IconTile(size)
+		local tile = CreateFrame("Button", nil, content)
+		tile:SetSize(size, size)
+		tile.border = tile:CreateTexture(nil, "BACKGROUND")
+		tile.border:SetAllPoints()
+		tile.border:SetColorTexture(0.45, 0.38, 0.2, 1)
+		local bg = tile:CreateTexture(nil, "BORDER")
+		bg:SetPoint("TOPLEFT", 1, -1)
+		bg:SetPoint("BOTTOMRIGHT", -1, 1)
+		bg:SetColorTexture(0.06, 0.05, 0.04, 0.95)
+		tile.icon = tile:CreateTexture(nil, "ARTWORK")
+		tile.icon:SetPoint("TOPLEFT", 2, -2)
+		tile.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+		tile.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		local hl = tile:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints(tile.icon)
+		hl:SetColorTexture(1, 1, 1, 0.15)
+		tile:SetScript("OnEnter", function(self)
+			if not self.tipTitle then return end
+			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+			GameTooltip:SetText(self.tipTitle, 1, 0.82, 0)
+			for _, line in ipairs(self.tipLines or {}) do
+				GameTooltip:AddLine(line, 1, 1, 1, true)
+			end
+			GameTooltip:Show()
+		end)
+		tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		return tile
+	end
+
+	-- Scrolls the page to a group's heading.
+	local headingY = {}
+	local function JumpTo(index)
+		local scroll = canvas.scroll
+		local y = headingY[index]
+		if not (scroll and y) then return end
+		local range = scroll:GetVerticalScrollRange() or 0
+		scroll:SetVerticalScroll(math.max(0, math.min(range, y - 8)))
+	end
 
 	-- A row in a group: remove button, label, a note after it.
 	local function MemberRow()
@@ -6865,7 +6978,44 @@ local function CreateMouseoverPanel()
 			widget:SetPoint("TOPLEFT", content, "TOPLEFT", x, -(y + (extraY or 0)))
 		end
 
-		for index, group in ipairs(Groups()) do
+		-- A row of every group's icon: click one to go to it. The + at the
+		-- end makes a new group.
+		local TILE, GAP = 32, 6
+		local perRow = math.max(1, math.floor((WIDTH + GAP) / (TILE + GAP)))
+		local groups = Groups()
+		local function TileAt(tile, i)
+			tile:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT + ((i - 1) % perRow) * (TILE + GAP),
+				-(y + math.floor((i - 1) / perRow) * (TILE + GAP)))
+		end
+		for index, group in ipairs(groups) do
+			local tile = Take("tile", function() return IconTile(TILE) end)
+			TileAt(tile, index)
+			tile.icon:SetTexture(ns.HoverGroupIcon(group))
+			tile.tipTitle = group.name
+			local names = {}
+			for _, key in ipairs(group.members) do
+				local item = byKey[key]
+				if item or key:find("^extra:") then
+					names[#names + 1] = item and item.label or key:gsub("^extra:", "")
+				end
+			end
+			tile.tipLines = { #names > 0 and table.concat(names, ", ") or L["No frames yet."],
+				"|cff808080" .. L["Click to go to it."] .. "|r" }
+			tile:SetScript("OnClick", function() JumpTo(index) end)
+		end
+		local add = Take("tile", function() return IconTile(TILE) end)
+		TileAt(add, #groups + 1)
+		add.icon:SetTexture("Interface\\Icons\\Spell_ChargePositive")
+		add.tipTitle, add.tipLines = L["New group"], { L["A group of your own, to pick its frames and icon."] }
+		add:SetScript("OnClick", function()
+			newGroup:Click()
+			-- (Once the page has grown to fit it.)
+			C_Timer.After(0, function() JumpTo(#Groups()) end)
+		end)
+		y = y + math.ceil((#groups + 1) / perRow) * (TILE + GAP) + 14
+
+		wipe(headingY)
+		for index, group in ipairs(groups) do
 			-- Divider and heading: name box, delete.
 			local line = Take("line", function()
 				local t = content:CreateTexture(nil, "ARTWORK")
@@ -6875,7 +7025,21 @@ local function CreateMouseoverPanel()
 			end)
 			At(line, LEFT)
 			line:SetWidth(WIDTH)
+			headingY[index] = y
 			y = y + 20
+
+			-- Its icon: one you pick, for a group you made.
+			local preset = ns.HoverGroupPreset(group)
+			local icon = Take("headIcon", function() return IconTile(26) end)
+			At(icon, LEFT + 4, -3)
+			icon.icon:SetTexture(ns.HoverGroupIcon(group))
+			icon:SetEnabled(not preset)
+			if preset then
+				icon.tipTitle = nil
+			else
+				icon.tipTitle, icon.tipLines = group.name, { L["Click to pick its icon."] }
+			end
+			icon:SetScript("OnClick", function(self) ShowPicker(self, index) end)
 
 			local nameBox = Take("name", function()
 				local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
@@ -6887,12 +7051,15 @@ local function CreateMouseoverPanel()
 				Tooltip(box, L["The group's name: click to change it."])
 				return box
 			end)
-			At(nameBox, LEFT + 6)
+			At(nameBox, LEFT + 40)
 			nameBox:SetText(group.name or "")
 			nameBox:SetScript("OnEditFocusLost", function(self)
 				local text = self:GetText()
 				if text ~= "" and text ~= group.name then
-					Writable()[index].name = text
+					local editable = Writable()[index]
+					-- (A default group stays one, with its icon, under a new name.)
+					editable.preset = preset and preset.preset or editable.preset
+					editable.name = text
 					Layout()
 				end
 			end)
@@ -6983,7 +7150,10 @@ local function CreateMouseoverPanel()
 		Layout()
 		C_Timer.After(0, function() FitContentHeight(content) end)
 	end)
-	canvas:SetScript("OnHide", function() results:Hide() end)
+	canvas:SetScript("OnHide", function()
+		results:Hide()
+		picker:Hide()
+	end)
 	canvas:Hide()
 	RegisterSubpage(canvas, "Mouseover groups")
 end
