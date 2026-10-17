@@ -85,6 +85,7 @@ local function PrintDebugHelp()
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
+	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
@@ -719,6 +720,8 @@ function ns.HandleSlash(msg)
 		ns.PrintPlatesDebug()
 	elseif cmd == "debug" and arg == "duels" then
 		ns.PrintDuelsDebug()
+	elseif cmd == "debug" and arg:find("^talents?%p*$") then
+		if ns.PrintTalentLinkDebug then ns.PrintTalentLinkDebug() else ns.Print("talents link not loaded (retail, or TalentLink.lua missing)") end
 	elseif cmd == "debug" and arg == "panels" then
 		ns.PrintPanelsDebug()
 	elseif cmd == "debug" and arg == "cvars" then

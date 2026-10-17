@@ -3905,6 +3905,18 @@ local function CreateQualityPanel()
 		L["Dragging something you can wear out of your bags, over the game world, opens the character window, " ..
 		"so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it " ..
 		"and the window closes again. Not in a fight."]), "check")
+	-- (TalentLink.lua; WoW Forever only.)
+	if not ns.isRetail then
+		stack:Add(Check(content, "talentLink", L["Talents button when inspecting someone"],
+			L["Inspecting someone, a button just right of their level and class opens their talents, and one " ..
+			"with their portrait on the talents window takes you back to the inspect window. Not in a fight."],
+			function(value)
+				ns.GetDB().talentLink = value
+				if ns.RefreshTalentLink then
+					ns.RefreshTalentLink()
+				end
+			end), "check")
+	end
 	-- (CenterPanels.lua.)
 	stack:Add(Check(content, "centerPanels", L["Open windows in the middle of the screen"],
 		L["Windows the game opens on the left (quest log, group finder, spellbook and the like) " ..

@@ -38,6 +38,7 @@ Campfire.lua
 Hunter.lua
 HunterAmmo.lua
 DragEquip.lua
+TalentLink.lua
 CenterPanels.lua
 CameraWheel.lua
 MenuWheel.lua

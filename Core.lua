@@ -235,6 +235,7 @@ local DEFAULTS = {
 	hunterAmmoSort = true,    -- hunters: after Clean Up Bags, the smallest ammo stack goes first, to be shot first (HunterAmmo.lua)
 	hunterQuiverFill = true,  -- hunters: a Fill button on arrows and bullets at vendors fills the quiver (HunterAmmo.lua)
 	dragEquipCharacter = true, -- dragging something you can wear out of the bags opens the character window (DragEquip.lua)
+	talentLink = true,         -- Forever: inspecting someone, a button to their talents, and one back on the talents window (TalentLink.lua)
 	centerPanels = true,       -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
