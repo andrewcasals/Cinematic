@@ -81,6 +81,8 @@ local FRAME_GROUPS = {
 	-- Action bar art from addons (Bartender4's art bar); the game's own is
 	-- found by FindBarArt.
 	barart = {},
+	-- The bar behind the zone's name above the minimap: found by FindMinimapHeader.
+	minimapheader = {},
 	chat = {
 		"GeneralDockManager", "ChatFrameMenuButton", "ChatFrameChannelButton",
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
@@ -462,7 +464,7 @@ end
 -- and gamepad ones (their own pages'); the page switches below it come on
 -- top. The 3rd Party Frames page's covers other addons' and added frames.
 local GROUP_SWITCH = {
-	minimap = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
+	minimap = "handleMinimap", minimapheader = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
 	buffs = "handleBuffs", cooldowns = "handleCooldowns", chat = "handleChat", swing = "handleSwing",
 	gamepadbars = "handleGamepad", gamepadlegend = "handleGamepad", gamepadreticle = "handleGamepad",
 }
@@ -900,6 +902,54 @@ local function FindBarArt()
 	end
 end
 
+-- The minimap's header art (the Standard Frames page's Minimap header row):
+-- the bar behind the zone's name above the minimap. WoW Forever's is the zone
+-- button's StateTexture (and AddTexture, its hover glow); retail's BorderTop
+-- and older clients' MinimapBorderTop are unverified. Textures, so a frame of
+-- ours over the bar stands in for them in the fade, as for the action bar
+-- art. They ignore the minimap's own fade, so the zone's name can float
+-- without its bar, or the bar stay up while the map goes.
+do
+	local headerArt, headerSeen = {}, {}
+	local headerStandIn
+
+	local function AddHeaderArt(region, over)
+		if type(region) ~= "table" or headerSeen[region] or type(region.SetAlpha) ~= "function"
+			or IsForbidden(region) then
+			return
+		end
+		headerSeen[region] = true
+		headerArt[#headerArt + 1] = region
+		if region.SetIgnoreParentAlpha then
+			region:SetIgnoreParentAlpha(true)
+		end
+		if not headerStandIn then
+			headerStandIn = CreateFrame("Frame", nil, UIParent)
+			headerStandIn:SetAllPoints(over or region)
+			hooksecurefunc(headerStandIn, "SetAlpha", function(_, alpha)
+				for _, art in ipairs(headerArt) do
+					art:SetAlpha(alpha)
+				end
+			end)
+		end
+		region:SetAlpha(headerStandIn:GetAlpha())
+	end
+
+	function ns.FindMinimapHeader()
+		local cluster = type(_G.MinimapCluster) == "table" and _G.MinimapCluster or nil
+		local bar = (cluster and cluster.ZoneTextButton) or _G.MinimapZoneTextButton
+		if type(bar) == "table" then
+			AddHeaderArt(bar.StateTexture, bar)
+			AddHeaderArt(bar.AddTexture, bar)
+		end
+		AddHeaderArt(cluster and cluster.BorderTop)
+		AddHeaderArt(_G.MinimapBorderTop)
+		if headerStandIn then
+			AddFrame(headerStandIn, "minimapheader")
+		end
+	end
+end
+
 -- Saved extras that are really built-in frames (added before /cine add
 -- checked for that) would show in the extras list, where Stop would break the
 -- built-in fade. Drop them.
@@ -956,6 +1006,7 @@ function ns.BuildManagedList()
 	ScanAddonFrames()
 	FindIssueReporter()
 	FindBarArt()
+	ns.FindMinimapHeader()
 	RecomputeNesting()
 end
 
@@ -1240,6 +1291,13 @@ ns.COMBAT_SHOW = {
 	-- morePage: the options page with more settings for it, which can keep it up besides.
 	{ key = "minimap", label = L["Minimap"], default = true, groups = { "minimap" }, morePage = "Minimap",
 		handledBy = "handleMinimap" },
+	-- The bar behind the zone's name (not the name): follows the minimap's
+	-- ticks until set (see ROW_FALLBACK).
+	{ key = "minimapheader", label = L["Minimap header"], default = true, groups = { "minimapheader" },
+		handledBy = "handleMinimap",
+		tip = L["The bar behind the zone's name above the minimap (the name itself goes with the minimap). " ..
+			"Untick it to leave the name floating on its own. Hovering the minimap brings it up with the map: " ..
+			"to keep it hidden then too, take Minimap header out of the Minimap group on the Mouseover groups page."] },
 	{ key = "quests", label = L["Quest tracker"], default = false, frames = FRAME_GROUPS.quests,
 		morePage = "Quest tracker", handledBy = "handleQuests" },
 	-- Retail's quest waypoint: its Always tick is the Minimap page's "Always
@@ -1320,7 +1378,7 @@ local ROW_SECTIONS = {
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
-	minimap = "interface", quests = "interface", waypoint = "interface", micro = "interface", xp = "interface",
+	minimap = "interface", minimapheader = "interface", quests = "interface", waypoint = "interface", micro = "interface", xp = "interface",
 }
 for _, item in ipairs(ns.COMBAT_SHOW) do
 	item.page = item.page or ROW_SECTIONS[item.key]
@@ -1417,7 +1475,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
 	{ name = L["Party frames"], members = { "party", "partyroles", "partynames", "raidmanager" },
 		triggers = { roster = true } },
-	{ name = L["Minimap"], members = { "minimap" }, triggers = { ping = true, tracking = true } },
+	{ name = L["Minimap"], members = { "minimap", "minimapheader" }, triggers = { ping = true, tracking = true } },
 	{ name = L["Buffs"], members = { "buffs" }, triggers = { aura = true } },
 	{ name = L["Quest tracker"], members = { "quests" }, triggers = { quest = true } },
 	{ name = L["Gamepad action bars"], members = { "gamepadbars" }, triggers = { gamepad = true } },
@@ -1501,9 +1559,9 @@ local function IsExtraKey(key)
 end
 
 -- Rows that take another row's tick in a column until given their own: the
--- bar art follows action bar 1 and the pet portrait yours, so profiles and lists from before it was a
+-- bar art follows action bar 1, the pet portrait yours and the minimap header the minimap, so profiles and lists from before it was a
 -- row (the Cooldown Manager profile's: no action bars) still hold.
-local ROW_FALLBACK = { art = "mainbar", petframe = "player" }
+local ROW_FALLBACK = { art = "mainbar", petframe = "player", minimapheader = "minimap" }
 
 function ns.IsCombatShowOn(key)
 	local on = ns.db.combatShow[key]
@@ -2886,6 +2944,78 @@ function ns.ReportMinimap()
 	local parent = frame:GetParent()
 	ns.Print(("  parent %s (shown=%s, alpha %s)"):format(parent and (parent:GetName() or parent:GetDebugName()) or "none",
 		Value(parent and parent:IsShown()), Value(parent and parent:GetAlpha())))
+	-- The header above the map (zone name, its border, the buttons on it):
+	-- every frame and texture on MinimapCluster, and the older clients' globals,
+	-- each with its size, for finding which is which.
+	local function Describe(name, region)
+		local okType, kind = pcall(region.GetObjectType, region)
+		local okShown, shown = pcall(region.IsShown, region)
+		local okSize, width, height = pcall(function() return region:GetWidth(), region:GetHeight() end)
+		local okText, text = pcall(function() return kind == "FontString" and region:GetText() or nil end)
+		local okAtlas, atlas = pcall(function() return kind == "Texture" and region.GetAtlas and region:GetAtlas() or nil end)
+		local okFile, file = pcall(function() return kind == "Texture" and region:GetTexture() or nil end)
+		return name .. ":" .. (okType and tostring(kind) or "?") .. ((okShown and not ns.Flag(shown)) and "(hidden)" or "")
+			.. (okSize and (" " .. Value(width) .. "x" .. Value(height)) or "")
+			.. ((okText and type(text) == "string") and (' "' .. text .. '"') or "")
+			.. ((okAtlas and type(atlas) == "string") and (" atlas " .. atlas) or "")
+			.. ((okFile and file and not (okAtlas and atlas)) and (" file " .. tostring(file)) or "")
+	end
+	-- A frame's fields (frames and textures), then its regions that have none.
+	local function Contents(container)
+		local found, named, frames = {}, {}, {}
+		for field, value in pairs(container) do
+			if type(field) == "string" and type(value) == "table" and value.GetObjectType then
+				named[value] = true
+				found[#found + 1] = Describe(field, value)
+				if value.GetRegions then
+					frames[#frames + 1] = field
+				end
+			end
+		end
+		table.sort(found)
+		table.sort(frames)
+		local ok, regions = pcall(function() return { container:GetRegions() } end)
+		for i, region in ipairs(ok and regions or {}) do
+			if not named[region] then
+				found[#found + 1] = Describe("#" .. i, region)
+			end
+		end
+		return found, frames
+	end
+	local cluster = _G.MinimapCluster
+	if cluster then
+		local found, frames = Contents(cluster)
+		ns.Print("MinimapCluster: " .. table.concat(found, ", "))
+		-- And what's in each of its frames (bar the map's own pins and blips).
+		for _, field in ipairs(frames) do
+			local inside = Contents(cluster[field])
+			if #inside > 0 and field ~= "MinimapContainer" then
+				ns.Print("  ." .. field .. ": " .. table.concat(inside, ", "))
+			end
+		end
+		local container = cluster.MinimapContainer
+		if type(container) == "table" and container.GetRegions then
+			local inside = {}
+			local ok, regions = pcall(function() return { container:GetRegions() } end)
+			for i, region in ipairs(ok and regions or {}) do
+				inside[#inside + 1] = Describe("#" .. i, region)
+			end
+			ns.Print("  .MinimapContainer textures: " .. (#inside > 0 and table.concat(inside, ", ") or "none"))
+		end
+	end
+	local globals = {}
+	for _, name in ipairs({ "MinimapBorderTop", "MinimapZoneTextButton", "MinimapZoneText", "MinimapBorder",
+		"MinimapToggleButton", "MiniMapWorldMapButton", "TimeManagerClockButton", "GameTimeFrame" }) do
+		local region = _G[name]
+		if type(region) == "table" and region.GetObjectType then
+			local okParent, parentName = pcall(function()
+				local p = region:GetParent()
+				return p and (p:GetName() or p:GetDebugName()) or "none"
+			end)
+			globals[#globals + 1] = Describe(name, region) .. " in " .. (okParent and tostring(parentName) or "?")
+		end
+	end
+	ns.Print("header globals: " .. (#globals > 0 and table.concat(globals, ", ") or "NONE"))
 	local entry
 	for _, managed in ipairs(ns.managed) do
 		if managed.frame == frame then

@@ -735,6 +735,8 @@ L["Battlegrounds and arenas (being flagged for PvP out in the world doesn't coun
 L["BGs"] = "CB"
 L["Tracking doesn't keep the minimap up here. Hovering it still shows it."] = "El rastreo no mantiene el minimapa visible aquí. Pasar el ratón por encima sigue mostrándolo."
 L["Hide in camera modes"] = "Ocultar en los modos de cámara"
+L["Minimap header"] = "Cabecera del minimapa"
+L["The bar behind the zone's name above the minimap (the name itself goes with the minimap). Untick it to leave the name floating on its own. Hovering the minimap brings it up with the map: to keep it hidden then too, take Minimap header out of the Minimap group on the Mouseover groups page."] = "La barra detrás del nombre de la zona sobre el minimapa (el nombre va con el minimapa). Desmárcala para dejar el nombre flotando solo. Pasar el ratón por el minimapa la muestra con el mapa: para que siga oculta también entonces, quita Cabecera del minimapa del grupo Minimapa en la página Grupos al pasar el ratón."
 L["While the %s camera runs, the minimap fades, even if it's set to always show or tracking would keep it up. Hovering it still shows it."] = "Mientras funciona la cámara «%s», el minimapa se desvanece, aunque esté configurado para mostrarse siempre o el rastreo lo mantuviera visible. Pasar el ratón por encima sigue mostrándolo."
 L["When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it up all the time, or in fights, see the Standard Frames page."] = "Cuándo aparece el seguimiento de misiones en CineMode. Pasar el ratón por encima siempre lo muestra. Para mantenerlo visible todo el tiempo, o en combate, mira la página Marcos estándar."
 L["Reveal on new quest"] = "Mostrar al aceptar una misión"
