@@ -113,7 +113,8 @@ L["tooltip hiding on"] = "скрытие подсказок включено"
 L["tooltip hiding off"] = "скрытие подсказок выключено"
 
 -- Frames.lua
-L["Player portrait (and pet)"] = "Портрет (и питомец)"
+L["Player portrait"] = "Портрет"
+L["Pet portrait"] = "Портрет питомца"
 L["Personal resource bars"] = "Личные полосы ресурсов"
 L["Target"] = "Цель"
 L["Target of target"] = "Цель цели"
@@ -273,6 +274,7 @@ L["Put this page's settings back to the profile's own?"] = "Вернуть на�
 L["Reset page"] = "Сброс страницы"
 L["Put this page's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "Возвращает настройки этой страницы к значениям активного профиля (по умолчанию или встроенного профиля)."
 L["Search Cinematic's settings"] = "Поиск по настройкам Cinematic"
+L["Search this page"] = "Поиск на этой странице"
 L["|cff808080Nothing found|r"] = "|cff808080Ничего не найдено|r"
 L["Scroll for %d more"] = "Прокрутите, еще %d"
 L["Fades the UI and adds letterbox bars between fights. Combat, casting and opening windows like the spellbook bring it back. Typing just shows the chat. The pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, Chat), visual effects and sound, the camera modes and triggers, and keybinds."] = "Скрывает интерфейс и добавляет черные полосы кадра между боями. Бой, произнесение заклинаний и открытие окон вроде книги заклинаний возвращают его. Ввод текста показывает только чат. Страницы ниже описывают, что и когда показывается (CineMode, Стандартные рамки, Рамки модификаций, Миникарта, Список заданий, Индикаторы, Чат), визуальные эффекты и звук, режимы камеры и их триггеры, а также назначение клавиш."

@@ -411,6 +411,7 @@ local function CreateScrollPage(noReset)
 			self:Hide()
 		end
 	end)
+	canvas.resetButton = reset
 	return canvas, content
 end
 
@@ -474,10 +475,11 @@ end
 
 -- Every page's settings, headings and notes as they are now (pages show and
 -- hide rows as settings change). rank: 0 a page, 1 a label or heading, 3 a note.
-local function BuildSearchIndex()
+-- onlyPage: just that page's (a sub-page's own search box).
+local function BuildSearchIndex(onlyPage)
 	Refresh() -- (slider titles and some rows are only filled in on refresh)
 	local entries = {}
-	for _, page in ipairs(searchPages) do
+	for _, page in ipairs(onlyPage and { onlyPage } or searchPages) do
 		local seen = {}
 		local function add(text, tip, rank, edges)
 			text = SearchText(text)
@@ -487,7 +489,7 @@ local function BuildSearchIndex()
 			entries[#entries + 1] = { page = page, text = text, lower = text:lower(),
 				tip = tip and tip:lower(), rank = rank, edges = edges, order = #entries }
 		end
-		add(page.name or "Cinematic", nil, 0)
+		if not onlyPage then add(page.name or "Cinematic", nil, 0) end
 		local function walk(frame)
 			-- (IsShown: the frame's own flag, so hidden rows are left out even on
 			-- pages that aren't open)
@@ -573,8 +575,9 @@ local function Highlight(canvas, edges)
 	glow:Show()
 end
 
--- Opens a match's page, scrolled to it and highlighted.
-local function ShowMatch(entry)
+-- Opens a match's page, scrolled to it and highlighted. onPage: it's
+-- already open (found by its own search box).
+local function ShowMatch(entry, onPage)
 	-- In a closed section of the Camera Settings page: opened first.
 	local object = entry.edges and entry.edges.top
 	while object do
@@ -584,7 +587,7 @@ local function ShowMatch(entry)
 		end
 		object = object:GetParent()
 	end
-	ns.OpenOptions(entry.page.key)
+	if not onPage then ns.OpenOptions(entry.page.key) end
 	if not entry.edges then return end
 	local canvas = entry.page.canvas
 	-- (once the page has shown and sized itself)
@@ -601,20 +604,28 @@ end
 local SEARCH_ROWS = 12
 
 -- The search box, with its matches listed in a box below it (over the page).
-local function CreateSearch(canvas, parent)
+-- page: searches just that page (a sub-page's box, top right beside Reset page).
+local function CreateSearch(canvas, parent, page)
 	local ok, box = pcall(CreateFrame, "EditBox", nil, parent, "SearchBoxTemplate")
 	if not ok or not box then
 		box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
 	end
-	box:SetSize(260, 20)
+	box:SetSize(page and 180 or 260, 20)
 	box:SetAutoFocus(false)
 	box.searchSkip = true
-	if box.Instructions then box.Instructions:SetText(L["Search Cinematic's settings"]) end
+	if box.Instructions then
+		box.Instructions:SetText(page and L["Search this page"] or L["Search Cinematic's settings"])
+	end
 
 	local list = CreateFrame("Frame", nil, parent)
 	list.searchSkip = true
-	list:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -2)
-	list:SetWidth(580)
+	if page then
+		list:SetPoint("TOPRIGHT", box, "BOTTOMRIGHT", 2, -2)
+		list:SetWidth(420)
+	else
+		list:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -2)
+		list:SetWidth(580)
+	end
 	list:SetFrameLevel(parent:GetFrameLevel() + 20)
 	list:EnableMouse(true) -- (clicks don't reach the settings underneath)
 	list:Hide()
@@ -644,7 +655,7 @@ local function CreateSearch(canvas, parent)
 			if not self.entry then return end
 			list:Hide()
 			box:ClearFocus()
-			ShowMatch(self.entry)
+			ShowMatch(self.entry, page)
 		end)
 		rows[i] = row
 		return row
@@ -659,7 +670,8 @@ local function CreateSearch(canvas, parent)
 			local text = entry.text
 			if #text > 70 then text = text:sub(1, 67) .. "..." end
 			row.entry = entry
-			row.text:SetText("|cffffd100" .. (entry.page.name or "Cinematic") .. ":|r  " .. text)
+			row.text:SetText(page and text or
+				("|cffffd100" .. (entry.page.name or "Cinematic") .. ":|r  " .. text))
 			row:Show()
 		end
 		local lines = shown
@@ -687,7 +699,7 @@ local function CreateSearch(canvas, parent)
 			list:Hide()
 			return
 		end
-		index = index or BuildSearchIndex()
+		index = index or BuildSearchIndex(page)
 		matches = SearchMatches(index, query)
 		offset = 0
 		Draw()
@@ -705,7 +717,7 @@ local function CreateSearch(canvas, parent)
 		self:ClearFocus()
 		if matches[1] and list:IsShown() then
 			list:Hide()
-			ShowMatch(matches[1])
+			ShowMatch(matches[1], page)
 		end
 	end)
 	box:HookScript("OnEscapePressed", function(self)
@@ -938,7 +950,13 @@ local function RegisterSubpage(subpanel, name)
 	subpanel.name = L[name]
 	subpanel.parent = "Cinematic"
 	subpages[name] = subpanel
-	searchPages[#searchPages + 1] = { name = L[name], key = name, canvas = subpanel }
+	local page = { name = L[name], key = name, canvas = subpanel }
+	searchPages[#searchPages + 1] = page
+	-- Its own search box, for just its settings, left of Reset page.
+	if subpanel.content and subpanel.resetButton then
+		local box = CreateSearch(subpanel, subpanel.content, page)
+		box:SetPoint("RIGHT", subpanel.resetButton, "LEFT", -12, 0)
+	end
 	if category and Settings and Settings.RegisterCanvasLayoutSubcategory then
 		local sub = Settings.RegisterCanvasLayoutSubcategory(category, subpanel, L[name])
 		Settings.RegisterAddOnCategory(sub)

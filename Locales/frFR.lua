@@ -113,7 +113,8 @@ L["tooltip hiding on"] = "masquage des infobulles activé"
 L["tooltip hiding off"] = "masquage des infobulles désactivé"
 
 -- Frames.lua
-L["Player portrait (and pet)"] = "Portrait (et familier)"
+L["Player portrait"] = "Portrait"
+L["Pet portrait"] = "Portrait du familier"
 L["Personal resource bars"] = "Barres de ressources perso"
 L["Target"] = "Cible"
 L["Target of target"] = "Cible de la cible"
@@ -273,6 +274,7 @@ L["Put this page's settings back to the profile's own?"] = "Rétablir les régla
 L["Reset page"] = "Réinit. la page"
 L["Put this page's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "Rétablit les réglages de cette page aux valeurs du profil actif (par défaut, ou celles d'un profil intégré)."
 L["Search Cinematic's settings"] = "Rechercher dans les options de Cinematic"
+L["Search this page"] = "Rechercher dans cette page"
 L["|cff808080Nothing found|r"] = "|cff808080Aucun résultat|r"
 L["Scroll for %d more"] = "Faites défiler pour %d de plus"
 L["Fades the UI and adds letterbox bars between fights. Combat, casting and opening windows like the spellbook bring it back. Typing just shows the chat. The pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, Chat), visual effects and sound, the camera modes and triggers, and keybinds."] = "Estompe l'interface et ajoute des bandes noires entre les combats. Le combat, l'incantation et l'ouverture de fenêtres comme le grimoire la font revenir. Taper du texte affiche seulement le chat. Les pages en dessous couvrent ce qui s'affiche et quand (CineMode, Cadres standard, Cadres d'autres addons, Minicarte, Suivi des quêtes, Barres de nom, Chat), les effets visuels et le son, les modes de caméra et leurs déclencheurs, et les raccourcis."

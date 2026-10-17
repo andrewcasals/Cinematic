@@ -113,7 +113,8 @@ L["tooltip hiding on"] = "Tooltip-Ausblendung an"
 L["tooltip hiding off"] = "Tooltip-Ausblendung aus"
 
 -- Frames.lua
-L["Player portrait (and pet)"] = "Spielerporträt (und Begleiter)"
+L["Player portrait"] = "Spielerporträt"
+L["Pet portrait"] = "Begleiterporträt"
 L["Personal resource bars"] = "Persönliche Ressourcenleisten"
 L["Target"] = "Ziel"
 L["Target of target"] = "Ziel des Ziels"
@@ -273,6 +274,7 @@ L["Put this page's settings back to the profile's own?"] = "Die Einstellungen di
 L["Reset page"] = "Seite zurücksetzen"
 L["Put this page's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "Setzt die Einstellungen dieser Seite auf die Werte des aktiven Profils zurück (die Standardwerte oder die eines eingebauten Profils)."
 L["Search Cinematic's settings"] = "Cinematic-Einstellungen durchsuchen"
+L["Search this page"] = "Diese Seite durchsuchen"
 L["|cff808080Nothing found|r"] = "|cff808080Nichts gefunden|r"
 L["Scroll for %d more"] = "Scrollen für %d weitere"
 L["Fades the UI and adds letterbox bars between fights. Combat, casting and opening windows like the spellbook bring it back. Typing just shows the chat. The pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, Chat), visual effects and sound, the camera modes and triggers, and keybinds."] = "Blendet das UI aus und fügt zwischen Kämpfen Kinobalken hinzu. Kampf, Zaubern und das Öffnen von Fenstern wie dem Zauberbuch holen es zurück. Beim Tippen erscheint nur der Chat. Die Seiten darunter behandeln, was wann zu sehen ist (CineMode, Standardrahmen, Rahmen anderer Addons, Minikarte, Questverfolgung, Namensplaketten, Chat), visuelle Effekte und Ton, die Kameramodi und ihre Auslöser sowie Tastenbelegungen."

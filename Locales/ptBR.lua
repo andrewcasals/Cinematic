@@ -113,7 +113,8 @@ L["tooltip hiding on"] = "ocultação de dicas ativada"
 L["tooltip hiding off"] = "ocultação de dicas desativada"
 
 -- Frames.lua
-L["Player portrait (and pet)"] = "Retrato (e ajudante)"
+L["Player portrait"] = "Retrato"
+L["Pet portrait"] = "Retrato do ajudante"
 L["Personal resource bars"] = "Barras de recursos pessoais"
 L["Target"] = "Alvo"
 L["Target of target"] = "Alvo do alvo"
@@ -273,6 +274,7 @@ L["Put this page's settings back to the profile's own?"] = "Voltar as configura�
 L["Reset page"] = "Redefinir página"
 L["Put this page's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "Volta as configurações desta página aos valores do perfil ativo (os padrões, ou os de um perfil embutido)."
 L["Search Cinematic's settings"] = "Buscar nas configurações do Cinematic"
+L["Search this page"] = "Buscar nesta página"
 L["|cff808080Nothing found|r"] = "|cff808080Nada encontrado|r"
 L["Scroll for %d more"] = "Role para ver mais %d"
 L["Fades the UI and adds letterbox bars between fights. Combat, casting and opening windows like the spellbook bring it back. Typing just shows the chat. The pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, Chat), visual effects and sound, the camera modes and triggers, and keybinds."] = "Esmaece a interface e adiciona faixas de cinema entre os combates. Combate, lançar feitiços e abrir janelas como o grimório a trazem de volta. Digitar mostra só o bate-papo. As páginas abaixo desta tratam do que aparece e quando (CineMode, Quadros padrão, Quadros de terceiros, Minimapa, Rastreador de missões, Placas de identificação, Bate-papo), dos efeitos visuais e do som, dos modos de câmera e seus gatilhos, e dos atalhos de teclado."

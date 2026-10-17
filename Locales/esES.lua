@@ -113,7 +113,8 @@ L["tooltip hiding on"] = "ocultación de tooltips activada"
 L["tooltip hiding off"] = "ocultación de tooltips desactivada"
 
 -- Frames.lua
-L["Player portrait (and pet)"] = "Retrato (y mascota)"
+L["Player portrait"] = "Retrato"
+L["Pet portrait"] = "Retrato de la mascota"
 L["Personal resource bars"] = "Barras de recursos personales"
 L["Target"] = "Objetivo"
 L["Target of target"] = "Objetivo del objetivo"
@@ -273,6 +274,7 @@ L["Put this page's settings back to the profile's own?"] = "¿Devolver los ajust
 L["Reset page"] = "Restablecer página"
 L["Put this page's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "Devuelve los ajustes de esta página a los valores del perfil activo (los predeterminados, o los de un perfil integrado)."
 L["Search Cinematic's settings"] = "Buscar en las opciones de Cinematic"
+L["Search this page"] = "Buscar en esta página"
 L["|cff808080Nothing found|r"] = "|cff808080No se encontró nada|r"
 L["Scroll for %d more"] = "Desplázate para ver %d más"
 L["Fades the UI and adds letterbox bars between fights. Combat, casting and opening windows like the spellbook bring it back. Typing just shows the chat. The pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, Chat), visual effects and sound, the camera modes and triggers, and keybinds."] = "Desvanece la interfaz y añade franjas de cine entre combates. El combate, lanzar hechizos y abrir ventanas como el libro de hechizos la devuelven. Al escribir solo aparece el chat. Las páginas bajo esta cubren qué se muestra y cuándo (CineMode, Marcos estándar, Marcos de terceros, Minimapa, Seguimiento de misiones, Placas de nombre, Chat), los efectos visuales y el sonido, los modos de cámara y sus activadores, y las teclas."

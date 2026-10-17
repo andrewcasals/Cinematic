@@ -113,7 +113,8 @@ L["tooltip hiding on"] = "occultamento dei tooltip attivo"
 L["tooltip hiding off"] = "occultamento dei tooltip disattivato"
 
 -- Frames.lua
-L["Player portrait (and pet)"] = "Ritratto (e famiglio)"
+L["Player portrait"] = "Ritratto"
+L["Pet portrait"] = "Ritratto del famiglio"
 L["Personal resource bars"] = "Barre delle risorse personali"
 L["Target"] = "Bersaglio"
 L["Target of target"] = "Bersaglio del bersaglio"
@@ -273,6 +274,7 @@ L["Put this page's settings back to the profile's own?"] = "Ripristinare le impo
 L["Reset page"] = "Ripristina pagina"
 L["Put this page's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "Riporta le impostazioni di questa pagina ai valori del profilo attivo (quelli predefiniti, o quelli di un profilo integrato)."
 L["Search Cinematic's settings"] = "Cerca nelle impostazioni di Cinematic"
+L["Search this page"] = "Cerca in questa pagina"
 L["|cff808080Nothing found|r"] = "|cff808080Nessun risultato|r"
 L["Scroll for %d more"] = "Scorri per altri %d"
 L["Fades the UI and adds letterbox bars between fights. Combat, casting and opening windows like the spellbook bring it back. Typing just shows the chat. The pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, Chat), visual effects and sound, the camera modes and triggers, and keybinds."] = "Dissolve l'interfaccia e aggiunge bande nere tra un combattimento e l'altro. Il combattimento, il lancio di incantesimi e l'apertura di finestre come il libro degli incantesimi la fanno tornare. Scrivendo appare solo la chat. Le pagine sotto questa riguardano cosa si vede e quando (CineMode, Riquadri standard, Riquadri di terze parti, Minimappa, Elenco missioni, Barre dei nomi, Chat), gli effetti visivi e il suono, le modalità e gli attivatori della telecamera, e i tasti."

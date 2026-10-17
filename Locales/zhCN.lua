@@ -113,7 +113,8 @@ L["tooltip hiding on"] = "鼠标提示隐藏已开启"
 L["tooltip hiding off"] = "鼠标提示隐藏已关闭"
 
 -- Frames.lua
-L["Player portrait (and pet)"] = "玩家头像（及宠物）"
+L["Player portrait"] = "玩家头像"
+L["Pet portrait"] = "宠物头像"
 L["Personal resource bars"] = "个人资源条"
 L["Target"] = "目标"
 L["Target of target"] = "目标的目标"
@@ -273,6 +274,7 @@ L["Put this page's settings back to the profile's own?"] = "将本页设置恢�
 L["Reset page"] = "重置本页"
 L["Put this page's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "将本页设置恢复为当前配置文件自身的值（默认值，或内置配置文件的值）。"
 L["Search Cinematic's settings"] = "搜索Cinematic的设置"
+L["Search this page"] = "搜索此页"
 L["|cff808080Nothing found|r"] = "|cff808080未找到任何结果|r"
 L["Scroll for %d more"] = "滚动查看另外%d项"
 L["Fades the UI and adds letterbox bars between fights. Combat, casting and opening windows like the spellbook bring it back. Typing just shows the chat. The pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, Chat), visual effects and sound, the camera modes and triggers, and keybinds."] = "在战斗间隙淡出界面并加上宽银幕黑边。战斗、施法以及打开法术书等窗口会让界面重新出现。输入文字时只显示聊天框。本页下方的各页面分别设置何时显示什么（CineMode、标准框体、第三方框体、小地图、任务追踪、姓名板、聊天）、视觉效果和声音、镜头模式及其触发条件，以及按键绑定。"

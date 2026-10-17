@@ -1190,7 +1190,9 @@ ns.IsEntryHovered = ns.Profiled("IsEntryHovered", ns.IsEntryHovered)
 -- Frames the player can choose to show while fighting when staying cinematic
 -- in combat (db.combatShow[key], missing = the default here).
 ns.COMBAT_SHOW = {
-	{ key = "player", label = L["Player portrait (and pet)"], default = true, frames = { "PlayerFrame", "PetFrame" } },
+	{ key = "player", label = L["Player portrait"], default = true, frames = { "PlayerFrame" } },
+	-- Follows the portrait's ticks until set (see ROW_FALLBACK).
+	{ key = "petframe", label = L["Pet portrait"], default = true, frames = { "PetFrame" } },
 	{ key = "prd", label = L["Personal resource bars"], default = true,
 		frames = { "PersonalResourceDisplayFrame", "CinematicPersonalResource" } },
 	{ key = "target", label = L["Target"], default = true, frames = { "TargetFrame" } },
@@ -1314,7 +1316,7 @@ ns.COMBAT_SHOW = {
 -- The Standard Frames page's sections (page) for the rows not given one
 -- above. (Kept in the order above within each.)
 local ROW_SECTIONS = {
-	player = "units", prd = "units", target = "units", tot = "units", focus = "units",
+	player = "units", petframe = "units", prd = "units", target = "units", tot = "units", focus = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
@@ -1407,7 +1409,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 		"pet", "stance", "totems", "micro", "xp", "extra" } },
 	{ name = L["Action bars 6-8"], members = { "bar6", "bar7", "bar8" } },
 	{ name = L["Side bars"], members = { "right1", "right2" } },
-	{ name = L["Player"], members = { "player", "prd", "totemtimers", "castbar" } },
+	{ name = L["Player"], members = { "player", "petframe", "prd", "totemtimers", "castbar" } },
 	{ name = L["Target and focus"], members = { "target", "tot", "focus" } },
 	-- (Raid-style party frames are the raid frames; the Raid Frame Manager
 	-- goes with both.)
@@ -1499,9 +1501,9 @@ local function IsExtraKey(key)
 end
 
 -- Rows that take another row's tick in a column until given their own: the
--- bar art follows action bar 1, so profiles and lists from before it was a
+-- bar art follows action bar 1 and the pet portrait yours, so profiles and lists from before it was a
 -- row (the Cooldown Manager profile's: no action bars) still hold.
-local ROW_FALLBACK = { art = "mainbar" }
+local ROW_FALLBACK = { art = "mainbar", petframe = "player" }
 
 function ns.IsCombatShowOn(key)
 	local on = ns.db.combatShow[key]

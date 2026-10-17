@@ -2622,6 +2622,24 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.raidThreatHoverV1 = true
 		end
+		-- The pet portrait got a row apart from yours: into saved Mouseover
+		-- groups with your portrait, as the default groups have it. Once.
+		if not ns.db.petFrameHoverV1 then
+			local function AddPetRow(groups)
+				for _, group in ipairs(groups or {}) do
+					local has = {}
+					for _, key in ipairs(group.members or {}) do has[key] = true end
+					if has.player and not has.petframe then
+						table.insert(group.members, "petframe")
+					end
+				end
+			end
+			AddPetRow(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then AddPetRow(saved.hoverGroups) end
+			end
+			ns.db.petFrameHoverV1 = true
+		end
 		-- The vignette and weather went with the tint's row of the Visual
 		-- Effects grid: rows of their own now, starting as the tint's was. Once.
 		if not ns.db.effectGridV2 then

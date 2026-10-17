@@ -113,7 +113,8 @@ L["tooltip hiding on"] = "툴팁 숨기기 켜짐"
 L["tooltip hiding off"] = "툴팁 숨기기 꺼짐"
 
 -- Frames.lua
-L["Player portrait (and pet)"] = "플레이어 초상화 (소환수 포함)"
+L["Player portrait"] = "플레이어 초상화"
+L["Pet portrait"] = "소환수 초상화"
 L["Personal resource bars"] = "개인 자원 바"
 L["Target"] = "대상"
 L["Target of target"] = "대상의 대상"
@@ -273,6 +274,7 @@ L["Put this page's settings back to the profile's own?"] = "이 페이지의 설
 L["Reset page"] = "페이지 초기화"
 L["Put this page's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "이 페이지의 설정을 현재 프로필의 값(기본값 또는 기본 제공 프로필의 값)으로 되돌립니다."
 L["Search Cinematic's settings"] = "Cinematic 설정 검색"
+L["Search this page"] = "이 페이지 검색"
 L["|cff808080Nothing found|r"] = "|cff808080찾은 항목 없음|r"
 L["Scroll for %d more"] = "스크롤하면 %d개 더 있음"
 L["Fades the UI and adds letterbox bars between fights. Combat, casting and opening windows like the spellbook bring it back. Typing just shows the chat. The pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, Chat), visual effects and sound, the camera modes and triggers, and keybinds."] = "전투 사이에 UI를 흐리게 하고 레터박스 바를 추가합니다. 전투, 시전, 주문책 같은 창을 열면 UI가 돌아옵니다. 입력할 때는 대화창만 보입니다. 이 아래의 페이지에서 언제 무엇을 보일지(CineMode, 기본 창, 타사 창, 미니맵, 퀘스트 추적기, 이름표, 대화), 화면 효과와 소리, 카메라 모드와 발동 조건, 단축키를 설정합니다."
