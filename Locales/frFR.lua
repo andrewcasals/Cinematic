@@ -1111,6 +1111,10 @@ L["its health, power and totem bars"] = "ses barres de vie, de ressource et de t
 L["Its cast bar isn't faded, like the game's. Its swing timer is the Swing timer row on the Standard Frames page."] = "Sa barre d'incantation n'est pas estompée, comme celle du jeu. Son minuteur d'attaque est la ligne Minuteur d'attaque de la page Cadres standard."
 L["its data bars"] = "ses barres de données"
 L["its missing-buff reminders"] = "ses rappels d'améliorations manquantes"
+L["its target distance (range) text"] = "son texte de distance (portée) de la cible"
+L["its stats, FPS, battle res, Bloodlust and movement displays and its crosshair"] = "ses affichages de statistiques, d'IPS, de résurrection en combat, de Furie sanguinaire et de déplacement, et son viseur"
+L["its combat text over your character"] = "son texte de combat au-dessus de votre personnage"
+L["its flight timer, loot feed, threat meter and junk list"] = "son minuteur de vol, son flux de butin, son compteur de menace et sa liste de camelote"
 
 -- Support/ForeverEnhancedCooldownManager.lua
 L["its cooldown and buff bars, and the pulse when a cooldown is ready"] = "ses barres de temps de recharge et d'améliorations, et l'éclat quand un temps de recharge est prêt"

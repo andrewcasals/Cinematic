@@ -1111,6 +1111,10 @@ L["its health, power and totem bars"] = "其生命值条、能量条和图腾条
 L["Its cast bar isn't faded, like the game's. Its swing timer is the Swing timer row on the Standard Frames page."] = "其施法条不会淡出，与游戏自带的一样。其攻击计时条对应标准框体页面上的“攻击计时条”行。"
 L["its data bars"] = "其数据条"
 L["its missing-buff reminders"] = "其缺失增益效果提醒"
+L["its target distance (range) text"] = "其目标距离（范围）文本"
+L["its stats, FPS, battle res, Bloodlust and movement displays and its crosshair"] = "其属性、FPS、战复、嗜血和移动显示及其准星"
+L["its combat text over your character"] = "其角色上方的战斗文字"
+L["its flight timer, loot feed, threat meter and junk list"] = "其飞行计时器、拾取信息、仇恨统计和垃圾列表"
 
 -- Support/ForeverEnhancedCooldownManager.lua
 L["its cooldown and buff bars, and the pulse when a cooldown is ready"] = "其冷却条和增益效果条，以及冷却就绪时的闪光"

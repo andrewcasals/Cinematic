@@ -9,6 +9,39 @@
 local _, ns = ...
 local L = ns.L
 
+-- A frame by its Unlock Mode entry, which hands it out: most of its parts'
+-- frames have no name.
+local function UnlockFrame(key)
+	local eui = _G.EllesmereUI
+	local elems = type(eui) == "table" and eui._unlockRegisteredElements
+	local elem = type(elems) == "table" and elems[key]
+	if type(elem) ~= "table" or type(elem.getFrame) ~= "function" then
+		return nil
+	end
+	local ok, frame = pcall(elem.getFrame)
+	return ok and type(frame) == "table" and frame or nil
+end
+
+-- A row's match (it's asked about each unnamed frame): whether the frame is
+-- one of these entries'. Looked up once per scan.
+local function MatchUnlockFrames(keys)
+	local frames, lookedAt = {}, nil
+	return function(frame)
+		local now = GetTime()
+		if lookedAt ~= now then
+			lookedAt = now
+			wipe(frames)
+			for _, key in ipairs(keys) do
+				local found = UnlockFrame(key)
+				if found then
+					frames[found] = true
+				end
+			end
+		end
+		return frames[frame] or false
+	end
+end
+
 -- 3rd Party Frames rows.
 for _, known in ipairs({
 	{
@@ -50,6 +83,35 @@ for _, known in ipairs({
 		label = "EllesmereUI Buff Reminders", short = "EllesmereUI reminders",
 		about = L["its missing-buff reminders"],
 		names = { "EABR_Anchor", "EABR_CombatAnchor", "EABR_TalentAnchor", "EABR_BeaconAnchor", "EABR_CursorAnchor" },
+	},
+	{
+		key = "euiQoL", addon = "EllesmereUIQoL",
+		label = "EllesmereUI QoL Displays", short = "EllesmereUI QoL",
+		about = L["its stats, FPS, battle res, Bloodlust and movement displays and its crosshair"],
+		names = {
+			"EUI_SecondaryStats", "EUI_FPSCounter", "EllesmereUIBattleResIcon", "EllesmereUIBloodlustIcon",
+			"EUI_MovementAlertFrame", "EUI_TimeSpiralFrame", "EUI_GatewayShardFrame", "EUI_CharacterCrosshair",
+		},
+	},
+	{
+		-- (Unnamed and not taking the mouse, so /cine add can't find it.)
+		key = "euiDistance", addon = "EllesmereUIQoL",
+		label = "EllesmereUI Target Distance", short = "EllesmereUI distance",
+		about = L["its target distance (range) text"],
+		match = MatchUnlockFrames({ "EUI_TargetDistance" }),
+	},
+	{
+		key = "euiCombatText", addon = "EllesmereUIQoL",
+		label = "EllesmereUI Self Combat Text", short = "EllesmereUI combat text",
+		about = L["its combat text over your character"],
+		match = MatchUnlockFrames({ "EUI_SelfCombatText" }),
+	},
+	{
+		key = "euiEssentials", addon = "EllesmereUIForeverEssentials",
+		label = "EllesmereUI Forever Essentials", short = "EllesmereUI essentials",
+		about = L["its flight timer, loot feed, threat meter and junk list"],
+		names = { "EllesmereUIThreatMeterFrame", "EllesmereUIJunkList" },
+		match = MatchUnlockFrames({ "EUI_FlightTimer", "EUI_LootFeed" }),
 	},
 }) do
 	known.suite, known.hookAlpha = "EllesmereUI", true
@@ -116,6 +178,26 @@ ns.WhenAddonLoads("EllesmereUIActionBars", function()
 	})
 	-- It keeps retail's main bar at alpha 0.
 	ns.LeaveAlone({ "MainActionBar" })
+end)
+
+-- Its raid and party frames fade with the game's on the Standard Frames page:
+-- the raid ones (with its healer mana, boss and extra frames) as Players, the
+-- party ones (unnamed) as Party frames.
+ns.WhenAddonLoads("EllesmereUIRaidFrames", function()
+	ns.AddScanner(function()
+		for _, name in ipairs({
+			"EllesmereUIRaidFrameContainer", "ERF_HealerMana", "ERFExtraFramesContainer", "ERFFriendlyBossContainer",
+		}) do
+			local frame = _G[name]
+			if type(frame) == "table" and not ns.IsFaded(frame) then
+				ns.AddFoundFrame(frame, "raidplayers", true, true)
+			end
+		end
+		local party = UnlockFrame("RF_PartyFrames")
+		if party and not ns.IsFaded(party) then
+			ns.AddFoundFrame(party, "party", true, true)
+		end
+	end)
 end)
 
 ns.WhenAddonLoads("EllesmereUIQuestTracker", function()

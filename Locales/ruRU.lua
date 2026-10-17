@@ -1112,6 +1112,10 @@ L["its health, power and totem bars"] = "ее полосы здоровья, р�
 L["Its cast bar isn't faded, like the game's. Its swing timer is the Swing timer row on the Standard Frames page."] = "Ее полоса заклинаний не скрывается, как и игровая. Ее таймер удара — строка «Таймер удара» на странице «Стандартные рамки»."
 L["its data bars"] = "ее информационные панели"
 L["its missing-buff reminders"] = "ее напоминания об отсутствующих баффах"
+L["its target distance (range) text"] = "ее текст расстояния до цели (дальности)"
+L["its stats, FPS, battle res, Bloodlust and movement displays and its crosshair"] = "ее показатели характеристик, FPS, боевого воскрешения, Жажды крови и передвижения, и ее прицел"
+L["its combat text over your character"] = "ее текст боя над вашим персонажем"
+L["its flight timer, loot feed, threat meter and junk list"] = "ее таймер полета, ленту добычи, измеритель угрозы и список хлама"
 
 -- Support/ForeverEnhancedCooldownManager.lua
 L["its cooldown and buff bars, and the pulse when a cooldown is ready"] = "ее полосы восстановления и баффов, а также вспышка, когда способность готова"

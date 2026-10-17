@@ -1111,6 +1111,10 @@ L["its health, power and totem bars"] = "생명력, 자원, 토템 바"
 L["Its cast bar isn't faded, like the game's. Its swing timer is the Swing timer row on the Standard Frames page."] = "시전 바는 게임 기본 시전 바처럼 흐리게 하지 않습니다. 평타 타이머는 기본 창 페이지의 평타 타이머 줄입니다."
 L["its data bars"] = "데이터 바"
 L["its missing-buff reminders"] = "빠진 강화 효과 알림"
+L["its target distance (range) text"] = "대상 거리(사거리) 문자"
+L["its stats, FPS, battle res, Bloodlust and movement displays and its crosshair"] = "능력치, FPS, 전투 부활, 피의 욕망, 이동 표시와 조준점"
+L["its combat text over your character"] = "캐릭터 위의 전투 문자"
+L["its flight timer, loot feed, threat meter and junk list"] = "비행 타이머, 전리품 피드, 위협 수준 측정기, 잡동사니 목록"
 
 -- Support/ForeverEnhancedCooldownManager.lua
 L["its cooldown and buff bars, and the pulse when a cooldown is ready"] = "재사용 대기시간 및 강화 효과 바, 재사용 대기시간이 준비될 때의 반짝임"
