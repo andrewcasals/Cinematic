@@ -1209,6 +1209,13 @@ L["Plater's nameplates fade in CineMode and follow the Nameplates page's rows. P
 L["Follows the Quest tracker row"] = "Sigue la fila Seguimiento de misiones"
 L["Horizon Suite's quest tracker (Focus) and its floating quest item button fade with the Quest tracker row on the Standard Frames page."] = "El seguimiento de misiones de Horizon Suite (Focus) y su botón flotante de objeto de misión se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
 
+-- Support/WeakAuras.lua
+L["its auras"] = "sus auras"
+L["Auras anchored to another frame fade with that frame."] = "Las auras ancladas a otro marco se desvanecen con ese marco."
+
+-- Support/Questie.lua
+L["Questie's quest tracker and its quest item buttons fade with the Quest tracker row on the Standard Frames page."] = "El seguimiento de misiones de Questie y sus botones de objetos de misión se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
+
 -- Tint.lua
 L["None"] = "Ninguno"
 L["No colour tint."] = "Sin tinte de color."
@@ -1490,3 +1497,7 @@ L["Minimap header pieces"] = "Piezas de la cabecera del minimapa"
 L["The zone name, tracking button, calendar and clock over the minimap fade on rows of their own, and the frame behind the tracking button goes with the header bar."] = "El nombre de la zona, el botón de rastreo, el calendario y el reloj sobre el minimapa se desvanecen con filas propias, y el marco detrás del botón de rastreo va con la barra de la cabecera."
 L["Mouseover group icons"] = "Iconos de los grupos al pasar el ratón"
 L["Every Mouseover group has its own icon, in a row at the top of the page: click one to go to that group. Groups you make get an icon you pick."] = "Cada grupo al pasar el ratón tiene su propio icono, en una fila arriba de la página: haz clic en uno para ir a ese grupo. Los grupos que crees llevan el icono que elijas."
+L["WeakAuras support"] = "Compatibilidad con WeakAuras"
+L["WeakAuras' auras fade in CineMode; auras anchored to another frame fade with that frame."] = "Las auras de WeakAuras se desvanecen en CineMode; las auras ancladas a otro marco se desvanecen con ese marco."
+L["Questie support"] = "Compatibilidad con Questie"
+L["Questie's quest tracker and its quest item buttons fade with the Quest tracker row."] = "El seguimiento de misiones de Questie y sus botones de objetos de misión se desvanecen con la fila Seguimiento de misiones."

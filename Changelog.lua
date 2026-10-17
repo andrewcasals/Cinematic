@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-17", page = "3rd Party Frames", title = "WeakAuras support",
+		text = "WeakAuras' auras fade in CineMode; auras anchored to another frame fade with that frame." },
+	{ date = "2026-10-17", page = "3rd Party Frames", title = "Questie support",
+		text = "Questie's quest tracker and its quest item buttons fade with the Quest tracker row." },
 	{ date = "2026-10-17", page = "Mouseover groups", title = "Mouseover group icons",
 		text = "Every Mouseover group has its own icon, in a row at the top of the page: click one to go " ..
 		"to that group. Groups you make get an icon you pick." },
