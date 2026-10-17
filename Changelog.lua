@@ -11,6 +11,8 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-17", page = "3rd Party Frames", title = "Horizon Suite support",
+		text = "Horizon Suite's quest tracker fades with the Quest tracker row, without flickering on zone changes." },
 	{ date = "2026-10-17", page = "New features", title = "What's new",
 		text = "The last settings page lists new features, newest first, and every change made to Cinematic." },
 	{ date = "2026-10-17", page = "Quest tracker", title = "Quest tracker stays up longer",

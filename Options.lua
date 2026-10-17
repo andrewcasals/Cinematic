@@ -5691,6 +5691,26 @@ local function CreateExtrasPanel()
 		end
 	end
 
+	-- A row per installed addon supported with no frames of its own (Support/,
+	-- ns.ADDON_NOTES): its name and, across the columns, what's done for it.
+	local notes = {}
+	for _, note in ipairs(ns.ADDON_NOTES) do
+		if ns.AddOnInstalled(note.addon) then
+			local row = { note = note }
+			row.frame = CreateFrame("Frame", nil, box)
+			row.frame:SetSize(LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH, ROW_HEIGHT)
+			row.label = Label(row.frame, "GameFontHighlight", "")
+			row.label:SetPoint("TOPLEFT", 0, -5)
+			row.label:SetWidth(LABEL_WIDTH - INDENT)
+			row.label:SetJustifyH("LEFT")
+			row.label:SetWordWrap(false)
+			row.works = Label(row.frame, "GameFontDisable", "")
+			row.works:SetPoint("TOPLEFT", LABEL_WIDTH, -5)
+			Tooltip(row.frame, "")
+			notes[#notes + 1] = row
+		end
+	end
+
 	local sectionTitles, suiteHeaders = {}, {}
 	local missingNote = Label(box, "GameFontHighlightSmall", "")
 	missingNote:SetWidth(560)
@@ -5745,6 +5765,7 @@ local function CreateExtrasPanel()
 			row.label:Hide()
 			for _, check in ipairs(row.checks) do check:Hide() end
 		end
+		for _, row in ipairs(notes) do row.frame:Hide() end
 
 		local function PlaceRow(row, indent)
 			row.label:SetText(indent > 0 and row.suiteLabel or row.known.short or row.known.label)
@@ -5762,17 +5783,29 @@ local function CreateExtrasPanel()
 
 		-- One section: its addons in the page's order, a suite's together under its header.
 		local function Section(title, wanted)
-			local list = {}
+			local list, noteList = {}, {}
 			for _, row in ipairs(rows) do
 				if wanted(row.known) then
 					list[#list + 1] = row
 				end
 			end
-			if #list == 0 then
+			for _, row in ipairs(notes) do
+				if wanted(row.note) then
+					noteList[#noteList + 1] = row
+				end
+			end
+			if #list + #noteList == 0 then
 				return
 			end
 			y = y + (y > 16 and 12 or 0)
 			Place(SectionTitle(title), 0, 20)
+			-- (Texts read now: they're translated once the language is known.)
+			for _, row in ipairs(noteList) do
+				row.label:SetText(row.note.label)
+				row.works:SetText(row.note.works)
+				Tooltip(row.frame, row.note.about)
+				Place(row.frame, 0, ROW_HEIGHT)
+			end
 			local done = {}
 			for _, row in ipairs(list) do
 				local suite = row.known.suite
@@ -5801,7 +5834,7 @@ local function CreateExtrasPanel()
 			end
 		end
 
-		if #rows > 0 then
+		if #rows + #notes > 0 then
 			for c, heading in ipairs(headings) do
 				Place(heading, LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
 			end
@@ -5819,6 +5852,11 @@ local function CreateExtrasPanel()
 			if not ns.AddOnInstalled(known.addon) and not listed[name] then
 				listed[name] = true
 				missing[#missing + 1] = name
+			end
+		end
+		for _, note in ipairs(ns.ADDON_NOTES) do
+			if not ns.AddOnInstalled(note.addon) then
+				missing[#missing + 1] = note.label
 			end
 		end
 		if #missing > 0 then

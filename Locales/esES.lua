@@ -1177,6 +1177,10 @@ L["its cooldown and buff bars, and the pulse when a cooldown is ready"] = "sus b
 L["Follows the Nameplates page"] = "Sigue la página Placas de nombre"
 L["Plater's nameplates fade in CineMode and follow the Nameplates page's rows. Plater can change the game's nameplate settings itself (at login, and with its auto toggles); Cinematic puts its own back afterwards."] = "Las placas de nombre de Plater se desvanecen en CineMode y siguen las filas de la página Placas de nombre. Plater puede cambiar por sí mismo los ajustes de placas de nombre del juego (al conectarte, y con sus alternancias automáticas); Cinematic restaura los suyos después."
 
+-- Support/HorizonSuite.lua
+L["Follows the Quest tracker row"] = "Sigue la fila Seguimiento de misiones"
+L["Horizon Suite's quest tracker (Focus) and its floating quest item button fade with the Quest tracker row on the Standard Frames page."] = "El seguimiento de misiones de Horizon Suite (Focus) y su botón flotante de objeto de misión se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
+
 -- Tint.lua
 L["None"] = "Ninguno"
 L["No colour tint."] = "Sin tinte de color."
@@ -1444,3 +1448,5 @@ L["One Cinematic for WoW Forever and retail."] = "Un solo Cinematic para WoW For
 L["Talking to a quest giver brings the camera in close, drifting gently once settled."] = "Hablar con quien da misiones acerca la cámara, que se mece suavemente una vez colocada."
 L["The UI fades and letterbox bars come in between fights. Combat, casting and opening windows bring it back."] = "La interfaz se desvanece y aparecen franjas de cine entre combates. El combate, lanzar hechizos y abrir ventanas la devuelven."
 L["Frames that come up together when you mouse over any of them."] = "Marcos que aparecen juntos al pasar el ratón por cualquiera de ellos."
+L["Horizon Suite support"] = "Compatibilidad con Horizon Suite"
+L["Horizon Suite's quest tracker fades with the Quest tracker row, without flickering on zone changes."] = "El seguimiento de misiones de Horizon Suite se desvanece con la fila Seguimiento de misiones, sin parpadear al cambiar de zona."

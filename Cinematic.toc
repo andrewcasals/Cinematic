@@ -40,6 +40,7 @@ Support\ForeverEnhancedCooldownManager.lua
 Support\EllesmereUI.lua
 Support\Bartender4.lua
 Support\Plater.lua
+Support\HorizonSuite.lua
 Frames.lua
 Chat.lua
 Bubbles.lua
