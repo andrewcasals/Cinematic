@@ -1,0 +1,3 @@
+-- What's new > All changes: every commit. The release workflow fills this file
+-- in with Tools/commits.sh before packaging; in the source it stays empty (the
+-- dev copy loads ChangelogCommits.dev.lua instead, made by the same script).

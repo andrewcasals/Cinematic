@@ -19,4 +19,7 @@ jobs:
         with:
           fetch-depth: 0 # the packager needs history for the changelog
 
+      # Every commit, for the What's new > All changes page
+      - run: bash Tools/commits.sh ChangelogCommits.lua
+
       - uses: BigWigsMods/packager@v2

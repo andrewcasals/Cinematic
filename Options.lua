@@ -975,6 +975,7 @@ do
 			{ "Chat", "Interface\\Icons\\INV_Scroll_03" },
 			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout" },
 			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01" },
+			{ "Misc", "Interface\\Icons\\INV_Misc_Bag_08" },
 		} },
 		{ name = "Camera", pages = {
 			{ "Camera Modes", "Interface\\Icons\\INV_Misc_Spyglass_03" },
@@ -985,6 +986,11 @@ do
 			{ "General", "Interface\\Icons\\INV_Misc_Bag_07" },
 			{ "Fishing", "Interface\\Icons\\Trade_Fishing" },
 			{ "Hunter", "Interface\\Icons\\INV_Weapon_Bow_07" },
+		} },
+		-- (WhatsNew.lua's pages, after Keybinds)
+		{ name = "What's new", pages = {
+			{ "New features", "Interface\\Icons\\INV_Misc_Gift_01" },
+			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11" },
 		} },
 	}
 	local TILE, TILE_GAP, EDGE = 36, 6, 12
@@ -1157,6 +1163,15 @@ do
 		end
 		return tile.hub.name
 	end
+
+	-- A hub page's icon by its English name (nil for a page with none).
+	function ns.PageIcon(name)
+		for _, hub in ipairs(HUBS) do
+			for _, page in ipairs(hub.pages) do
+				if page[1] == name then return page[2] end
+			end
+		end
+	end
 end
 
 -- (name in English, as ns.OpenOptions takes it; shown in the game's language.)
@@ -1301,67 +1316,6 @@ local function CreateRevealPanel()
 	worldText:HookScript("OnClick", function()
 		StaticPopup_Show("CINEMATIC_WORLD_TEXT_RESTART")
 	end)
-
-	local yoursHeader = Header(content, L["Your portrait"], worldText, -24)
-	yoursHeader:SetPoint("TOPLEFT", worldText, "BOTTOMLEFT", 2, -24)
-
-	local portrait = Check(content, "portraitWhenNotFull", L["Show your portrait until health and power are full"],
-		L["Keeps your player portrait up while you're recovering. Rage and runic power don't " ..
-		"count, so a warrior's portrait hides once their health is full."])
-	portrait:SetPoint("TOPLEFT", yoursHeader, "BOTTOMLEFT", -2, -6)
-	portrait:HookScript("OnClick", Refresh) -- grey out / enable the options below
-
-	-- Child: only apply the rule within the Calm Timer of a fight
-	local PORTRAIT_INDENT = 16
-	local function IfPortrait(db) return db.portraitWhenNotFull end
-
-	local afterCombat = Check(content, "portraitAfterCombat", L["Only after combat"],
-		L["Only keep the portrait up if you've been in combat (or taken fall damage) within the " ..
-		"Calm Timer above, so things like casting a buff in town don't bring it up."])
-	afterCombat:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
-	GreyUnless(afterCombat, IfPortrait)
-	afterCombat:HookScript("OnClick", Refresh) -- grey out / enable the option below
-
-	local afterResurrect = Check(content, "portraitAfterResurrect", L["Or after you resurrect"],
-		L["After you come back to life, keep the portrait up until your health and power are full, " ..
-		"however long that takes."])
-	afterResurrect:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
-	GreyUnless(afterResurrect, function(db) return db.portraitWhenNotFull and db.portraitAfterCombat end)
-
-	-- (Back at the column edge, out from under the indented options above.)
-	local gearHeader = Header(content, L["Your gear"], afterResurrect, -24)
-	gearHeader:SetPoint("TOPLEFT", afterResurrect, "BOTTOMLEFT", 2 - 2 * PORTRAIT_INDENT, -24)
-
-	local durability = Check(content, "durabilityShow", L["Show the durability figure when gear is damaged"],
-		L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: " ..
-		"some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, " ..
-		"it fades with the rest of the UI."])
-	durability:SetPoint("TOPLEFT", gearHeader, "BOTTOMLEFT", -2, -6)
-	durability:HookScript("OnClick", Refresh) -- grey out / enable the option below
-
-	local durabilityCam = Check(content, "durabilityHideInCam", L["Hide in camera modes"],
-		L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades " ..
-		"with the rest of the UI. It comes back when the camera mode ends."])
-	durabilityCam:SetPoint("TOPLEFT", durability, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
-	GreyUnless(durabilityCam, function(db) return db.durabilityShow end)
-
-	-- Pet happiness: classic hunters only.
-	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
-		local petHeader = Header(content, L["Your pet"], durabilityCam, -24)
-		petHeader:SetPoint("TOPLEFT", durabilityCam, "BOTTOMLEFT", 2 - PORTRAIT_INDENT, -24)
-
-		local pet = Check(content, "petUnhappyShow", L["Show the pet frame when your pet isn't happy"],
-			L["Keeps your pet's portrait up in CineMode, and in fights, while its happiness isn't green: " ..
-			"content (yellow) or unhappy (red). It goes again once your pet is happy."])
-		pet:SetPoint("TOPLEFT", petHeader, "BOTTOMLEFT", -2, -6)
-		pet:HookScript("OnClick", Refresh) -- grey out / enable the option below
-
-		local petCam = Check(content, "petUnhappyHideInCam", L["Hide in camera modes"],
-			L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the pet frame fades " ..
-			"with the rest of the UI. It comes back when the camera mode ends."])
-		petCam:SetPoint("TOPLEFT", pet, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
-		GreyUnless(petCam, function(db) return db.petUnhappyShow end)
-	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -4053,6 +4007,78 @@ local function CreateCombatPanel()
 	RegisterSubpage(canvas, L["Standard Frames"])
 end
 
+-- Sub-page: frames kept up while they have something to say - your portrait
+-- while you recover, the durability figure, an unhappy pet.
+local function CreateMiscPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Misc"])
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		L["Frames CineMode brings back while they have something to tell you. Always keeping a frame " ..
+		"up, or in fights, is on the Standard Frames page."])
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local portrait = Check(content, "portraitWhenNotFull", L["Show your portrait until health and power are full"],
+		L["Keeps your player portrait up while you're recovering. Rage and runic power don't " ..
+		"count, so a warrior's portrait hides once their health is full."])
+	portrait:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -16)
+	portrait:HookScript("OnClick", Refresh) -- grey out / enable the options below
+
+	-- Child: only apply the rule within the Calm Timer of a fight
+	local PORTRAIT_INDENT = 16
+	local function IfPortrait(db) return db.portraitWhenNotFull end
+
+	local afterCombat = Check(content, "portraitAfterCombat", L["Only after combat"],
+		L["Only keep the portrait up if you've been in combat (or taken fall damage) within the " ..
+		"Calm Timer (CineMode page), so things like casting a buff in town don't bring it up."])
+	afterCombat:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
+	GreyUnless(afterCombat, IfPortrait)
+	afterCombat:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+	local afterResurrect = Check(content, "portraitAfterResurrect", L["Also after you resurrect"],
+		L["After you come back to life, keep the portrait up until your health and power are full, " ..
+		"however long that takes."])
+	afterResurrect:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
+	GreyUnless(afterResurrect, function(db) return db.portraitWhenNotFull and db.portraitAfterCombat end)
+
+	-- (Back at the column edge, out from under the indented options above.)
+	local durability = Check(content, "durabilityShow", L["Show the durability figure when gear is damaged"],
+		L["Keeps the armor figure (by the minimap) up in CineMode, and in fights, while the game shows it: " ..
+		"some of your gear is badly damaged (yellow) or broken (red). It goes again once you repair. Off, " ..
+		"it fades with the rest of the UI."])
+	durability:SetPoint("TOPLEFT", afterResurrect, "BOTTOMLEFT", -2 * PORTRAIT_INDENT, -10)
+	durability:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+	local durabilityCam = Check(content, "durabilityHideInCam", L["Hide in camera modes"],
+		L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the figure fades " ..
+		"with the rest of the UI. It comes back when the camera mode ends."])
+	durabilityCam:SetPoint("TOPLEFT", durability, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
+	GreyUnless(durabilityCam, function(db) return db.durabilityShow end)
+
+	-- Pet happiness: classic hunters only.
+	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
+		local pet = Check(content, "petUnhappyShow", L["Show the pet frame when your pet isn't happy"],
+			L["Keeps your pet's portrait up in CineMode, and in fights, while its happiness isn't green: " ..
+			"content (yellow) or unhappy (red). It goes again once your pet is happy."])
+		pet:SetPoint("TOPLEFT", durabilityCam, "BOTTOMLEFT", -PORTRAIT_INDENT, -10)
+		pet:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+		local petCam = Check(content, "petUnhappyHideInCam", L["Hide in camera modes"],
+			L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the pet frame fades " ..
+			"with the rest of the UI. It comes back when the camera mode ends."])
+		petCam:SetPoint("TOPLEFT", pet, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
+		GreyUnless(petCam, function(db) return db.petUnhappyShow end)
+	end
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Misc")
+end
+
 -- Sub-page: chat bubbles (where they show, and how they look).
 local function CreateBubblesPanel()
 	local canvas, content = CreateScrollPage()
@@ -5222,16 +5248,30 @@ local function CreateQuestTrackerPanel()
 	PageSwitch(content, "handleQuests", L["Let CineMode handle the quest tracker"],
 		L["On: CineMode fades the quest tracker (and the quest timer and waypoint) as this page and its " ..
 		"Standard Frames row say. Off: it leaves them alone."], subtitle)
+	reveal:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+	-- Children: each reveal can stay up for the Calm Timer instead.
+	local QUEST_INDENT = 16
+	local calmTip = L["The quest tracker stays up for the Calm Timer (CineMode page) instead of the " ..
+		"mouseover time, if that's longer."]
+	local acceptCalm = Check(content, "questAcceptCalm", L["Keep up for the Calm Timer"], calmTip)
+	acceptCalm:SetPoint("TOPLEFT", reveal, "BOTTOMLEFT", QUEST_INDENT, -2)
+	GreyUnless(acceptCalm, function(db) return db.questRevealOnAccept end)
 
 	local revealProgress = Check(content, "questRevealOnProgress", L["Reveal on receiving quest objective"],
 		L["Progress on a quest's objectives (a kill or item counted towards it) shows the quest " ..
 		"tracker the same way."])
-	revealProgress:SetPoint("TOPLEFT", reveal, "BOTTOMLEFT", 0, -2)
+	revealProgress:SetPoint("TOPLEFT", acceptCalm, "BOTTOMLEFT", -QUEST_INDENT, -2)
+	revealProgress:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+	local progressCalm = Check(content, "questProgressCalm", L["Keep up for the Calm Timer"], calmTip)
+	progressCalm:SetPoint("TOPLEFT", revealProgress, "BOTTOMLEFT", QUEST_INDENT, -2)
+	GreyUnless(progressCalm, function(db) return db.questRevealOnProgress end)
 
 	local combatCalm = Check(content, "questCombatCalm", L["Stay up for the Calm Timer after a fight"],
 		L["With the quest tracker ticked In combat (Standard Frames page), it stays up after a fight " ..
 		"until the Calm Timer (CineMode page) has run out, then fades. Off: it fades as soon as the fight ends."])
-	combatCalm:SetPoint("TOPLEFT", revealProgress, "BOTTOMLEFT", 0, -2)
+	combatCalm:SetPoint("TOPLEFT", progressCalm, "BOTTOMLEFT", -QUEST_INDENT, -2)
 	GreyUnless(combatCalm, function(db) return db.stayInCombat end)
 
 	-- Classic's quest timer box (retail shows timers in the tracker itself).
@@ -6055,6 +6095,8 @@ ns.RefreshOptions = function() Refresh() end
 function ns.OpenOptions(page)
 	-- (a Frame Manager page: that page, then Frame Manager open at it)
 	page = page and HubTab(page) or page
+	-- (some pages are registered by their name as shown)
+	if page and not subpages[page] and subpages[L[page]] then page = L[page] end
 	if InCombatLockdown() then
 		if category and SettingsPanel and SettingsPanel.SelectCategory then
 			SettingsPanel:Show()
@@ -6922,6 +6964,7 @@ ns.OnLanguage(function()
 	-- keybinds. (Standard Frames and 3rd Party Frames come right after CineMode.)
 	CreateRevealPanel()
 	CreateCombatPanel()
+	CreateMiscPanel()
 	-- WoW Forever's gamepad mode (retail's has no frames of its own).
 	if C_GamePad and not ns.isRetail then
 		CreateGamepadPanel()
@@ -6953,5 +6996,10 @@ ns.OnLanguage(function()
 	-- Each camera's own settings, in a section apiece.
 	CreateCameraSettingsPanel()
 	CreateKeybindsPanel()
+	-- What's new, last (WhatsNew.lua, with the helpers it shares from here).
+	if ns.CreateWhatsNewPanels then
+		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
+			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
+	end
 	GuardGamepadClose()
 end)

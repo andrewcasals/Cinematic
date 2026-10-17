@@ -6,3 +6,5 @@ ignore:
   - Release
   - .gitignore
   - CinematicDev.toc
+  - Tools
+  - .claude

@@ -26,6 +26,7 @@ read_globals = {
 	"ACCEPT",
 	"CANCEL",
 	"C_AddOnProfiler",
+	"CALENDAR_FULLDATE_MONTH_NAMES",
 	"C_AddOns",
 	"SetPortraitTexture",
 	"CLASS_ICON_TCOORDS",

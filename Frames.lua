@@ -2094,10 +2094,12 @@ local hoverHeldUntil = {} -- [row key] = when the mouse's hold on it ends (Mouse
 
 -- Accepting a quest, or progress on one's objectives, brings the quest
 -- tracker up as a mouseover would: it fades in, then is gone the quest
--- tracker's mouseover time later.
+-- tracker's mouseover time later (or the Calm Timer, if longer, with that
+-- reveal's Calm setting ticked).
 local questRevealUntil = 0
 do
 	local QUEST_REVEAL_EVENTS = { QUEST_ACCEPTED = "questRevealOnAccept", QUEST_WATCH_UPDATE = "questRevealOnProgress" }
+	local QUEST_REVEAL_CALM = { questRevealOnAccept = "questAcceptCalm", questRevealOnProgress = "questProgressCalm" }
 	local questWatcher = CreateFrame("Frame")
 	for event in pairs(QUEST_REVEAL_EVENTS) do
 		pcall(questWatcher.RegisterEvent, questWatcher, event)
@@ -2105,6 +2107,9 @@ do
 	local function Reveal(setting)
 		if ns.db and ns.db[setting] then
 			local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
+			if ns.db[QUEST_REVEAL_CALM[setting]] then
+				hold = math.max(hold, ns.db.calmTime or 0)
+			end
 			questRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
 		end
 	end

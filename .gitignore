@@ -7,3 +7,6 @@ Thumbs.db
 
 # Packaged zips for uploading
 Release/
+
+# The dev copy's commit list (Tools/commits.sh)
+ChangelogCommits.dev.lua
