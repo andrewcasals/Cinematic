@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-17", page = "Standard Frames", title = "Minimap header pieces",
+		text = "The zone name, tracking button, calendar and clock over the minimap fade on rows of their " ..
+		"own, and the frame behind the tracking button goes with the header bar." },
 	{ date = "2026-10-17", page = "Portraits", title = "Unit frame parts",
 		text = "Pick which parts of your frame and the target and focus frames show - portrait, name, " ..
 		"level, frame art - for you and each kind of unit, to keep just the bars." },

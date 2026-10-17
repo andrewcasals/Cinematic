@@ -48,7 +48,7 @@ local FRAME_GROUPS = {
 	-- (With the queue eyes for the dungeon finder and battlegrounds, which can
 	-- sit outside the minimap: named differently by client.)
 	minimap = {
-		"MinimapCluster", "Minimap", "GameTimeFrame", "CinematicMinimapButton",
+		"MinimapCluster", "Minimap", "CinematicMinimapButton",
 		"LFGMinimapFrame", "MiniMapLFGFrame", "QueueStatusMinimapButton", "MiniMapBattlefieldFrame",
 	},
 	buffs = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" },
@@ -83,6 +83,12 @@ local FRAME_GROUPS = {
 	barart = {},
 	-- The bar behind the zone's name above the minimap: found by FindMinimapHeader.
 	minimapheader = {},
+	-- What's on it: the zone's name and the tracking button (no names: found
+	-- by FindMinimapHeader), the calendar and the clock.
+	minimapzone = {},
+	minimaptracking = {},
+	minimapcalendar = { "GameTimeFrame" },
+	minimapclock = { "TimeManagerClockButton" },
 	chat = {
 		"GeneralDockManager", "ChatFrameMenuButton", "ChatFrameChannelButton",
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
@@ -464,7 +470,8 @@ end
 -- and gamepad ones (their own pages'); the page switches below it come on
 -- top. The 3rd Party Frames page's covers other addons' and added frames.
 local GROUP_SWITCH = {
-	minimap = "handleMinimap", minimapheader = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
+	minimap = "handleMinimap", minimapheader = "handleMinimap", minimaptracking = "handleMinimap",
+	minimapcalendar = "handleMinimap", minimapzone = "handleMinimap", minimapclock = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
 	buffs = "handleBuffs", cooldowns = "handleCooldowns", chat = "handleChat", swing = "handleSwing",
 	gamepadbars = "handleGamepad", gamepadlegend = "handleGamepad", gamepadreticle = "handleGamepad",
 }
@@ -507,8 +514,10 @@ local function AddFrame(frame, group)
 		shrinkWhenFaded = frame == Minimap,
 	}
 	ns.managed[#ns.managed + 1] = entry
-	-- (Cast bars too, so their row alone decides: see castBars.)
-	if (group == "questtimer" or group == "castbar") and frame.SetIgnoreParentAlpha then
+	-- (Cast bars too, so their row alone decides: see castBars. And what's on
+	-- the minimap's header (minimapzone, minimapclock...), so it can go while
+	-- the map stays.)
+	if (group == "questtimer" or group == "castbar" or group:find("^minimap.")) and frame.SetIgnoreParentAlpha then
 		frame:SetIgnoreParentAlpha(true)
 	end
 	if group == "castbar" then
@@ -954,6 +963,25 @@ do
 		end
 		AddHeaderArt(cluster and cluster.BorderTop)
 		AddHeaderArt(_G.MinimapBorderTop)
+		-- The dark square behind the tracking button (Forever: atlas
+		-- UI-HUD-Minimap-Button), and any like it behind the calendar.
+		local tracking = cluster and cluster.Tracking
+		if type(tracking) == "table" then
+			AddHeaderArt(tracking.Background)
+			AddFrame(tracking, "minimaptracking")
+		end
+		-- The zone's name: its button, whose bar art ignores its fade (above).
+		AddFrame((cluster and cluster.ZoneTextButton) or _G.MinimapZoneTextButton, "minimapzone")
+		local calendar = _G.GameTimeFrame
+		if type(calendar) == "table" and calendar.GetRegions and not IsForbidden(calendar) then
+			for _, region in ipairs({ calendar:GetRegions() }) do
+				local atlas = region.GetAtlas and region:GetAtlas()
+				if type(atlas) == "string" and atlas:lower() == "ui-hud-minimap-button" then
+					AddHeaderArt(region)
+				end
+			end
+			AddHeaderArt(calendar.Background)
+		end
 		if headerStandIn then
 			AddFrame(headerStandIn, "minimapheader")
 		end
@@ -1305,9 +1333,26 @@ ns.COMBAT_SHOW = {
 	-- ticks until set (see ROW_FALLBACK).
 	{ key = "minimapheader", label = L["Minimap header"], default = true, groups = { "minimapheader" },
 		handledBy = "handleMinimap",
-		tip = L["The bar behind the zone's name above the minimap (the name itself goes with the minimap). " ..
+		tip = L["The bar behind the zone's name above the minimap (the name has a row of its own). " ..
 			"Untick it to leave the name floating on its own. Hovering the minimap brings it up with the map: " ..
 			"to keep it hidden then too, take Minimap header out of the Minimap group on the Mouseover groups page."] },
+	-- The buttons on the header: follow the minimap's ticks until set, too.
+	{ key = "minimaptracking", label = L["Tracking button"], default = true, groups = { "minimaptracking" },
+		handledBy = "handleMinimap",
+		tip = L["The tracking button on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
+			"Hovering the minimap brings it up with the map."] },
+	{ key = "minimapcalendar", label = L["Calendar"], default = true, groups = { "minimapcalendar" },
+		handledBy = "handleMinimap",
+		tip = L["The calendar button on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
+			"Hovering the minimap brings it up with the map."] },
+	{ key = "minimapzone", label = L["Zone name"], default = true, groups = { "minimapzone" },
+		handledBy = "handleMinimap",
+		tip = L["The zone's name on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
+			"Hovering the minimap brings it up with the map."] },
+	{ key = "minimapclock", label = L["Clock"], default = true, groups = { "minimapclock" },
+		handledBy = "handleMinimap",
+		tip = L["The clock on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
+			"Hovering the minimap brings it up with the map."] },
 	{ key = "quests", label = L["Quest tracker"], default = false, frames = FRAME_GROUPS.quests,
 		morePage = "Quest tracker", handledBy = "handleQuests" },
 	-- Retail's quest waypoint: its Always tick is the Minimap page's "Always
@@ -1388,7 +1433,9 @@ local ROW_SECTIONS = {
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
-	minimap = "interface", minimapheader = "interface", quests = "interface", waypoint = "interface", micro = "interface", xp = "interface",
+	minimap = "interface", minimapheader = "interface", minimaptracking = "interface", minimapcalendar = "interface",
+	minimapzone = "interface", minimapclock = "interface",
+	quests = "interface", waypoint = "interface", micro = "interface", xp = "interface",
 }
 for _, item in ipairs(ns.COMBAT_SHOW) do
 	item.page = item.page or ROW_SECTIONS[item.key]
@@ -1485,7 +1532,8 @@ ns.HOVER_GROUPS_DEFAULT = {
 		"raidpetnames", "raidtitles", "raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
 	{ name = L["Party frames"], members = { "party", "partyroles", "partynames", "raidmanager" },
 		triggers = { roster = true } },
-	{ name = L["Minimap"], members = { "minimap", "minimapheader" }, triggers = { ping = true, tracking = true } },
+	{ name = L["Minimap"], members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock" },
+		triggers = { ping = true, tracking = true } },
 	{ name = L["Buffs"], members = { "buffs" }, triggers = { aura = true } },
 	{ name = L["Quest tracker"], members = { "quests" }, triggers = { quest = true } },
 	{ name = L["Gamepad action bars"], members = { "gamepadbars" }, triggers = { gamepad = true } },
@@ -1569,9 +1617,12 @@ local function IsExtraKey(key)
 end
 
 -- Rows that take another row's tick in a column until given their own: the
--- bar art follows action bar 1, the pet portrait yours and the minimap header the minimap, so profiles and lists from before it was a
--- row (the Cooldown Manager profile's: no action bars) still hold.
-local ROW_FALLBACK = { art = "mainbar", petframe = "player", minimapheader = "minimap" }
+-- bar art follows action bar 1, the pet portrait yours and the minimap header and its buttons the minimap, so profiles and lists
+-- from before it was a row (the Cooldown Manager profile's: no action bars) still hold.
+local ROW_FALLBACK = {
+	art = "mainbar", petframe = "player", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
+	minimapzone = "minimap", minimapclock = "minimap",
+}
 
 function ns.IsCombatShowOn(key)
 	local on = ns.db.combatShow[key]
@@ -3031,6 +3082,13 @@ function ns.ReportMinimap()
 		end
 	end
 	ns.Print("header globals: " .. (#globals > 0 and table.concat(globals, ", ") or "NONE"))
+	-- And what the header's buttons are made of.
+	for name, button in pairs({ GameTimeFrame = _G.GameTimeFrame, ["Tracking.Button"] = cluster and cluster.Tracking
+		and cluster.Tracking.Button }) do
+		if type(button) == "table" and button.GetRegions then
+			ns.Print("  " .. name .. ": " .. table.concat(Contents(button), ", "))
+		end
+	end
 	local entry
 	for _, managed in ipairs(ns.managed) do
 		if managed.frame == frame then

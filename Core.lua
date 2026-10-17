@@ -2672,6 +2672,26 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.minimapHeaderHoverV1 = true
 		end
+		-- What's on the header (its name, buttons and clock) got rows apart from
+		-- the minimap too.
+		if not ns.db.minimapHeaderPartsHoverV1 then
+			local function AddButtonRows(groups)
+				for _, group in ipairs(groups or {}) do
+					local has = {}
+					for _, key in ipairs(group.members or {}) do has[key] = true end
+					for _, key in ipairs({ "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock" }) do
+						if has.minimap and not has[key] then
+							table.insert(group.members, key)
+						end
+					end
+				end
+			end
+			AddButtonRows(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then AddButtonRows(saved.hoverGroups) end
+			end
+			ns.db.minimapHeaderPartsHoverV1 = true
+		end
 		-- The vignette and weather went with the tint's row of the Visual
 		-- Effects grid: rows of their own now, starting as the tint's was. Once.
 		if not ns.db.effectGridV2 then
