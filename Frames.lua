@@ -597,6 +597,12 @@ end
 do -- (a block: this file is at Lua's 200-local cap)
 local PARK_OFFSET = 20000
 
+-- (Not x == PARK_OFFSET: the client can hand the offset back rounded, like
+-- 19999.998, and nothing else anchors anywhere near that far out.)
+local function IsParkPoint(relativeTo, x)
+	return relativeTo == UIParent and type(x) == "number" and x > PARK_OFFSET / 2
+end
+
 function ns.ParkShrunk(entry)
 	local frame = entry.frame
 	local points = {}
@@ -605,9 +611,13 @@ function ns.ParkShrunk(entry)
 		if not ok or type(point) ~= "string" then
 			return -- (can't read them back: leave it where it is)
 		end
+		if IsParkPoint(relativeTo, x) then
+			points = nil -- (already parked: keep the anchors saved before)
+			break
+		end
 		points[i] = { point, relativeTo, relativePoint, x, y }
 	end
-	entry.savedPoints = points
+	entry.savedPoints = points or entry.savedPoints
 	frame:ClearAllPoints()
 	frame:SetPoint("TOPLEFT", UIParent, "TOPRIGHT", PARK_OFFSET, 0)
 end
@@ -615,7 +625,7 @@ end
 -- Something laid it out again while shrunk (it's back on its own anchors).
 function ns.IsParked(entry)
 	local ok, _, relativeTo, _, x = pcall(entry.frame.GetPoint, entry.frame, 1)
-	return ok and relativeTo == UIParent and x == PARK_OFFSET
+	return ok and IsParkPoint(relativeTo, x)
 end
 
 function ns.UnparkShrunk(entry)
