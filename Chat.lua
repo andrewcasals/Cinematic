@@ -287,6 +287,15 @@ local function PeekWindow(chatFrame)
 	end
 end
 
+-- Shows a chat window for at least seconds, whatever the Chat page's peek
+-- settings (our own lines worth reading: the update notice).
+function ns.PeekChat(chatFrame, seconds)
+	if chatFrame and ns.Flag(chatFrame:IsShown()) then
+		local untilTime = GetTime() + math.max(seconds, ns.HoldTime("chatPeekTime"))
+		ns.chatPeekUntil[chatFrame] = math.max(ns.chatPeekUntil[chatFrame] or 0, untilTime)
+	end
+end
+
 -- With "Hide your messages" (db.chatHideOwn), your own lines don't peek: your
 -- emotes ("You bow.", the campfire button's sit or kneel), says, party lines...
 -- You know you did them. Told by the sender's GUID, or by name where a client

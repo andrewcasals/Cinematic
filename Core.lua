@@ -197,6 +197,7 @@ local DEFAULTS = {
 	chatHideOwn = true, -- your own messages (emotes, say, party...) don't show chat
 	chatHideBubbled = true, -- say/yell you can see as a bubble on screen doesn't show chat
 	chatAttackAlert = true, -- LocalDefense "... is under attack!" also shows as a title
+	updateNotice = true, -- after an update, a line in chat at login with a What's new link (WhatsNew.lua)
 	chatInCities = false,     -- keep chat visible in capital cities
 	chatInDungeons = false,   -- ...in dungeons and scenarios
 	chatInRaids = false,

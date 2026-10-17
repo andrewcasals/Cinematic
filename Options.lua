@@ -4923,8 +4923,13 @@ local function CreateChatPanel()
 		"place shows at most once every 90 seconds. /cine attacktest shows one."])
 	attackAlert:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 0, -2)
 
-	local typesHeader = Header(chatPanel, L["Show chat for these messages"], attackAlert, -24)
-	typesHeader:SetPoint("TOPLEFT", attackAlert, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
+	local updateNotice = Check(chatPanel, "updateNotice", L["Get notified of updates"],
+		L["The first time you log in after Cinematic updates, a line in chat says so, with a " ..
+		"What's new link to what's been added. Chat shows for it while the UI is faded."])
+	updateNotice:SetPoint("TOPLEFT", attackAlert, "BOTTOMLEFT", 0, -2)
+
+	local typesHeader = Header(chatPanel, L["Show chat for these messages"], updateNotice, -24)
+	typesHeader:SetPoint("TOPLEFT", updateNotice, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
 	local previous, previousIsHeader, section = typesHeader, true, nil
 	for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 		if peekType.section == "game" and section ~= "game" then

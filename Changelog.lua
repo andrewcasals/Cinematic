@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-17", page = "Chat", title = "Update notices",
+		text = "After an update with new features, a line in chat at login says so, with a link to " ..
+		"What's new. Turn it off on the Chat page." },
 	{ date = "2026-10-17", page = "3rd Party Frames", title = "Horizon Suite support",
 		text = "Horizon Suite's quest tracker fades with the Quest tracker row, without flickering on zone changes." },
 	{ date = "2026-10-17", page = "New features", title = "What's new",

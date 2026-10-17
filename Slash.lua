@@ -75,6 +75,7 @@ local function PrintDebugHelp()
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug cooldowns - what the Cooldown Manager's \"stay up while recharging\" check sees")
 	print("  /cine debug newplayer - back to no profile picked, as on a fresh install (the welcome window)")
+	print("  /cine debug whatsnew - the chat line shown at login after an update, with its What's new link")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
 	print("  /cine debug tent [seen|cozy [left|right]|clear] - whether a Camp Tent's been moused over near here (seen fakes one on that side of the screen, cozy also starts the cozy camera)")
@@ -267,6 +268,8 @@ local function HandleSlash(msg)
 		ns.turnTestUntil = GetTime() + 10
 		ns.Print("turn hold test for 10 seconds: stand still and hold a turn key. The camera " ..
 			"should keep looking the same way while your character turns.")
+	elseif cmd == "debug" and arg == "whatsnew" then
+		ns.ShowUpdateNotice(2)
 	elseif cmd == "debug" and arg == "modes" then
 		ns.db.debugCameraMode = not ns.db.debugCameraMode
 		ns.ResetCameraModeReport() -- print the current mode straight away

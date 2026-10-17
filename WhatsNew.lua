@@ -175,3 +175,56 @@ ns.CreateWhatsNewPanels = function(kit)
 	CreateFeaturesPanel(kit)
 	CreateCommitsPanel(kit)
 end
+
+-- After an update with new features, a line in chat at login with a [What's
+-- new] link to the page (a release of fixes only says nothing). Told by the
+-- newest feature's date (db.lastFeatureDate), so the dev copy gets it too.
+-- Not on a fresh install: the welcome window is enough then. Off with
+-- db.updateNotice (Chat page).
+local LINK = "garrmission:cinematic:whatsnew" -- (a type every client passes to SetItemRef quietly)
+
+-- How many of this client's features are newer than date (nil: all), and the newest date.
+local function FeaturesSince(date)
+	local count, newest = 0, nil
+	for _, entry in ipairs(ns.CHANGELOG_FEATURES or {}) do
+		if not entry.client or (entry.client == "retail") == (ns.isRetail and true or false) then
+			if not date or entry.date > date then count = count + 1 end
+			if not newest or entry.date > newest then newest = entry.date end
+		end
+	end
+	return count, newest
+end
+
+-- count: new features since the last login (nil: unknown, not said).
+function ns.ShowUpdateNotice(count)
+	local version = ns.Version()
+	if version:match("^%d") then version = "v" .. version end
+	local link = "|cff71d5ff|H" .. LINK .. "|h[" .. L["What's new"] .. "]|h|r"
+	if count == 1 then
+		ns.Print(L["updated to %s: a new feature, see %s."]:format(version, link))
+	elseif count and count > 1 then
+		ns.Print(L["updated to %s: %d new features, see %s."]:format(version, count, link))
+	else
+		ns.Print(L["updated to %s: see %s for the changes."]:format(version, link))
+	end
+	if ns.PeekChat then ns.PeekChat(DEFAULT_CHAT_FRAME, 20) end -- (up through CineMode, to be seen)
+end
+
+hooksecurefunc("SetItemRef", function(link)
+	if link == LINK then ns.OpenOptions("New features") end
+end)
+
+local notice = CreateFrame("Frame")
+notice:RegisterEvent("PLAYER_ENTERING_WORLD")
+notice:SetScript("OnEvent", function(self, _, isLogin, isReload)
+	if not (isLogin or isReload) or not ns.db then return end
+	self:UnregisterAllEvents()
+	local db = ns.db
+	local newest = select(2, FeaturesSince(nil))
+	if db.updateNotice ~= false and not ns.newInstall and newest and newest > (db.lastFeatureDate or "") then
+		-- (no count the first time: every feature would be new)
+		local count = db.lastFeatureDate and FeaturesSince(db.lastFeatureDate) or nil
+		C_Timer.After(3, function() ns.ShowUpdateNotice(count) end) -- (after the login chat)
+	end
+	db.lastFeatureDate = newest
+end)
