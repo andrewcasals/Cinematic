@@ -496,7 +496,8 @@ do
 		return (pcall(function() return max - health > 0 and health / max < 1 end))
 	end
 
-	local function Units()
+	-- The group, then (withOthers) the target, focus and mouseover.
+	local function Units(withOthers)
 		local units = { "player" }
 		local count = GetNumGroupMembers and GetNumGroupMembers() or 0
 		if IsInRaid and IsInRaid() then
@@ -505,7 +506,7 @@ do
 		else
 			for i = 1, math.max(0, count - 1) do units[#units + 1] = "party" .. i end
 		end
-		for _, unit in ipairs({ "target", "focus", "mouseover" }) do
+		for _, unit in ipairs(withOthers and { "target", "focus", "mouseover" } or {}) do
 			if UnitExists(unit) then units[#units + 1] = unit end
 		end
 		return units
@@ -513,7 +514,7 @@ do
 
 	function ns.HealthDebug()
 		local combat = InCombatLockdown and InCombatLockdown()
-		local units = Units()
+		local units = Units(true)
 		local usable, secret = 0, 0
 		ns.Log("health", ("%s, %d units, issecretvalue %s"):format(combat and "in combat" or "out of combat",
 			#units, issecretvalue and "exists" or "missing"))
@@ -527,9 +528,11 @@ do
 			local ok = Usable(health, max)
 			if ok then usable = usable + 1 end
 			if Secret(health) or Secret(max) then secret = secret + 1 end
-			local line = ("%s (%s): health %s / %s, missing %s, percent %s, role %s, main tank %s -> %s"):format(
+			local line = ("%s (%s): health %s / %s, missing %s, percent %s, role %s, main tank %s,"
+				.. " dead %s, online %s, in range %s -> %s"):format(
 				unit, Show(Read(UnitName, unit)), Show(health), Show(max), Show(missing), Show(percent),
-				Show(role), Show(tank), ok and "sortable" or "NOT sortable")
+				Show(role), Show(tank), Show(Read(UnitIsDeadOrGhost, unit)), Show(Read(UnitIsConnected, unit)),
+				Show(Read(UnitInRange, unit)), ok and "sortable" or "NOT sortable")
 			-- (Printed lines go in the log already.)
 			if i <= 10 then print("  " .. line) else ns.Log("health", line) end
 		end
@@ -537,6 +540,237 @@ do
 		ns.Print(("health (%s): %d of %d sortable, %d secret. Run it %s too"):format(
 			combat and "in combat" or "out of combat", usable, #units, secret,
 			combat and "out of combat" or "in combat (hit a training dummy, in a group)"))
+	end
+
+	-- /cine debug healthfade [percent]: can a frame show only while someone's
+	-- hurt, with the addon never knowing their health? A window with a row per
+	-- group member: a plain bar and %, then two ways of fading a block by the
+	-- game's own (secret) health percent - frame alpha from a number curve
+	-- (blue), and texture colour from a colour curve (red). Both should be gone
+	-- at full health and show below the percent (100: any damage).
+	local window, alphaCurve, colorCurve
+	local rows, failed = {}, {}
+	local ROWS_MAX = 10
+
+	local function Try(what, func, ...)
+		local ok, err = pcall(func, ...)
+		if not ok and not failed[what] then
+			failed[what] = true
+			ns.Print(("healthfade: %s failed: %s"):format(what, tostring(err)))
+		end
+		return ok
+	end
+
+	local function MakeCurves(percent)
+		local at = math.min(percent / 100, 0.9995) -- (full is 1, so 100 means any damage)
+		alphaCurve, colorCurve = nil, nil
+		if not (C_CurveUtil and C_CurveUtil.CreateCurve) then
+			ns.Print("healthfade: no C_CurveUtil on this client")
+			return
+		end
+		Try("number curve", function()
+			local curve = C_CurveUtil.CreateCurve()
+			curve:SetType(Enum.LuaCurveType.Step)
+			curve:AddPoint(0, 1)
+			curve:AddPoint(at, 0)
+			alphaCurve = curve
+		end)
+		Try("colour curve", function()
+			local curve = C_CurveUtil.CreateColorCurve()
+			curve:AddPoint(0, CreateColor(1, 0.2, 0.2, 1))
+			curve:AddPoint(at - 0.0001, CreateColor(1, 0.2, 0.2, 1))
+			curve:AddPoint(at, CreateColor(1, 0.2, 0.2, 0))
+			curve:AddPoint(1, CreateColor(1, 0.2, 0.2, 0))
+			colorCurve = curve
+		end)
+	end
+
+	local function Row(i)
+		if rows[i] then return rows[i] end
+		local row = CreateFrame("Frame", nil, window)
+		row:SetSize(300, 18)
+		row:SetPoint("TOPLEFT", 8, -40 - (i - 1) * 20)
+		row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		row.name:SetPoint("LEFT")
+		row.name:SetWidth(80)
+		row.name:SetJustifyH("LEFT")
+		row.bar = CreateFrame("StatusBar", nil, row)
+		row.bar:SetSize(120, 14)
+		row.bar:SetPoint("LEFT", 84, 0)
+		row.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+		row.bar:SetStatusBarColor(0.1, 0.8, 0.1)
+		local back = row.bar:CreateTexture(nil, "BACKGROUND")
+		back:SetAllPoints()
+		back:SetColorTexture(0.2, 0.2, 0.2, 0.8)
+		row.text = row.bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		row.text:SetPoint("CENTER")
+		row.alpha = CreateFrame("Frame", nil, row)
+		row.alpha:SetSize(40, 14)
+		row.alpha:SetPoint("LEFT", 208, 0)
+		local blue = row.alpha:CreateTexture(nil, "ARTWORK")
+		blue:SetAllPoints()
+		blue:SetColorTexture(0.2, 0.6, 1, 1)
+		row.color = row:CreateTexture(nil, "ARTWORK")
+		row.color:SetSize(40, 14)
+		row.color:SetPoint("LEFT", 252, 0)
+		row.color:SetColorTexture(1, 1, 1, 1)
+		rows[i] = row
+		return row
+	end
+
+	local function UpdateRow(row, unit)
+		Try("name", row.name.SetText, row.name, (UnitName(unit)))
+		Try("bar", function()
+			row.bar:SetMinMaxValues(0, UnitHealthMax(unit))
+			row.bar:SetValue(UnitHealth(unit))
+		end)
+		Try("percent text", function()
+			row.text:SetFormattedText("%d%%", UnitHealthPercent(unit, true, CurveConstants.ScaleTo100))
+		end)
+		if alphaCurve then
+			Try("frame alpha", function() row.alpha:SetAlpha(UnitHealthPercent(unit, true, alphaCurve)) end)
+		end
+		if colorCurve then
+			Try("texture colour", function()
+				row.color:SetVertexColor(UnitHealthPercent(unit, true, colorCurve):GetRGBA())
+			end)
+		end
+	end
+
+	local function UpdateFade()
+		local units = Units()
+		for i = 1, ROWS_MAX do
+			local unit = units[i]
+			if unit then
+				local row = Row(i)
+				row:Show()
+				UpdateRow(row, unit)
+			elseif rows[i] then
+				rows[i]:Hide()
+			end
+		end
+		window:SetHeight(48 + math.min(#units, ROWS_MAX) * 20)
+	end
+
+	local function MakeWindow()
+		window = CreateFrame("Frame", nil, UIParent)
+		window:SetSize(316, 60)
+		window:SetPoint("CENTER", 0, 200)
+		window:SetFrameStrata("HIGH")
+		window:SetMovable(true)
+		window:EnableMouse(true)
+		window:RegisterForDrag("LeftButton")
+		window:SetScript("OnDragStart", window.StartMoving)
+		window:SetScript("OnDragStop", window.StopMovingOrSizing)
+		local back = window:CreateTexture(nil, "BACKGROUND")
+		back:SetAllPoints()
+		back:SetColorTexture(0, 0, 0, 0.75)
+		window.title = window:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		window.title:SetPoint("TOPLEFT", 8, -6)
+		local function Head(text, x)
+			local head = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+			head:SetPoint("TOPLEFT", 8 + x, -24)
+			head:SetText(text)
+		end
+		Head("name", 0)
+		Head("health", 84)
+		Head("alpha", 208)
+		Head("colour", 252)
+		local elapsed = 0
+		window:SetScript("OnUpdate", function(_, delta)
+			elapsed = elapsed + delta
+			if elapsed < 0.2 then return end
+			elapsed = 0
+			UpdateFade()
+		end)
+	end
+
+	function ns.HealthFadeDebug(arg)
+		local percent = tonumber(arg)
+		if window and window:IsShown() and not percent then
+			window:Hide()
+			ns.Print("healthfade: closed")
+			return
+		end
+		percent = percent or 100
+		wipe(failed)
+		MakeCurves(percent)
+		if not window then MakeWindow() end
+		window.title:SetText(("Health fade test: shown below %d%%"):format(percent))
+		window:Show()
+		UpdateFade()
+		ns.Print(("healthfade: the blue (frame alpha) and red (colour) blocks should be gone at full"
+			.. " health and show below %d%%. Take some damage and watch. Drag to move, run again to close")
+			:format(percent))
+	end
+
+	-- /cine debug damage [seconds]: does damage taken reach the addon? Listens
+	-- to the combat log and the portrait hit event for a while (15 seconds),
+	-- then reads Blizzard's own damage meter, and says what's plain or secret.
+	local probe
+
+	local function Listened(name, ok, err, count, sample)
+		print(("  %s: %s, %d events%s"):format(name, ok and "registered" or ("refused: " .. tostring(err)),
+			count or 0, sample and (", first " .. sample) or ""))
+	end
+
+	local function ReportMeter(combat)
+		if not (C_DamageMeter and Enum.DamageMeterSessionType and Enum.DamageMeterType) then
+			print("  damage meter: no C_DamageMeter on this client")
+			return
+		end
+		local ok, session = pcall(C_DamageMeter.GetCombatSessionFromType,
+			Enum.DamageMeterSessionType.Current, Enum.DamageMeterType.DamageTaken)
+		local sources = ok and type(session) == "table" and session.combatSources
+		if not ok then
+			print("  damage meter: error " .. tostring(session))
+		elseif type(sources) ~= "table" or (issecrettable and issecrettable(sources)) then
+			print("  damage meter: damage taken list " .. (sources and "secret" or "missing"))
+		else
+			local count = 0
+			pcall(function() count = #sources end)
+			print(("  damage meter (%s): %d in the damage taken list"):format(combat, count))
+			for i = 1, math.min(count, 5) do
+				local source = sources[i]
+				print(("    %d. %s: %s taken, class %s, spec icon %s"):format(i, Show(source.name),
+					Show(source.totalAmount), Show(source.classFilename), Show(source.specIconID)))
+			end
+		end
+	end
+
+	function ns.DamageDebug(arg)
+		local seconds = tonumber(arg) or 15
+		probe = probe or CreateFrame("Frame")
+		probe:UnregisterAllEvents()
+		local counts, samples = {}, {}
+		local logOk, logErr = pcall(probe.RegisterEvent, probe, "COMBAT_LOG_EVENT_UNFILTERED")
+		local hitOk, hitErr = pcall(probe.RegisterEvent, probe, "UNIT_COMBAT")
+		probe:SetScript("OnEvent", function(_, event, ...)
+			counts[event] = (counts[event] or 0) + 1
+			if samples[event] then return end
+			if event == "UNIT_COMBAT" then
+				local unit, action, _, amount = ...
+				samples[event] = ("unit %s, %s, amount %s"):format(Show(unit), Show(action), Show(amount))
+			else
+				-- (info[1] is pcall's ok: the sub-event is info[3], names 6 and 10,
+				-- the amount 13 for swings or 16 for spells.)
+				local info = { pcall(CombatLogGetCurrentEventInfo) }
+				samples[event] = info[1] and ("%s: %s -> %s, values %s / %s"):format(Show(info[3]),
+					Show(info[6]), Show(info[10]), Show(info[13]), Show(info[16])) or "info error"
+			end
+		end)
+		ns.Print(("damage: listening %d seconds (%s), take some damage now"):format(seconds,
+			InCombatLockdown() and "in combat" or "out of combat"))
+		C_Timer.After(seconds, function()
+			probe:UnregisterAllEvents()
+			probe:SetScript("OnEvent", nil)
+			local combat = InCombatLockdown() and "in combat" or "out of combat"
+			Listened("combat log", logOk, logErr, counts.COMBAT_LOG_EVENT_UNFILTERED,
+				samples.COMBAT_LOG_EVENT_UNFILTERED)
+			Listened("hit event", hitOk, hitErr, counts.UNIT_COMBAT, samples.UNIT_COMBAT)
+			ReportMeter(combat)
+			ns.Print("damage: done (" .. combat .. ")")
+		end)
 	end
 end
 
