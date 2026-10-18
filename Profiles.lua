@@ -165,8 +165,6 @@ ns.BUILTIN_PROFILES = {
 			set("walkCine", true)
 			set("runCine", true)
 			set("deathCine", true)
-			-- Every camera starting can bring music back, however recently it played.
-			set("musicFatigue", 0)
 			-- Standing still starts the AFK camera, and every camera can start music.
 			set("eventStillCamera", "afk")
 			for _, event in ipairs({ "AFK", "Still", "Chair", "Kneel", "Sleep", "Dance", "Weapon", "Campfire",

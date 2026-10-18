@@ -179,12 +179,12 @@ local DEFAULTS = {
 	tooltipHideCombatEnemy = false, -- ...units you can attack
 	tooltipHideCombatElse = true,   -- ...everything else: friends, objects, action bars, bags, menus
 	musicFadeTime = 3,        -- seconds for music to fade in or out
-	musicFatigue = 2,         -- minutes: don't start music again within this long of the last start
+	musicFatigue = 0,         -- minutes: don't start music again within this long of the last start
 	-- Which cameras can start music as they start (when music fatigue allows).
 	musicCamFlight = true,
 	musicCamWalk = false,     -- RP walk
 	musicCamRun = false,      -- auto-run
-	musicPauseWhenMoving = true,  -- music fades out once you leave the camera modes and move on
+	musicPauseWhenMoving = false, -- music fades out once you leave the camera modes and move on
 	musicOffInCombat = false, -- fade game music out while in combat
 	musicOffInCities = false, -- ...and in these places
 	musicOffInDungeons = false,
