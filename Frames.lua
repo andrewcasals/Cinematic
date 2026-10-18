@@ -602,14 +602,35 @@ end
 -- player arrow (which ignores alpha) shows as a single pixel. So while shrunk
 -- it's also moved off the right edge of the screen, and its own anchors are
 -- put back when it grows. (The offset is in its shrunk scale: 20000 is a few
--- hundred pixels.)
+-- hundred pixels.) A map clamped to the screen (WoW Forever's is) gets pulled
+-- back into the top-right corner, so that's switched off while it's out there.
 do -- (a block: this file is at Lua's 200-local cap)
 local PARK_OFFSET = 20000
 
 -- (Not x == PARK_OFFSET: the client can hand the offset back rounded, like
--- 19999.998, and nothing else anchors anywhere near that far out.)
-local function IsParkPoint(relativeTo, x)
-	return relativeTo == UIParent and type(x) == "number" and x > PARK_OFFSET / 2
+-- 19999.998. And not just any big offset: EllesmereUI anchors the shrunk map
+-- far out too, see ParkShrunk.)
+local function IsParkPoint(point, relativeTo, relativePoint, x)
+	return point == "TOPLEFT" and relativeTo == UIParent and relativePoint == "TOPRIGHT" and type(x) == "number"
+		and not (issecretvalue and issecretvalue(x)) and math.abs(x - PARK_OFFSET) < 1
+end
+
+-- EllesmereUI puts the map back on its saved spot divided by the map's own
+-- scale, so the shrunk map lands right where it was (CENTER 130666 for 1306).
+-- An offset past the screen's size that's on it once scaled is one of those:
+-- taken back to what it is at full size, so the map grows back in place.
+local function FullSizeOffsets(frame, entry, x, y)
+	local ratio = frame:GetScale() / (entry.savedScale or 1)
+	if ratio >= 1 or type(x) ~= "number" or type(y) ~= "number"
+		or (issecretvalue and (issecretvalue(x) or issecretvalue(y))) then
+		return x, y
+	end
+	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+	if (math.abs(x) > width or math.abs(y) > height)
+		and math.abs(x * ratio) <= width and math.abs(y * ratio) <= height then
+		return x * ratio, y * ratio
+	end
+	return x, y
 end
 
 function ns.ParkShrunk(entry)
@@ -620,26 +641,43 @@ function ns.ParkShrunk(entry)
 		if not ok or type(point) ~= "string" then
 			return -- (can't read them back: leave it where it is)
 		end
-		if IsParkPoint(relativeTo, x) then
+		if IsParkPoint(point, relativeTo, relativePoint, x) then
 			points = nil -- (already parked: keep the anchors saved before)
 			break
 		end
+		x, y = FullSizeOffsets(frame, entry, x, y)
 		points[i] = { point, relativeTo, relativePoint, x, y }
 	end
 	entry.savedPoints = points or entry.savedPoints
 	frame:ClearAllPoints()
 	frame:SetPoint("TOPLEFT", UIParent, "TOPRIGHT", PARK_OFFSET, 0)
+	if frame.IsClampedToScreen and ns.Flag(frame:IsClampedToScreen()) then
+		entry.savedClamped = true
+		frame:SetClampedToScreen(false)
+	end
 end
 
 -- Something laid it out again while shrunk (it's back on its own anchors).
 function ns.IsParked(entry)
-	local ok, _, relativeTo, _, x = pcall(entry.frame.GetPoint, entry.frame, 1)
-	return ok and IsParkPoint(relativeTo, x)
+	local ok, point, relativeTo, relativePoint, x = pcall(entry.frame.GetPoint, entry.frame, 1)
+	return ok and IsParkPoint(point, relativeTo, relativePoint, x)
+end
+
+-- Shrunk and moved off, but back on the screen: laid out again on its own
+-- anchors (EllesmereUI does), or clamped to the screen again.
+function ns.ParkUndone(entry)
+	local frame = entry.frame
+	return entry.savedPoints and (not ns.IsParked(entry)
+		or (frame.IsClampedToScreen and ns.Flag(frame:IsClampedToScreen())))
 end
 
 function ns.UnparkShrunk(entry)
 	local points = entry.savedPoints
 	entry.savedPoints = nil
+	if entry.savedClamped then
+		entry.savedClamped = nil
+		entry.frame:SetClampedToScreen(true)
+	end
 	if not points or not ns.IsParked(entry) then
 		return
 	end
@@ -1159,8 +1197,8 @@ function ns.SetEntryAlpha(entry, alpha)
 			-- Something put its size back (EllesmereUI does when it lays the
 			-- minimap out again): take that as its size and shrink it again.
 			ShrinkEntry(entry)
-		elseif entry.savedPoints and not ns.IsParked(entry) then
-			-- Laid out again at its shrunk size: back off the screen.
+		elseif ns.ParkUndone(entry) then
+			-- Laid out again at its shrunk size, or clamped again: back off the screen.
 			ns.ParkShrunk(entry)
 		end
 	end
@@ -3177,6 +3215,92 @@ function ns.ReportMinimap()
 			ns.Print("    " .. Point(p))
 		end
 	end
+	-- Moved off the screen, nothing of the map's should show: list what's still
+	-- on it (its parts, its parent when not UIParent - EllesmereUI's crop frame -
+	-- and the frames on UIParent anchored to either), for a stray pixel.
+	local uiScale = UIParent:GetEffectiveScale()
+	local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+	-- A frame's or texture's rect in UIParent units, or nil.
+	local function ScreenRect(region, scale)
+		local ok, left, bottom, width, height = pcall(region.GetRect, region)
+		if not ok or type(left) ~= "number" or Secret(left) or Secret(width) then
+			return nil
+		end
+		local k = scale / uiScale
+		return left * k, bottom * k, width * k, height * k
+	end
+	local function Rect(left, bottom, width, height)
+		return left and ("%.1f,%.1f %.1fx%.1f"):format(left, bottom, width, height) or "none"
+	end
+	-- (Not Rect(parent and ScreenRect(...)): "and" keeps only the first value.)
+	local parentRect = "none"
+	if parent then
+		parentRect = Rect(ScreenRect(parent, parent:GetEffectiveScale()))
+	end
+	ns.Print(("  rect %s (screen %.0fx%.0f), parent rect %s, clamped to the screen %s (put back when it grows %s)"):format(
+		Rect(ScreenRect(frame, frame:GetEffectiveScale())), screenW, screenH, parentRect,
+		Value(frame.IsClampedToScreen and frame:IsClampedToScreen()), tostring(entry.savedClamped or false)))
+	if not entry.shrunk then
+		return
+	end
+	local onScreen, checked = {}, {}
+	local function Check(name, region, scale, alpha)
+		local left, bottom, width, height = ScreenRect(region, scale)
+		if left and left < screenW and left + width > 0 and bottom < screenH and bottom + height > 0 then
+			onScreen[#onScreen + 1] = ("%s (%s) at %s, alpha %s"):format(name,
+				tostring(select(2, pcall(region.GetObjectType, region))), Rect(left, bottom, width, height), Value(alpha))
+		end
+	end
+	local function Walk(target, depth)
+		if checked[target] or depth > 6 or IsForbidden(target) or not ns.Flag(target:IsVisible()) then
+			return
+		end
+		checked[target] = true
+		local name = target:GetName() or target:GetDebugName()
+		local scale, alpha = target:GetEffectiveScale(), target:GetEffectiveAlpha()
+		if not Secret(alpha) and alpha > 0 then
+			Check(name, target, scale, alpha)
+		end
+		local ok, regions = pcall(function() return { target:GetRegions() } end)
+		for i, region in ipairs(ok and regions or {}) do
+			local okShown, shown = pcall(region.IsShown, region)
+			local okAlpha, own = pcall(region.GetAlpha, region)
+			if okShown and ns.Flag(shown) and okAlpha and not Secret(own) and not Secret(alpha) then
+				local ignores = region.IsIgnoringParentAlpha and ns.Flag(region:IsIgnoringParentAlpha())
+				local shownAlpha = ignores and own or own * alpha
+				if shownAlpha > 0 then
+					Check(name .. "#" .. i, region, scale, shownAlpha)
+				end
+			end
+		end
+		for _, child in ipairs({ target:GetChildren() }) do
+			Walk(child, depth + 1)
+		end
+	end
+	local roots = { [frame] = true }
+	if parent and parent ~= UIParent then
+		roots[parent] = true
+	end
+	Walk(frame, 1)
+	if roots[parent] then
+		Walk(parent, 1)
+	end
+	for _, child in ipairs({ UIParent:GetChildren() }) do
+		if not IsForbidden(child) then
+			for i = 1, child:GetNumPoints() do
+				local ok, _, relativeTo = pcall(child.GetPoint, child, i)
+				if ok and relativeTo and (roots[relativeTo] or checked[relativeTo]) then
+					Walk(child, 1)
+					break
+				end
+			end
+		end
+	end
+	ns.Print(("  still on the screen while moved off (%d):"):format(#onScreen))
+	for i, line in ipairs(onScreen) do
+		if i <= 15 then ns.Print("    " .. line) else ns.Log("minimap", line) end
+	end
+	if #onScreen > 15 then ns.Print(("    ...and %d more in /cine log"):format(#onScreen - 15)) end
 end
 
 -- /cine debug frames: the shown top-level frames not faded, and every global
