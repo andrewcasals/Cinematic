@@ -466,6 +466,80 @@ do
 	end
 end
 
+-- Group health (/cine debug health) -------------------------------------------
+-- For a possible healer list (the tank plus whoever's most hurt): whether this
+-- client hands addons the group's health as plain numbers it can compare and
+-- sort, or as secret values (only drawable on a bar). Run it in and out of
+-- combat; each run also goes in the log.
+do
+	local function Secret(value)
+		return issecretvalue ~= nil and issecretvalue(value) == true
+	end
+
+	local function Read(func, ...)
+		if not func then return "no API" end
+		local ok, value = pcall(func, ...)
+		if not ok then return "error" end
+		return value
+	end
+
+	local function Show(value)
+		if Secret(value) then return "secret" end
+		return tostring(value)
+	end
+
+	-- Can the addon do the sums and comparisons sorting needs?
+	local function Usable(health, max)
+		if type(health) ~= "number" or type(max) ~= "number" or Secret(health) or Secret(max) then
+			return false
+		end
+		return (pcall(function() return max - health > 0 and health / max < 1 end))
+	end
+
+	local function Units()
+		local units = { "player" }
+		local count = GetNumGroupMembers and GetNumGroupMembers() or 0
+		if IsInRaid and IsInRaid() then
+			units = {}
+			for i = 1, count do units[#units + 1] = "raid" .. i end
+		else
+			for i = 1, math.max(0, count - 1) do units[#units + 1] = "party" .. i end
+		end
+		for _, unit in ipairs({ "target", "focus", "mouseover" }) do
+			if UnitExists(unit) then units[#units + 1] = unit end
+		end
+		return units
+	end
+
+	function ns.HealthDebug()
+		local combat = InCombatLockdown and InCombatLockdown()
+		local units = Units()
+		local usable, secret = 0, 0
+		ns.Log("health", ("%s, %d units, issecretvalue %s"):format(combat and "in combat" or "out of combat",
+			#units, issecretvalue and "exists" or "missing"))
+		for i, unit in ipairs(units) do
+			local health = Read(UnitHealth, unit)
+			local max = Read(UnitHealthMax, unit)
+			local missing = Read(UnitHealthMissing, unit)
+			local percent = Read(UnitHealthPercent, unit)
+			local role = Read(UnitGroupRolesAssigned, unit)
+			local tank = Read(GetPartyAssignment, "MAINTANK", unit)
+			local ok = Usable(health, max)
+			if ok then usable = usable + 1 end
+			if Secret(health) or Secret(max) then secret = secret + 1 end
+			local line = ("%s (%s): health %s / %s, missing %s, percent %s, role %s, main tank %s -> %s"):format(
+				unit, Show(Read(UnitName, unit)), Show(health), Show(max), Show(missing), Show(percent),
+				Show(role), Show(tank), ok and "sortable" or "NOT sortable")
+			-- (Printed lines go in the log already.)
+			if i <= 10 then print("  " .. line) else ns.Log("health", line) end
+		end
+		if #units > 10 then print(("  ...and %d more in /cine log"):format(#units - 10)) end
+		ns.Print(("health (%s): %d of %d sortable, %d secret. Run it %s too"):format(
+			combat and "in combat" or "out of combat", usable, #units, secret,
+			combat and "out of combat" or "in combat (hit a training dummy, in a group)"))
+	end
+end
+
 -- Unit frames -----------------------------------------------------------------
 
 -- /cine debug unitframes: every part of the player and target frames, as a

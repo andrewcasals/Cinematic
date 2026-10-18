@@ -90,6 +90,7 @@ local function PrintDebugHelp()
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
 	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
+	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
 	print("  /cine debug flight - the flight route, its known time and when the camera settles")
@@ -735,6 +736,8 @@ local function HandleSlash(msg)
 		ns.PrintPanelsDebug()
 	elseif cmd == "debug" and arg == "cvars" then
 		ns.CVarsDebug()
+	elseif cmd == "debug" and arg == "health" then
+		ns.HealthDebug()
 	elseif cmd == "facing" then
 		-- Test: can the addon tell when you turn? For 10 seconds, reports the
 		-- turning events, the turn keys, and your facing direction.
