@@ -963,7 +963,7 @@ do
 	-- Each hub (by English name) and its pages in order, with their icons
 	-- (or a function that gives one).
 	local HUBS = {
-		{ name = "Frame Manager", pages = {
+		{ name = "UI Manager", pages = {
 			-- (A standard: your faction's battle banner.)
 			{ "Standard Frames", function()
 				return UnitFactionGroup("player") == "Horde" and "Interface\\Icons\\INV_BannerPVP_01"
@@ -6205,7 +6205,7 @@ ns.RefreshOptions = function() Refresh() end
 -- failed because of an AddOn": its ShowUIPanel is), but showing the window
 -- itself isn't, so it's shown and the page picked directly.
 function ns.OpenOptions(page)
-	-- (a Frame Manager page: that page, then Frame Manager open at it)
+	-- (a UI Manager page: that page, then UI Manager open at it)
 	page = page and HubTab(page) or page
 	-- (some pages are registered by their name as shown)
 	if page and not subpages[page] and subpages[L[page]] then page = L[page] end

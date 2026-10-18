@@ -36,9 +36,9 @@ ns.CHANGELOG_FEATURES = {
 		"instead of the mouseover time." },
 	{ date = "2026-10-17", page = "Portraits", title = "Misc page",
 		text = "Your portrait, durability figure and pet happiness options have a page of their own " ..
-		"in Frame Manager." },
-	{ date = "2026-10-17", page = "Frame Manager", title = "Settings in hubs",
-		text = "Frame Manager, Camera and Quality of life hold their pages behind a row of icons, " ..
+		"in UI Manager." },
+	{ date = "2026-10-17", page = "UI Manager", title = "Settings in hubs",
+		text = "UI Manager, Camera and Quality of life hold their pages behind a row of icons, " ..
 		"with one search box for all of them." },
 	{ date = "2026-10-17", page = "3rd Party Frames", title = "More of EllesmereUI fades",
 		text = "Its range text, QoL displays (stats, FPS, battle res, Bloodlust, crosshair), combat text " ..

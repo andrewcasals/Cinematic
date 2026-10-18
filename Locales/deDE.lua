@@ -1009,7 +1009,7 @@ L["Vignette"] = "Vignette"
 L["Gamepad"] = "Gamepad"
 L["Tooltips"] = "Tooltips"
 L["Mouseover groups"] = "Mouseover-Gruppen"
-L["Frame Manager"] = "Rahmenverwaltung"
+L["UI Manager"] = "UI-Verwaltung"
 L["in %s"] = "in %s"
 
 -- Profiles.lua
