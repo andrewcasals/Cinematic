@@ -1510,6 +1510,20 @@ end
 -- `leavingTargets` maps old targets' plates to their fade on the way out.
 local targetFade = { plate = nil, level = 0, enemy = false }
 local leavingTargets = {}
+-- The other way round: in CineMode, your target's plate goes while its
+-- target row doesn't keep it up here, whatever its kind's row says (the
+-- Target Nameplate grid overrides the Nameplates grid both ways). It fades
+-- down, and back up if the row lets it again; a plate that stops being your
+-- target is its kind's again at once. level: 1 untouched, 0 hidden.
+local targetHidden = { plate = nil, level = 1 }
+
+local function TargetHeldDown()
+	if not (platesActive and ns.HasTarget()) then
+		return false
+	end
+	local row = TargetRow("target")
+	return row ~= nil and not UnitRowWanted(row)
+end
 
 local function TargetFadeTime(fadeIn)
 	return fadeIn and ns.FadeInTime() or ns.FadeOutTime()
@@ -1547,6 +1561,26 @@ local function UpdateTargetFade(elapsed)
 		end
 		moving = true
 	end
+	local targetPlate = ns.HasTarget() and C_NamePlate and C_NamePlate.GetNamePlateForUnit
+		and C_NamePlate.GetNamePlateForUnit("target") or nil
+	local heldPlate = targetPlate and TargetHeldDown() and targetPlate or nil
+	if targetHidden.plate and targetHidden.plate ~= targetPlate then
+		-- (No longer your target: its kind's again at once.)
+		targetHidden.plate, targetHidden.level = nil, 1
+		moving = true
+	end
+	if heldPlate and not targetHidden.plate then
+		targetHidden.plate, targetHidden.level = heldPlate, 1
+	end
+	if targetHidden.plate then
+		local goal = heldPlate == targetHidden.plate and 0 or 1
+		if targetHidden.level ~= goal then
+			targetHidden.level = ns.Approach(targetHidden.level, goal, elapsed, TargetFadeTime(goal == 1))
+			moving = true
+		elseif goal == 1 then
+			targetHidden.plate = nil
+		end
+	end
 	return moving
 end
 
@@ -1555,6 +1589,9 @@ local function ForgetTargetFade(plate)
 	leavingTargets[plate] = nil
 	if targetFade.plate == plate then
 		targetFade.plate, targetFade.level = nil, 0
+	end
+	if targetHidden.plate == plate then
+		targetHidden.plate, targetHidden.level = nil, 1
 	end
 end
 
@@ -1602,7 +1639,7 @@ end
 
 -- Whether some plates need an alpha other than the shared fade level.
 local function PlatesFiltered()
-	if next(combatCap) then
+	if next(combatCap) or targetHidden.plate then
 		return true
 	end
 	if platesActive and InCombatLockdown() then
@@ -1663,7 +1700,11 @@ local function PlateAlpha(unit, plate)
 	if plate == targetFade.plate and not (unit and IsTarget(unit) and AlwaysShownTarget(unit)) then
 		return alpha -- a frame before the target fade catches up with a new target
 	end
-	return math.max(alpha, TargetPlateLevel(plate), duels.Level(plate))
+	alpha = math.max(alpha, TargetPlateLevel(plate), duels.Level(plate))
+	if plate and plate == targetHidden.plate then
+		alpha = math.min(alpha, targetHidden.level)
+	end
+	return alpha
 end
 
 -- Leaves a plate's alpha to the game (or its nameplate addon) again.
