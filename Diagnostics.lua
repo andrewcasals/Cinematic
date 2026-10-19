@@ -798,6 +798,8 @@ do
 		end
 	end
 
+	local managedGroup = {} -- frame -> its faded group, while a walk logs
+
 	local function Describe(object, parent)
 		local name = Safe(object.GetName, object)
 		local field = parent and FieldName(parent, object)
@@ -830,29 +832,132 @@ do
 				parts[#parts + 1] = ("text %q"):format(text)
 			end
 		end
+		if managedGroup[object] then
+			parts[#parts + 1] = "FADED AS " .. managedGroup[object]
+		end
 		return table.concat(parts, ", ")
 	end
 
-	local function Walk(object, parent, depth, count)
-		if count[1] > 400 then
+	local function Walk(object, parent, depth, count, category, limit)
+		category, limit = category or "unitframes", limit or 400
+		if count[1] > limit then
 			return
 		end
 		count[1] = count[1] + 1
-		ns.Log("unitframes", ("%s%s"):format(("  "):rep(depth), Describe(object, parent)))
+		ns.Log(category, ("%s%s"):format(("  "):rep(depth), Describe(object, parent)))
 		if depth >= 6 then
 			return
 		end
 		if object.GetRegions then
 			for _, region in ipairs(Safe(function() return { object:GetRegions() } end) or {}) do
 				count[1] = count[1] + 1
-				ns.Log("unitframes", ("%s%s"):format(("  "):rep(depth + 1), Describe(region, object)))
+				ns.Log(category, ("%s%s"):format(("  "):rep(depth + 1), Describe(region, object)))
 			end
 		end
 		if object.GetChildren then
 			for _, child in ipairs(Safe(function() return { object:GetChildren() } end) or {}) do
-				Walk(child, object, depth + 1, count)
+				Walk(child, object, depth + 1, count, category, limit)
 			end
 		end
+	end
+
+	-- /cine debug raidparts: every part of the party and raid frames, each
+	-- marked with the group it's faded as (none: Cinematic doesn't fade it on
+	-- its own), to find icons a row should hide but doesn't. Shown buttons
+	-- on a member's frame that aren't faded are printed too.
+	function ns.LogRaidFrames()
+		wipe(managedGroup)
+		for _, entry in ipairs(ns.managed) do
+			managedGroup[entry.frame] = entry.group
+		end
+		local total, loose = 0, 0
+		for _, name in ipairs({ "CompactPartyFrame", "CompactRaidFrameContainer" }) do
+			local holder = _G[name]
+			if holder and not Safe(holder.IsForbidden, holder) then
+				local count = { 0 }
+				Walk(holder, nil, 0, count, "raidparts", 1500)
+				total = total + count[1]
+				for _, member in ipairs({ holder:GetChildren() }) do
+					-- Its aura icons, wherever they're parented (on WoW Forever
+					-- they aren't its children): each field named like one.
+					local memberName = Safe(member.GetName, member) or "?"
+					for key, value in pairs(member) do
+						local lower = type(key) == "string" and key:lower()
+						if lower and (lower:find("aura") or lower:find("buff")) then
+							if type(value) == "table" and value.GetObjectType then
+								ns.Log("raidparts", ("%s.%s: %s, parent %s"):format(memberName, key,
+									Describe(value), Safe(function() return value:GetParent():GetDebugName() end) or "?"))
+							elseif type(value) == "table" then
+								local n = 0
+								for index, item in pairs(value) do
+									n = n + 1
+									local text = type(item) == "table" and item.GetObjectType and ("%s, parent %s"):format(
+										Describe(item), Safe(function() return item:GetParent():GetDebugName() end) or "?")
+										or type(item)
+									ns.Log("raidparts", ("%s.%s[%s]: %s"):format(memberName, key, tostring(index), text))
+								end
+								ns.Log("raidparts", ("%s.%s: table, %d entries"):format(memberName, key, n))
+								if Safe(member.IsShown, member) then
+									ns.Print(("%s.%s: %d entries"):format(memberName, key, n))
+								end
+							else
+								ns.Log("raidparts", ("%s.%s = %s"):format(memberName, key, tostring(value)))
+							end
+						end
+					end
+					for _, child in ipairs(Safe(function() return { member:GetChildren() } end) or {}) do
+						if not managedGroup[child] and Safe(child.IsShown, child)
+							and Safe(child.GetObjectType, child) == "Button" then
+							loose = loose + 1
+							if loose <= 8 then
+								ns.Print("not faded: " .. Describe(child, member))
+							end
+						end
+					end
+				end
+			else
+				ns.Log("raidparts", name .. ": not on this client (or forbidden)")
+			end
+		end
+		-- Every frame anchored to a member's frame, whatever its parent: newer
+		-- clients' aura icons sit outside the member (no buffFrames list).
+		local members = {}
+		for _, name in ipairs({ "CompactPartyFrame", "CompactRaidFrameContainer" }) do
+			local holder = _G[name]
+			if holder and not Safe(holder.IsForbidden, holder) then
+				for _, member in ipairs({ holder:GetChildren() }) do
+					members[member] = Safe(member.GetName, member) or "?"
+				end
+			end
+		end
+		local anchored = 0
+		local frame = EnumerateFrames()
+		while frame do
+			for i = 1, (Safe(frame.GetNumPoints, frame) or 0) do
+				local relativeTo = select(2, Safe(function() return nil, select(2, frame:GetPoint(i)) end))
+				if relativeTo and members[relativeTo] then
+					anchored = anchored + 1
+					ns.Log("raidparts", ("anchored to %s: %s, parent %s, strata %s"):format(members[relativeTo],
+						Describe(frame), Safe(function() return frame:GetParent():GetDebugName() end) or "?",
+						Safe(frame.GetFrameStrata, frame) or "?"))
+					break
+				end
+			end
+			frame = EnumerateFrames(frame)
+		end
+		for _, fn in ipairs({ "CompactUnitFrame_UtilSetBuff", "CompactUnitFrame_UtilSetDebuff",
+			"CompactUnitFrame_UpdateAuras", "CompactUnitFrame_UpdateBuffs" }) do
+			ns.Log("raidparts", ("%s: %s"):format(fn, type(_G[fn])))
+		end
+		local focus = GetMouseFoci and GetMouseFoci()[1]
+		if focus then
+			ns.Log("raidparts", ("under the mouse: %s, debug name %s, parent %s"):format(Describe(focus),
+				Safe(focus.GetDebugName, focus) or "?",
+				Safe(function() return focus:GetParent():GetDebugName() end) or "?"))
+		end
+		wipe(managedGroup)
+		ns.Print(("raidparts: %d frames anchored to members (hover an icon while running it to log it too)"):format(anchored))
+		ns.Print(("raidparts: logged %d parts, %d shown buttons not faded. /reload to write the log"):format(total, loose))
 	end
 
 	function ns.LogUnitFrames()

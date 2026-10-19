@@ -4437,6 +4437,36 @@ do
 	end
 	ns.AddScanner(ScanRaidFrames)
 
+	-- WoW Forever's raid frames draw their auras as forbidden frames, out of
+	-- reach (no buffFrames lists, nor the functions that fill them): there the
+	-- Buffs and Debuffs rows switch the game's own settings instead. A stand-in
+	-- fades as the row says, as the bar art's does, and each frame its alpha
+	-- turns the setting off (under half) or back on. The player changing it in
+	-- the game's options wins (playerWins), as for the addon's other settings.
+	local AURA_CVAR_ROWS = { raidbuffs = "raidFramesDisplayBuffs", raiddebuffs = "raidFramesDisplayDebuffs" }
+	local auraStandIns = {}
+	local function AddAuraStandIns()
+		if _G.CompactUnitFrame_UtilSetBuff then
+			return -- (aura icons as frames: faded as parts)
+		end
+		for group, cvar in pairs(AURA_CVAR_ROWS) do
+			if not auraStandIns[group] and GetCVar(cvar) ~= nil then
+				local set = { values = { [cvar] = "0" }, playerWins = true }
+				local standIn = CreateFrame("Frame", nil, UIParent)
+				standIn:SetSize(1, 1)
+				standIn:SetPoint("TOPLEFT")
+				standIn:SetScript("OnUpdate", function(self)
+					ns.ApplyCVarSet(set, self:GetAlpha() < 0.5)
+				end)
+				auraStandIns[group] = standIn
+			end
+			if auraStandIns[group] then
+				AddFrame(auraStandIns[group], group)
+			end
+		end
+	end
+	ns.AddScanner(AddAuraStandIns)
+
 	-- A party member's frame, with its role icon and name (retail's are
 	-- parent keys, Classic's named after the frame).
 	-- The party frames dim members out of range (and light them back up) with
@@ -4498,6 +4528,7 @@ do
 
 	local rosterWatcher = CreateFrame("Frame")
 	rosterWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")
+	rosterWatcher:RegisterEvent("UNIT_PET") -- (a pet's frame comes and goes)
 	rosterWatcher:SetScript("OnEvent", function()
 		-- (After the game has set its frames up for the new group.)
 		C_Timer.After(0.5, function()

@@ -90,6 +90,7 @@ local function PrintDebugHelp()
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
 	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
+	print("  /cine debug raidparts - log every part of the party and raid frames and how each is faded, print shown icons that aren't")
 	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
 	print("  /cine debug healer - the healer frame's rows and their HoT icons' containers")
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
@@ -739,6 +740,8 @@ local function HandleSlash(msg)
 		ns.PrintPanelsDebug()
 	elseif cmd == "debug" and arg == "cvars" then
 		ns.CVarsDebug()
+	elseif cmd == "debug" and arg == "raidparts" then
+		ns.LogRaidFrames()
 	elseif cmd == "debug" and arg == "health" then
 		ns.HealthDebug()
 	elseif cmd == "debug" and arg == "healer" then
