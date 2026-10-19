@@ -856,7 +856,23 @@ ns.InPvPFight = InPvPFight
 -- plateCombatPvP<kind> while flagged for PvP, or Always or Grouped on the
 -- Nameplates page, which keep a row up everywhere / in a party or raid
 -- whatever its other boxes say).
+-- A row with a rule (Rules section, key plate:<row>) goes by it instead,
+-- in fights and out: nil without one. (Keys made once each, not each frame.)
+local PLATE_RULE_KEY = setmetatable({}, { __index = function(keys, kind)
+	keys[kind] = "plate:" .. kind
+	return keys[kind]
+end })
+local function RuleSays(kind)
+	local test = ns.RuleTest(PLATE_RULE_KEY[kind])
+	if test then
+		return test(ns.RuleFactsNow()) and true or false
+	end
+end
 local function ShownInFights(kind)
+	local rule = RuleSays(kind)
+	if rule ~= nil then
+		return rule
+	end
 	return (ns.db["plateCombat" .. kind] or ns.db["plateAlways" .. kind]
 		or (ns.db["plateGroup" .. kind] and ns.InGroup()) or (ns.db["plateCombatPvP" .. kind] and InPvPFight())) and true or false
 end
@@ -864,6 +880,10 @@ end
 -- Whether a kind stays up in cinematic mode out of combat where you are:
 -- plateCinematic<kind> in the open world, plateIn<place><kind> elsewhere.
 local function KeptHere(kind)
+	local rule = RuleSays(kind)
+	if rule ~= nil then
+		return rule
+	end
 	local key = placeSuffix and ("plateIn" .. placeSuffix .. kind) or ("plateCinematic" .. kind)
 	return (ns.db[key] or ns.db["plateAlways" .. kind] or (ns.db["plateGroup" .. kind] and ns.InGroup()))
 		and true or false
@@ -1986,6 +2006,9 @@ function ns.EnsurePlateRows()
 	for _, kind in ipairs(ns.PLATE_KINDS) do rows[#rows + 1] = kind end
 	for _, row in ipairs(ns.PLATE_UNIT_ROWS) do rows[#rows + 1] = row end
 	for _, kind in ipairs(rows) do
+		if ns.RuleTest(PLATE_RULE_KEY[kind]) then
+			ns.EnablePlateRow(kind) -- (a rule may show it)
+		end
 		for _, prefix in ipairs({ "plateAlways", "plateGroup", "plateCombat", "plateCombatPvP",
 			"plateCinematic", "plateInInstances", "plateInPvP", "plateInBGs" }) do
 			if ns.db[prefix .. kind] then

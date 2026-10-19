@@ -3,7 +3,7 @@
 -- and XP bar for its own, which fade with the frames they stand in for and
 -- follow the same rows on the Standard Frames page. It keeps the game's
 -- action bars, minimap and damage meter, skinned. Its boss frames, with no
--- game frame to follow, get a row on the 3rd Party Frames page.
+-- game frame to follow, get a row on the Advanced Frames page.
 --
 -- It sets alphas itself: its unit frames' fade-out (out of combat with no
 -- target) and its quest items' are its own frames, so they're hooked; its
@@ -12,7 +12,7 @@
 local _, ns = ...
 local L = ns.L
 
--- 3rd Party Frames row.
+-- Advanced Frames row.
 table.insert(ns.ADDON_FRAMES, {
 	key = "flareBoss", addon = "FlareUI",
 	label = "FlareUI Boss Frames", short = "FlareUI bosses",

@@ -18,7 +18,7 @@
 local _, ns = ...
 local L = ns.L
 
--- 3rd Party Frames page (no columns: its plates follow the Nameplates page).
+-- Advanced Frames page (no columns: its plates follow the Nameplates page).
 table.insert(ns.ADDON_NOTES, {
 	addon = "Plater", label = "Plater",
 	works = L["Follows the Nameplates page"],

@@ -33,7 +33,7 @@ local DEFAULTS = {
 	enabled = true,
 	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, over the normal UI)
 	minimapButton = true,     -- show the minimap button
-	minimapAngle = 225,       -- its position around the minimap, in degrees
+	minimapAngle = 205,       -- its position around the minimap, in degrees (clear of the dungeon finder's eye)
 	-- In CineMode, hide every tooltip in each camera mode ticked (the Tooltips page):
 	tooltipHideInFlight = true,
 	tooltipHideInIdle = true,   -- standing still
@@ -549,7 +549,7 @@ DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (of
 -- The other pages' master switches likewise (see ns.HANDLE_SWITCHES): off,
 -- CineMode leaves that part of the UI to the game.
 DEFAULTS.handleFrames = true -- Standard Frames
-DEFAULTS.handleAddonFrames = true -- 3rd Party Frames
+DEFAULTS.handleAddonFrames = true -- Advanced Frames
 DEFAULTS.handleGamepad = true
 DEFAULTS.handleMinimap = true
 DEFAULTS.handleQuests = true -- Quest tracker
@@ -1828,8 +1828,8 @@ end
 function ns.EnsureTables()
 	ns.db.extraFrames = ns.db.extraFrames or {}
 	ns.db.ignoredFrames = ns.db.ignoredFrames or {}
-	ns.db.addonFrames = ns.db.addonFrames or {} -- 3rd Party Frames page: key -> false when switched off
-	-- 3rd Party Frames page: suite -> true when opened (they start collapsed).
+	ns.db.addonFrames = ns.db.addonFrames or {} -- Advanced Frames page: key -> false when switched off
+	-- Advanced Frames page: suite -> true when opened (they start collapsed).
 	ns.db.addonSuitesOpen = ns.db.addonSuitesOpen or {}
 	ns.db.addonSuitesClosed = nil -- (a test build's: they started open then)
 	ns.db.savedCVars = ns.db.savedCVars or {}
@@ -1850,6 +1850,11 @@ function ns.EnsureTables()
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
 	ns.db.tooltipCineMode = nil -- (a test build's: the Tooltips page's master switch decides now)
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode
+	ns.db.frameRules = ns.db.frameRules or {} -- row key -> rule text (Custom Visibility Rules, Advanced Frames page)
+	ns.db.playerRule = nil -- (a test build's one rule, the player frame's)
+	-- The minimap button's old spot, 225 (never dragged: dragging never lands
+	-- exactly on it), covered the dungeon finder's eye: the new default.
+	if ns.db.minimapAngle == 225 then ns.db.minimapAngle = 205 end
 	-- The frames pages' place columns (ns.PLACE_SHOW): row -> true, shown all through CineMode there.
 	for _, place in ipairs(ns.PLACE_SHOW) do
 		ns.db[place.list] = ns.db[place.list] or {}

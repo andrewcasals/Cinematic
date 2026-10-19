@@ -2,14 +2,14 @@
 -- bars fade with the game's bars they stand in for and follow the same rows
 -- on the Standard Frames page; its art bar (the gryphons) is the Action bar
 -- art row. The bars with no game bar to follow (its bar 2, class and bonus
--- bars) get a row of their own on the 3rd Party Frames page.
+-- bars) get a row of their own on the Advanced Frames page.
 --
 -- Its bars set their own alpha (each bar's opacity and fade-out settings):
 -- they're its own frames, so they're hooked.
 local _, ns = ...
 local L = ns.L
 
--- 3rd Party Frames row.
+-- Advanced Frames row.
 table.insert(ns.ADDON_FRAMES, {
 	key = "bt4Bars", addon = "Bartender4",
 	label = "Bartender4 other bars", short = "Bartender4 bars",

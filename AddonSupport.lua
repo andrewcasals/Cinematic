@@ -1,10 +1,10 @@
 -- Cinematic: support for other addons. Each one's file (Support/) adds its rows
--- for the 3rd Party Frames page (plain data: the page lists them installed or
+-- for the Advanced Frames page (plain data: the page lists them installed or
 -- not) and any setup code, which only runs once that addon has loaded. So an
 -- addon that isn't loaded costs nothing beyond its rows.
 local ADDON_NAME, ns = ...
 
--- Other addons' frames faded out of the box, listed on the 3rd Party Frames page.
+-- Other addons' frames faded out of the box, listed on the Advanced Frames page.
 -- Each fades as its own group ("addon:<key>") while its addon is loaded and
 -- it isn't switched off (db.addonFrames[key] = false). names: its named
 -- frames. about: what they are, for the options page (note: more to say there).
@@ -17,7 +17,7 @@ local ADDON_NAME, ns = ...
 -- (see HookOwnAlpha in Frames.lua). loaded: set once its addon has loaded.
 ns.ADDON_FRAMES = {}
 
--- Addons supported with no frames to list: on the 3rd Party Frames page all
+-- Addons supported with no frames to list: on the Advanced Frames page all
 -- the same, with what's done for them (works) in place of the columns. about:
 -- the same said at more length, for its tooltip.
 ns.ADDON_NOTES = {}

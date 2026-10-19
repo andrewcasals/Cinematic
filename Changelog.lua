@@ -11,10 +11,14 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-19", page = "Advanced Frames", title = "Custom Visibility Rules",
+		text = "Give any frame, nameplate row or unit frame part a rule of its own instead of its ticks, like " ..
+		"\"In combat AND (Open World OR BGs & Arenas)\". Build it with buttons at the bottom of the Advanced " ..
+		"Frames page." },
 	{ date = "2026-10-19", page = "Profiles", title = "Profile icons",
 		text = "Profiles show as icons with their names, and their descriptions when you point at them. " ..
 		"New profiles get an icon of their own; click your active profile to pick another." },
-	{ date = "2026-10-19", page = "3rd Party Frames", title = "FlareUI support",
+	{ date = "2026-10-19", page = "Advanced Frames", title = "FlareUI support",
 		text = "FlareUI's unit frames, resource bars, buffs, quest tracker, party and raid frames fade in " ..
 		"CineMode, following the Standard Frames rows of the frames they replace." },
 	{ date = "2026-10-19", page = "Unit Frames", title = "Hit text and threat parts",
@@ -38,9 +42,9 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-19", page = "Unit Frames", title = "More unit frame parts",
 		text = "Your pet's frame has a row in the Unit frame parts grid, and the PvP icon, the frames' " ..
 		"other icons and the target's buffs and debuffs have columns of their own." },
-	{ date = "2026-10-17", page = "3rd Party Frames", title = "WeakAuras support",
+	{ date = "2026-10-17", page = "Advanced Frames", title = "WeakAuras support",
 		text = "WeakAuras' auras fade in CineMode; auras anchored to another frame fade with that frame." },
-	{ date = "2026-10-17", page = "3rd Party Frames", title = "Questie support",
+	{ date = "2026-10-17", page = "Advanced Frames", title = "Questie support",
 		text = "Questie's quest tracker and its quest item buttons fade with the Quest tracker row." },
 	{ date = "2026-10-17", page = "Mouseover groups", title = "Mouseover group icons",
 		text = "Every Mouseover group has its own icon, in a row at the top of the page: click one to go " ..
@@ -54,7 +58,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-17", page = "Chat", title = "Update notices",
 		text = "After an update with new features, a line in chat at login says so, with a link to " ..
 		"What's new. Turn it off on the Chat page." },
-	{ date = "2026-10-17", page = "3rd Party Frames", title = "Horizon Suite support",
+	{ date = "2026-10-17", page = "Advanced Frames", title = "Horizon Suite support",
 		text = "Horizon Suite's quest tracker fades with the Quest tracker row, without flickering on zone changes." },
 	{ date = "2026-10-17", page = "New features", title = "What's new",
 		text = "The last settings page lists new features, newest first, and every change made to Cinematic." },
@@ -67,7 +71,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-17", page = "UI Manager", title = "Settings in hubs",
 		text = "UI Manager, Camera and Quality of life hold their pages behind a row of icons, " ..
 		"with one search box for all of them." },
-	{ date = "2026-10-17", page = "3rd Party Frames", title = "More of EllesmereUI fades",
+	{ date = "2026-10-17", page = "Advanced Frames", title = "More of EllesmereUI fades",
 		text = "Its range text, QoL displays (stats, FPS, battle res, Bloodlust, crosshair), combat text " ..
 		"and Forever Essentials frames get rows of their own." },
 	{ date = "2026-10-17", page = "Standard Frames", title = "Pet portrait and minimap header rows",
@@ -143,9 +147,9 @@ ns.CHANGELOG_FEATURES = {
 		text = "Tick an event in the CineMode column and it brings CineMode on while its camera runs." },
 	{ date = "2026-10-13", page = "Cooldown Manager", title = "Cooldowns when ready",
 		text = "In combat the Cooldown Manager can show spells only once they're ready, or early, spell by spell." },
-	{ date = "2026-10-12", page = "3rd Party Frames", title = "Plater support",
+	{ date = "2026-10-12", page = "Advanced Frames", title = "Plater support",
 		text = "Plater's nameplates fade in CineMode like the game's own." },
-	{ date = "2026-10-12", page = "3rd Party Frames", title = "Add mode and Bartender4",
+	{ date = "2026-10-12", page = "Advanced Frames", title = "Add mode and Bartender4",
 		text = "Add any addon's frame by clicking it, and Bartender4's bars fade too." },
 	{ date = "2026-10-12", page = "Cooldown Manager", title = "Cooldown Manager page",
 		text = "The game's Cooldown Manager fades in CineMode, with an Immersive (CDM) profile." },
@@ -163,7 +167,7 @@ ns.CHANGELOG_FEATURES = {
 		text = "A fishing camera and settings of its own." },
 	{ date = "2026-10-11", page = "Gamepad", client = "forever", title = "Gamepad mode",
 		text = "WoW Forever's gamepad mode fades with the rest, with a page of its own." },
-	{ date = "2026-10-10", page = "3rd Party Frames", title = "EllesmereUI support",
+	{ date = "2026-10-10", page = "Advanced Frames", title = "EllesmereUI support",
 		text = "EllesmereUI's frames fade in CineMode." },
 	{ date = "2026-10-10", page = "Quest tracker", title = "Quest tracker page",
 		text = "The quest tracker and quest timer fade, and come up when you accept a quest." },
@@ -175,7 +179,7 @@ ns.CHANGELOG_FEATURES = {
 		text = "Tick a frame in the CineMode column to keep it shown all through CineMode." },
 	{ date = "2026-10-09", page = "Visual Effects", title = "Letterbox and tint by situation",
 		text = "The letterbox bars and the tint can be set for each situation." },
-	{ date = "2026-10-09", page = "3rd Party Frames", title = "Details! and Cooldown Manager Centered",
+	{ date = "2026-10-09", page = "Advanced Frames", title = "Details! and Cooldown Manager Centered",
 		text = "Both fade with the rest of the UI in CineMode." },
 	{ date = "2026-10-08", page = "Camera Modes", title = "Tele Cam",
 		text = "Hearthstones and teleports get a camera move of their own." },

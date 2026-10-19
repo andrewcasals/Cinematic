@@ -9,7 +9,7 @@
 local _, ns = ...
 local L = ns.L
 
--- 3rd Party Frames page (no columns: it follows the Quest tracker row).
+-- Advanced Frames page (no columns: it follows the Quest tracker row).
 table.insert(ns.ADDON_NOTES, {
 	addon = "HorizonSuite", label = "Horizon Suite",
 	works = L["Follows the Quest tracker row"],

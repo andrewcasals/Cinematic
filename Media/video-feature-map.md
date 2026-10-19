@@ -132,7 +132,7 @@ Each hands over to the next seamlessly; worth one shot that chains two.
 ## 11. Works with your setup
 
 - [ ] **Gamepad mode** `[F]`: its bars, button hints and reticle fade like any frame
-- [ ] **3rd Party Frames**: Details!, Bartender4, Plater, EllesmereUI, Cooldown Manager Centered, Forever Enhanced Cooldown Manager - supported out of the box
+- [ ] **Advanced Frames**: Details!, Bartender4, Plater, EllesmereUI, Cooldown Manager Centered, Forever Enhanced Cooldown Manager - supported out of the box
 - [ ] **Custom frames**: fade any addon frame or keep it visible - **Add mode** / `/cine add` to click-pick one (e.g. ChatCopyPaste's button)
 - [ ] **Hide the UI, keep the look** keybind - great for screenshots (show a screenshot being taken)
 

@@ -1,6 +1,6 @@
 -- Cinematic: the frames that fade. The built-in fade list, fading and
 -- nesting, the minimap shrink, scanning for frames created later, the Issue
--- Reporter, hover, and the 3rd Party Frames page's lists.
+-- Reporter, hover, and the Advanced Frames page's lists.
 local ADDON_NAME, ns = ...
 local L = ns.L
 
@@ -465,7 +465,7 @@ end
 local ownAlphaNames, ownAlphaFrames = {}, {}
 local hookedNames, hookedFrames = {}, {}
 local leftAlone = {}
--- 3rd Party Frames groups hooked (hookAlpha), from their rows.
+-- Advanced Frames groups hooked (hookAlpha), from their rows.
 local HOOKED_GROUPS = {}
 for _, known in ipairs(ns.ADDON_FRAMES) do
 	if known.hookAlpha then
@@ -477,7 +477,7 @@ end
 -- off, the frames in their groups aren't faded (let go, their own alpha
 -- back). The Standard Frames page's covers every built-in group but the chat
 -- and gamepad ones (their own pages'); the page switches below it come on
--- top. The 3rd Party Frames page's covers other addons' and added frames.
+-- top. The Advanced Frames page's covers other addons' and added frames.
 local GROUP_SWITCH = {
 	minimap = "handleMinimap", minimapheader = "handleMinimap", minimaptracking = "handleMinimap",
 	minimapcalendar = "handleMinimap", minimapzone = "handleMinimap", minimapclock = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
@@ -1521,7 +1521,7 @@ end
 -- the group. A frame can be in several groups; one in none comes up alone.
 -- Groups are lists of rows: the Standard Frames rows above (with the
 -- supported addons; not the Gamepad page's copy of the XP bars), a few
--- frames that have no row there, and the 3rd Party Frames additions
+-- frames that have no row there, and the Advanced Frames additions
 -- ("extra:<name>"). These only decide what reveals together: the fade groups
 -- (FRAME_GROUPS) still drive everything else.
 local HOVER_EXTRA_ROWS = {
@@ -1810,7 +1810,7 @@ function ns.IsGamePadOn()
 	return C_GamePad ~= nil and GetCVarBool("GamePadEnable")
 end
 
--- Frames added on the 3rd Party Frames page ("extra:<name>") start out like
+-- Frames added on the Advanced Frames page ("extra:<name>") start out like
 -- the supported addons': up in combat and with an enemy targeted.
 local function IsExtraKey(key)
 	return key:find("^extra:") ~= nil
@@ -1936,6 +1936,168 @@ local function PlaceListsHere()
 	return lists
 end
 
+-- Rules (a test): a boolean expression in place of a Standard Frames row's
+-- ticks (db.frameRules: row -> text), like "combat and (world or bg) and not
+-- dungeon". Words: the situations below; and, or, not (also &, |, !) and
+-- brackets. ns.CompileRule(text) gives a test of a facts table, or nil and
+-- what's wrong; compiled once per text. ns.RuleShows(key, facts) is the
+-- row's rule's answer, or nil with no rule (or a broken one): the ticks decide then.
+-- The situations a rule can name, each a field of the facts table (aliases too).
+ns.RULE_WORDS = {
+	always = "always", ["true"] = "always", never = "never", ["false"] = "never",
+	combat = "combat", fighting = "combat",
+	enemy = "enemy", friendly = "friendly", target = "target",
+	bg = "bg", bgs = "bg", arena = "bg", pvp = "bg",
+	world = "world", group = "group", grouped = "group", instance = "instance",
+	dungeon = "dungeon", raid = "raid", city = "city", inn = "inn",
+	flagged = "flagged", mounted = "mounted",
+}
+do
+	local OPERATORS = { ["and"] = "and", ["&"] = "and", ["&&"] = "and", ["or"] = "or", ["|"] = "or", ["||"] = "or",
+		["not"] = "not", ["!"] = "not" }
+	local compiled = {}
+
+	local function Tokens(text)
+		local tokens = {}
+		local i = 1
+		while i <= #text do
+			local c = text:sub(i, i)
+			if c:find("%s") then
+				i = i + 1
+			elseif c == "(" or c == ")" then
+				tokens[#tokens + 1] = c
+				i = i + 1
+			elseif c == "&" or c == "|" or c == "!" then
+				local run = text:match("^[&|]+", i) or c
+				tokens[#tokens + 1] = OPERATORS[run] or run
+				i = i + #run
+			else
+				local word = text:match("^[%w_]+", i)
+				if not word then
+					return nil, ("can't read \"%s\""):format(c)
+				end
+				word = word:lower()
+				tokens[#tokens + 1] = OPERATORS[word] or word
+				i = i + #word
+			end
+		end
+		return tokens
+	end
+
+	-- Recursive descent: or binds loosest, then and, then not.
+	function ns.CompileRule(text)
+		local cached = compiled[text]
+		if cached then
+			return cached[1], cached[2]
+		end
+		local tokens, err = Tokens(text)
+		local pos = 1
+		local Or
+		local function Unary()
+			local token = tokens[pos]
+			if token == "not" then
+				pos = pos + 1
+				local inner = Unary()
+				return inner and function(f) return not inner(f) end
+			elseif token == "(" then
+				pos = pos + 1
+				local inner = Or()
+				if not inner then return nil end
+				if tokens[pos] ~= ")" then
+					err = err or "a ( has no )"
+					return nil
+				end
+				pos = pos + 1
+				return inner
+			elseif token == nil then
+				err = err or "it ends too soon"
+			elseif ns.RULE_WORDS[token] then
+				local field = ns.RULE_WORDS[token]
+				pos = pos + 1
+				return function(f) return f[field] end
+			else
+				err = err or ("\"%s\" isn't a word it knows"):format(token)
+			end
+		end
+		local function And()
+			local left = Unary()
+			while left and tokens[pos] == "and" do
+				pos = pos + 1
+				local a, b = left, Unary()
+				left = b and function(f) return a(f) and b(f) end
+			end
+			return left
+		end
+		function Or()
+			local left = And()
+			while left and tokens[pos] == "or" do
+				pos = pos + 1
+				local a, b = left, And()
+				left = b and function(f) return a(f) or b(f) end
+			end
+			return left
+		end
+		local test
+		if tokens then
+			test = Or()
+			if test and tokens[pos] ~= nil then
+				test, err = nil, ("\"%s\" is out of place"):format(tokens[pos])
+			end
+		end
+		compiled[text] = { test, not test and err or nil }
+		return test, not test and err or nil
+	end
+
+	function ns.RuleShows(key, facts)
+		local test = ns.RuleTest(key)
+		if test then
+			return test(facts) and true or false
+		end
+	end
+	-- The row's rule, compiled, when it has one that reads.
+	function ns.RuleTest(key)
+		local text = ns.db.frameRules and ns.db.frameRules[key]
+		if type(text) ~= "string" or not text:find("%S") then
+			return nil
+		end
+		return (ns.CompileRule(text))
+	end
+
+	-- The facts for where you are now (inCombat: as the In combat column has
+	-- it). Worked out once a frame (the nameplates ask for each kind).
+	local facts = {}
+	local factsAt, factsCombat
+	function ns.RuleFacts(inCombat)
+		local now = GetTime()
+		inCombat = inCombat and true or false
+		if factsAt == now and factsCombat == inCombat then
+			return facts
+		end
+		factsAt, factsCombat = now, inCombat
+		local place = ns.GetPlaceType()
+		local hasTarget = ns.HasTarget()
+		local enemy = hasTarget and ns.IsEnemyUnit("target") and not ns.Flag(UnitIsDeadOrGhost("target"))
+		facts.always, facts.never = true, false
+		facts.combat = inCombat and true or false
+		facts.target = hasTarget and true or false
+		facts.enemy = enemy and true or false
+		facts.friendly = (hasTarget and not enemy) and true or false
+		facts.bg = place == "pvp"
+		facts.dungeon, facts.raid = place == "dungeon", place == "raid"
+		facts.instance = facts.dungeon or facts.raid
+		facts.world = not facts.bg and not facts.instance
+		facts.city, facts.inn = place == "city", place == "inn"
+		facts.group = ns.InGroup() and true or false
+		facts.flagged = ns.IsPvPFlagged() and true or false
+		facts.mounted = ns.Flag(IsMounted()) and true or false
+		return facts
+	end
+	-- The same, in a fight only while really in one (the nameplates and unit frame parts).
+	function ns.RuleFactsNow()
+		return ns.RuleFacts(InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")))
+	end
+end
+
 -- Frame names to show right now: only while staying cinematic and fighting
 -- (in combat, or with an enemy targeted). Also returns whether the player is
 -- actually in combat, since the fast fade-in only applies then.
@@ -1989,11 +2151,17 @@ do
 		local shown = wipe(tickTables.combatShown)
 		-- Rows for gamepad mode only, and the ones they stand in for then.
 		local gamepad = ns.IsGamePadOn()
+		local facts = ns.RuleFacts(inCombat)
 		for _, item in ipairs(ns.COMBAT_SHOW) do
 			local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
 			local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
 				and ns.IsCombatShowOn(item.key)
-			if applies and (ns.IsCineShowOn(item.key) or KeptHere(placeLists, item.key) or (isOn and isOn(item.key)) or calmRow) then
+			-- (A row's rule, when it has one that reads, decides instead of its ticks.)
+			local ticked = ns.RuleShows(item.key, facts)
+			if ticked == nil then
+				ticked = ns.IsCineShowOn(item.key) or KeptHere(placeLists, item.key) or (isOn and isOn(item.key)) or calmRow
+			end
+			if applies and ticked then
 				for _, name in ipairs(item.frames or NO_DEFAULTS) do
 					shown[name] = true
 				end
@@ -2002,10 +2170,14 @@ do
 				end
 			end
 		end
-		-- Added frames, by their rows on the 3rd Party Frames page.
+		-- Added frames, by their rows on the Advanced Frames page.
 		for name in pairs(ns.db.extraFrames) do
 			local key = "extra:" .. name
-			if KeptHere(placeLists, key) or (isOn and isOn(key)) then
+			local ticked = ns.RuleShows(key, facts)
+			if ticked == nil then
+				ticked = KeptHere(placeLists, key) or (isOn and isOn(key))
+			end
+			if ticked then
 				shown[GROUP_KEY[key]] = true
 			end
 		end
@@ -4347,7 +4519,7 @@ function ns.AddUnderMouse(name)
 	end
 	if not name then
 		ns.Print(L["hover over a named UI element, then type /cine add and press Enter " ..
-			"(or /cine add <FrameName>). Frames without a name can't be added: the 3rd Party Frames " ..
+			"(or /cine add <FrameName>). Frames without a name can't be added: the Advanced Frames " ..
 			"settings page lists the addons faded out of the box."])
 		return
 	end
@@ -4376,7 +4548,7 @@ function ns.RemoveUnderMouse()
 		return
 	end
 	ns.StopFading(name)
-	ns.Print(L["%s will always be shown (untick its CineMode box under Custom frames on the 3rd Party Frames " ..
+	ns.Print(L["%s will always be shown (untick its CineMode box under Custom frames on the Advanced Frames " ..
 		"options page to undo)."]:format(name))
 end
 
@@ -4419,7 +4591,7 @@ do
 		overlays[name] = overlay
 	end
 
-	-- The 3rd Party Frames page's button and list (see Options.lua).
+	-- The Advanced Frames page's button and list (see Options.lua).
 	local function AddModeChanged()
 		if ns.OnAddModeChanged then
 			ns.OnAddModeChanged()
@@ -4461,7 +4633,7 @@ do
 		if ns.db.ignoredFrames[name] then
 			skipped[name] = true
 			ns.Print(L["%s skipped: you set it to always show (untick its CineMode box under Custom frames " ..
-				"on the 3rd Party Frames page)."]:format(name))
+				"on the Advanced Frames page)."]:format(name))
 			return
 		end
 		pending[#pending + 1] = name
@@ -5077,6 +5249,17 @@ do
 	end
 
 	-- (Settings unitPart<grid><row><part>, ticked = shown: see ns.UNIT_PART_KINDS.)
+	-- A part with a rule (Rules section, keyed by the same setting) goes by it instead.
+	function FRAMES.Hidden(key)
+		if not key then
+			return false
+		end
+		local test = ns.RuleTest(key)
+		if test then
+			return not test(ns.RuleFactsNow())
+		end
+		return ns.db[key] == false
+	end
 	-- A region in two parts (the target's aggro glow: frame art and threat)
 	-- is hidden while either says so: gathered first in want, then set.
 	FRAMES.want = {}
@@ -5091,7 +5274,7 @@ do
 				local row = entry[4] or Ask(UnitExists, entry[3]) and Row(entry[3])
 				for _, part in ipairs(ns.UNIT_PARTS) do
 					local key = FRAMES.Key(entry, row, part)
-					local hide = key and ns.db[key] == false or false
+					local hide = FRAMES.Hidden(key)
 					local paths = entry[2][part]
 					if type(paths) == "function" then
 						for _, region in ipairs(paths(frame)) do
@@ -5125,7 +5308,7 @@ do
 		for _, entry in ipairs(FRAMES) do
 			if _G[entry[1]] == frame and entry[2].Auras then
 				local key = FRAMES.Key(entry, Ask(UnitExists, entry[3]) and Row(entry[3]), "Auras")
-				local hide = key and ns.db[key] == false or false
+				local hide = FRAMES.Hidden(key)
 				for _, region in ipairs(entry[2].Auras(frame)) do
 					SetHidden(region, hide)
 				end
@@ -5178,6 +5361,36 @@ do
 		ns.ApplyUnitFrameParts()
 		if event == "PLAYER_ENTERING_WORLD" then
 			C_Timer.After(0, ns.ApplyUnitFrameParts)
+		end
+	end)
+	-- Parts with rules: applied again when what the rules know changes (a
+	-- fight, a place, a group...), checked 4 times a second.
+	local lastFacts, since = {}, 0
+	watcher:SetScript("OnUpdate", function(_, elapsed)
+		since = since + elapsed
+		if since < 0.25 or not ns.db then
+			return
+		end
+		since = 0
+		local any = false
+		for key in pairs(ns.db.frameRules or NO_DEFAULTS) do
+			if key:find("^unitPart") then
+				any = true
+				break
+			end
+		end
+		if not any then
+			return
+		end
+		local changed = false
+		for field, value in pairs(ns.RuleFactsNow()) do
+			if lastFacts[field] ~= value then
+				lastFacts[field] = value
+				changed = true
+			end
+		end
+		if changed then
+			ns.ApplyUnitFrameParts()
 		end
 	end)
 end

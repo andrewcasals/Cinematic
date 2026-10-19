@@ -2,7 +2,7 @@
 -- only once it has loaded. It swaps the game's unit frames, action bars and
 -- the like for its own, which fade with the frames they stand in for and
 -- follow the same rows on the Standard Frames page. Its parts with no game
--- frame to follow get rows of their own on the 3rd Party Frames page.
+-- frame to follow get rows of their own on the Advanced Frames page.
 --
 -- It sets its frames' alpha all the time (target changes, combat, mouseover):
 -- its own frames are hooked, and game frames it sets are checked every frame.
@@ -42,7 +42,7 @@ local function MatchUnlockFrames(keys)
 	end
 end
 
--- 3rd Party Frames rows.
+-- Advanced Frames rows.
 for _, known in ipairs({
 	{
 		key = "euiBars", addon = "EllesmereUIActionBars",

@@ -18,7 +18,7 @@ local function RecordKey(parent, key)
 	end
 end
 -- Pages sharing a list (the Standard Frames columns: Standard Frames, Gamepad,
--- 3rd Party Frames) reset only their own rows of it (page -> list -> row -> true).
+-- Advanced Frames) reset only their own rows of it (page -> list -> row -> true).
 local pageRows = {}
 local function RecordRow(parent, key, row)
 	pageRows[parent] = pageRows[parent] or {}
@@ -791,7 +791,7 @@ local function CreatePanel()
 	local subtitle = PageIntro(panel, title,
 		L["Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
-		"pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, " ..
+		"pages under this one cover what shows when (CineMode, Standard Frames, Advanced Frames, Minimap, Quest tracker, Nameplates, " ..
 		"Chat), visual effects and sound, the camera modes and triggers, and keybinds."])
 
 	local searchBox = CreateSearch(mainCanvas, panel)
@@ -1005,7 +1005,7 @@ do
 				return UnitFactionGroup("player") == "Horde" and "Interface\\Icons\\INV_BannerPVP_01"
 					or "Interface\\Icons\\INV_BannerPVP_02"
 			end },
-			{ "3rd Party Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
+			{ "Advanced Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
 			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot" },
 			{ "Unit Frames", "Interface\\Icons\\INV_Misc_Head_Dwarf_01" },
 			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision" },
@@ -3893,7 +3893,17 @@ local function CreateAudioPanel()
 	RegisterSubpage(canvas, "Audio")
 end
 
--- The frames tables (Standard Frames, Gamepad, 3rd Party Frames): the
+-- What a rule can be for (RulesSection): the rows the pages make, as they
+-- make them: { key, label, path = { page, grid... } }, once each.
+local ruleTargets, ruleTargetKeys = {}, {}
+local function RuleTarget(key, label, ...)
+	if not ruleTargetKeys[key] then
+		ruleTargetKeys[key] = true
+		ruleTargets[#ruleTargets + 1] = { key = key, label = label, path = { ... } }
+	end
+end
+
+-- The frames tables (Standard Frames, Gamepad, Advanced Frames): the
 -- name, then a column per situation ({ heading, isOn, list, needs "stay
 -- cinematic in combat", tip }): Always, the fights and targets, then the
 -- places (ns.PLACE_SHOW). Narrow columns, so all eight fit beside the
@@ -3920,8 +3930,9 @@ local function FrameHeading(parent, text)
 end
 
 -- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
--- items), a column per situation. Used by the Gamepad page too.
-local function ShowTable(content, anchor, rows)
+-- items), a column per situation. Used by the Gamepad page too. ...: where
+-- the rows are, for the Rules section's menu.
+local function ShowTable(content, anchor, rows, ...)
 	-- One table: a row per frame, a column per situation.
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, 24
 	local COLUMNS = FRAME_COLUMNS
@@ -3936,6 +3947,7 @@ local function ShowTable(content, anchor, rows)
 	local lastLabel = columnTop
 	for r, item in ipairs(rows) do
 		local y = -FRAME_HEADING_HEIGHT - 4 - (r - 1) * ROW_HEIGHT
+		RuleTarget(item.key, item.label, ...)
 		local rowLabel = Label(content, "GameFontHighlight", item.label)
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
 		rowLabel:SetWidth(LABEL_WIDTH - 4)
@@ -3979,7 +3991,8 @@ local function ShowTable(content, anchor, rows)
 			check.Refresh = function(self)
 				local db = ns.GetDB()
 				self:SetChecked(isOn(item.key))
-				self:SetEnabled((not item.handledBy or db[item.handledBy]) and (c == 1
+				-- (A row with a rule that reads: the rule decides, its ticks greyed.)
+				self:SetEnabled((not item.handledBy or db[item.handledBy]) and not ns.RuleTest(item.key) and (c == 1
 					or (not ns.IsCineShowOn(item.key) and (not needsStay or db.stayInCombat))))
 			end
 		end
@@ -4000,17 +4013,17 @@ local function CreateCombatPanel()
 		"Always shows it the whole time, the next three only while you fight or have something " ..
 		"targeted, and the places the whole time while you're there (Grouped: in a party or raid). " ..
 		"Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
-		"frames are on the 3rd Party Frames page."])
+		"frames are on the Advanced Frames page."])
 
 	-- The game's frames this client has, in sections (their page: see
 	-- ROW_SECTIONS), each a table of its own; the gamepad's are on the
-	-- Gamepad page, other addons' frames on the 3rd Party Frames page.
+	-- Gamepad page, other addons' frames on the Advanced Frames page.
 	local switch = PageSwitch(content, "handleFrames", L["CineMode Standard Frames"],
 		L["On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
 		"alone, the minimap, quest tracker, buffs and Cooldown Manager included (their pages' " ..
 		"switches only count while this is on)."], subtitle)
 	local calm = Check(content, "combatShowCalm", L["In combat rows stay for the Calm Timer"],
-		L["Frames ticked In combat (here and on the 3rd Party Frames page) stay up after a fight " ..
+		L["Frames ticked In combat (here and on the Advanced Frames page) stay up after a fight " ..
 		"until the Calm Timer (CineMode page) has run out, then fade. Off: they fade as soon as the fight ends."])
 	calm:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -2)
 	GreyUnless(calm, function(db) return db.stayInCombat end)
@@ -4026,16 +4039,17 @@ local function CreateCombatPanel()
 			return
 		end
 		lastRow = ShowTable(content, Header(content, heading, lastRow, lastRow == calm and -16 or -28),
-			sectionRows)
+			sectionRows, "Standard Frames", heading)
 	end
-	Section("units", L["Unit frames"])
-	Section("combat", L["Combat"])
-	Section("bars", L["Action bars"])
-	Section("interface", L["Interface"])
-	Section("party", L["Party frames (not raid-style)"])
-	Section("raid", L["Raid frames"])
-	Section("bg", L["Battlegrounds"])
-	Section(nil, L["Other"]) -- (any row not given a section)
+	local SECTIONS = {
+		{ "units", L["Unit frames"] }, { "combat", L["Combat"] }, { "bars", L["Action bars"] },
+		{ "interface", L["Interface"] }, { "party", L["Party frames (not raid-style)"] },
+		{ "raid", L["Raid frames"] }, { "bg", L["Battlegrounds"] },
+		{ false, L["Other"] }, -- (any row not given a section)
+	}
+	for _, section in ipairs(SECTIONS) do
+		Section(section[1] or nil, section[2])
+	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -4304,15 +4318,17 @@ local function CreatePortraitsPanel()
 					-- auras; threat is for NPCs you can fight.)
 					if Has(row, column[1]) then
 						local key = "unitPart" .. section.prefix .. row[1] .. column[1]
+						RuleTarget(key, column[2], "Unit frame parts", section.title, row[2])
 						local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
 							ns.GetDB()[key] = value
 							ns.ApplyUnitFrameParts()
 						end)
 						cb:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
-						if section.same then
-							local same = section.same
-							GreyUnless(cb, function(db) return db[same] == false end)
-						end
+						-- (Greyed while a rule decides it: Rules section, Advanced Frames page.)
+						local same = section.same
+						GreyUnless(cb, function(db)
+							return (not same or db[same] == false) and not ns.RuleTest(key)
+						end)
 						section.widgets[#section.widgets + 1] = cb
 					end
 				end
@@ -4449,7 +4465,8 @@ local function CreateQualityPanel()
 	local title = Label(content, "GameFontNormalLarge", L["General"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = PageIntro(content, title, L["Small helpers for getting about the world."])
+	local subtitle = PageIntro(content, title, L["Small helpers for getting about the world. Ideas for more in the spirit of this page are " ..
+		"welcome: please send them to the developer."])
 
 	local stack = Stack(subtitle, "label")
 	-- (WoW Forever only: Campfire.lua.)
@@ -4657,7 +4674,7 @@ local function CreateGamepadPanel()
 	local switch = PageSwitch(content, "handleGamepad", L["CineMode Gamepad"],
 		L["On: CineMode fades the gamepad's bars, button hints and reticle as this page says. Off: it " ..
 		"leaves them alone."], subtitle)
-	local lastRow = ShowTable(content, switch, rows)
+	local lastRow = ShowTable(content, switch, rows, "Gamepad")
 
 	-- The prompt sits on a nameplate, not a frame of its own: a setting for
 	-- the plates' fade rather than a row.
@@ -4979,10 +4996,14 @@ local function CreatePlatesPanel()
 		local function Available()
 			return part or ns.HasPlateSettings(kind[1])
 		end
+		-- (And while a rule decides the row: Rules section, Advanced Frames page.)
+		local ruleKey = "plate:" .. kind[1]
+		RuleTarget(ruleKey, kind[2], "Nameplates",
+			part and "Plate parts" or kind[1]:find("Target$") and "Your target" or "Plates")
 		for c, check in ipairs(checks) do
 			if not emptyColumns[c] then
 				GreyUnless(check, function(db)
-					return Available() and (c == 1 or not db[alwaysKey])
+					return Available() and not ns.RuleTest(ruleKey) and (c == 1 or not db[alwaysKey])
 				end)
 			end
 		end
@@ -5300,10 +5321,328 @@ local function CreateChatPanel()
 	RegisterSubpage(chatCanvas, "Chat")
 end
 
+-- Rules (a test): a boolean expression in place of a row's ticks, one at
+-- most for each row on the frames pages, the Nameplates page and the Unit
+-- frame parts grids (db.frameRules: row key -> text; see ns.CompileRule).
+-- At the bottom of the Advanced Frames page, under anchor. The buttons build
+-- the selected rule, so it needn't be typed. Returns a function that lays
+-- the rules out again.
+local function RulesSection(content, anchor)
+	local ROW_WIDTH = FRAME_LABEL_WIDTH + 8 * FRAME_COLUMN_WIDTH
+	local rulesHeader = Header(content, "Custom Visibility Rules", anchor, -28)
+	-- (Its intro behind a "?" beside the header.)
+	local intro = PageIntro(content, rulesHeader,
+		"Pick a frame, nameplate row or unit frame part to give it a rule instead of its ticks, like " ..
+		"\"In combat AND (Open World OR BGs & Arenas)\". Click a rule to select it, then the buttons below " ..
+		"to build it (a green dot means it's true where you are). An unfinished rule leaves the ticks to decide.")
+	RecordKey(content, "frameRules") -- (the page's Reset empties them)
+
+	-- What a rule can be for: the rows the pages registered, and the custom
+	-- frames as they are now.
+	local function Targets()
+		local targets = {}
+		for _, target in ipairs(ruleTargets) do targets[#targets + 1] = target end
+		local db = ns.GetDB()
+		local names = {}
+		for name in pairs(db and db.extraFrames or {}) do names[#names + 1] = name end
+		table.sort(names)
+		for _, name in ipairs(names) do
+			targets[#targets + 1] = { key = "extra:" .. name, label = name, path = { "Custom frames" } }
+		end
+		return targets
+	end
+
+	local selected -- (the key whose rule the buttons build)
+	local ruleRows = {} -- (made as needed, reused)
+	local RebuildRules
+	local function Rules() return ns.GetDB().frameRules end
+	-- What else a rule changing needs: a nameplate row its game settings on,
+	-- unit frame parts applied again.
+	local function Changed(key)
+		local text = Rules()[key]
+		local kind = key:match("^plate:(.+)")
+		if kind and text and text:find("%S") and ns.EnablePlateRow then
+			ns.EnablePlateRow(kind)
+		elseif key:find("^unitPart") and ns.ApplyUnitFrameParts then
+			ns.ApplyUnitFrameParts()
+		end
+	end
+	local function SetRule(key, text)
+		Rules()[key] = text
+		Changed(key)
+		RebuildRules()
+		Refresh() -- (greys the row's ticks, or brings them back)
+	end
+	-- The rule's box focused, its cursor at the end (for the next piece, or typing).
+	local function FocusEnd(key)
+		for _, row in ipairs(ruleRows) do
+			if row:IsShown() and row.key == key then
+				local text = Rules()[key] or ""
+				row.box:SetText(text)
+				row.box:SetFocus()
+				row.box:SetCursorPosition(#text)
+			end
+		end
+	end
+
+	-- The menu that adds a rule: what has none yet, in submenus by page
+	-- (and grid, and row).
+	local addMenu
+	local ok, made = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+	if ok and made and made.SetupMenu then
+		addMenu = made
+		addMenu:SetWidth(220)
+		addMenu:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -8)
+		addMenu:SetDefaultText("Add a rule for...")
+		addMenu:SetupMenu(function(_, root)
+			local db = ns.GetDB()
+			if not db then return end
+			local menus = {}
+			for _, target in ipairs(Targets()) do
+				local key = target.key
+				if not (db.frameRules and db.frameRules[key]) then
+					local menu, path = root, ""
+					for _, step in ipairs(target.path) do
+						path = path .. "\001" .. step
+						menus[path] = menus[path] or menu:CreateButton(step)
+						menu = menus[path]
+					end
+					menu:CreateButton(target.label, function()
+						selected = key
+						SetRule(key, "")
+						FocusEnd(key)
+					end)
+				end
+			end
+		end)
+	end
+	local rowsTop = CreateFrame("Frame", nil, content)
+	rowsTop:SetSize(1, 1)
+	rowsTop:SetPoint("TOPLEFT", addMenu or intro, "BOTTOMLEFT", 0, -8)
+
+	-- A rule row: what it's for, its rule and a remove button, and a line
+	-- saying whether it reads and what it gives right now.
+	local function RuleRow(index)
+		local row = ruleRows[index]
+		if row then return row end
+		row = CreateFrame("Button", nil, content)
+		row:SetSize(ROW_WIDTH, 58)
+		row.highlight = row:CreateTexture(nil, "BACKGROUND")
+		row.highlight:SetAllPoints()
+		row.highlight:SetColorTexture(1, 0.82, 0, 0.12)
+		row.label = Label(row, "GameFontHighlight", "")
+		row.label:SetPoint("TOPLEFT", 4, -4)
+		row.label:SetWidth(ROW_WIDTH - 8)
+		row.label:SetJustifyH("LEFT")
+		row.label:SetWordWrap(false)
+		row.box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+		row.box:SetSize(ROW_WIDTH - 40, 20)
+		row.box:SetAutoFocus(false)
+		row.box:SetPoint("TOPLEFT", 10, -20)
+		row.status = Label(row, "GameFontNormalSmall", "")
+		row.status:SetPoint("TOPLEFT", 4, -44)
+		row.status:SetWidth(ROW_WIDTH - 8)
+		row.status:SetJustifyH("LEFT")
+		row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")
+		row.remove:SetSize(24, 24)
+		row.remove:SetPoint("LEFT", row.box, "RIGHT", 4, 0)
+		Tooltip(row.remove, "Removes this rule: its ticks decide again.")
+		local function Select()
+			selected = row.key
+			RebuildRules()
+		end
+		row:SetScript("OnClick", Select)
+		row.box:SetScript("OnEditFocusGained", Select)
+		row.box:SetScript("OnTextChanged", function(self, userInput)
+			if userInput then Rules()[row.key] = self:GetText() end
+		end)
+		row.box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+		row.box:SetScript("OnEditFocusLost", function()
+			Changed(row.key)
+			Refresh()
+		end)
+		row.box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+		row.remove:SetScript("OnClick", function()
+			local key = row.key
+			Rules()[key] = nil
+			Changed(key)
+			if selected == key then selected = nil end
+			RebuildRules()
+			Refresh()
+		end)
+		ruleRows[index] = row
+		return row
+	end
+
+	-- The building buttons, a line for each kind of piece, each its colour:
+	-- the joining words (and Undo, Clear), then the situations. A situation
+	-- that's true where you are has a green dot, in room kept for it at the
+	-- button's right (on the text, it looked odd).
+	local palette = CreateFrame("Frame", nil, content)
+	palette:SetSize(ROW_WIDTH, 1)
+	local GROUP_WIDTH = 70
+	local PIECE_GROUPS = {
+		{ "Logic", { 1, 1, 1 }, { { "and", "AND" }, { "or", "OR" }, { "not", "NOT" }, { "(", "(" }, { ")", ")" } } },
+		{ "Combat", { 1, 0.45, 0.4 }, { { "combat", L["In combat"] } } },
+		{ "Target", { 1, 0.65, 0.25 }, { { "enemy", L["Tar Enemy"] }, { "friendly", L["Tar Friendly"] },
+			{ "target", "Any target" } } },
+		{ "Location", { 0.45, 0.75, 1 }, { { "world", L["Open World"] }, { "city", "City" }, { "inn", "Inn" },
+			{ "bg", L["BGs & Arenas"] }, { "instance", L["Instances"] }, { "dungeon", "Dungeon" }, { "raid", "Raid" } } },
+		{ "You", { 0.8, 0.6, 1 }, { { "mounted", "Mounted" }, { "flagged", "PvP flagged" }, { "group", L["Grouped"] } } },
+	}
+	local pieceButtons, wordButtons = {}, {}
+	local x, y = GROUP_WIDTH, 0
+	local DOT_ROOM = 12
+	local function PieceButton(text, onClick, color, dotted)
+		local button = CreateFrame("Button", nil, palette, "UIPanelButtonTemplate")
+		button:SetText(text)
+		button:SetSize(button:GetTextWidth() + 20 + (dotted and DOT_ROOM or 0), 22)
+		if dotted then
+			button.dot = button:CreateTexture(nil, "OVERLAY")
+			button.dot:SetSize(10, 10)
+			button.dot:SetPoint("RIGHT", -7, 0)
+			button.dot:SetTexture("Interface\\COMMON\\Indicator-Green")
+			button.dot:Hide()
+			local label = button:GetFontString()
+			label:ClearAllPoints()
+			label:SetPoint("CENTER", -DOT_ROOM / 2, 0)
+		end
+		button:SetScript("OnClick", onClick)
+		if x > GROUP_WIDTH and x + button:GetWidth() > ROW_WIDTH then
+			x, y = GROUP_WIDTH, y - 24
+		end
+		button:SetPoint("TOPLEFT", palette, "TOPLEFT", x, y)
+		x = x + button:GetWidth() + 4
+		button.color = color or { 1, 0.82, 0 }
+		pieceButtons[#pieceButtons + 1] = button
+		return button
+	end
+	local function Edit(change)
+		if selected then
+			SetRule(selected, change((Rules()[selected] or ""):gsub("%s+$", "")))
+			FocusEnd(selected)
+		end
+	end
+	for g, group in ipairs(PIECE_GROUPS) do
+		if g > 1 then
+			x, y = GROUP_WIDTH, y - 26
+		end
+		local name, color = group[1], group[2]
+		local heading = Label(palette, "GameFontNormalSmall", name)
+		heading:SetTextColor(color[1], color[2], color[3])
+		heading:SetPoint("TOPLEFT", palette, "TOPLEFT", 0, y - 6)
+		for _, piece in ipairs(group[3]) do
+			local word = piece[1]
+			local button = PieceButton(piece[2], function()
+				Edit(function(text)
+					local glue = (text == "" or text:sub(-1) == "(" or word == ")") and "" or " "
+					return text .. glue .. word
+				end)
+			end, color, ns.RULE_WORDS[word] ~= nil)
+			if ns.RULE_WORDS[word] then
+				wordButtons[word] = button
+				Tooltip(button, ("Adds \"%s\". A green dot: true where you are now."):format(word))
+			end
+		end
+		if g == 1 then
+			-- (Undo and Clear at the end of the Logic line, a little apart.)
+			x = x + 16
+			local undo = PieceButton("Undo", function()
+				Edit(function(text)
+					-- (The last word, or the last bracket or sign.)
+					local shorter = text:gsub("[%w_]+$", "")
+					if shorter == text then shorter = text:sub(1, -2) end
+					return (shorter:gsub("%s+$", ""))
+				end)
+			end)
+			Tooltip(undo, "Takes the last piece off the selected rule.")
+			local clear = PieceButton("Clear", function() Edit(function() return "" end) end)
+			Tooltip(clear, "Empties the selected rule (it stays, for building again).")
+		end
+	end
+	palette:SetHeight(-y + 22)
+
+	-- Whether each rule reads and what it gives now, and which words are true.
+	local function UpdateStatus()
+		local facts = ns.RuleFactsNow()
+		for _, button in ipairs(pieceButtons) do
+			local color = button.color
+			if button:IsEnabled() then
+				button:GetFontString():SetTextColor(color[1], color[2], color[3])
+			else
+				button:GetFontString():SetTextColor(0.5, 0.5, 0.5)
+			end
+		end
+		for word, button in pairs(wordButtons) do
+			button.dot:SetShown(facts[ns.RULE_WORDS[word]] and button:IsEnabled() and true or false)
+		end
+		for _, row in ipairs(ruleRows) do
+			if row:IsShown() then
+				local text = Rules()[row.key] or ""
+				local test, err = ns.CompileRule(text)
+				if not text:find("%S") then
+					row.status:SetText("|cff999999Empty: the ticks decide.|r")
+				elseif not test then
+					row.status:SetText("|cffff6060Not finished: " .. err .. ". The ticks decide until it is.|r")
+				else
+					row.status:SetText(test(facts) and "|cff60ff60Right now: shown|r"
+						or "|cffffd100Right now: hidden|r")
+				end
+			end
+		end
+	end
+	-- The rules in the pages' order, the selected one lit.
+	function RebuildRules()
+		local db = ns.GetDB()
+		local rules = db and db.frameRules or {}
+		if selected and not rules[selected] then selected = nil end
+		local index, last = 0, nil
+		local listed = {}
+		local function Add(key, label, path)
+			index = index + 1
+			listed[key] = true
+			selected = selected or key
+			local row = RuleRow(index)
+			row.key = key
+			row.label:SetText((#path > 0 and "|cff999999" .. table.concat(path, " > ") .. " >|r " or "") .. label)
+			if not row.box:HasFocus() then row.box:SetText(rules[key]) end
+			row.highlight:SetShown(key == selected)
+			row:ClearAllPoints()
+			row:SetPoint("TOPLEFT", last or rowsTop, last and "BOTTOMLEFT" or "TOPLEFT", 0, last and -4 or 0)
+			row:Show()
+			last = row
+		end
+		for _, target in ipairs(Targets()) do
+			if rules[target.key] then Add(target.key, target.label, target.path) end
+		end
+		-- (Rules for rows this client doesn't have: kept, listed by their keys.)
+		for key in pairs(rules) do
+			if not listed[key] then Add(key, key, {}) end
+		end
+		for i = index + 1, #ruleRows do ruleRows[i]:Hide() end
+		palette:ClearAllPoints()
+		palette:SetPoint("TOPLEFT", last or rowsTop, last and "BOTTOMLEFT" or "TOPLEFT", 0, -8)
+		for _, button in ipairs(pieceButtons) do button:SetEnabled(selected ~= nil) end
+		UpdateStatus()
+		FitContentHeight(content)
+	end
+	local since = 0
+	palette:SetScript("OnUpdate", function(_, elapsed)
+		since = since + elapsed
+		if since > 0.5 then since = 0 UpdateStatus() end
+	end)
+	local reset = resetHooks[content]
+	resetHooks[content] = function()
+		if reset then reset() end
+		RebuildRules()
+	end
+	return RebuildRules
+end
+
 -- Sub-page listing the built-in frames, each with a checkbox to keep it shown.
 local RefreshExtras
 
--- The 3rd Party Frames page's columns, for the supported addons and the
+-- The Advanced Frames page's columns, for the supported addons and the
 -- custom frames alike: the name, then Always and the Standard Frames
 -- page's columns ({ heading, isOn, list, needs "stay cinematic in combat" }).
 local THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_COLUMN_WIDTH = FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH
@@ -5384,7 +5723,7 @@ local function GetExtraRow(index)
 				if not row.item then return end
 				self:SetChecked(isOn("extra:" .. row.item.name))
 				self:SetEnabled(SwitchOn("handleAddonFrames") and not row.item.kept
-					and (not needsStay or ns.GetDB().stayInCombat))
+					and not ns.RuleTest("extra:" .. row.item.name) and (not needsStay or ns.GetDB().stayInCombat))
 			end
 		end
 		check:SetPoint("LEFT", ThirdPartyColumnX(c), 0)
@@ -5433,6 +5772,12 @@ RefreshExtras = function()
 
 	GetExtraHeadings():SetShown(#items > 0)
 	extrasPanel.empty:SetShown(#items == 0)
+	-- (The Rules section, below the last of them.)
+	if extrasPanel.rulesAnchor then
+		extrasPanel.rulesAnchor:ClearAllPoints()
+		extrasPanel.rulesAnchor:SetPoint("TOPLEFT", #items > 0 and extraRows[#items] or extrasPanel.empty, "BOTTOMLEFT")
+		extrasPanel.rebuildRules()
+	end
 	FitContentHeight(extrasPanel)
 end
 
@@ -6076,10 +6421,10 @@ local function CreateExtrasPanel()
 	local canvas, content = CreateScrollPage()
 	extrasPanel = content
 
-	local title = Label(content, "GameFontNormalLarge", L["3rd Party Frames"])
+	local title = Label(content, "GameFontNormalLarge", L["Advanced Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleAddonFrames", L["CineMode 3rd Party Frames"],
+	local switch = PageSwitch(content, "handleAddonFrames", L["CineMode Advanced Frames"],
 		L["On: CineMode fades the supported addons' frames, and frames you added, as this page says. " ..
 		"Off: it leaves them all alone."], title)
 	local stack = Stack(switch, "check")
@@ -6120,6 +6465,7 @@ local function CreateExtrasPanel()
 			row.suiteLabel = known.label:sub(#known.suite + 2)
 		end
 		local item = "addon:" .. known.key
+		RuleTarget(item, known.label, "Supported addons")
 		for c, column in ipairs(COLUMNS) do
 			local check
 			if c == 1 then
@@ -6140,7 +6486,8 @@ local function CreateExtrasPanel()
 				RecordRow(content, tableKey, item)
 				check.Refresh = function(self)
 					self:SetChecked(isOn(item))
-					self:SetEnabled(ns.IsAddonFramesOn(known.key) and (not needsStay or ns.GetDB().stayInCombat))
+					self:SetEnabled(ns.IsAddonFramesOn(known.key) and not ns.RuleTest(item)
+						and (not needsStay or ns.GetDB().stayInCombat))
 				end
 			end
 			row.checks[c] = check
@@ -6386,6 +6733,12 @@ local function CreateExtrasPanel()
 	content.empty = Label(content, "GameFontDisableSmall", L["None yet."])
 	content.empty:SetPoint("TOPLEFT", addMode, "BOTTOMLEFT", 0, -12)
 
+	-- Rules (a test), at the bottom: placed by RefreshExtras.
+	content.rulesAnchor = CreateFrame("Frame", nil, content)
+	content.rulesAnchor:SetSize(1, 1)
+	content.rulesAnchor:SetPoint("TOPLEFT", content.empty, "BOTTOMLEFT")
+	content.rebuildRules = RulesSection(content, content.rulesAnchor)
+
 	canvas:SetScript("OnShow", PageShown(function()
 		if ns.GetDB() then
 			Layout()
@@ -6394,7 +6747,7 @@ local function CreateExtrasPanel()
 		end
 	end, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, L["3rd Party Frames"])
+	RegisterSubpage(canvas, L["Advanced Frames"])
 end
 
 -- Sub-page: keybinds. The same bindings as Key Bindings > AddOns, with two
@@ -7050,7 +7403,7 @@ local function CreateMouseoverPanel()
 	RecordKey(content, "hoverGroups")
 
 	-- The frames you can add: the rows (Standard Frames, the supported
-	-- addons, a few more), your 3rd Party Frames additions, and any other
+	-- addons, a few more), your Advanced Frames additions, and any other
 	-- named frame on screen (adding one of those fades it too).
 	local catalog, byKey = {}, {}
 	local function AddToCatalog(key, label, tag)
@@ -7184,7 +7537,7 @@ local function CreateMouseoverPanel()
 	if scrollBar.SetObeyStepOnDrag then scrollBar:SetObeyStepOnDrag(true) end
 
 	-- Adding a frame to group number index. A frame on screen that isn't
-	-- faded yet is added to the 3rd Party Frames list first (as /cine add
+	-- faded yet is added to the Advanced Frames list first (as /cine add
 	-- does; windows are turned down there).
 	local function AddMember(index, item)
 		local key = item.key
@@ -7684,7 +8037,7 @@ ns.OnLanguage(function()
 	CreateProfilesPanel()
 	-- Sub-pages in the order they're listed: what fades and shows, then the look
 	-- and sound, then the camera modes (their shared page and events first),
-	-- keybinds. (Standard Frames and 3rd Party Frames come right after CineMode.)
+	-- keybinds. (Standard Frames and Advanced Frames come right after CineMode.)
 	CreateRevealPanel()
 	CreateCombatPanel()
 	CreatePortraitsPanel()
