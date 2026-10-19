@@ -4078,7 +4078,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local deathFade = cinematic and ns.IsDeathCinematic and ns.IsDeathCinematic()
 
 	-- Hide in camera modes (Minimap page): the camera running now fades the
-	-- minimap, whatever would keep it up. Hovering still shows it.
+	-- minimap and its header, whatever would keep them up. Hovering still shows them.
 	local camHidesMinimap = ns.activeCam and ns.db[ns.activeCam .. "HideMinimap"]
 	-- Keep minimap open indoors (Minimap page): see RedrawMinimapWhenShown.
 	local keepIndoors = ns.db.minimapIndoors and IsIndoors and ns.Flag(IsIndoors())
@@ -4136,7 +4136,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 			end
 			entry.debugUp = up
 		end
-		if camHidesMinimap and entry.group == "minimap" and not hovered[entry.row] and not pinged[entry.row] then
+		-- (The header too: its bar, zone name, clock and buttons are groups of their own.)
+		if camHidesMinimap and GROUP_SWITCH[entry.group] == "handleMinimap"
+			and not hovered[entry.row] and not pinged[entry.row] then
 			target = 0
 		end
 		if entry.frame == Minimap then

@@ -713,7 +713,7 @@ L["Battlegrounds and arenas (being flagged for PvP out in the world doesn't coun
 L["BGs"] = "战场"
 L["Tracking doesn't keep the minimap up here. Hovering it still shows it."] = "在这里追踪不会让小地图保持显示。鼠标悬停仍会显示它。"
 L["Hide in camera modes"] = "在镜头模式中隐藏"
-L["While the %s camera runs, the minimap fades, even if it's set to always show or tracking would keep it up. Hovering it still shows it."] = "%s镜头运行期间，小地图会淡出，即使它被设为始终显示或追踪会让它保持显示。鼠标悬停仍会显示它。"
+L["While the %s camera runs, the minimap and its header fade, even if they're set to always show or tracking would keep them up. Hovering them still shows them."] = "%s镜头运行期间，小地图会淡出，即使它被设为始终显示或追踪会让它保持显示。鼠标悬停仍会显示它。"
 L["When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it up all the time, or in fights, see the Standard Frames page."] = "任务追踪何时在CineMode中出现。鼠标悬停时总会显示它。若要一直显示或在战斗中显示，请查看标准框体页面。"
 L["Reveal on new quest"] = "接受新任务时显示"
 L["Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the Mouseover groups that have Quest progress ticked): it goes after \"Stays after mouseover\" (Mouseover groups page)."] = "接受任务时，任务追踪会像被鼠标悬停一样显示（同时显示勾选了“任务进度”的其他鼠标悬停分组）：在“悬停后保持”（鼠标悬停分组页面）时间后消失。"

@@ -5531,8 +5531,8 @@ local function CreateMinimapPanel()
 	local camAbove = {}
 	for i, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 		local check = Check(content, cam[1] .. "HideMinimap", cam[2],
-			L["While the %s camera runs, the minimap fades, even if it's set to " ..
-			"always show or tracking would keep it up. Hovering it still shows it."]:format(cam[2]))
+			L["While the %s camera runs, the minimap and its header fade, even if they're set to " ..
+			"always show or tracking would keep them up. Hovering them still shows them."]:format(cam[2]))
 		local column, row = math.floor((i - 1) / CAM_ROWS), (i - 1) % CAM_ROWS
 		if row == 0 then
 			check:SetPoint("TOPLEFT", hideInCams, "BOTTOMLEFT", -2 + column * CAM_COLUMN, -4)

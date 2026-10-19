@@ -713,7 +713,7 @@ L["Battlegrounds and arenas (being flagged for PvP out in the world doesn't coun
 L["BGs"] = "전장"
 L["Tracking doesn't keep the minimap up here. Hovering it still shows it."] = "이곳에서는 추적해도 미니맵이 남아 있지 않습니다. 마우스를 올리면 여전히 보입니다."
 L["Hide in camera modes"] = "카메라 모드에서 숨기기"
-L["While the %s camera runs, the minimap fades, even if it's set to always show or tracking would keep it up. Hovering it still shows it."] = "%s 카메라가 도는 동안에는 항상 표시나 추적으로 남아 있도록 설정했더라도 미니맵이 흐려집니다. 마우스를 올리면 여전히 보입니다."
+L["While the %s camera runs, the minimap and its header fade, even if they're set to always show or tracking would keep them up. Hovering them still shows them."] = "%s 카메라가 도는 동안에는 항상 표시나 추적으로 남아 있도록 설정했더라도 미니맵이 흐려집니다. 마우스를 올리면 여전히 보입니다."
 L["When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it up all the time, or in fights, see the Standard Frames page."] = "CineMode에서 퀘스트 추적기가 언제 나타날지 정합니다. 마우스를 올리면 항상 보입니다. 항상 또는 전투 중에 띄워 두려면 기본 창 페이지를 보세요."
 L["Reveal on new quest"] = "새 퀘스트를 받으면 표시"
 L["Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the Mouseover groups that have Quest progress ticked): it goes after \"Stays after mouseover\" (Mouseover groups page)."] = "퀘스트를 수락하면 마우스를 올린 것처럼 퀘스트 추적기(와 '퀘스트 진행'에 체크한 다른 마우스오버 그룹)를 보여 줍니다: '마우스오버 후 유지'(마우스오버 그룹 페이지) 시간 뒤에 사라집니다."

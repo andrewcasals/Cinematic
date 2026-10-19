@@ -710,7 +710,7 @@ L["Battlegrounds and arenas (being flagged for PvP out in the world doesn't coun
 L["BGs"] = "ПБ"
 L["Tracking doesn't keep the minimap up here. Hovering it still shows it."] = "Здесь отслеживание не удерживает миникарту. Наведение курсора по-прежнему ее показывает."
 L["Hide in camera modes"] = "Скрывать в режимах камеры"
-L["While the %s camera runs, the minimap fades, even if it's set to always show or tracking would keep it up. Hovering it still shows it."] = "Пока работает камера «%s», миникарта скрыта, даже если она настроена показываться всегда или ее удерживало бы отслеживание. Наведение курсора по-прежнему ее показывает."
+L["While the %s camera runs, the minimap and its header fade, even if they're set to always show or tracking would keep them up. Hovering them still shows them."] = "Пока работает камера «%s», миникарта скрыта, даже если она настроена показываться всегда или ее удерживало бы отслеживание. Наведение курсора по-прежнему ее показывает."
 L["When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it up all the time, or in fights, see the Standard Frames page."] = "Когда список заданий появляется в CineMode. Наведение курсора всегда показывает его. Чтобы держать его постоянно или в бою, см. страницу «Стандартные рамки»."
 L["Reveal on new quest"] = "Показывать при новом задании"
 L["Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the Mouseover groups that have Quest progress ticked): it goes after \"Stays after mouseover\" (Mouseover groups page)."] = "Взятие задания показывает список заданий, как при наведении (вместе с остальными группами наведения, у которых отмечен «Ход задания»): он исчезает через «Остается после наведения» (страница «Группы наведения»)."

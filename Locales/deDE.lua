@@ -711,7 +711,7 @@ L["Battlegrounds and arenas (being flagged for PvP out in the world doesn't coun
 L["BGs"] = "SF"
 L["Tracking doesn't keep the minimap up here. Hovering it still shows it."] = "Aufspüren hält die Minikarte hier nicht sichtbar. Mouseover zeigt sie trotzdem."
 L["Hide in camera modes"] = "In Kameramodi ausblenden"
-L["While the %s camera runs, the minimap fades, even if it's set to always show or tracking would keep it up. Hovering it still shows it."] = "Solange die Kamera „%s“ läuft, blendet die Minikarte aus, auch wenn sie auf immer zeigen steht oder Aufspüren sie sichtbar hielte. Mouseover zeigt sie trotzdem."
+L["While the %s camera runs, the minimap and its header fade, even if they're set to always show or tracking would keep them up. Hovering them still shows them."] = "Solange die Kamera „%s“ läuft, blendet die Minikarte aus, auch wenn sie auf immer zeigen steht oder Aufspüren sie sichtbar hielte. Mouseover zeigt sie trotzdem."
 L["When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it up all the time, or in fights, see the Standard Frames page."] = "Wann die Questverfolgung in CineMode erscheint. Mouseover zeigt sie immer. Um sie die ganze Zeit oder im Kampf sichtbar zu halten, siehe die Seite Standardrahmen."
 L["Reveal on new quest"] = "Bei neuer Quest zeigen"
 L["Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the Mouseover groups that have Quest progress ticked): it goes after \"Stays after mouseover\" (Mouseover groups page)."] = "Eine Quest anzunehmen zeigt die Questverfolgung, als hättest du darübergefahren (zusammen mit den anderen Mouseover-Gruppen, bei denen Questfortschritt angehakt ist): Sie verschwindet nach „Bleibt nach Mouseover“ (Seite Mouseover-Gruppen)."
