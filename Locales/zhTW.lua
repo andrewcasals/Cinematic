@@ -1245,6 +1245,7 @@ L["Clicking the Campfire button (Quality of life page). Once the campfire's buff
 L["Stand up once you get Camp Benefits"] = "獲得營地增益後站起"
 L["Open the character window when dragging gear out of your bags"] = "把裝備拖出背包時打開角色視窗"
 L["Dragging something you can wear out of your bags, over the game world, opens the character window, so its slots are there to drop it on. Moving it between bags doesn't. Put it back without wearing it and the window closes again. Not in a fight."] = "把可穿戴的物品拖出背包、移到遊戲世界上方時會打開角色視窗，方便把它放到欄位上。在背包之間移動不會打開。沒穿上就放回去，視窗會再次關閉。戰鬥中不生效。"
+L["Off by default on this client: opened by an addon, the window makes your player frame's health and power numbers show errors in BugSack and other error catchers. They're harmless."] = "此用戶端預設關閉：由插件打開時，該視窗會讓你的玩家框架的生命值和能量數字在 BugSack 等錯誤收集插件中報錯。這些錯誤無害。"
 L["Open windows in the middle of the screen"] = "在畫面中間開啟視窗"
 L["Windows the game opens on the left (quest log, group finder, character, spellbook and the like) open in the middle of the screen instead. Two open at once still sit side by side, together in the middle. Quest givers' windows open a little in from the left edge instead, out of the way of the quest giver. A window another addon has moved stays where that addon put it."] = "遊戲在左側開啟的視窗（任務日誌、隊伍搜尋器、角色、法術書等）改為在畫面中間開啟。同時開啟兩個時仍並排顯示，一起置中。任務給予者的視窗則在離左邊緣稍遠處開啟，以免擋住任務給予者。被其他插件移動過的視窗留在該插件放置的位置。"
 L["Drag windows to move them"] = "拖曳視窗來移動它們"

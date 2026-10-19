@@ -240,7 +240,9 @@ local DEFAULTS = {
 	hunterRightClickShot = true, -- hunters: right-click on an enemy starts Auto Shot, in combat too (Hunter.lua)
 	hunterAmmoSort = true,    -- hunters: after Clean Up Bags, the smallest ammo stack goes first, to be shot first (HunterAmmo.lua)
 	hunterQuiverFill = true,  -- hunters: a Fill button on arrows and bullets at vendors fills the quiver (HunterAmmo.lua)
-	dragEquipCharacter = true, -- dragging something you can wear out of the bags opens the character window (DragEquip.lua)
+	-- Dragging something you can wear out of the bags opens the character window (DragEquip.lua). Off by
+	-- default where unit values are secret: opening it taints the player bars, and BugSack shows their errors.
+	dragEquipCharacter = issecretvalue == nil,
 	talentLink = true,         -- Forever: inspecting someone, a button to their talents, and one back on the talents window (TalentLink.lua)
 	centerPanels = true,       -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
@@ -2062,6 +2064,13 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 			ns.db.walkSettingsV2 = true
+		end
+		-- Dragging gear out of the bags opening the character window was on for
+		-- everyone; where unit values are secret it's off by default now, so turn
+		-- it off once there.
+		if not ns.db.dragEquipV2 then
+			if issecretvalue and ns.db.dragEquipCharacter then ns.db.dragEquipCharacter = nil end
+			ns.db.dragEquipV2 = true
 		end
 		-- The auto-run camera first swung wider; narrow it once, unless changed.
 		if not ns.db.runSettingsV2 then
