@@ -44,6 +44,7 @@ Support\HorizonSuite.lua
 Support\WeakAuras.lua
 Support\Questie.lua
 Frames.lua
+HealerFrame.lua
 Chat.lua
 Bubbles.lua
 Campfire.lua

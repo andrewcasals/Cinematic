@@ -566,6 +566,36 @@ for _, setting in ipairs(ns.GRAPHICS_PLUS) do
 	DEFAULTS[setting.key .. "On"] = true
 end
 DEFAULTS.handleSwing = true -- Swing timer
+-- The development copy (the CinematicDev folder), for features not ready to
+-- ship: they show only there.
+ns.isDev = ADDON_NAME == "CinematicDev"
+-- Healer frame page (HealerFrame.lua): the tank, and whoever else is hurt.
+-- (Work in progress: the dev copy only.)
+DEFAULTS.healerFrame = false      -- off until switched on
+DEFAULTS.healerOnlyHealer = false -- only while your group role is healer
+DEFAULTS.healerSolo = false       -- also when not in a group (just you)
+DEFAULTS.healerSelf = true        -- you're in the list too
+DEFAULTS.healerThreshold = 100    -- the rest show below this much health (100: any lost)
+DEFAULTS.healerFadeBand = 10      -- ...fading out over the last this many percent before it
+DEFAULTS.healerMinAlpha = 0       -- ...down to this much opacity, in % (0: gone)
+DEFAULTS.healerRows = 4           -- at most this many besides the tank
+DEFAULTS.healerSort = true        -- taking the most damage right now first
+DEFAULTS.healerWindow = 3         -- seconds for damage taken to count half as much
+DEFAULTS.healerClickable = true   -- click a row to target (the order holds still in fights)
+DEFAULTS.healerTargetHighlight = true -- an edge round your target's row
+DEFAULTS.healerRange = true       -- dim players out of range
+DEFAULTS.healerIncoming = true    -- heals on their way, a lighter bar after the health
+DEFAULTS.healerHots = true        -- your heals over time and shields next to each bar
+DEFAULTS.healerHotMaxMinutes = 5  -- ...only ones shorter than this many minutes
+DEFAULTS.healerRoles = true       -- tank, healer or damage icon on each bar
+DEFAULTS.healerNames = true       -- the player's name on each bar
+DEFAULTS.healerPercent = true     -- health % on each bar
+DEFAULTS.healerClassColors = true -- bars in class colours
+DEFAULTS.healerSideways = false   -- the rows side by side instead of down
+DEFAULTS.healerBarWidth = 150     -- each bar's size
+DEFAULTS.healerBarHeight = 20
+DEFAULTS.healerScale = 1
+DEFAULTS.healerUnlocked = false   -- shown with a drag handle, to move it
 -- Swing timer page: the ranged bar on top (it and the main hand's trade
 -- places), per class so one profile suits them all. To start with, the
 -- classes that shoot most: hunters, and the casters with wands.
@@ -1638,6 +1668,7 @@ function ns.Resume()
 	ns.letterboxDirty = true
 	if ns.RefreshTint then ns.RefreshTint() end
 	if _G.CinematicFocus then _G.CinematicFocus:Show() end
+	if ns.ApplyHealerFrame then ns.ApplyHealerFrame() end
 	if started then
 		ticker:SetScript("OnUpdate", OnUpdate)
 		ns.orbitFrame:SetScript("OnUpdate", OnOrbitUpdate)

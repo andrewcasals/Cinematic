@@ -976,6 +976,7 @@ do
 			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01" },
 			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01" },
 			{ "Swing timer", "Interface\\Icons\\INV_Sword_04" },
+			{ "Healer frame", "Interface\\Icons\\Spell_Holy_FlashHeal" },
 			{ "Cooldown Manager", "Interface\\Icons\\INV_Misc_PocketWatch_01" },
 			{ "Tooltips", "Interface\\Icons\\INV_Misc_Book_09" },
 			{ "Buffs/debuffs", "Interface\\Icons\\Spell_Holy_WordFortitude" },
@@ -999,6 +1000,8 @@ do
 			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11" },
 		} },
 	}
+	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.
+	local WIP_PAGES = { ["Healer frame"] = true }
 	local TILE, TILE_GAP, EDGE = 36, 6, 12
 	local BAR = 30 -- (the search box and Reset page, above the icons)
 	local byName = {} -- tile by the name its page was registered under (English or shown)
@@ -1110,7 +1113,7 @@ do
 		-- Its page's name on mouseover.
 		tile:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-			GameTooltip:SetText(L[english], 1, 0.82, 0)
+			GameTooltip:SetText(WIP_PAGES[english] and L[english] .. " " .. L["(WIP)"] or L[english], 1, 0.82, 0)
 			GameTooltip:Show()
 		end)
 		tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -5412,6 +5415,122 @@ local function CreateSwingPanel()
 	RegisterSubpage(canvas, L["Swing timer"])
 end
 
+-- Sub-page: the healer frame (HealerFrame.lua): the tank always, and whoever
+-- else has lost health, the ones taking the most damage first.
+local function CreateHealerPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Healer frame"])
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = Label(content, "GameFontHighlightSmall",
+		L["A small frame for healing: your group's tank always shows, and beside them only the players " ..
+		"who have lost health, the ones taking the most damage right now first. Everyone at full health " ..
+		"is hidden, so you see who needs healing."])
+	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	subtitle:SetJustifyV("TOP")
+
+	local function Apply()
+		if ns.ApplyHealerFrame then ns.ApplyHealerFrame() end
+	end
+	local function Set(key)
+		return function(value)
+			ns.GetDB()[key] = value
+			Apply()
+			Refresh()
+		end
+	end
+
+	local switch = PageSwitch(content, "healerFrame", L["Show the healer frame"],
+		L["On: the healer frame shows while you're in a group, as this page says. Off: no healer frame."],
+		subtitle, Apply)
+	local stack = Stack(switch, "check")
+
+	stack:Header(content, L["When it shows"])
+	stack:Add(Check(content, "healerOnlyHealer", L["Only while I'm the group's healer"],
+		L["Only while your role in the group is healer (as picked in the group finder or by the leader). " ..
+		"Off: whenever you're in a group."], Set("healerOnlyHealer")), "check")
+	stack:Add(Check(content, "healerSolo", L["Also when I'm not in a group"],
+		L["Shows just you while you're on your own, to try it out."], Set("healerSolo")), "check")
+
+	stack:Header(content, L["Who's in it"])
+	stack:Add(Check(content, "healerSelf", L["Include me"],
+		L["You're in the list too when you're hurt."], Set("healerSelf")), "check")
+	stack:Add(Slider(content, "healerThreshold", L["Show players below"], 50, 100, 5, "%d%%", nil, Apply), "slider")
+	local floor = stack:Add(Slider(content, "healerMinAlpha", L["Opacity at full health"], 0, 80, 5, "%d%%", nil,
+		Apply), "slider")
+	Tooltip(floor, L["How visible players at full health stay. 0: they go, and the rows after them close up. " ..
+		"Above 0 they stay faintly in their place, fully visible again once hurt."])
+	local band = stack:Add(Slider(content, "healerFadeBand", L["Fade out over the last"], 0, 30, 5, "%d%%", nil,
+		Apply), "slider")
+	Tooltip(band, L["As a player is healed up, their bar fades out over this much health before the percent " ..
+		"above, rather than going all at once. 0: gone the moment they reach it. (A heal that takes them " ..
+		"straight to full still makes them go at once.)"])
+	stack:Add(Slider(content, "healerRows", L["Players besides the tank, at most"], 1, 10, 1, "%d", nil, Apply),
+		"slider")
+	stack:Note(content, L["The game keeps everyone's health hidden from addons, so the frame never knows " ..
+		"it: the game itself fades each player in once they're below the percent, and out again when " ..
+		"they're healed. Players stay in their place while they fade, so there can be gaps."], 300)
+	local sort = stack:Add(Check(content, "healerSort", L["Taking the most damage first"],
+		L["Orders the players by the damage they've taken in the last few seconds, less the healing they've " ..
+		"had. Players at full health have none, so they go to the end. Off: in group order."],
+		Set("healerSort")), "check")
+	local window = stack:Add(Slider(content, "healerWindow", L["Damage counts half as much after"], 1, 10, 1,
+		L["%d sec"]), "slider", 20)
+	Tooltip(window, L["How quickly older damage stops counting toward the order. Shorter follows the fight " ..
+		"more closely; longer moves the rows about less."])
+	GreyUnless(window, function(db) return db.healerSort end)
+	sort:HookScript("OnClick", Refresh)
+
+	stack:Header(content, L["Clicking"])
+	stack:Add(Check(content, "healerClickable", L["Click to target"],
+		L["Left click a player to target them, right click for their menu; click-casting addons work " ..
+		"on it too. In a fight the game won't let addons move clickable frames, so from the pull the " ..
+		"players stay where they were (they still fade in and out) and sort again once it's over. A " ..
+		"player faded out can still be clicked. Off: the frame only shows, and keeps sorting all fight."],
+		Set("healerClickable")), "check")
+	stack:Add(Check(content, "healerTargetHighlight", L["Highlight my target"],
+		L["A gold edge round the player you have targeted."], Set("healerTargetHighlight")), "check")
+
+	stack:Header(content, L["Look"])
+	stack:Add(Check(content, "healerRange", L["Dim players out of range"],
+		L["Players too far away to heal show faded."], Set("healerRange")), "check")
+	stack:Add(Check(content, "healerIncoming", L["Show incoming heals"],
+		L["Healing on its way to each player (being cast, from anyone) as a lighter bar after their " ..
+		"health."], Set("healerIncoming")), "check")
+	stack:Add(Check(content, "healerHots", L["Show my heals over time"],
+		L["Your heals over time and shields on each player, as icons to the right of their bar (under it " ..
+		"side by side), with the time they have left."], Set("healerHots")), "check")
+	local hotMax = stack:Add(Slider(content, "healerHotMaxMinutes", L["Only buffs shorter than"], 1, 30, 1,
+		L["%d min"], nil, Apply), "slider", 20)
+	Tooltip(hotMax, L["Leaves out your long buffs (an hour's blessing or the like, and ones with no time at " ..
+		"all), so the icons are your heals over time and shields."])
+	GreyUnless(hotMax, function(db) return db.healerHots end)
+	stack:Add(Check(content, "healerRoles", L["Show role icons"],
+		L["A tank, healer or damage icon on each bar, from the group's roles."], Set("healerRoles")), "check")
+	stack:Add(Check(content, "healerNames", L["Show names"],
+		L["The player's name on each bar."], Set("healerNames")), "check")
+	stack:Add(Check(content, "healerPercent", L["Show health %"],
+		L["The health percent on each bar."], Set("healerPercent")), "check")
+	stack:Add(Check(content, "healerClassColors", L["Bars in class colours"],
+		L["Each bar in its player's class colour. Off: green."], Set("healerClassColors")), "check")
+	stack:Add(Check(content, "healerSideways", L["Side by side"],
+		L["The players in a row going right from the tank, instead of a column going down."],
+		Set("healerSideways")), "check")
+	stack:Add(Slider(content, "healerBarWidth", L["Bar width"], 80, 300, 5, "%d", nil, Apply), "slider")
+	stack:Add(Slider(content, "healerBarHeight", L["Bar height"], 12, 50, 1, "%d", nil, Apply), "slider")
+	stack:Add(Slider(content, "healerScale", L["Size"], 0.5, 2, 0.05, "%.2f", nil, Apply), "slider")
+	stack:Add(Check(content, "healerUnlocked", L["Unlock to move"],
+		L["Shows the frame with a handle: drag it where you want it, then untick this."],
+		Set("healerUnlocked")), "check")
+
+	resetHooks[content] = Apply
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, L["Healer frame"])
+end
+
 -- Sub-page: the Cooldown Manager (the game's, or Forever Enhanced Cooldown Manager).
 local function CreateCooldownPanel()
 	local canvas, content = CreateScrollPage()
@@ -7258,6 +7377,10 @@ ns.OnLanguage(function()
 	-- (Classic clients' own swing timer.)
 	if not ns.isRetail then
 		CreateSwingPanel()
+	end
+	-- (Work in progress: the dev copy only.)
+	if ns.isDev then
+		CreateHealerPanel()
 	end
 	-- (Only with a Cooldown Manager: the game's, on clients that have it, or the addon.)
 	if ns.AddOnInstalled("Blizzard_CooldownViewer") or ns.AddOnInstalled("ForeverEnhancedCooldownManager") then

@@ -705,34 +705,37 @@ do
 	end
 
 	-- /cine debug damage [seconds]: does damage taken reach the addon? Listens
-	-- to the combat log and the portrait hit event for a while (15 seconds),
-	-- then reads Blizzard's own damage meter, and says what's plain or secret.
+	-- to the portrait hit event for a while (15 seconds), then reads Blizzard's
+	-- own damage meter, and says what's plain or secret. (Not the combat log:
+	-- registering for it is blocked on WoW Forever, with the game's "blocked
+	-- from an action" popup.)
 	local probe
 
-	local function Listened(name, ok, err, count, sample)
-		print(("  %s: %s, %d events%s"):format(name, ok and "registered" or ("refused: " .. tostring(err)),
-			count or 0, sample and (", first " .. sample) or ""))
+	-- (Printed after the command ends, so not caught for the log by itself.)
+	local function Line(text)
+		print(text)
+		ns.Log("damage", text)
 	end
 
 	local function ReportMeter(combat)
 		if not (C_DamageMeter and Enum.DamageMeterSessionType and Enum.DamageMeterType) then
-			print("  damage meter: no C_DamageMeter on this client")
+			Line("  damage meter: no C_DamageMeter on this client")
 			return
 		end
 		local ok, session = pcall(C_DamageMeter.GetCombatSessionFromType,
 			Enum.DamageMeterSessionType.Current, Enum.DamageMeterType.DamageTaken)
 		local sources = ok and type(session) == "table" and session.combatSources
 		if not ok then
-			print("  damage meter: error " .. tostring(session))
+			Line("  damage meter: error " .. tostring(session))
 		elseif type(sources) ~= "table" or (issecrettable and issecrettable(sources)) then
-			print("  damage meter: damage taken list " .. (sources and "secret" or "missing"))
+			Line("  damage meter: damage taken list " .. (sources and "secret" or "missing"))
 		else
 			local count = 0
 			pcall(function() count = #sources end)
-			print(("  damage meter (%s): %d in the damage taken list"):format(combat, count))
+			Line(("  damage meter (%s): %d in the damage taken list"):format(combat, count))
 			for i = 1, math.min(count, 5) do
 				local source = sources[i]
-				print(("    %d. %s: %s taken, class %s, spec icon %s"):format(i, Show(source.name),
+				Line(("    %d. %s: %s taken, class %s, spec icon %s"):format(i, Show(source.name),
 					Show(source.totalAmount), Show(source.classFilename), Show(source.specIconID)))
 			end
 		end
@@ -742,32 +745,29 @@ do
 		local seconds = tonumber(arg) or 15
 		probe = probe or CreateFrame("Frame")
 		probe:UnregisterAllEvents()
-		local counts, samples = {}, {}
-		local logOk, logErr = pcall(probe.RegisterEvent, probe, "COMBAT_LOG_EVENT_UNFILTERED")
-		local hitOk, hitErr = pcall(probe.RegisterEvent, probe, "UNIT_COMBAT")
-		probe:SetScript("OnEvent", function(_, event, ...)
-			counts[event] = (counts[event] or 0) + 1
-			if samples[event] then return end
-			if event == "UNIT_COMBAT" then
-				local unit, action, _, amount = ...
-				samples[event] = ("unit %s, %s, amount %s"):format(Show(unit), Show(action), Show(amount))
-			else
-				-- (info[1] is pcall's ok: the sub-event is info[3], names 6 and 10,
-				-- the amount 13 for swings or 16 for spells.)
-				local info = { pcall(CombatLogGetCurrentEventInfo) }
-				samples[event] = info[1] and ("%s: %s -> %s, values %s / %s"):format(Show(info[3]),
-					Show(info[6]), Show(info[10]), Show(info[13]), Show(info[16])) or "info error"
-			end
+		-- One sample per kind of unit (player, party, nameplate...) and action
+		-- (WOUND, HEAL...): a healer needs the player's and party's to be plain.
+		local count, samples, order = 0, {}, {}
+		local ok, err = pcall(probe.RegisterEvent, probe, "UNIT_COMBAT")
+		probe:SetScript("OnEvent", function(_, _, unit, action, _, amount)
+			count = count + 1
+			local kind = (Secret(unit) and "secret" or tostring(unit):gsub("%d+$", "")) .. " "
+				.. (Secret(action) and "secret" or tostring(action))
+			if samples[kind] or #order >= 12 then return end
+			samples[kind] = ("%s (%s): amount %s"):format(Show(unit), Show(Read(UnitName, unit)), Show(amount))
+			order[#order + 1] = kind
 		end)
-		ns.Print(("damage: listening %d seconds (%s), take some damage now"):format(seconds,
+		ns.Print(("damage: listening %d seconds (%s): get hit, heal yourself, and in a group let others get hit"):format(seconds,
 			InCombatLockdown() and "in combat" or "out of combat"))
 		C_Timer.After(seconds, function()
 			probe:UnregisterAllEvents()
 			probe:SetScript("OnEvent", nil)
 			local combat = InCombatLockdown() and "in combat" or "out of combat"
-			Listened("combat log", logOk, logErr, counts.COMBAT_LOG_EVENT_UNFILTERED,
-				samples.COMBAT_LOG_EVENT_UNFILTERED)
-			Listened("hit event", hitOk, hitErr, counts.UNIT_COMBAT, samples.UNIT_COMBAT)
+			Line(("  hit event: %s, %d events"):format(ok and "registered" or ("refused: " .. tostring(err)), count))
+			for _, kind in ipairs(order) do
+				Line(("    %s: %s"):format(kind, samples[kind]))
+			end
+			Line("  combat log: not tried (blocked on WoW Forever)")
 			ReportMeter(combat)
 			ns.Print("damage: done (" .. combat .. ")")
 		end)

@@ -91,8 +91,9 @@ local function PrintDebugHelp()
 	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
 	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
+	print("  /cine debug healer - the healer frame's rows and their HoT icons' containers")
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
-	print("  /cine debug damage [seconds] - whether damage taken reaches addons: combat log, hit event, damage meter (15 seconds)")
+	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
 	print("  /cine debug flight - the flight route, its known time and when the camera settles")
@@ -740,6 +741,8 @@ local function HandleSlash(msg)
 		ns.CVarsDebug()
 	elseif cmd == "debug" and arg == "health" then
 		ns.HealthDebug()
+	elseif cmd == "debug" and arg == "healer" then
+		if ns.HealerDebug then ns.HealerDebug() end
 	elseif cmd == "debug" and arg:find("^healthfade") then
 		ns.HealthFadeDebug(arg:match("^healthfade%s+(%S+)"))
 	elseif cmd == "debug" and arg:find("^damage") then

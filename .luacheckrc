@@ -9,6 +9,7 @@ ignore = { "542", "212/self", "421", "422", "431" }
 -- What the addon defines or changes
 globals = {
 	"CinematicDB", "CinematicCharDB", "SlashCmdList", "StaticPopupDialogs", "ColorPickerFrame", "DAMAGE_TEXT_FONT",
+	"ClickCastFrames",
 	"Cinematic_Toggle", "Cinematic_ToggleUI", "Cinematic_StartCam", "Cinematic_FlyBy", "Cinematic_ShowTooltips", "Cinematic_ToggleTooltips",
 	"Cinematic_CameraWheel", "BINDING_NAME_CINEMATIC_CAMWHEEL",
 	"SLASH_CINEMATIC1", "SLASH_CINEMATIC2",
@@ -210,6 +211,9 @@ read_globals = {
 	"GetNormalizedRealmName",
 	"UnitHealth",
 	"UnitHealthMax",
+	"RAID_CLASS_COLORS",
+	"UnitGetIncomingHeals",
+	"AnchorUtil",
 	"UnitHealthMissing",
 	"UnitHealthPercent",
 	"UnitGroupRolesAssigned",
@@ -220,7 +224,6 @@ read_globals = {
 	"CurveConstants",
 	"C_DamageMeter",
 	"issecrettable",
-	"CombatLogGetCurrentEventInfo",
 	"UnitIsAFK",
 	"UnitIsDead",
 	"UnitInVehicle",
