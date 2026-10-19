@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-19", page = "Unit Frames", title = "Hit text and threat parts",
+		text = "The Unit frame parts grids can hide the damage and healing numbers on your and your pet's " ..
+		"portraits, and the threat percentage and glow on the target and focus frames." },
 	{ date = "2026-10-19", page = "Unit Frames", title = "Focus and target of target parts",
 		text = "The Unit frame parts grid covers the focus and target of target frames too. They follow " ..
 		"the target's grid until you untick Same as target." },

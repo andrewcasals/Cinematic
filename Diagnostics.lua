@@ -778,7 +778,7 @@ end
 
 -- Unit frames -----------------------------------------------------------------
 
--- /cine debug unitframes: every part of the player and target frames, as a
+-- /cine debug unitframes: every part of the player, pet, target and focus frames, as a
 -- tree in the log (field name, type, shown, size, texture or atlas, text), to
 -- find which pieces are the portrait, level, name and borders on clients
 -- whose frames are laid out their own way (WoW Forever's).
@@ -836,6 +836,18 @@ do
 		end
 		if managedGroup[object] then
 			parts[#parts + 1] = "FADED AS " .. managedGroup[object]
+		end
+		if ns.unitPartsHidden and ns.unitPartsHidden[object] then
+			parts[#parts + 1] = "HELD HIDDEN"
+		end
+		-- (A playing alpha animation outdoes the alpha we set.)
+		if object.GetAnimationGroups then
+			for _, group in ipairs(Safe(function() return { object:GetAnimationGroups() } end) or {}) do
+				if Safe(group.IsPlaying, group) then
+					parts[#parts + 1] = "anim playing"
+					break
+				end
+			end
 		end
 		return table.concat(parts, ", ")
 	end
@@ -964,7 +976,7 @@ do
 
 	function ns.LogUnitFrames()
 		local total = 0
-		for _, name in ipairs({ "PlayerFrame", "TargetFrame" }) do
+		for _, name in ipairs({ "PlayerFrame", "PetFrame", "TargetFrame", "FocusFrame" }) do
 			local frame = _G[name]
 			if frame then
 				local count = { 0 }
@@ -974,7 +986,7 @@ do
 				ns.Log("unitframes", name .. ": not on this client")
 			end
 		end
-		ns.Print(("unitframes: logged %d parts of the player and target frames (have a target). /reload to write the log"):format(total))
+		ns.Print(("unitframes: logged %d parts of the player, pet, target and focus frames (have a target). /reload to write the log"):format(total))
 	end
 end
 

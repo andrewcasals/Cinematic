@@ -659,16 +659,28 @@ end
 -- row per kind of unit they show (keys unitPart<kind><part> for the target,
 -- unitPartFocus<kind><part> and unitPartToT<kind><part>). The focus and
 -- target of target go as the target's grid says until their "Same as target"
--- is unticked. All shown to start with, as the game has them.
+-- is unticked. All shown to start with, as the game has them. Some parts
+-- only on some rows (UNIT_PART_ONLY): the hit text on your and your pet's
+-- portraits, and threat on NPCs you can fight.
 ns.UNIT_PART_KINDS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer",
 	"FriendlyNPC" }
-ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons", "Auras" }
+ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons", "Auras", "CombatText", "Threat" }
+ns.UNIT_PART_ONLY = {
+	CombatText = { Player = true, Pet = true },
+	Threat = { EnemyNPC = true, NeutralNPC = true },
+}
 for _, part in ipairs(ns.UNIT_PARTS) do
-	DEFAULTS["unitPartPlayer" .. part] = true
-	DEFAULTS["unitPartPet" .. part] = true
+	local only = ns.UNIT_PART_ONLY[part]
+	for _, row in ipairs({ "Player", "Pet" }) do
+		if not only or only[row] then
+			DEFAULTS["unitPart" .. row .. part] = true
+		end
+	end
 	for _, kind in ipairs(ns.UNIT_PART_KINDS) do
-		for _, prefix in ipairs({ "", "Focus", "ToT" }) do
-			DEFAULTS["unitPart" .. prefix .. kind .. part] = true
+		if not only or only[kind] then
+			for _, prefix in ipairs({ "", "Focus", "ToT" }) do
+				DEFAULTS["unitPart" .. prefix .. kind .. part] = true
+			end
 		end
 	end
 end

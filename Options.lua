@@ -4114,13 +4114,22 @@ local function CreatePortraitsPanel()
 			"as target. Untick parts to keep just the bars. The frame art is the portrait ring, the name " ..
 			"box and the bars' borders: the game draws them as one picture. Icons are the rest Zzz, the " ..
 			"group leader's crown, role and quest icons. Auras are the buffs and debuffs on the target and " ..
-			"focus frames."])
+			"focus frames. Hit text is the damage and healing numbers on your and your pet's portraits. " ..
+			"Threat is the threat percentage and aggro glow on the target and focus frames, for NPCs you " ..
+			"can fight."])
 
 		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, SECTION_HEADER = 160, 64, 24, 26
 		local COLUMNS = {
 			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
 			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] }, { "Auras", L["Auras"] },
+			{ "CombatText", L["Hit text"] }, { "Threat", L["Threat"] },
 		}
+		-- Whether a row has a part: the frame has it, and it's not one only
+		-- some rows have (UNIT_PART_ONLY: hit text, threat). Cells without stay empty.
+		local function Has(row, part)
+			local only = ns.UNIT_PART_ONLY[part]
+			return (not row[4] or row[4][part] ~= nil) and (not only or only[row[1]] == true)
+		end
 		-- { row, label, tip, the frame's parts (nil: all of them) }
 		local KIND_ROWS = {
 			{ "Self", L["You"], L["You, when the frame shows you."] },
@@ -4144,7 +4153,7 @@ local function CreatePortraitsPanel()
 				{ "Player", L["You"], L["Your own frame."], ns.UNIT_PARTS_PLAYER },
 				{ "Pet", L["Your pet"], L["Your pet's frame."], ns.UNIT_PARTS_PET },
 			} },
-			{ title = L["Target"], prefix = "", rows = KindRows() },
+			{ title = L["Target"], prefix = "", rows = KindRows(ns.UNIT_PARTS_TARGET) },
 		}
 		if _G.TargetFrameToT then
 			SECTIONS[#SECTIONS + 1] = { title = L["Target of target"], prefix = "ToT", same = "unitPartsToTSame",
@@ -4152,7 +4161,7 @@ local function CreatePortraitsPanel()
 		end
 		if _G.FocusFrame then
 			SECTIONS[#SECTIONS + 1] = { title = L["Focus"], prefix = "Focus", same = "unitPartsFocusSame",
-				rows = KindRows() }
+				rows = KindRows(ns.UNIT_PARTS_TARGET) }
 		end
 
 		local top = CreateFrame("Frame", nil, content)
@@ -4195,22 +4204,39 @@ local function CreatePortraitsPanel()
 			local db = ns.GetDB()
 			for _, row in ipairs(section.rows) do
 				for _, column in ipairs(COLUMNS) do
-					if db["unitPart" .. section.prefix .. row[1] .. column[1]] == false then
+					if Has(row, column[1]) and db["unitPart" .. section.prefix .. row[1] .. column[1]] == false then
 						return
 					end
 				end
 			end
 			for _, row in ipairs(section.rows) do
 				for _, column in ipairs(COLUMNS) do
-					db["unitPart" .. section.prefix .. row[1] .. column[1]] = db["unitPart" .. row[1] .. column[1]]
+					if Has(row, column[1]) then
+						db["unitPart" .. section.prefix .. row[1] .. column[1]] = db["unitPart" .. row[1] .. column[1]]
+					end
 				end
 			end
+		end
+
+		-- Each grid: just the columns one of its rows has. All as wide as the widest.
+		local most = 0
+		for _, section in ipairs(SECTIONS) do
+			section.columns = {}
+			for _, column in ipairs(COLUMNS) do
+				for _, row in ipairs(section.rows) do
+					if Has(row, column[1]) then
+						section.columns[#section.columns + 1] = column
+						break
+					end
+				end
+			end
+			most = math.max(most, #section.columns)
 		end
 
 		for _, section in ipairs(SECTIONS) do
 			section.widgets = {}
 			local frame = CreateFrame("Frame", nil, content)
-			frame:SetWidth(LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH)
+			frame:SetWidth(LABEL_WIDTH + most * COLUMN_WIDTH)
 			section.frame = frame
 
 			-- The name row: click to open or close (the +/- sits in the page margin).
@@ -4252,16 +4278,7 @@ local function CreatePortraitsPanel()
 				check:SetFrameLevel(nameRow:GetFrameLevel() + 2)
 			end
 
-			-- The grid: just the columns this frame has.
-			local columns = {}
-			for _, column in ipairs(COLUMNS) do
-				for _, row in ipairs(section.rows) do
-					if not row[4] or row[4][column[1]] then
-						columns[#columns + 1] = column
-						break
-					end
-				end
-			end
+			local columns = section.columns
 			local gridTop = -SECTION_HEADER - 6
 			for c, column in ipairs(columns) do
 				local text = Label(content, "GameFontNormalSmall", column[2])
@@ -4276,8 +4293,9 @@ local function CreatePortraitsPanel()
 				rowLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y - 5)
 				section.widgets[#section.widgets + 1] = rowLabel
 				for c, column in ipairs(columns) do
-					-- (Your frame has no auras, the pet's no level, PvP, icons or auras.)
-					if not row[4] or row[4][column[1]] then
+					-- (Your frame has no auras, the pet's no level, PvP, icons or
+					-- auras; threat is for NPCs you can fight.)
+					if Has(row, column[1]) then
 						local key = "unitPart" .. section.prefix .. row[1] .. column[1]
 						local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
 							ns.GetDB()[key] = value

@@ -1223,6 +1223,8 @@ function ns.SetEntryAlpha(entry, alpha)
 	if entry.frame == Minimap then
 		-- (Its arrow and icons ignore alpha: hidden while it's faded full size.)
 		ns.SetMinimapIconsHidden(alpha <= 0 and not entry.shrunk and ns.KeepMinimapFullSize())
+		-- (Its blue quest areas too, whenever it's faded full size.)
+		ns.SetMinimapBlobsHidden(alpha <= 0 and not entry.shrunk)
 	end
 	ApplyAlpha(entry)
 end
@@ -4781,7 +4783,13 @@ do
 		Art = { "PlayerFrameContainer.FrameTexture", "PlayerFrameContainer.AlternatePowerFrameTexture",
 			"PlayerFrameContainer.VehicleFrameTexture", "PlayerFrameContainer.FrameFlash",
 			"PlayerFrameContent.PlayerFrameContentMain.StatusTexture",
-			"PlayerFrameContent.PlayerFrameContentContextual.PlayerPortraitCornerIcon" },
+			"PlayerFrameContent.PlayerFrameContentContextual.PlayerPortraitCornerIcon",
+			-- (The aggro glow, under the key the game keeps it on every client.)
+			"threatIndicator" },
+		-- The damage and healing numbers on the portrait (feedbackText: where
+		-- the game keeps them on every client).
+		CombatText = { "feedbackText", "PlayerFrameContent.PlayerFrameContentMain.HitIndicator.HitText",
+			"_G.PlayerHitIndicator" },
 		-- (The faction flag, or the honor-level badge in its place, and the
 		-- flag's timer.)
 		PvP = { "PlayerFrameContent.PlayerFrameContentContextual.PVPIcon",
@@ -4834,7 +4842,7 @@ do
 		Name = { "TargetFrameContent.TargetFrameContentMain.Name",
 			"TargetFrameContent.TargetFrameContentMain.ReputationColor" },
 		Art = { "TargetFrameContainer.FrameTexture", "TargetFrameContainer.Flash",
-			"TargetFrameContainer.BossPortraitFrameTexture" },
+			"TargetFrameContainer.BossPortraitFrameTexture", "threatIndicator" },
 		-- (PvpBackgroundIcon: the flag WoW Forever shows by the level, tested.)
 		PvP = { "TargetFrameContent.TargetFrameContentContextual.PvpIcon",
 			"TargetFrameContent.TargetFrameContentContextual.PvpBackgroundIcon",
@@ -4852,7 +4860,11 @@ do
 	local PET = {
 		Portrait = { "portrait", "_G.PetPortrait" },
 		Name = { "name", "_G.PetName" },
-		Art = { "_G.PetFrameTexture", "_G.PetFrameFlash", "_G.PetAttackModeTexture" },
+		-- (The aggro glow and the attack pulse, the red ring in a fight: by
+		-- their keys too, for clients that don't name them.)
+		Art = { "_G.PetFrameTexture", "_G.PetFrameFlash", "_G.PetAttackModeTexture", "threatIndicator",
+			"AttackModeTexture", "Flash", "FrameTexture" },
+		CombatText = { "feedbackText", "_G.PetHitIndicator" },
 	}
 	-- The target of target frames (the target's and the focus's): a portrait,
 	-- a name and the frame art, and on older frames numbered debuffs
@@ -4869,7 +4881,11 @@ do
 			return list
 		end
 	end
-	ns.UNIT_PARTS_PLAYER, ns.UNIT_PARTS_PET = PLAYER, PET
+	-- The threat percentage over the frame and its aggro glow (also frame art:
+	-- hidden while either column says so). By the keys the game keeps them
+	-- on, the same on the target and focus frames.
+	TARGET.Threat = { "threatNumericIndicator", "threatIndicator" }
+	ns.UNIT_PARTS_PLAYER, ns.UNIT_PARTS_PET, ns.UNIT_PARTS_TARGET = PLAYER, PET, TARGET
 	-- Each frame: its parts, the unit it shows, and its grid row when always
 	-- the same. The focus and target of target ones: the setting that has
 	-- them go by the target's grid, and the grid of their own otherwise.
@@ -4948,6 +4964,8 @@ do
 	-- [region] = the alpha to put back. While hidden, the game setting the
 	-- alpha (the rest glow pulses) is undone.
 	local hidden, hooked = {}, {}
+	-- (For /cine debug unitframes: which regions are held hidden.)
+	ns.unitPartsHidden = hidden
 	local setting = false
 	local function KeepHidden(region)
 		if hidden[region] and not setting then
@@ -4972,6 +4990,15 @@ do
 				if type(region.SetVertexColor) == "function" then
 					hooksecurefunc(region, "SetVertexColor", KeepHidden)
 				end
+				-- (And a text's colour, for the hit numbers; and, textures and
+				-- texts only, shown again, for the glows the game shows in a fight.)
+				if type(region.SetTextColor) == "function" then
+					hooksecurefunc(region, "SetTextColor", KeepHidden)
+				end
+				if not (region.IsObjectType and region:IsObjectType("Frame")) then
+					hooksecurefunc(region, "Show", KeepHidden)
+					hooksecurefunc(region, "SetShown", KeepHidden)
+				end
 			end
 			KeepHidden(region)
 		elseif not hide and hidden[region] then
@@ -4987,10 +5014,14 @@ do
 	end
 
 	-- (Settings unitPart<grid><row><part>, ticked = shown: see ns.UNIT_PART_KINDS.)
+	-- A region in two parts (the target's aggro glow: frame art and threat)
+	-- is hidden while either says so: gathered first in want, then set.
+	FRAMES.want = {}
 	function ns.ApplyUnitFrameParts()
 		if not ns.db then
 			return
 		end
+		local want = FRAMES.want
 		for _, entry in ipairs(FRAMES) do
 			local frame = _G[entry[1]]
 			if frame then
@@ -5001,19 +5032,23 @@ do
 					local paths = entry[2][part]
 					if type(paths) == "function" then
 						for _, region in ipairs(paths(frame)) do
-							SetHidden(region, hide)
+							want[region] = want[region] or hide
 						end
 					else
 						for _, path in ipairs(paths or {}) do
 							local region = Field(frame, path)
 							if region then
-								SetHidden(region, hide)
+								want[region] = want[region] or hide
 							end
 						end
 					end
 				end
 			end
 		end
+		for region, hide in pairs(want) do
+			SetHidden(region, hide)
+		end
+		wipe(want)
 	end
 
 	-- The game draws the target's and focus's auras again as they change,
