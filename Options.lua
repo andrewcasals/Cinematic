@@ -6735,6 +6735,82 @@ StaticPopupDialogs.CINEMATIC_ADDON_RESET = {
 	timeout = 0, whileDead = true, hideOnEscape = true,
 }
 
+-- A grid of icons (HOVER_GROUP_ICONS) to pick from, under the one clicked:
+-- picker:Open(owner, key, current), and onPick(key, file). (On the page's
+-- canvas, so the scroll frame doesn't clip it.)
+local function IconPicker(canvas, onPick)
+	local PICK, PICK_GAP, PICK_PER_ROW = 28, 4, 15
+	local picker = CreateFrame("Frame", nil, canvas)
+	picker:SetFrameStrata("DIALOG")
+	picker:EnableMouse(true)
+	local pickerRows = math.ceil(#ns.HOVER_GROUP_ICONS / PICK_PER_ROW)
+	picker:SetSize(PICK_PER_ROW * (PICK + PICK_GAP) + PICK_GAP, pickerRows * (PICK + PICK_GAP) + PICK_GAP)
+	local pickerBg = picker:CreateTexture(nil, "BACKGROUND")
+	pickerBg:SetAllPoints()
+	pickerBg:SetColorTexture(0.05, 0.05, 0.05, 0.95)
+	local pickerEdge = picker:CreateTexture(nil, "BACKGROUND", nil, -1)
+	pickerEdge:SetPoint("TOPLEFT", -1, 1)
+	pickerEdge:SetPoint("BOTTOMRIGHT", 1, -1)
+	pickerEdge:SetColorTexture(0.4, 0.4, 0.4, 1)
+	picker:Hide()
+	local pickerButtons = {}
+	for i, file in ipairs(ns.HOVER_GROUP_ICONS) do
+		local button = CreateFrame("Button", nil, picker)
+		button:SetSize(PICK, PICK)
+		button:SetPoint("TOPLEFT", PICK_GAP + ((i - 1) % PICK_PER_ROW) * (PICK + PICK_GAP),
+			-PICK_GAP - math.floor((i - 1) / PICK_PER_ROW) * (PICK + PICK_GAP))
+		button.border = button:CreateTexture(nil, "BACKGROUND")
+		button.border:SetAllPoints()
+		local icon = button:CreateTexture(nil, "ARTWORK")
+		icon:SetPoint("TOPLEFT", 2, -2)
+		icon:SetPoint("BOTTOMRIGHT", -2, 2)
+		icon:SetTexture(file)
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		local hl = button:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints(icon)
+		hl:SetColorTexture(1, 1, 1, 0.2)
+		button.file = file
+		button:SetScript("OnClick", function()
+			picker:Hide()
+			if picker.key ~= nil then onPick(picker.key, file) end
+		end)
+		pickerButtons[i] = button
+	end
+	-- Closes on a click anywhere else.
+	picker:SetScript("OnUpdate", function(self)
+		if not self:IsMouseOver() and not (self.owner and self.owner:IsMouseOver())
+			and (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) then
+			self:Hide()
+		end
+	end)
+	-- (Clicking the same one again closes it.)
+	function picker:Open(owner, key, current)
+		if self:IsShown() and self.key == key then
+			self:Hide()
+			return
+		end
+		self.owner, self.key = owner, key
+		for _, button in ipairs(pickerButtons) do
+			-- (Gold round the one it has.)
+			if button.file == current then
+				button.border:SetColorTexture(1, 0.82, 0, 1)
+			else
+				button.border:SetColorTexture(0.45, 0.38, 0.2, 1)
+			end
+		end
+		-- (Below it, or above when that runs off the page; leftwards near the right edge.)
+		local scale = owner:GetEffectiveScale() / self:GetEffectiveScale()
+		local left, bottom = (owner:GetLeft() or 0) * scale, (owner:GetBottom() or 0) * scale
+		local rightward = left + self:GetWidth() <= (canvas:GetRight() or math.huge)
+		local downward = bottom - self:GetHeight() - 2 >= (canvas:GetBottom() or 0)
+		self:ClearAllPoints()
+		self:SetPoint((downward and "TOP" or "BOTTOM") .. (rightward and "LEFT" or "RIGHT"), owner,
+			(downward and "BOTTOM" or "TOP") .. (rightward and "LEFT" or "RIGHT"), 0, downward and -2 or 2)
+		self:Show()
+	end
+	return picker
+end
+
 local function CreateProfilesPanel()
 	local canvas, content = CreateScrollPage(true)
 
@@ -6770,29 +6846,65 @@ local function CreateProfilesPanel()
 	local header = Header(content, L["Profiles"], perChar, -12)
 	header:SetPoint("TOPLEFT", perChar, "BOTTOMLEFT", 2, -12)
 
-	-- One row per profile (built up as profiles come and go).
-	local rows = {}
-	local function GetRow(i)
-		if rows[i] then return rows[i] end
-		local row = CreateFrame("Frame", nil, content)
-		row:SetSize(540, 26)
-		local pick = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-		pick:SetSize(26, 26)
-		pick:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
-		pick:SetScript("OnClick", function()
-			ns.SetProfile(row.name)
-			Refresh()
+	-- One icon per profile, its name under it and its description on
+	-- mouseover (built up as profiles come and go). Clicking one switches to
+	-- it; clicking yours when it's active picks its icon.
+	local ICON, CELL_W, CELL_H, PER_ROW = 40, 108, 72, 5
+	local active -- (the ticked one, or nil until a new player picks one)
+	local cells = {}
+	local Layout -- (below)
+	local picker = IconPicker(canvas, function(name, file)
+		ns.SetProfileIcon(name, file)
+		Layout()
+	end)
+	local function GetCell(i)
+		if cells[i] then return cells[i] end
+		local cell = CreateFrame("Button", nil, content)
+		cell:SetSize(CELL_W, CELL_H)
+		local square = CreateFrame("Frame", nil, cell)
+		square:SetSize(ICON, ICON)
+		square:SetPoint("TOP", 0, 0)
+		cell.border = square:CreateTexture(nil, "BACKGROUND")
+		cell.border:SetAllPoints()
+		local bg = square:CreateTexture(nil, "BORDER")
+		bg:SetPoint("TOPLEFT", 1, -1)
+		bg:SetPoint("BOTTOMRIGHT", -1, 1)
+		bg:SetColorTexture(0.06, 0.05, 0.04, 0.95)
+		cell.icon = square:CreateTexture(nil, "ARTWORK")
+		cell.icon:SetPoint("TOPLEFT", 2, -2)
+		cell.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+		cell.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		local hl = cell:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints(cell.icon)
+		hl:SetColorTexture(1, 1, 1, 0.15)
+		cell.label = Label(cell, "GameFontHighlightSmall")
+		cell.label:SetPoint("TOP", square, "BOTTOM", 0, -4)
+		cell.label:SetWidth(CELL_W - 6)
+		cell.label:SetJustifyH("CENTER")
+		if cell.label.SetMaxLines then cell.label:SetMaxLines(2) end
+		cell.square = square
+		cell:SetScript("OnClick", function(self)
+			GameTooltip:Hide()
+			if self.name ~= active then
+				picker:Hide()
+				ns.SetProfile(self.name)
+				Refresh()
+			elseif not ns.IsBuiltinProfile(self.name) then
+				picker:Open(self, self.name, ns.ProfileIcon(self.name))
+			end
 		end)
-		local name = Label(row, "GameFontHighlight")
-		name:SetPoint("LEFT", pick, "RIGHT", 2, 0)
-		name:SetWidth(170)
-		local tip = Label(row, "GameFontHighlightSmall")
-		tip:SetPoint("TOPLEFT", row, "TOPLEFT", 200, -6)
-		tip:SetWidth(340)
-		tip:SetJustifyV("TOP")
-		row.pick, row.label, row.tip = pick, name, tip
-		rows[i] = row
-		return row
+		cell:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self.square, "ANCHOR_RIGHT")
+			GameTooltip:SetText(self.name, 1, 0.82, 0)
+			GameTooltip:AddLine(self.tip, 1, 1, 1, true)
+			local hint = self.name ~= active and L["Click to switch to it."]
+				or not ns.IsBuiltinProfile(self.name) and L["Click to pick its icon."]
+			if hint then GameTooltip:AddLine(hint, 0.5, 0.5, 0.5, true) end
+			GameTooltip:Show()
+		end)
+		cell:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		cells[i] = cell
+		return cell
 	end
 
 	local buttons = CreateFrame("Frame", nil, content)
@@ -6815,8 +6927,8 @@ local function CreateProfilesPanel()
 		StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name)
 	end)
 	rename:SetPoint("LEFT", new, "RIGHT", 8, 0)
-	local note = Button(L["Description"], 110, L["Write what the active profile is for, shown beside it " ..
-		"(your own ones only)."], function()
+	local note = Button(L["Description"], 110, L["Write what the active profile is for, shown when you point " ..
+		"at its icon (your own ones only)."], function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name)
 	end)
@@ -6852,15 +6964,14 @@ local function CreateProfilesPanel()
 	local shareNote = Label(share, "GameFontHighlightSmall", L["Share a profile with friends."])
 	shareNote:SetPoint("LEFT", import, "RIGHT", 12, 0)
 
-	local function Layout()
+	function Layout()
 		if not ns.GetDB() then return end
 		-- (None ticked until a new player picks one; Cinematic does nothing till then.)
-		local active = ns.ProfileChosen() and ns.ActiveProfile() or nil
+		active = ns.ProfileChosen() and ns.ActiveProfile() or nil
 		local names = ns.ProfileNames()
-		local last = header
 		for i, name in ipairs(names) do
-			local row = GetRow(i)
-			row.name = name
+			local cell = GetCell(i)
+			cell.name = name
 			local builtin
 			for _, profile in ipairs(ns.BUILTIN_PROFILES) do
 				if profile.name == name then builtin = profile end
@@ -6870,19 +6981,26 @@ local function CreateProfilesPanel()
 			if name == active and builtin and ns.ProfileChanged() then
 				text = text .. " |cff808080(changed)|r"
 			end
-			row.label:SetText(text)
-			row.tip:SetText(builtin and builtin.tip or ns.ProfileNote(name)
-				or L["Your own profile. Pick it, then Description to say what it's for."])
-			row.pick:SetChecked(name == active)
-			row:SetHeight(math.max(26, row.tip:GetStringHeight() + 10))
-			row:ClearAllPoints()
-			row:SetPoint("TOPLEFT", last, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -4)
-			row:Show()
-			last = row
+			cell.label:SetText(text)
+			-- (Gold for the active one, and round its icon.)
+			if name == active then
+				cell.label:SetTextColor(1, 0.82, 0)
+				cell.border:SetColorTexture(1, 0.82, 0, 1)
+			else
+				cell.label:SetTextColor(1, 1, 1)
+				cell.border:SetColorTexture(0.45, 0.38, 0.2, 1)
+			end
+			cell.tip = builtin and builtin.tip or ns.ProfileNote(name)
+				or L["Your own profile. Pick it, then Description to say what it's for."]
+			cell.icon:SetTexture(ns.ProfileIcon(name))
+			cell:ClearAllPoints()
+			cell:SetPoint("TOPLEFT", header, "BOTTOMLEFT", ((i - 1) % PER_ROW) * CELL_W,
+				-10 - math.floor((i - 1) / PER_ROW) * CELL_H)
+			cell:Show()
 		end
-		for i = #names + 1, #rows do rows[i]:Hide() end
+		for i = #names + 1, #cells do cells[i]:Hide() end
 		buttons:ClearAllPoints()
-		buttons:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 2, -16)
+		buttons:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -10 - math.ceil(#names / PER_ROW) * CELL_H - 8)
 		local own = active ~= nil and not ns.IsBuiltinProfile(active)
 		rename:SetEnabled(own)
 		note:SetEnabled(own)
@@ -7185,73 +7303,15 @@ local function CreateMouseoverPanel()
 		Layout()
 	end)
 
-	-- The icon picker for a group you made: a grid of icons under the one
-	-- clicked. (On the canvas, like the search results.)
-	local PICK, PICK_GAP, PICK_PER_ROW = 30, 4, 10
-	local picker = CreateFrame("Frame", nil, canvas)
-	picker:SetFrameStrata("DIALOG")
-	picker:EnableMouse(true)
-	local pickerRows = math.ceil(#ns.HOVER_GROUP_ICONS / PICK_PER_ROW)
-	picker:SetSize(PICK_PER_ROW * (PICK + PICK_GAP) + PICK_GAP, pickerRows * (PICK + PICK_GAP) + PICK_GAP)
-	local pickerBg = picker:CreateTexture(nil, "BACKGROUND")
-	pickerBg:SetAllPoints()
-	pickerBg:SetColorTexture(0.05, 0.05, 0.05, 0.95)
-	local pickerEdge = picker:CreateTexture(nil, "BACKGROUND", nil, -1)
-	pickerEdge:SetPoint("TOPLEFT", -1, 1)
-	pickerEdge:SetPoint("BOTTOMRIGHT", 1, -1)
-	pickerEdge:SetColorTexture(0.4, 0.4, 0.4, 1)
-	picker:Hide()
-	local pickerButtons = {}
-	for i, file in ipairs(ns.HOVER_GROUP_ICONS) do
-		local button = CreateFrame("Button", nil, picker)
-		button:SetSize(PICK, PICK)
-		button:SetPoint("TOPLEFT", PICK_GAP + ((i - 1) % PICK_PER_ROW) * (PICK + PICK_GAP),
-			-PICK_GAP - math.floor((i - 1) / PICK_PER_ROW) * (PICK + PICK_GAP))
-		button.border = button:CreateTexture(nil, "BACKGROUND")
-		button.border:SetAllPoints()
-		local icon = button:CreateTexture(nil, "ARTWORK")
-		icon:SetPoint("TOPLEFT", 2, -2)
-		icon:SetPoint("BOTTOMRIGHT", -2, 2)
-		icon:SetTexture(file)
-		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-		local hl = button:CreateTexture(nil, "HIGHLIGHT")
-		hl:SetAllPoints(icon)
-		hl:SetColorTexture(1, 1, 1, 0.2)
-		button.file = file
-		button:SetScript("OnClick", function()
-			local group = picker.index and Writable()[picker.index]
-			if group then group.icon = file end
-			picker:Hide()
-			Layout()
-		end)
-		pickerButtons[i] = button
-	end
-	-- Closes on a click anywhere else.
-	picker:SetScript("OnUpdate", function(self)
-		if not self:IsMouseOver() and not (self.owner and self.owner:IsMouseOver())
-			and (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) then
-			self:Hide()
-		end
+	-- The icon picker for a group you made, under the icon clicked.
+	local picker = IconPicker(canvas, function(index, file)
+		local group = Writable()[index]
+		if group then group.icon = file end
+		Layout()
 	end)
 	local function ShowPicker(owner, index)
-		if picker:IsShown() and picker.index == index then
-			picker:Hide()
-			return
-		end
 		results:Hide()
-		picker.owner, picker.index = owner, index
-		local current = ns.HoverGroupIcon(Groups()[index])
-		for _, button in ipairs(pickerButtons) do
-			-- (Gold round the one it has.)
-			if button.file == current then
-				button.border:SetColorTexture(1, 0.82, 0, 1)
-			else
-				button.border:SetColorTexture(0.45, 0.38, 0.2, 1)
-			end
-		end
-		picker:ClearAllPoints()
-		picker:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
-		picker:Show()
+		picker:Open(owner, index, ns.HoverGroupIcon(Groups()[index]))
 	end
 
 	-- A square icon: gold edge, a darker one when dim. (The row of groups at

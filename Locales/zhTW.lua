@@ -847,7 +847,7 @@ L["A profile of your own, starting from your current settings. To copy another p
 L["Rename"] = "重新命名"
 L["Rename the active profile (your own ones only)."] = "重新命名目前的設定檔(僅限你自己的設定檔)。"
 L["Description"] = "描述"
-L["Write what the active profile is for, shown beside it (your own ones only)."] = "寫下目前設定檔的用途,會顯示在它旁邊(僅限你自己的設定檔)。"
+L["Write what the active profile is for, shown when you point at its icon (your own ones only)."] = "寫下目前設定檔的用途,滑鼠指向它的圖示時會顯示(僅限你自己的設定檔)。"
 L["Delete"] = "刪除"
 L["Delete the active profile (your own ones only), switching to %s."] = "刪除目前的設定檔(僅限你自己的設定檔),並切換到 %s。"
 L["Put the active built-in profile back to its own values (your own profiles keep your changes as you go)."] = "將目前的內建設定檔還原為其本身的值(你自己的設定檔會隨時保存你的更改)。"

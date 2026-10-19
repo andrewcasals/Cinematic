@@ -847,7 +847,7 @@ L["A profile of your own, starting from your current settings. To copy another p
 L["Rename"] = "이름 변경"
 L["Rename the active profile (your own ones only)."] = "현재 프로필의 이름을 바꿉니다(직접 만든 프로필만)."
 L["Description"] = "설명"
-L["Write what the active profile is for, shown beside it (your own ones only)."] = "현재 프로필의 용도를 적습니다. 프로필 옆에 표시됩니다(직접 만든 프로필만)."
+L["Write what the active profile is for, shown when you point at its icon (your own ones only)."] = "현재 프로필의 용도를 적습니다. 아이콘에 마우스를 올리면 표시됩니다(직접 만든 프로필만)."
 L["Delete"] = "삭제"
 L["Delete the active profile (your own ones only), switching to %s."] = "현재 프로필을 삭제하고(직접 만든 프로필만) %s 프로필로 바꿉니다."
 L["Put the active built-in profile back to its own values (your own profiles keep your changes as you go)."] = "현재 기본 제공 프로필을 원래 값으로 되돌립니다 (직접 만든 프로필은 바꾸는 대로 저장됩니다)."

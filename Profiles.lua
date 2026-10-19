@@ -87,6 +87,7 @@ end
 ns.BUILTIN_PROFILES = {
 	{
 		name = DEFAULT_PROFILE,
+		icon = "Interface\\Icons\\Spell_Holy_MindVision",
 		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
 			"and how the developer plays every day."],
 		apply = function(set)
@@ -110,6 +111,7 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Immersive (CDM)",
+		icon = "Interface\\Icons\\Spell_Shadow_AntiShadow", -- (Preparation)
 		tip = L["Immersive, with the Cooldown Manager in place of the action bars in fights: your " ..
 			"portrait, target, buffs, swing timer, pet, stance and totem bars and the Cooldown Manager " ..
 			"come up, the action bars don't. After a fight it stays up until its cooldowns are ready."],
@@ -142,6 +144,7 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Lite",
+		icon = "Interface\\Icons\\Spell_Holy_HolyBolt",
 		tip = L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
 		apply = function(set)
@@ -156,6 +159,7 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "VFX Only",
+		icon = "Interface\\Icons\\Spell_Nature_Lightning",
 		tip = L["Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no " ..
 			"letterbox, and the camera's left to you."],
 		apply = function(set)
@@ -166,6 +170,7 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Camera Only",
+		icon = "Interface\\Icons\\INV_Misc_Spyglass_03",
 		tip = L["The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), " ..
 			"then CineMode until it ends. The letterbox, tint, vignette and weather show only while a " ..
 			"camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music."],
@@ -202,6 +207,7 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Solo Explorer",
+		icon = "Interface\\Icons\\Ability_Mount_RidingHorse",
 		tip = L["Everything on while you're out in the world on your own; the normal UI in a group, " ..
 			"in dungeons, raids and PvP."],
 		apply = function(set)
@@ -214,6 +220,7 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Pure Cinema",
+		icon = "Interface\\Icons\\Ability_Stealth",
 		tip = L["As little UI as possible: chat, buffs, the quest tracker and your portrait " ..
 			"don't pop up on their own (hovering still shows them), group members' " ..
 			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
@@ -436,6 +443,29 @@ function ns.SetProfileNote(name, text)
 	ns.db.profileNotes[name] = text ~= "" and text or nil
 end
 
+-- A profile's icon: a built-in's own, or the one picked for yours
+-- (db.profileIcons, one of HOVER_GROUP_ICONS).
+function ns.ProfileIcon(name)
+	local builtin = builtinByName[name]
+	return builtin and builtin.icon or ns.db.profileIcons[name] or ns.HOVER_GROUP_ICONS[1]
+end
+
+function ns.SetProfileIcon(name, file)
+	if builtinByName[name] then return end
+	ns.db.profileIcons[name] = file
+end
+
+-- A random icon no profile has yet (for a new one), else any.
+function ns.UnusedProfileIcon()
+	local used, free = {}, {}
+	for _, name in ipairs(ns.ProfileNames()) do used[ns.ProfileIcon(name)] = true end
+	for i = 2, #ns.HOVER_GROUP_ICONS do
+		if not used[ns.HOVER_GROUP_ICONS[i]] then free[#free + 1] = ns.HOVER_GROUP_ICONS[i] end
+	end
+	if #free == 0 then free = ns.HOVER_GROUP_ICONS end
+	return free[math.random(#free)]
+end
+
 -- A new profile of your own from the current settings.
 function ns.NewProfile(name)
 	if ns.ProfileExists(name) then return false end
@@ -453,6 +483,7 @@ function ns.NewProfile(name)
 	ns.SaveProfile()
 	ns.db.profiles[name] = saved
 	ns.db.profileNotes[name] = L["Started from %s."]:format(ns.ActiveProfile())
+	ns.db.profileIcons[name] = ns.UnusedProfileIcon()
 	Choose(name)
 	ns.db.profileChosen = true
 	return true
@@ -463,6 +494,7 @@ function ns.RenameProfile(old, new)
 	if old == ns.ActiveProfile() then ns.SaveProfile() end
 	ns.db.profiles[new], ns.db.profiles[old] = ns.db.profiles[old], nil
 	ns.db.profileNotes[new], ns.db.profileNotes[old] = ns.db.profileNotes[old], nil
+	ns.db.profileIcons[new], ns.db.profileIcons[old] = ns.db.profileIcons[old], nil
 	-- (Other characters with it as their own go back to the account's next login.)
 	for _, holder in ipairs({ ns.db, ns.chardb }) do
 		if holder.profile == old then holder.profile = new end
@@ -478,6 +510,7 @@ function ns.DeleteProfile(name)
 	if ns.db.profile == name then ns.db.profile = DEFAULT_PROFILE end
 	ns.db.profiles[name] = nil
 	ns.db.profileNotes[name] = nil
+	ns.db.profileIcons[name] = nil
 	return true
 end
 
@@ -541,8 +574,9 @@ end
 
 -- A new profile of your own from shared settings (stored against the
 -- defaults, as your own are), switched to.
-function ns.AddSharedProfile(name, settings, note)
+function ns.AddSharedProfile(name, settings, note, icon)
 	if ns.ProfileExists(name) then return false end
+	ns.db.profileIcons[name] = icon or ns.UnusedProfileIcon()
 	ns.db.profiles[name] = settings
 	ns.db.profileNotes[name] = note
 	ns.SetProfile(name)
@@ -574,6 +608,7 @@ function ns.InitProfiles()
 	local db, chardb = ns.db, ns.chardb
 	db.profiles = db.profiles or {}
 	db.profileNotes = db.profileNotes or {}
+	db.profileIcons = db.profileIcons or {}
 	-- The default profile was first called Cinematic Strong (test builds).
 	local old = "Cinematic Strong"
 	if db.profiles[old] and not db.profiles[DEFAULT_PROFILE] then
@@ -583,6 +618,12 @@ function ns.InitProfiles()
 		if holder.profile == old then holder.profile = DEFAULT_PROFILE end
 	end
 	if db.liveProfile == old then db.liveProfile = DEFAULT_PROFILE end
+	-- Your own profiles made before they had icons get one each.
+	for _, name in ipairs(ns.ProfileNames()) do
+		if not builtinByName[name] and not db.profileIcons[name] then
+			db.profileIcons[name] = ns.UnusedProfileIcon()
+		end
+	end
 	-- Only a new player is asked to pick one (Welcome.lua); everyone else has
 	-- their settings already.
 	if db.profileChosen == nil then

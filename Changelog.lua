@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-19", page = "Profiles", title = "Profile icons",
+		text = "Profiles show as icons with their names, and their descriptions when you point at them. " ..
+		"New profiles get an icon of their own; click your active profile to pick another." },
 	{ date = "2026-10-19", page = "3rd Party Frames", title = "FlareUI support",
 		text = "FlareUI's unit frames, resource bars, buffs, quest tracker, party and raid frames fade in " ..
 		"CineMode, following the Standard Frames rows of the frames they replace." },

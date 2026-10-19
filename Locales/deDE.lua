@@ -845,7 +845,7 @@ L["A profile of your own, starting from your current settings. To copy another p
 L["Rename"] = "Umbenennen"
 L["Rename the active profile (your own ones only)."] = "Das aktive Profil umbenennen (nur eigene)."
 L["Description"] = "Beschreibung"
-L["Write what the active profile is for, shown beside it (your own ones only)."] = "Schreib, wofür das aktive Profil ist; wird daneben angezeigt (nur eigene)."
+L["Write what the active profile is for, shown when you point at its icon (your own ones only)."] = "Schreib, wofür das aktive Profil ist; wird angezeigt, wenn du auf sein Symbol zeigst (nur eigene)."
 L["Delete"] = "Löschen"
 L["Delete the active profile (your own ones only), switching to %s."] = "Das aktive Profil löschen (nur eigene) und zu %s wechseln."
 L["Put the active built-in profile back to its own values (your own profiles keep your changes as you go)."] = "Das aktive eingebaute Profil auf seine eigenen Werte zurücksetzen (deine eigenen Profile behalten deine Änderungen laufend)."

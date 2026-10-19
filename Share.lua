@@ -178,6 +178,7 @@ function ns.ExportProfile(name)
 		version = Version(),
 		name = name,
 		note = not ns.IsBuiltinProfile(name) and ns.ProfileNote(name) or nil,
+		icon = ns.ProfileIcon(name),
 		from = UnitName("player"),
 		settings = ns.ProfileForSharing(name),
 	}
@@ -187,7 +188,7 @@ function ns.ExportProfile(name)
 	return PREFIX .. Encode(body .. Checksum(body))
 end
 
--- What a pasted string holds: { name, note, from, version, settings, count,
+-- What a pasted string holds: { name, note, icon, from, version, settings, count,
 -- skipped }, or nil and why not ("empty", "newer" or "broken").
 function ns.ReadSharedProfile(text)
 	text = (text or ""):gsub("%s", "")
@@ -201,6 +202,11 @@ function ns.ReadSharedProfile(text)
 	if #payload < 9 or Checksum(body) ~= sum then return nil, "broken" end
 	local data = Read(body)
 	if type(data) ~= "table" or type(data.settings) ~= "table" then return nil, "broken" end
+	-- (Its icon only if it's one this version can pick.)
+	local icon
+	for _, file in ipairs(ns.HOVER_GROUP_ICONS) do
+		if data.icon == file then icon = file end
+	end
 	local settings, count, skipped = {}, 0, 0
 	for key, value in pairs(data.settings) do
 		if ns.KnownProfileSetting(key, value) then
@@ -213,6 +219,7 @@ function ns.ReadSharedProfile(text)
 	return {
 		name = Clean(data.name, MAX_NAME) or L["Shared profile"],
 		note = Clean(data.note, MAX_NOTE),
+		icon = icon,
 		from = Clean(data.from, 48),
 		version = Clean(data.version, 32),
 		settings = settings, count = count, skipped = skipped,
@@ -283,7 +290,7 @@ local function Accept()
 	local info, name = window.info, Trimmed(window.nameBox)
 	if not info or name == "" or ns.FindProfile(name) then return end
 	local note = info.note or (info.from and L["Shared by %s."]:format(info.from))
-	if ns.AddSharedProfile(name, info.settings, note) then
+	if ns.AddSharedProfile(name, info.settings, note, info.icon) then
 		ns.Print(L["profile imported: %s"]:format(name))
 		window:Hide()
 	end
