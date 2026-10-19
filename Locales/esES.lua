@@ -1237,7 +1237,7 @@ L["Plater's nameplates fade in CineMode and follow the Nameplates page's rows. P
 
 -- Support/HorizonSuite.lua
 L["Follows the Quest tracker row"] = "Sigue la fila Seguimiento de misiones"
-L["Horizon Suite's quest tracker (Focus) and its floating quest item button fade with the Quest tracker row on the Standard Frames page."] = "El seguimiento de misiones de Horizon Suite (Focus) y su botón flotante de objeto de misión se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
+L["Horizon Suite's quest tracker (Focus), its dungeon banner and its floating quest item button fade with the Quest tracker row on the Standard Frames page."] = "El seguimiento de misiones de Horizon Suite (Focus), su rótulo de mazmorra y su botón flotante de objeto de misión se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
 
 -- Support/WeakAuras.lua
 L["its auras"] = "sus auras"

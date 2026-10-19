@@ -1404,7 +1404,8 @@ ns.COMBAT_SHOW = {
 		handledBy = "handleMinimap",
 		tip = L["The clock on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
 			"Hovering the minimap brings it up with the map."] },
-	{ key = "quests", label = L["Quest tracker"], default = false, frames = FRAME_GROUPS.quests,
+	-- (groups too: an addon's unnamed tracker parts, found by its scanner.)
+	{ key = "quests", label = L["Quest tracker"], default = false, frames = FRAME_GROUPS.quests, groups = { "quests" },
 		morePage = "Quest tracker", handledBy = "handleQuests" },
 	-- Retail's quest waypoint: its Always tick is the Minimap page's "Always
 	-- show the quest waypoint" (CINE_SHOW_SETTING).
@@ -3058,13 +3059,14 @@ function ns.ReportCooldowns()
 	ns.Print("recharging now: " .. tostring(AnyCooldownRecharging(now)))
 end
 
--- /cine debug frame <text>: how the faded frames with <text> in their name
--- stand (the name is matched ignoring case: slash commands come lowercased).
+-- /cine debug frame <text>: how the faded frames with <text> in their name,
+-- or their fade group (for unnamed ones), stand (matched ignoring case: slash
+-- commands come lowercased).
 function ns.ReportFrames(text)
 	local found = false
 	for _, entry in ipairs(ns.managed) do
 		local name = entry.name or entry.frame:GetDebugName()
-		if name:lower():find(text, 1, true) then
+		if name:lower():find(text, 1, true) or entry.group:lower():find(text, 1, true) then
 			found = true
 			local frame = entry.frame
 			local function Number(value)
@@ -3087,7 +3089,7 @@ function ns.ReportFrames(text)
 		end
 	end
 	if not found then
-		ns.Print("no faded frames with " .. text .. " in the name")
+		ns.Print("no faded frames with " .. text .. " in the name or group")
 	end
 end
 

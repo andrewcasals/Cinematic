@@ -13,10 +13,26 @@ local L = ns.L
 table.insert(ns.ADDON_NOTES, {
 	addon = "HorizonSuite", label = "Horizon Suite",
 	works = L["Follows the Quest tracker row"],
-	about = L["Horizon Suite's quest tracker (Focus) and its floating quest item button fade with " ..
-		"the Quest tracker row on the Standard Frames page."],
+	about = L["Horizon Suite's quest tracker (Focus), its dungeon banner and its floating quest " ..
+		"item button fade with the Quest tracker row on the Standard Frames page."],
 })
+
+-- Its dungeon banner (and retail's Mythic+ one) sit on UIParent rather than
+-- in the tracker, unnamed: found through its addon table.
+local BLOCKS = ns.isRetail and { "runBlock", "mplusBlock" } or { "runBlock" }
 
 ns.WhenAddonLoads("HorizonSuite", function()
 	ns.FadeWithRow("quests", "quests", { "HSFrame", "HSFloatingQuestItem" }, true, true)
+	ns.AddScanner(function()
+		local hs = _G.HorizonSuite
+		if type(hs) ~= "table" then
+			return
+		end
+		for _, key in ipairs(BLOCKS) do
+			local block = hs[key]
+			if type(block) == "table" and block.GetAlpha and not ns.IsFaded(block) then
+				ns.AddFoundFrame(block, "quests", true, true)
+			end
+		end
+	end)
 end)
