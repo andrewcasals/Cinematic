@@ -2746,6 +2746,54 @@ function ns.CreateLetterbox()
 	ns.AddOverlay(ns.letterbox)
 end
 
+-- The game's frame rate counter (Ctrl+R) sits at the bottom of the screen in
+-- WorldFrame, which draws under UIParent (the letterbox) whatever its strata:
+-- it moves up above the bottom bar while the bars show. Where the game puts
+-- it is kept, and taken again if the game moves it.
+local framerate = { height = 0 }
+
+local function LiftFramerate(height)
+	local counter = _G.FramerateFrame
+	if type(counter) ~= "table" or type(counter.GetNumPoints) ~= "function" then
+		return
+	end
+	framerate.height = height
+	if not framerate.hooked then
+		framerate.hooked = true
+		hooksecurefunc(counter, "SetPoint", function()
+			if framerate.moving then
+				return
+			end
+			-- The game placed it: keep that, lifted again a frame later (once
+			-- it has set all its points).
+			framerate.points = nil
+			if framerate.height > 0 and not framerate.pending then
+				framerate.pending = true
+				C_Timer.After(0, function()
+					framerate.pending = false
+					LiftFramerate(framerate.height)
+				end)
+			end
+		end)
+	end
+	if not framerate.points then
+		if height == 0 or counter:GetNumPoints() == 0 then
+			return -- (where the game put it, untouched)
+		end
+		framerate.points = {}
+		for i = 1, counter:GetNumPoints() do
+			framerate.points[i] = { counter:GetPoint(i) }
+		end
+	end
+	local lift = height * UIParent:GetEffectiveScale() / counter:GetEffectiveScale()
+	framerate.moving = true
+	counter:ClearAllPoints()
+	for _, point in ipairs(framerate.points) do
+		counter:SetPoint(point[1], point[2], point[3], point[4], point[5] + lift)
+	end
+	framerate.moving = false
+end
+
 function ns.UpdateLetterbox(cinematic, elapsed)
 	local target = (cinematic and ns.db.letterbox) and 1 or 0
 	if letterboxProgress == target and not ns.letterboxDirty then
@@ -2762,4 +2810,5 @@ function ns.UpdateLetterbox(cinematic, elapsed)
 	ns.letterbox.bottom:SetHeight(height)
 	ns.letterbox:SetAlpha(ns.db.letterboxAlpha)
 	ns.letterbox:SetShown(letterboxProgress > 0)
+	LiftFramerate(letterboxProgress > 0 and height or 0)
 end
