@@ -3811,7 +3811,16 @@ local function CreateAudioPanel()
 	local fatigueHeader = Header(content, L["Fatigue"], musicFade, -24)
 	fatigueHeader:SetPoint("TOPLEFT", musicFade, "BOTTOMLEFT", -2, -24)
 
-	local fatigue = Slider(content, "musicFatigue", L["Music fatigue"], 0, 30, 1, L["%d min"])
+	-- (Minutes, in half-minute steps.)
+	local fatigue = Slider(content, "musicFatigue", L["Music fatigue"], 0, 30, 0.5, function(value)
+		local minutes, seconds = math.floor(value), math.floor((value % 1) * 60 + 0.5)
+		if minutes == 0 then
+			return L["%d sec"]:format(seconds)
+		elseif seconds == 0 then
+			return L["%d min"]:format(minutes)
+		end
+		return L["%d min %d sec"]:format(minutes, seconds)
+	end)
 	fatigue:SetPoint("TOPLEFT", fatigueHeader, "BOTTOMLEFT", 2, -26)
 	Tooltip(fatigue, L["Once a camera has started music, no camera starts it again for this long, " ..
 		"counted from when it started. The first camera after a login or /reload always can. " ..
@@ -4282,11 +4291,11 @@ local function CreateQualityPanel()
 	end
 	-- (CenterPanels.lua.)
 	stack:Add(Check(content, "centerPanels", L["Open windows in the middle of the screen"],
-		L["Windows the game opens on the left (quest log, group finder, spellbook and the like) " ..
-			"open in the middle of the screen instead. Two open at once still sit side by side, together in the " ..
-			"middle. Narrow ones on their own (character, trade, merchant, mail) and quest givers' windows open " ..
-			"a little in from the left edge instead, leaving the world and the quest giver in view. A window " ..
-			"another addon has moved stays where that addon put it."]), "check")
+		L["Windows the game opens on the left (quest log, group finder, profession book and the like) " ..
+			"open on the right instead, near the top, leaving your character in view. Two open at once still sit " ..
+			"side by side. Narrow ones on their own (character, trade, merchant, mail) and quest givers' windows " ..
+			"open a little in from the left edge instead, halfway up the screen, leaving the world and the quest " ..
+			"giver in view. A window another addon has moved stays where that addon put it."]), "check")
 	stack:Add(Check(content, "dragPanels", L["Drag windows to move them"],
 		L["Drag the game's windows (quest log, group finder, character, spellbook and the like) to move them. " ..
 		"A window opens where you last dropped it from then on, in this profile. Some windows can't be " ..

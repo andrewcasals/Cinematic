@@ -11,7 +11,8 @@
 -- instead (far enough in to show it isn't stuck there: it can be dragged).
 -- So does a narrow row (the character, trade, merchant or mail window on its
 -- own): in the middle it only covers your character, and to the side it
--- leaves the world in view.
+-- leaves the world in view. A row to the side is centered top to bottom too.
+-- Wide rows sit to the right, near the top (WIDE_RIGHT, WIDE_TOP).
 --
 -- dragPanels: drag a window to move it. It opens where it was last dropped
 -- from then on, saved in the profile (panelSpots, window name -> where; the
@@ -37,6 +38,17 @@ local TALK_LEFT = 0.12
 -- character window with its stats open is 540 wide; the group finder, 563,
 -- stays in the middle.
 local NARROW = 560
+-- ...and start further in than a talking row: nearer the middle, still clear
+-- of your character.
+local NARROW_LEFT = 0.18
+-- Wide rows (quest log, group finder, profession book...): to the right,
+-- their right edge this far in from the screen's right edge and their top
+-- this far down from its top (shares of the screen's width and height),
+-- leaving your character in view on the left. Always kept on the screen
+-- (EDGE from its edges, UIParent's units).
+local WIDE_RIGHT = 0.17
+local WIDE_TOP = 0.115
+local EDGE = 8
 
 local function Number(value)
 	if issecretvalue and issecretvalue(value) then
@@ -176,35 +188,51 @@ local function CenterRow()
 		return
 	end
 	local uiScale = Number(UIParent:GetEffectiveScale())
-	local screenWidth = Number(UIParent:GetWidth())
-	if not uiScale or not screenWidth then
+	local screenWidth, screenHeight = Number(UIParent:GetWidth()), Number(UIParent:GetHeight())
+	if not uiScale or not screenWidth or not screenHeight then
 		return
 	end
 	-- The row's edges, in UIParent's units.
-	local rowLeft, rowRight, talk
+	local rowLeft, rowRight, rowTop, rowBottom, talk
 	for _, frame in ipairs(row) do
 		talk = talk or TALK[frame:GetName() or ""]
 		local left, right, scale = Number(frame:GetLeft()), Number(frame:GetRight()), Number(frame:GetEffectiveScale())
-		if not left or not right or not scale then
+		local top, bottom = Number(frame:GetTop()), Number(frame:GetBottom())
+		if not left or not right or not top or not bottom or not scale then
 			return
 		end
 		left, right = left * scale / uiScale, right * scale / uiScale
+		top, bottom = top * scale / uiScale, bottom * scale / uiScale
 		rowLeft = rowLeft and math.min(rowLeft, left) or left
 		rowRight = rowRight and math.max(rowRight, right) or right
+		rowTop = rowTop and math.max(rowTop, top) or top
+		rowBottom = rowBottom and math.min(rowBottom, bottom) or bottom
 	end
 	local side = talk or rowRight - rowLeft < NARROW
-	local target = side and screenWidth * TALK_LEFT or (screenWidth - (rowRight - rowLeft)) / 2
+	local target = (talk and screenWidth * TALK_LEFT) or (side and screenWidth * NARROW_LEFT)
+		or screenWidth * (1 - WIDE_RIGHT) - (rowRight - rowLeft)
 	-- A row wider than the screen keeps its left edge on it.
 	local shift = math.max(target - rowLeft, -rowLeft)
-	if math.abs(shift) < 1 then
+	-- To the side, centered top to bottom (a row taller than the screen keeps
+	-- its top on it).
+	local rise
+	if side then
+		rise = math.min((screenHeight + rowTop - rowBottom) / 2, screenHeight) - rowTop
+	else
+		-- (A row too tall for that keeps its bottom on the screen, and its top.)
+		local top = math.min(screenHeight - EDGE, math.max(screenHeight * (1 - WIDE_TOP), rowTop - rowBottom + EDGE))
+		rise = top - rowTop
+	end
+	if math.abs(shift) < 1 and math.abs(rise) < 1 then
 		return
 	end
 	for _, frame in ipairs(row) do
 		local _, _, _, x, y = frame:GetPoint(1)
 		x, y = Number(x), Number(y)
 		if x and y then
+			local toFrame = uiScale / frame:GetEffectiveScale()
 			frame:ClearAllPoints()
-			frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x + shift * uiScale / frame:GetEffectiveScale(), y)
+			frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x + shift * toFrame, y + rise * toFrame)
 		end
 	end
 end
@@ -218,6 +246,11 @@ local function HookOpen()
 		end
 	end
 end
+
+-- Windows that settle their size after the game has placed them (the
+-- profession book) are placed again when they do: hooked once each.
+local sized = {}
+local Placed
 
 local function Arrange()
 	if not ns.db then
@@ -233,6 +266,12 @@ local function Arrange()
 		return
 	end
 	for _, frame in ipairs(open) do
+		if not sized[frame] then
+			sized[frame] = true
+			frame:HookScript("OnSizeChanged", function()
+				Placed()
+			end)
+		end
 		local spot = Spot(frame)
 		if spot and not moving[frame] then
 			frame:ClearAllPoints()
@@ -278,7 +317,7 @@ local function ArrangeAgain()
 	PlaceBag()
 end
 
-local function Placed()
+function Placed()
 	if not (ns.db and (ns.db.centerPanels or ns.db.dragPanels or next(handles))) then
 		return
 	end
@@ -294,8 +333,8 @@ end
 -- it can be dragged; then what's under the mouse.
 function ns.PrintPanelsDebug()
 	local db = ns.db or {}
-	ns.Print(("windows: centering %s, dragging %s"):format(db.centerPanels and "on" or "off",
-		db.dragPanels and "on" or "off"))
+	ns.Print(("windows: centering %s, dragging %s, screen %s x %s"):format(db.centerPanels and "on" or "off",
+		db.dragPanels and "on" or "off", tostring(Number(UIParent:GetWidth())), tostring(Number(UIParent:GetHeight()))))
 	if not GetUIPanel then
 		ns.Print("no GetUIPanel on this client")
 		return
@@ -312,8 +351,9 @@ function ns.PrintPanelsDebug()
 				area, tostring(frame:GetName()), tostring(ns.Flag(frame:IsShown())), tostring(frame:IsProtected()),
 				tostring(frame:IsMouseEnabled()), tostring(frame:IsMovable()), tostring(hooked[frame] or false),
 				tostring(handles[frame] and ns.Flag(handles[frame]:IsShown()) or false), tostring(Spot(frame) ~= nil)))
-			ns.Print(("   %d point(s): %s %s %s %s %s"):format(frame:GetNumPoints(), tostring(point),
-				tostring(relativeName), tostring(relativePoint), tostring(Number(x)), tostring(Number(y))))
+			ns.Print(("   %d point(s): %s %s %s %s %s; size %s x %s, scale %s"):format(frame:GetNumPoints(), tostring(point),
+				tostring(relativeName), tostring(relativePoint), tostring(Number(x)), tostring(Number(y)),
+				tostring(Number(frame:GetWidth())), tostring(Number(frame:GetHeight())), tostring(Number(frame:GetScale()))))
 		end
 	end
 	if not any then

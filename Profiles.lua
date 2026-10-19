@@ -90,9 +90,11 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
 			"and how the developer plays every day."],
 		apply = function(set)
-			-- Auto-walking and auto-running can start music.
+			-- Auto-walking and auto-running can start music, but no camera starts
+			-- it again within half a minute of the last start.
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
+			set("musicFatigue", 0.5)
 			-- Nameplates: group members' pets, and the Grouped column for
 			-- friendly players and minions, don't stay up.
 			set("plateAlwaysGroupMinions", false)
@@ -124,9 +126,11 @@ ns.BUILTIN_PROFILES = {
 			set("friendlyShow", Column({ "target", "tot" }))
 			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
 			set("cooldownWhileRecharging", true)
-			-- Auto-walking and auto-running can start music, as in Immersive.
+			-- Auto-walking and auto-running can start music, with the same
+			-- half-minute fatigue, as in Immersive.
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
+			set("musicFatigue", 0.5)
 			-- Nameplates: group members' pets, and the Grouped column for
 			-- friendly players and minions, don't stay up, as in Immersive.
 			set("plateAlwaysGroupMinions", false)
