@@ -15,7 +15,7 @@ Cinematic helps you immerse yourself in the world instead of staring at UI eleme
 * **Hide all floating text** (XP, damage, healing) if you'd like a clean screen. It takes a game restart.
 * **Tooltips** (advanced, off by default): hide tooltips in CineMode, in fights or in the camera modes, with a list of the ones that still show, and keybinds to hold for a peek or to switch the hiding off.
 * **Chat bubbles:** hide them by place, show just the text floating over the speaker, and set the text size.
-* **Your call on every frame:** keep any frame always visible, or fade extra ones from other addons. Details!, Bartender4, Plater, EllesmereUI, the Cooldown Manager and Forever Enhanced Cooldown Manager are handled out of the box. For anything else, **Add mode** (or `/cine add`) lets you click a frame to pick it.
+* **Your call on every frame:** keep any frame always visible, or fade extra ones from other addons. Details!, Bartender4, Plater, EllesmereUI, FlareUI, the Cooldown Manager and Forever Enhanced Cooldown Manager are handled out of the box. For anything else, **Add mode** (or `/cine add`) lets you click a frame to pick it.
 * **Turns itself off where you'd rather have the full UI:** the open world, inns, cities, dungeons, raids, PvP (flagged, or in battlegrounds and arenas), parties or raid groups. Each camera mode can be turned off in those places too (all but the open world), from one grid on the Camera Modes page.
 
 ## A camera with a mind of its own

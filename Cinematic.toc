@@ -41,6 +41,7 @@ Support\EllesmereUI.lua
 Support\Bartender4.lua
 Support\Plater.lua
 Support\HorizonSuite.lua
+Support\FlareUI.lua
 Support\WeakAuras.lua
 Support\Questie.lua
 Frames.lua

@@ -1255,6 +1255,10 @@ L["Plater's nameplates fade in CineMode and follow the Nameplates page's rows. P
 L["Follows the Quest tracker row"] = "Sigue la fila Seguimiento de misiones"
 L["Horizon Suite's quest tracker (Focus), its dungeon banner and its floating quest item button fade with the Quest tracker row on the Standard Frames page."] = "El seguimiento de misiones de Horizon Suite (Focus), su rótulo de mazmorra y su botón flotante de objeto de misión se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
 
+-- Support/FlareUI.lua
+L["its boss frames"] = "sus marcos de jefe"
+L["Its unit frames, cast bar, resource bars, buffs, quest tracker, party and raid frames, XP bar and totems are rows on the Standard Frames page."] = "Sus marcos de unidad, barra de lanzamiento, barras de recursos, beneficios, seguimiento de misiones, marcos de grupo y banda, barra de experiencia y tótems son filas de la página Marcos estándar."
+
 -- Support/WeakAuras.lua
 L["its auras"] = "sus auras"
 L["Auras anchored to another frame fade with that frame."] = "Las auras ancladas a otro marco se desvanecen con ese marco."
@@ -1615,3 +1619,5 @@ L["Choose whether friendly players, pets and NPCs show their nameplates in dunge
 L["Your mana, rage, energy and combo points under your character have a row of their own, so they can stay up while the health bar fades."] = "Tu maná, ira, energía y puntos de combo bajo tu personaje tienen una fila propia, así que pueden seguir visibles mientras la barra de salud se desvanece."
 L["Hit text and threat parts"] = "Partes de texto de golpes y amenaza"
 L["The Unit frame parts grids can hide the damage and healing numbers on your and your pet's portraits, and the threat percentage and glow on the target and focus frames."] = "Las cuadrículas de partes de los marcos de unidad pueden ocultar los números de daño y sanación de tu retrato y el de tu mascota, y el porcentaje y el brillo de amenaza de los marcos del objetivo y del foco."
+L["FlareUI support"] = "Compatibilidad con FlareUI"
+L["FlareUI's unit frames, resource bars, buffs, quest tracker, party and raid frames fade in CineMode, following the Standard Frames rows of the frames they replace."] = "Los marcos de unidad, barras de recursos, beneficios, seguimiento de misiones y marcos de grupo y banda de FlareUI se desvanecen en CineMode, siguiendo las filas de Marcos estándar de los marcos que sustituyen."

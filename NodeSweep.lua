@@ -293,6 +293,41 @@ function ns.SetMinimapIconsHidden(hidden)
 	settingIcons = false
 end
 
+-- The quest, task and dig site areas (the blue shapes) ignore the minimap's
+-- alpha as well: their own alphas go to 0 while it's faded full size. The
+-- game can't say what they were, and Blizzard's UI never sets them (so 1),
+-- unless another addon did: its value is what's put back.
+local BLOB_ALPHAS = {}
+for _, kind in ipairs({ "Quest", "Task", "Arch" }) do
+	for _, part in ipairs({ "Inside", "Outside", "Ring" }) do
+		local method = "Set" .. kind .. "Blob" .. part .. "Alpha"
+		if Minimap[method] then BLOB_ALPHAS[method] = 1 end
+	end
+end
+local blobsHidden, settingBlobs = false, false
+for method in pairs(BLOB_ALPHAS) do
+	hooksecurefunc(Minimap, method, function(_, alpha)
+		if settingBlobs or type(alpha) ~= "number" or Secret(alpha) then return end
+		BLOB_ALPHAS[method] = alpha
+		-- (Set while hidden: back to 0, the value kept for later.)
+		if blobsHidden then
+			settingBlobs = true
+			pcall(Minimap[method], Minimap, 0)
+			settingBlobs = false
+		end
+	end)
+end
+
+function ns.SetMinimapBlobsHidden(hidden)
+	if hidden == blobsHidden then return end
+	blobsHidden = hidden
+	settingBlobs = true
+	for method, alpha in pairs(BLOB_ALPHAS) do
+		pcall(Minimap[method], Minimap, hidden and 0 or alpha)
+	end
+	settingBlobs = false
+end
+
 -- From the Frames.lua tick: whether something ticked under Reveal is on the
 -- minimap. Swept every SWEEP_EVERY seconds while the minimap is faded (or
 -- fading), or up for what the last sweep found; between sweeps, and while one
