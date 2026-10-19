@@ -1025,6 +1025,12 @@ do
 			{ "Camera Triggers", "Interface\\Icons\\Spell_Nature_Lightning" },
 			{ "Camera Settings", "Interface\\Icons\\Trade_Engineering" }, -- (an icon per camera instead)
 		} },
+		-- (label: the name on its icon, when the page is registered under another)
+		{ name = "Visual Effects", pages = {
+			{ "Effects", "Interface\\Icons\\Spell_Holy_Restoration", label = "General" },
+			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02" },
+			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04" },
+		} },
 		{ name = "Quality of life", pages = {
 			{ "General", "Interface\\Icons\\INV_Misc_Bag_07" },
 			{ "Fishing", "Interface\\Icons\\Trade_Fishing" },
@@ -1120,7 +1126,7 @@ do
 		end
 	end
 
-	local function CreateTile(hub, canvas, english, iconFile)
+	local function CreateTile(hub, canvas, english, iconFile, label)
 		local tile = CreateFrame("Button", nil, hub.frame)
 		tile.hub, tile.canvas = hub, canvas
 		tile:SetSize(TILE, TILE)
@@ -1149,7 +1155,8 @@ do
 		-- Its page's name on mouseover.
 		tile:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-			GameTooltip:SetText(WIP_PAGES[english] and L[english] .. " " .. L["(WIP)"] or L[english], 1, 0.82, 0)
+			local shown = L[label or english]
+			GameTooltip:SetText(WIP_PAGES[english] and shown .. " " .. L["(WIP)"] or shown, 1, 0.82, 0)
 			GameTooltip:Show()
 		end)
 		tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1170,9 +1177,9 @@ do
 					-- An icon for the page, or one for each of its tabs (canvas.hubTabs:
 					-- { name, icon, onSelect, resetContent, setSelect }, sharing the page).
 					local icon = type(page[2]) == "function" and page[2]() or page[2]
-					local tabs = canvas.hubTabs or { { name = english, icon = icon } }
+					local tabs = canvas.hubTabs or { { name = english, icon = icon, label = page.label } }
 					for i, tab in ipairs(tabs) do
-						local tile = CreateTile(hub, canvas, tab.name, tab.icon)
+						local tile = CreateTile(hub, canvas, tab.name, tab.icon, tab.label)
 						tile.order = order + i / 100
 						tile.onSelect, tile.resetContent = tab.onSelect, tab.resetContent
 						if tab.setSelect then
@@ -1222,12 +1229,13 @@ do
 	end
 end
 
--- (name in English, as ns.OpenOptions takes it; shown in the game's language.)
-local function RegisterSubpage(subpanel, name)
-	subpanel.name = L[name]
+-- (name in English, as ns.OpenOptions takes it; shown in the game's language,
+-- or as shown if given.)
+local function RegisterSubpage(subpanel, name, shown)
+	subpanel.name = shown or L[name]
 	subpanel.parent = "Cinematic"
 	subpages[name] = subpanel
-	local page = { name = L[name], key = name, canvas = subpanel }
+	local page = { name = shown or L[name], key = name, canvas = subpanel }
 	searchPages[#searchPages + 1] = page
 	-- (a hub's page: shown in its place there, not listed on its own; the hub
 	-- has the search box and Reset page)
@@ -2932,8 +2940,11 @@ local function OpenColorPicker(r, g, b, onChange)
 end
 ns.OpenColorPicker = OpenColorPicker
 
--- Sub-page for the screen tint and vignette.
-local function CreateTintPanel()
+-- Sub-page: the visual effects' General tab (the Visual Effects hub's first):
+-- the master switch, the Turn off in grid, the letterbox, vignette, inns,
+-- weather and depth of field. Returns the master switch, which greys the
+-- Tint tab too.
+local function CreateEffectsPanel()
 	local canvas, content = CreateScrollPage()
 
 	local title = Label(content, "GameFontNormalLarge", L["Visual Effects"])
@@ -2941,16 +2952,15 @@ local function CreateTintPanel()
 
 	local subtitle = PageIntro(content, title,
 		L["How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the " ..
-		"main page): letterbox bars, colour " ..
-		"grading, vignette, inn glow and weather. The UI isn't tinted. Names and nameplates are " ..
-		"on the Nameplates page."])
+		"main page): letterbox bars, vignette, inn glow, weather and depth of field. The colour grading is " ..
+		"on the Tint tab. The UI isn't tinted. Names and nameplates are on the Nameplates page."])
 
 	-- The master switch: off, none of this page's effects show (each keeps its
 	-- own setting), and its other controls grey out.
 	local master = Check(content, "visualEffects", L["CineMode Visual Effects"],
-		L["Turns everything on this page on or off at once: the letterbox, tint, time of day, " ..
-		"zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for when you " ..
-		"turn this back on."], function(value)
+		L["Turns every visual effect on or off at once, these and the Tint tab's: the letterbox, tint, time " ..
+		"of day, zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for " ..
+		"when you turn this back on."], function(value)
 			ns.GetDB().visualEffects = value
 			ns.letterboxDirty = true
 			if ns.RefreshTint then ns.RefreshTint() end
@@ -3060,8 +3070,83 @@ local function CreateTintPanel()
 	opacity:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -34)
 	GreyUnless(opacity, function(db) return db.letterbox end)
 
-	local lookHeader = Header(content, L["Tint"], opacity, -24)
-	lookHeader:SetPoint("TOPLEFT", opacity, "BOTTOMLEFT", -2, -24)
+	-- Vignette
+	local vignetteHeader = Header(content, L["Vignette"], opacity, -24)
+	vignetteHeader:SetPoint("TOPLEFT", opacity, "BOTTOMLEFT", -2, -24)
+
+	local vignetteStrength = Slider(content, "vignetteStrength", L["Vignette strength"], 10, 100, 5, "%d%%", 100,
+		ns.RefreshTint)
+	vignetteStrength:SetPoint("TOPLEFT", vignetteHeader, "BOTTOMLEFT", 2, -26)
+	Tooltip(vignetteStrength, L["Soft dark edges that draw the eye to the middle. Works with any tint."])
+	GreyUnless(vignetteStrength, function(db) return db.vignette end)
+
+	-- Inns
+	local innHeader = Header(content, L["Inns"], vignetteStrength, -24)
+	innHeader:SetPoint("TOPLEFT", vignetteStrength, "BOTTOMLEFT", -2, -24)
+
+	local innGlow = Check(content, "innGlow", L["Light up inns"],
+		L["Indoors in an inn, the outdoor tint (a gloomy marsh, a moonlit night) partly lifts and a " ..
+		"soft firelit glow fades in, coloured by the zone: cooler in the snow, greener in a swamp. " ..
+		"Blends over a few seconds as you go through the door."],
+		function(value)
+			ns.GetDB().innGlow = value
+			Refresh() -- grey out / enable the strength slider
+			ns.RefreshTint()
+		end)
+	innGlow:SetPoint("TOPLEFT", innHeader, "BOTTOMLEFT", -2, -6)
+
+	local innGlowStrength = Slider(content, "innGlowAmount", L["Inn glow amount"], 0, 100, 1, "%d%%", 100,
+		ns.RefreshTint)
+	Tooltip(innGlowStrength, L["How much light the glow adds at its brightest, low on the screen."])
+	innGlowStrength:SetPoint("TOPLEFT", innGlow, "BOTTOMLEFT", 4, -26)
+	GreyUnless(innGlowStrength, function(db) return db.innGlow end)
+
+	-- Weather
+	local weatherHeader = Header(content, L["Weather"], innGlowStrength, -24)
+	weatherHeader:SetPoint("TOPLEFT", innGlowStrength, "BOTTOMLEFT", -2, -24)
+
+	local weatherTintStrength = Slider(content, "weatherTintStrength", L["Weather strength"], 10, 100, 5, "%d%%", 100,
+		ns.RefreshTint)
+	weatherTintStrength:SetPoint("TOPLEFT", weatherHeader, "BOTTOMLEFT", 2, -26)
+	Tooltip(weatherTintStrength, L["Rain greys and cools the scene, snow turns it pale blue and a sandstorm " ..
+		"gives it a dusty orange haze, more strongly the heavier the weather. Works with any tint (None " ..
+		"included), lifts under a roof and blends in as a storm builds. Needs a game version that " ..
+		"reports the weather."])
+	GreyUnless(weatherTintStrength, function(db) return db.weatherTint end)
+
+	-- Depth of field
+	local dofHeader = Header(content, L["Depth of field"], weatherTintStrength, -24)
+	dofHeader:SetPoint("TOPLEFT", weatherTintStrength, "BOTTOMLEFT", -2, -24)
+
+	local depthOfField = Check(content, "depthOfField", L["Haze the screen edges in the camera modes"],
+		L["A soft haze around the edges of the screen, as if the camera had focused on you. " ..
+		"Each camera mode's page sets its own strength. /cine doftest shows it on demand."])
+	depthOfField:SetPoint("TOPLEFT", dofHeader, "BOTTOMLEFT", -2, -6)
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	-- (Its own name, not "General": Quality of life has a General page. Shown as
+	-- Visual Effects in search, and General on its icon.)
+	RegisterSubpage(canvas, "Effects", L["Visual Effects"])
+	return master
+end
+
+-- Sub-page: the visual effects' Tint tab: the colour grading (a preset, its
+-- strength and drift), time of day and zone tints. Greyed with the General
+-- tab's CineMode Visual Effects switch (master).
+local function CreateTintPanel(master)
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Tint"])
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local subtitle = PageIntro(content, title,
+		L["The colour grading over the game world: a preset, the time of day and each zone's mood. The " ..
+		"General tab's CineMode Visual Effects switch turns it off with the rest, and its Turn off in grid " ..
+		"says where it doesn't show. The UI isn't tinted."])
+	RegisterPageSwitch(content, "visualEffects", master)
+
+	local lookHeader = Header(content, L["Preset"], subtitle, -20)
 
 	local choices = {}
 	for _, preset in ipairs(ns.TINT_PRESETS) do
@@ -3579,66 +3664,13 @@ local function CreateTintPanel()
 	gapGround:SetPoint("TOPLEFT", gapFlying, "BOTTOMLEFT", 0, -34)
 	Tooltip(gapGround, L["The same pause when you cross a border on foot or riding."])
 
-	-- Vignette
-	local vignetteHeader = Header(content, L["Vignette"], gapGround, -24)
-	vignetteHeader:SetPoint("TOPLEFT", gapGround, "BOTTOMLEFT", -2, -24)
-
-	local vignetteStrength = Slider(content, "vignetteStrength", L["Vignette strength"], 10, 100, 5, "%d%%", 100,
-		ns.RefreshTint)
-	vignetteStrength:SetPoint("TOPLEFT", vignetteHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(vignetteStrength, L["Soft dark edges that draw the eye to the middle. Works with any tint."])
-	GreyUnless(vignetteStrength, function(db) return db.vignette end)
-
-	-- Inns
-	local innHeader = Header(content, L["Inns"], vignetteStrength, -24)
-	innHeader:SetPoint("TOPLEFT", vignetteStrength, "BOTTOMLEFT", -2, -24)
-
-	local innGlow = Check(content, "innGlow", L["Light up inns"],
-		L["Indoors in an inn, the outdoor tint (a gloomy marsh, a moonlit night) partly lifts and a " ..
-		"soft firelit glow fades in, coloured by the zone: cooler in the snow, greener in a swamp. " ..
-		"Blends over a few seconds as you go through the door."],
-		function(value)
-			ns.GetDB().innGlow = value
-			Refresh() -- grey out / enable the strength slider
-			ns.RefreshTint()
-		end)
-	innGlow:SetPoint("TOPLEFT", innHeader, "BOTTOMLEFT", -2, -6)
-
-	local innGlowStrength = Slider(content, "innGlowAmount", L["Inn glow amount"], 0, 100, 1, "%d%%", 100,
-		ns.RefreshTint)
-	Tooltip(innGlowStrength, L["How much light the glow adds at its brightest, low on the screen."])
-	innGlowStrength:SetPoint("TOPLEFT", innGlow, "BOTTOMLEFT", 4, -26)
-	GreyUnless(innGlowStrength, function(db) return db.innGlow end)
-
-	-- Weather
-	local weatherHeader = Header(content, L["Weather"], innGlowStrength, -24)
-	weatherHeader:SetPoint("TOPLEFT", innGlowStrength, "BOTTOMLEFT", -2, -24)
-
-	local weatherTintStrength = Slider(content, "weatherTintStrength", L["Weather strength"], 10, 100, 5, "%d%%", 100,
-		ns.RefreshTint)
-	weatherTintStrength:SetPoint("TOPLEFT", weatherHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(weatherTintStrength, L["Rain greys and cools the scene, snow turns it pale blue and a sandstorm " ..
-		"gives it a dusty orange haze, more strongly the heavier the weather. Works with any tint (None " ..
-		"included), lifts under a roof and blends in as a storm builds. Needs a game version that " ..
-		"reports the weather."])
-	GreyUnless(weatherTintStrength, function(db) return db.weatherTint end)
-
-	-- Depth of field
-	local dofHeader = Header(content, L["Depth of field"], weatherTintStrength, -24)
-	dofHeader:SetPoint("TOPLEFT", weatherTintStrength, "BOTTOMLEFT", -2, -24)
-
-	local depthOfField = Check(content, "depthOfField", L["Haze the screen edges in the camera modes"],
-		L["A soft haze around the edges of the screen, as if the camera had focused on you. " ..
-		"Each camera mode's page sets its own strength. /cine doftest shows it on demand."])
-	depthOfField:SetPoint("TOPLEFT", dofHeader, "BOTTOMLEFT", -2, -6)
-
 	canvas:SetScript("OnShow", PageShown(function()
 		Refresh()
 		ns.SetTintPreview(true)
 	end, content))
 	canvas:SetScript("OnHide", function() ns.SetTintPreview(false) end)
 	canvas:Hide()
-	RegisterSubpage(canvas, L["Visual Effects"])
+	RegisterSubpage(canvas, "Tint")
 end
 
 -- Sub-page: Graphics+, the game's graphics settings past its menu's most
@@ -7365,7 +7397,7 @@ ns.OnLanguage(function()
 	CreateBubblesPanel()
 	CreateFishingPanel()
 	CreateQualityPanel()
-	CreateTintPanel()
+	CreateTintPanel(CreateEffectsPanel())
 	CreateGraphicsPanel()
 	CreateAudioPanel()
 	CreateCameraPanel()

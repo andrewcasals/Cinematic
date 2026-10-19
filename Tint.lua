@@ -449,7 +449,7 @@ local function GetClockTime()
 	return GetGameTime()
 end
 
--- Showing a preview: an hour picked in the Visual Effects page's Preview time
+-- Showing a preview: an hour picked in the Visual Effects hub's Tint tab's Preview time
 -- (just opening the page shows nothing), or a quick preview from the minimap
 -- menu is running.
 local function Previewing()
@@ -479,7 +479,7 @@ local function AppliedPhaseColor(name)
 end
 
 -- The tint colour for the current time, the phase's name, and the time.
--- A previewed hour (menu preview, or the Visual Effects page), else the clock.
+-- A previewed hour (menu preview, or the Tint tab), else the clock.
 -- Time-of-day strength blends the colour toward no change.
 local function TimeOfDayColor()
 	local hour, minute
@@ -514,7 +514,7 @@ local function TimeOfDayColor()
 	return color, phase, hour, minute
 end
 -- The drift multiplier on tint strength: 1 +/- the drift amount, wandering
--- slowly. Off while previewing, so the Visual Effects page shows the strength you set.
+-- slowly. Off while previewing, so the Tint tab shows the strength you set.
 local function DriftFactor()
 	if not db.tintDrift or Previewing() then
 		return 1
@@ -985,7 +985,7 @@ ns.GetWeatherDebug = function()
 	info.target, info.shown = weatherTarget, weatherColor
 	return info
 end
--- The Visual Effects page is open: its Preview time can show the tint.
+-- The Tint tab (Visual Effects) is open: its Preview time can show the tint.
 ns.SetTintPreview = function(on)
 	tintPreview = on
 	tintDirty = true

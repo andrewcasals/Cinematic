@@ -21,8 +21,8 @@ end
 local PAGE_ICONS = {
 	["CineMode"] = "Interface\\Icons\\INV_Misc_Spyglass_02",
 	["Profiles"] = "Interface\\Icons\\INV_Misc_Note_02",
+	-- (the Visual Effects hub: its General tab's)
 	["Visual Effects"] = "Interface\\Icons\\Spell_Holy_Restoration",
-	["Graphics+"] = "Interface\\Icons\\INV_Misc_Gem_Pearl_04",
 	["Audio"] = "Interface\\Icons\\INV_Misc_Drum_01",
 	["Keybinds"] = "Interface\\Icons\\INV_Misc_Key_03",
 	["UI Manager"] = "Interface\\Icons\\INV_Misc_Head_Human_01",
