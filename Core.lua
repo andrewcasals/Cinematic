@@ -129,9 +129,9 @@ local DEFAULTS = {
 	revealOnDrag = false,     -- bring the UI back while something's held on the cursor (dragging)
 	returnDelay = 15,         -- seconds things must stay calm (no cast, window...) before CineMode returns
 	stayWithWindows = true, -- stay cinematic when opening the spellbook, options and similar
-	portraitWhenNotFull = true, -- keep the player portrait up while health or power isn't full
-	portraitAfterCombat = true,  -- ...but only within the Calm Timer (calmTime) of combat
-	portraitAfterResurrect = true, -- ...or after coming back to life, until health and power are full
+	portraitWhenNotFull = true, -- keep the player portrait up while health or power isn't full, within
+	                            -- the Calm Timer (calmTime) of combat or after coming back to life
+	prdWhenNotFull = true,      -- ...and the personal resource display (its own tick)
 	buffPeek = true,          -- briefly show buffs/debuffs when a buff is gained or refreshed
 	buffPeekAfterCombat = false, -- ...or only within the Calm Timer of a fight
 	buffPeekIgnoreSelf = true,   -- ...and not for buffs you cast on yourself (or your pet does)
@@ -599,7 +599,7 @@ DEFAULTS.healerTargetHighlight = true -- an edge round your target's row
 DEFAULTS.healerRange = true       -- dim players out of range
 DEFAULTS.healerIncoming = true    -- heals on their way, a lighter bar after the health
 DEFAULTS.healerHots = true        -- your heals over time and shields next to each bar
-DEFAULTS.healerHotMaxMinutes = 5  -- ...only ones shorter than this many minutes
+DEFAULTS.healerHotMaxMinutes = 0.5 -- ...only ones shorter than this many minutes (15-second steps, up to 10)
 DEFAULTS.healerRoles = true       -- tank, healer or damage icon on each bar
 DEFAULTS.healerNames = true       -- the player's name on each bar
 DEFAULTS.healerPercent = true     -- health % on each bar
@@ -663,10 +663,11 @@ end
 -- target of target go as the target's grid says until their "Same as target"
 -- is unticked. All shown to start with, as the game has them. Some parts
 -- only on some rows (UNIT_PART_ONLY): the hit text on your and your pet's
--- portraits, and threat on NPCs you can fight.
+-- portraits, and threat on NPCs you can fight. (The cast bar: the target's
+-- and focus's only, the frames that have one.)
 ns.UNIT_PART_KINDS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer",
 	"FriendlyNPC" }
-ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons", "Auras", "CombatText", "Threat" }
+ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons", "Auras", "CombatText", "Threat", "CastBar" }
 ns.UNIT_PART_ONLY = {
 	CombatText = { Player = true, Pet = true },
 	Threat = { EnemyNPC = true, NeutralNPC = true },

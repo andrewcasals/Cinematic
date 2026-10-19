@@ -165,7 +165,7 @@ local OWN_ALPHA = {
 -- the mouse: hovering the raid frames brings them up (their Mouseover group).
 local PART_GROUPS = {
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true,
-	raidthreat = true, partyroles = true, partynames = true,
+	raidthreat = true, partyroles = true, partynames = true, partystatus = true,
 }
 -- Parts that go only while a row's frames are up (part -> row): the "Party"
 -- title sits in no faded frame (the party members fade one by one), so its
@@ -1305,6 +1305,17 @@ function ns.IsEntryHovered(entry)
 		return false
 	end
 	if entry.shrunk then
+		-- (Its spot is a bare rect test: a window dragged over it, like
+		-- Settings, has the mouse instead.)
+		local focus = MouseFocus()
+		if focus then
+			for name in pairs(ns.WINDOWS) do
+				local window = _G[name]
+				if window and IsInside(focus, window) then
+					return false
+				end
+			end
+		end
 		return IsCursorInSavedRect(entry)
 	end
 	if entry.group == "buffs" then
@@ -1359,6 +1370,9 @@ ns.COMBAT_SHOW = {
 	-- Their parts, Always ticked to start with (CINE_SHOW_DEFAULT), as the raid frames' are.
 	{ key = "partyroles", label = L["Role icons"], default = true, page = "party", groups = { "partyroles" }, part = true },
 	{ key = "partynames", label = L["Names"], default = true, page = "party", groups = { "partynames" }, part = true },
+	{ key = "partystatus", label = L["Status icons"], default = true, page = "party", groups = { "partystatus" }, part = true,
+		tip = L["The icon on a member's portrait for a summon on its way, or a member phased, in another " ..
+			"instance or too far away."] },
 	-- The raid frames (raid-style party frames too), members and pets apart,
 	-- and the Raid Frame Manager (the tab at the left edge): the Standard
 	-- Frames page's Raid frames section (page = "raid").
@@ -1551,7 +1565,7 @@ local HOVER_ROW_BY_GROUP = {
 	party = "party",
 	raidplayers = "raidplayers", raidpets = "raidpets", raidmanager = "raidmanager", flags = "flags",
 	raidroles = "raidroles", raidnames = "raidnames", raidpetnames = "raidpetnames", raidtitles = "raidtitles",
-	partyroles = "partyroles", partynames = "partynames",
+	partyroles = "partyroles", partynames = "partynames", partystatus = "partystatus",
 	raidbuffs = "raidbuffs", raiddebuffs = "raiddebuffs", raidthreat = "raidthreat",
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", castbar = "castbar", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
@@ -1608,7 +1622,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 		members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidnames", "raidpetnames", "raidtitles",
 		"raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
 	{ preset = "party", icon = "Interface\\Icons\\Spell_Holy_PrayerOfHealing02", name = L["Party frames"],
-		members = { "party", "partyroles", "partynames", "raidmanager" }, triggers = { roster = true } },
+		members = { "party", "partyroles", "partynames", "partystatus", "raidmanager" }, triggers = { roster = true } },
 	{ preset = "minimap", icon = "Interface\\Icons\\INV_Misc_Map_01", name = L["Minimap"],
 		members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock" },
 		triggers = { ping = true, tracking = true } },
@@ -1789,6 +1803,7 @@ local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
 	player = true, prd = true, prdpower = true, raidroles = true, raidnames = true, partyroles = true, partynames = true,
+	partystatus = true,
 	raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true, raidthreat = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
 	gamepadbars = true, gamepadreticle = true, castbar = true,
@@ -1859,7 +1874,7 @@ end
 ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWaypoint" }
 -- Rows ticked there until changed (no profile lists them, so none hides them).
 local CINE_SHOW_DEFAULT = {
-	flags = true, castbar = true, partyroles = true, partynames = true,
+	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
 	raiddebuffs = true, raidthreat = true, extra = true,
 }
@@ -3901,8 +3916,13 @@ local function GroupFadeTime(group, fadeIn)
 	return fadeIn and ns.FadeInTime() or ns.FadeOutTime()
 end
 -- The portrait shown while health or power recovers (addons' can stand in
--- for the game's: see ns.AddPortraitFrame).
-local PORTRAIT_FRAMES = { PlayerFrame = true }
+-- for the game's: see ns.AddPortraitFrame), and the personal resource
+-- display: each with the setting that keeps it up.
+local PORTRAIT_FRAMES = {
+	PlayerFrame = "portraitWhenNotFull",
+	PersonalResourceDisplayFrame = "prdWhenNotFull", CinematicPersonalResource = "prdWhenNotFull",
+	CinematicPersonalPower = "prdWhenNotFull",
+}
 
 -- Swing timer page (Classic clients' own swing timer): a bar fades out once
 -- its weapon hasn't been used for a while, and the off-hand's can go for
@@ -4209,9 +4229,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 	if resurrectRecovering and not IsPlayerRecovering() then
 		resurrectRecovering = false
 	end
-	local portraitAllowed = ns.db.portraitWhenNotFull and (not ns.db.portraitAfterCombat
-		or now - math.max(lastCombatAt, lastFallDamageAt) < ns.db.calmTime
-		or (ns.db.portraitAfterResurrect and resurrectRecovering))
+	-- (Only after a fight or fall damage, within the Calm Timer, or after
+	-- resurrecting: not for a buff cast in town.)
+	local portraitAllowed = now - math.max(lastCombatAt, lastFallDamageAt) < ns.db.calmTime
+		or resurrectRecovering
 	if ns.IsChatActive() then
 		ns.chatTypingUntil = now + ns.HoldTime("chatPeekTime")
 	end
@@ -4343,7 +4364,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown[GROUP_KEY[entry.group]])
 		local fightingShown = listShown
-		if not fightingShown and PORTRAIT_FRAMES[entry.name] and cinematic
+		if not fightingShown and PORTRAIT_FRAMES[entry.name] and ns.db[PORTRAIT_FRAMES[entry.name]] and cinematic
 			and portraitAllowed and IsPlayerRecovering() then
 			fightingShown = true -- shown like a combat frame, at the normal fade speeds
 		end
@@ -4810,7 +4831,7 @@ end
 
 -- Its player frame, shown like the game's while health or power recovers.
 function ns.AddPortraitFrame(name)
-	PORTRAIT_FRAMES[name] = true
+	PORTRAIT_FRAMES[name] = "portraitWhenNotFull"
 end
 
 -- The raid frames (and raid-style party frames): each member's frame, or
@@ -4964,9 +4985,14 @@ do
 		SortRaidPart((overlay and overlay.RoleIcon) or frame.RoleIcon or (name and _G[name .. "RoleIcon"]),
 			"partyroles")
 		SortRaidPart(frame.Name or (name and _G[name .. "Name"]), "partynames")
-		-- The icon for a member phased or elsewhere ignores its frame's alpha
-		-- (it stays bright as the frame dims), so it fades on its own.
-		SortRaidPart(frame.NotPresentIcon or (name and _G[name .. "NotPresentIcon"]), "party")
+		-- The icon for a summon on its way, or a member phased or elsewhere,
+		-- ignores its frame's alpha (it stays bright as the frame dims), so it
+		-- fades on its own: as its row says, and only while the frames are up.
+		local status = frame.NotPresentIcon or (name and _G[name .. "NotPresentIcon"])
+		SortRaidPart(status, "partystatus")
+		if status then
+			followsRow[status] = "party"
+		end
 	end
 
 	-- Retail's party frames (unnamed, from a pool) are in PartyFrame, and so
@@ -5120,6 +5146,12 @@ do
 	-- hidden while either column says so). By the keys the game keeps them
 	-- on, the same on the target and focus frames.
 	TARGET.Threat = { "threatNumericIndicator", "threatIndicator" }
+	-- The cast bar under the frame (spellbar on every client; by its name too).
+	TARGET.CastBar = function(frame)
+		local name = frame.GetName and frame:GetName()
+		local bar = frame.spellbar or name and _G[name .. "SpellBar"]
+		return type(bar) == "table" and bar.SetAlpha and { bar } or {}
+	end
 	ns.UNIT_PARTS_PLAYER, ns.UNIT_PARTS_PET, ns.UNIT_PARTS_TARGET = PLAYER, PET, TARGET
 	-- Each frame: its parts, the unit it shows, and its grid row when always
 	-- the same. The focus and target of target ones: the setting that has
@@ -5212,7 +5244,9 @@ do
 
 	local function SetHidden(region, hide)
 		if hide and not hidden[region] then
-			hidden[region] = region:GetAlpha()
+			-- (WoW Forever can keep a cast bar's alpha secret: full put back then.)
+			local alpha = region:GetAlpha()
+			hidden[region] = not (issecretvalue and issecretvalue(alpha)) and alpha or 1
 			if not hooked[region] then
 				hooked[region] = true
 				hooksecurefunc(region, "SetAlpha", KeepHidden)
@@ -5297,6 +5331,30 @@ do
 		wipe(want)
 	end
 
+	-- (For /cine debug unitframes: what a part of the target and focus frames
+	-- goes by right now, a line per region.)
+	function ns.UnitPartDebug(part)
+		-- (Applied first, any error said: a part decided hidden but not held.)
+		local ok, err = pcall(ns.ApplyUnitFrameParts)
+		wipe(FRAMES.want)
+		local lines = { "apply: " .. (ok and "ok" or tostring(err)) }
+		for _, entry in ipairs(FRAMES) do
+			local frame = _G[entry[1]]
+			local paths = frame and entry[2][part]
+			if type(paths) == "function" then
+				local row = entry[4] or Ask(UnitExists, entry[3]) and Row(entry[3])
+				local key = FRAMES.Key(entry, row, part)
+				for _, region in ipairs(paths(frame)) do
+					lines[#lines + 1] = ("%s %s: row %s, %s = %s, rule %s, hide %s, held %s, alpha %s"):format(
+						entry[1], part, tostring(row), tostring(key), tostring(key and ns.db[key]),
+						tostring(key and ns.RuleTest(key) ~= nil), tostring(FRAMES.Hidden(key)),
+						tostring(hidden[region]), tostring(Ask(region.GetAlpha, region)))
+				end
+			end
+		end
+		return lines
+	end
+
 	-- The game draws the target's and focus's auras again as they change,
 	-- taking frames from its pool: those go by the grid too. (In a function
 	-- of its own, for the cap of 200 locals.)
@@ -5342,6 +5400,58 @@ do
 		local frame = _G[name]
 		if frame and type(frame.CheckLevel) == "function" then
 			hooksecurefunc(frame, "CheckLevel", Rehide)
+		end
+	end
+
+	-- The target's and focus's cast bars while hidden (as for your own, see
+	-- castBars): their fade-out as a cast ends is an alpha animation, which
+	-- shows them whatever their alpha, so they're hidden as it starts, as at
+	-- its end; one left over is stopped as they show again. And one finishing
+	-- at alpha 0 skips that fade and stays up, empty, so it's hidden once idle.
+	local fades = {}
+	-- They're set to full alpha by more than SetAlpha, which ours undoes (as
+	-- your own bar is: still showing, tested), so it's put back after each of
+	-- their events and updates too.
+	-- (event: nil as they show, when they may not have set what they cast yet.)
+	local function BarEvent(bar, event)
+		if not hidden[bar] then
+			return
+		end
+		KeepHidden(bar)
+		for _, group in ipairs(fades[bar]) do
+			if ns.Flag(group:IsPlaying()) then
+				group:Stop()
+			end
+		end
+		if event and not (ns.Flag(bar.casting) or ns.Flag(bar.channeling) or ns.Flag(bar.reverseChanneling)
+			or bar.isInEditMode) and ns.Flag(bar:IsShown()) then
+			bar:Hide()
+		end
+	end
+	local function BarFade(group)
+		local bar = group:GetParent()
+		if hidden[bar] and not bar.isInEditMode then
+			bar:Hide()
+		end
+	end
+	for _, name in ipairs({ "TargetFrame", "FocusFrame" }) do
+		local bar = _G[name] and TARGET.CastBar(_G[name])[1]
+		if bar and bar.HookScript then
+			fades[bar] = {}
+			bar:HookScript("OnEvent", BarEvent)
+			bar:HookScript("OnShow", BarEvent)
+			bar:HookScript("OnUpdate", ns.Profiled("Unit cast bar update hook", function(self)
+				if hidden[self] then
+					KeepHidden(self)
+				end
+			end))
+			for _, group in ipairs(bar.GetAnimationGroups and { bar:GetAnimationGroups() } or {}) do
+				local ok, fadesBar = pcall(castBars.FadesFrame, group, bar)
+				if ok and fadesBar then
+					group:HookScript("OnPlay", BarFade)
+					table.insert(fades[bar], group)
+				end
+			end
 		end
 	end
 	end)()

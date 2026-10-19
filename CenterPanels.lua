@@ -79,8 +79,66 @@ local function Spot(frame)
 	return dropped[frame]
 end
 
+-- Being dragged: by us, or held down under the mouse (the game's own drags,
+-- or ours before we heard of it). Moving a window then breaks the drag: the
+-- window loses its place under the mouse and sticks to the screen's edge.
+local function Held(frame)
+	if moving[frame] then
+		return true
+	end
+	return IsMouseButtonDown and IsMouseButtonDown("LeftButton") and ns.Flag(frame:IsMouseOver()) and true or false
+end
+
+-- For /cine debug panels: once it has run, each drag of an open window is
+-- logged (where it starts and stops, the mouse, and anything else that moves
+-- the window or starts moving it meanwhile, with who called), printed next time.
+local dragLog, logging, logHooked = {}, false, {}
+
+local function Where(frame)
+	local point, _, relativePoint, x, y = frame:GetPoint(1)
+	local cx, cy = GetCursorPosition()
+	return ("%s %s %s %s, top %s left %s, mouse %d %d, scale %s"):format(tostring(point), tostring(relativePoint),
+		tostring(Number(x)), tostring(Number(y)), tostring(Number(frame:GetTop())), tostring(Number(frame:GetLeft())),
+		cx or 0, cy or 0, tostring(Number(frame:GetEffectiveScale())))
+end
+
+local function Log(frame, what)
+	if not logging then
+		return
+	end
+	if #dragLog >= 40 then
+		table.remove(dragLog, 1)
+	end
+	dragLog[#dragLog + 1] = ("%.2f %s %s: %s"):format(GetTime(), tostring(frame:GetName()), what, Where(frame))
+end
+
+local function Caller()
+	local stack = (debugstack(3, 2, 0) or "?"):gsub("\n", " < "):gsub("Interface[/\\]AddOns[/\\]", "")
+	return stack
+end
+
+local function LogHook(frame)
+	if logHooked[frame] then
+		return
+	end
+	logHooked[frame] = true
+	for _, method in ipairs({ "SetPoint", "ClearAllPoints", "StartMoving", "StopMovingOrSizing" }) do
+		hooksecurefunc(frame, method, function()
+			if Held(frame) or method == "StartMoving" then
+				Log(frame, method .. " by " .. Caller())
+			end
+		end)
+	end
+end
+
 local function DragStart(frame)
+	Log(frame, "drag start")
 	if ns.db and ns.db.dragPanels and not Locked(frame) then
+		-- (a drag whose end was never heard is ended first, or the window can
+		-- stay held where it was)
+		if moving[frame] then
+			frame:StopMovingOrSizing()
+		end
 		moving[frame] = true
 		frame:StartMoving()
 	end
@@ -90,6 +148,7 @@ local function DragStop(frame)
 	if not moving[frame] then
 		return
 	end
+	Log(frame, "drag stop")
 	moving[frame] = nil
 	frame:StopMovingOrSizing()
 	frame:SetUserPlaced(false)
@@ -138,6 +197,8 @@ local function MakeDraggable(frame, left)
 	frame:RegisterForDrag("LeftButton")
 	frame:HookScript("OnDragStart", DragStart)
 	frame:HookScript("OnDragStop", DragStop)
+	-- (letting go ends a drag too: OnDragStop doesn't always come)
+	frame:HookScript("OnMouseUp", DragStop)
 	frame:HookScript("OnHide", Closed)
 	local handle = CreateFrame("Frame", nil, frame)
 	handle:SetPoint("TOPLEFT", frame, "TOPLEFT", left or 0, 0)
@@ -148,6 +209,7 @@ local function MakeDraggable(frame, left)
 	handle:RegisterForDrag("LeftButton")
 	handle:SetScript("OnDragStart", function() DragStart(frame) end)
 	handle:SetScript("OnDragStop", function() DragStop(frame) end)
+	handle:SetScript("OnMouseUp", function() DragStop(frame) end)
 	handles[frame] = handle
 end
 
@@ -186,6 +248,12 @@ end
 local function CenterRow()
 	if #row == 0 then
 		return
+	end
+	-- (a window being dragged isn't moved under the mouse)
+	for _, frame in ipairs(row) do
+		if Held(frame) then
+			return
+		end
 	end
 	local uiScale = Number(UIParent:GetEffectiveScale())
 	local screenWidth, screenHeight = Number(UIParent:GetWidth()), Number(UIParent:GetHeight())
@@ -273,7 +341,7 @@ local function Arrange()
 			end)
 		end
 		local spot = Spot(frame)
-		if spot and not moving[frame] then
+		if spot and not Held(frame) then
 			frame:ClearAllPoints()
 			frame:SetPoint(spot[1], UIParent, spot[2], spot[3], spot[4])
 		end
@@ -303,7 +371,7 @@ local function PlaceBag()
 		handles[bag]:SetShown(ns.db.dragPanels and true or false)
 	end
 	local spot = Spot(bag)
-	if spot and not moving[bag] and ns.Flag(bag:IsShown()) and not Locked(bag) then
+	if spot and not Held(bag) and ns.Flag(bag:IsShown()) and not Locked(bag) then
 		bag:ClearAllPoints()
 		bag:SetPoint(spot[1], UIParent, spot[2], spot[3], spot[4])
 	end
@@ -358,6 +426,20 @@ function ns.PrintPanelsDebug()
 	end
 	if not any then
 		ns.Print("no game windows open")
+	end
+	if logging then
+		ns.Print(#dragLog > 0 and "drags since last time:" or "no drags logged since last time")
+		for _, line in ipairs(dragLog) do ns.Print("   " .. line) end
+	else
+		ns.Print("drags of the open windows are logged from now on: drag, then run this again")
+	end
+	wipe(dragLog)
+	logging = true
+	for _, area in ipairs(AREAS) do
+		local ok, frame = pcall(GetUIPanel, area)
+		if ok and type(frame) == "table" and frame.GetPoint then
+			LogHook(frame)
+		end
 	end
 	local bag = ContainerFrameCombinedBags
 	if bag and bag.GetPoint then

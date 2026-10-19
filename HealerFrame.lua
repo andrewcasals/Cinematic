@@ -68,6 +68,11 @@ local auraFilter = "HELPFUL|PLAYER|RAID"
 local auraGeneration = 0 -- goes up when the rows' players may have changed
 local aurasDirty = {}    -- unit -> its auras changed since last shown
 
+-- The icons follow the bar's height (16 on the default 20-high bar).
+local function AuraScale()
+	return math.max(8, rowHeight - 4) / AURA_SIZE
+end
+
 local function AuraIcon(row, i)
 	local icon = row.auras[i]
 	if icon then return icon end
@@ -156,10 +161,16 @@ local function InitAuraButton(button)
 	if not ok then auraButtonError = tostring(err) end
 end
 
+-- The page's "Only buffs shorter than", in seconds. (Up to 10 minutes: older
+-- settings could go to 30.)
+local function MaxAuraSeconds()
+	return math.min(ns.db.healerHotMaxMinutes, 10) * 60
+end
+
 -- Which of your buffs a container shows: only ones shorter than the page's
--- minutes (maxDuration also leaves out buffs with no duration).
+-- time (maxDuration also leaves out buffs with no duration).
 local function AuraCandidates()
-	return { maxDuration = ns.db.healerHotMaxMinutes * 60 }
+	return { maxDuration = MaxAuraSeconds() }
 end
 
 -- A row's container, or nil where the client has none (the icons are then
@@ -204,13 +215,17 @@ local function UpdateAuraBox(row, unit)
 	if not box then return false end
 	local on = ns.db.healerHots and true or false
 	local sideways = ns.db.healerSideways and true or false
-	if row.auraBoxOn ~= on or row.auraBoxSideways ~= sideways then
-		row.auraBoxOn, row.auraBoxSideways = on, sideways
+	-- (Its buttons can't be resized once made, so the whole box is scaled; its
+	-- offsets are in its own scale.)
+	local scale = AuraScale()
+	if row.auraBoxOn ~= on or row.auraBoxSideways ~= sideways or row.auraBoxScale ~= scale then
+		row.auraBoxOn, row.auraBoxSideways, row.auraBoxScale = on, sideways, scale
+		box:SetScale(scale)
 		box:ClearAllPoints()
 		if sideways then
-			box:SetPoint("TOPLEFT", row.body, "BOTTOMLEFT", 0, -1)
+			box:SetPoint("TOPLEFT", row.body, "BOTTOMLEFT", 0, -1 / scale)
 		else
-			box:SetPoint("TOPLEFT", row.body, "TOPRIGHT", 2, -2)
+			box:SetPoint("TOPLEFT", row.body, "TOPRIGHT", 2 / scale, -2 / scale)
 		end
 		if box.SetEnabled then pcall(box.SetEnabled, box, on) end
 		box:SetShown(on)
@@ -251,10 +266,11 @@ local function UpdateAuras(row, unit)
 			if not (ok and aura) then break end
 			-- (Shorter than the page's minutes; a secret duration shows.)
 			local length = Plain(aura.duration)
-			local wanted = not length or (length > 0 and length <= ns.db.healerHotMaxMinutes * 60)
+			local wanted = not length or (length > 0 and length <= MaxAuraSeconds())
 			if wanted then
 				shown = shown + 1
 				local icon = AuraIcon(row, shown)
+				icon:SetSize(AURA_SIZE * AuraScale(), AURA_SIZE * AuraScale())
 				if not pcall(icon.texture.SetTexture, icon.texture, aura.icon) then
 					icon.texture:SetColorTexture(0.2, 0.8, 0.2)
 				end

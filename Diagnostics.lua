@@ -986,6 +986,10 @@ do
 				ns.Log("unitframes", name .. ": not on this client")
 			end
 		end
+		for _, line in ipairs(ns.UnitPartDebug and ns.UnitPartDebug("CastBar") or {}) do
+			ns.Print(line)
+			ns.Log("unitframes", line)
+		end
 		ns.Print(("unitframes: logged %d parts of the player, pet, target and focus frames (have a target). /reload to write the log"):format(total))
 	end
 end

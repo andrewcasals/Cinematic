@@ -950,8 +950,8 @@ local function HandleSlash(msg)
 		ns.Print(("power %s / %s, type %s (%s)"):format(show(UnitPower("player")),
 			show(UnitPowerMax("player")), show(powerToken), show(powerType)))
 		ns.Print(("last health/power change: %.1f sec ago"):format(ns.GetSecondsSinceVitalsChange()))
-		ns.Print(("option on: %s, recovering: %s, in combat: %s"):format(
-			tostring(ns.db.portraitWhenNotFull), tostring(ns.IsPlayerRecovering()),
+		ns.Print(("option on: %s (PRD %s), recovering: %s, in combat: %s"):format(
+			tostring(ns.db.portraitWhenNotFull), tostring(ns.db.prdWhenNotFull), tostring(ns.IsPlayerRecovering()),
 			tostring(InCombatLockdown())))
 		for _, entry in ipairs(ns.managed) do
 			if entry.name == "PlayerFrame" then

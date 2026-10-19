@@ -11,6 +11,15 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-19", page = "Unit Frames", title = "Target and focus cast bars",
+		text = "The Unit frame parts grids have a Cast bar column: hide the bar under the target and focus " ..
+		"frames as they cast." },
+	{ date = "2026-10-19", page = "Standard Frames", title = "Resource display until full",
+		text = "Your personal resource display can stay up after a fight until your health and power are " ..
+		"full, like your player frame." },
+	{ date = "2026-10-19", page = "Standard Frames", title = "Party status icons",
+		text = "A row of their own for the icons on party portraits for a summon on its way, or a member " ..
+		"phased or far away." },
 	{ date = "2026-10-19", page = "Advanced Frames", title = "Custom Visibility Rules",
 		text = "Give any frame, nameplate row or unit frame part a rule of its own instead of its ticks, like " ..
 		"\"In combat AND (Open World OR BGs & Arenas)\". Build it with buttons at the bottom of the Advanced " ..
@@ -115,7 +124,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-15", page = "Hunter", client = "forever", title = "Hunter helpers",
 		text = "Right-click pulls with Auto Shot, a smart attack key, smallest ammo stack first, and a " ..
 		"Fill quiver button at vendors." },
-	{ date = "2026-10-15", page = "Unit Frames", client = "forever", title = "Unhappy pet",
+	{ date = "2026-10-15", page = "Standard Frames", client = "forever", title = "Unhappy pet",
 		text = "A hunter's pet frame stays up while the pet isn't happy." },
 	{ date = "2026-10-15", page = "Camera Settings", title = "Camera Settings page",
 		text = "Each camera's own settings in one place, a section apiece." },

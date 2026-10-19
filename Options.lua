@@ -4027,7 +4027,41 @@ local function CreateCombatPanel()
 		"until the Calm Timer (CineMode page) has run out, then fade. Off: they fade as soon as the fight ends."])
 	calm:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -2)
 	GreyUnless(calm, function(db) return db.stayInCombat end)
-	local lastRow = calm
+
+	-- Your player frame kept up while you recover, and the personal resource
+	-- display (its own tick, on clients that have one).
+	local INDENT = 16
+	local portrait = Check(content, "portraitWhenNotFull", L["Show your player frame until health and power are full"],
+		L["Keeps your player frame up after a fight, a fall or resurrecting, until your health and " ..
+		"power are full. Rage and runic power don't count."])
+	portrait:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", 0, -2)
+	-- The lowest option so far, and how far in from the column edge it sits.
+	local lastCheck, lastIndent = portrait, 0
+	if _G.CinematicPersonalPower then
+		local prd = Check(content, "prdWhenNotFull",
+			L["Show your personal resource display until health and power are full"],
+			L["The same for your personal resource display."])
+		prd:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -2)
+		lastCheck = prd
+	end
+
+	-- Pet happiness: classic hunters only.
+	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
+		local pet = Check(content, "petUnhappyShow", L["Show the pet frame when your pet isn't happy"],
+			L["Keeps your pet frame up in CineMode, and in fights, while its happiness isn't green: " ..
+			"content (yellow) or unhappy (red). It goes again once your pet is happy."])
+		pet:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 0, -2)
+		pet:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+		local petCam = Check(content, "petUnhappyHideInCam", L["Hide in camera modes"],
+			L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the pet frame fades " ..
+			"with the rest of the UI. It comes back when the camera mode ends."])
+		petCam:SetPoint("TOPLEFT", pet, "BOTTOMLEFT", INDENT, -2)
+		GreyUnless(petCam, function(db) return db.petUnhappyShow end)
+		lastCheck, lastIndent = petCam, INDENT
+	end
+
+	local lastRow = lastCheck
 	local function Section(page, heading)
 		local sectionRows = {}
 		for _, item in ipairs(ns.COMBAT_SHOW) do
@@ -4038,8 +4072,11 @@ local function CreateCombatPanel()
 		if #sectionRows == 0 then
 			return
 		end
-		lastRow = ShowTable(content, Header(content, heading, lastRow, lastRow == calm and -16 or -28),
-			sectionRows, "Standard Frames", heading)
+		local header = Header(content, heading, lastRow, -28)
+		if lastRow == lastCheck then
+			header:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", -lastIndent, -16) -- (back to the column edge)
+		end
+		lastRow = ShowTable(content, header, sectionRows, "Standard Frames", heading)
 	end
 	local SECTIONS = {
 		{ "units", L["Unit frames"] }, { "combat", L["Combat"] }, { "bars", L["Action bars"] },
@@ -4056,9 +4093,9 @@ local function CreateCombatPanel()
 	RegisterSubpage(canvas, L["Standard Frames"])
 end
 
--- Sub-page: your portrait - kept up in CineMode while you recover (and a
--- hunter's pet's while it isn't happy) - and the Unit frame parts grid: the
--- pieces of the player, target and focus frames each kind of unit shows.
+-- Sub-page: the Unit frame parts grid: the pieces of the player, target,
+-- focus and pet frames each kind of unit shows. (Keeping your frame up while
+-- you recover is on the Standard Frames page.)
 local function CreatePortraitsPanel()
 	local canvas, content = CreateScrollPage()
 
@@ -4066,49 +4103,8 @@ local function CreatePortraitsPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = PageIntro(content, title,
-		L["Your player frame in CineMode, and which parts of the player, target, focus and pet frames show. " ..
-		"Always keeping a frame up, or in fights, is on the Standard Frames page."])
-
-	local portrait = Check(content, "portraitWhenNotFull", L["Show your player frame until health and power are full"],
-		L["Keeps your player frame up while you're recovering. Rage and runic power don't " ..
-		"count, so a warrior's frame hides once their health is full."])
-	portrait:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -16)
-	portrait:HookScript("OnClick", Refresh) -- grey out / enable the options below
-
-	-- Child: only apply the rule within the Calm Timer of a fight
-	local PORTRAIT_INDENT = 16
-	local function IfPortrait(db) return db.portraitWhenNotFull end
-
-	local afterCombat = Check(content, "portraitAfterCombat", L["Only after combat"],
-		L["Only keep the frame up if you've been in combat (or taken fall damage) within the " ..
-		"Calm Timer (CineMode page), so things like casting a buff in town don't bring it up."])
-	afterCombat:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
-	GreyUnless(afterCombat, IfPortrait)
-	afterCombat:HookScript("OnClick", Refresh) -- grey out / enable the option below
-
-	local afterResurrect = Check(content, "portraitAfterResurrect", L["Also after you resurrect"],
-		L["After you come back to life, keep the frame up until your health and power are full, " ..
-		"however long that takes."])
-	afterResurrect:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
-	GreyUnless(afterResurrect, function(db) return db.portraitWhenNotFull and db.portraitAfterCombat end)
-	-- The lowest option so far, and how far in from the column edge it sits.
-	local last, lastIndent = afterResurrect, 2 * PORTRAIT_INDENT
-
-	-- Pet happiness: classic hunters only.
-	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
-		local pet = Check(content, "petUnhappyShow", L["Show the pet frame when your pet isn't happy"],
-			L["Keeps your pet frame up in CineMode, and in fights, while its happiness isn't green: " ..
-			"content (yellow) or unhappy (red). It goes again once your pet is happy."])
-		pet:SetPoint("TOPLEFT", afterResurrect, "BOTTOMLEFT", -2 * PORTRAIT_INDENT, -10)
-		pet:HookScript("OnClick", Refresh) -- grey out / enable the option below
-
-		local petCam = Check(content, "petUnhappyHideInCam", L["Hide in camera modes"],
-			L["While a camera mode runs (AFK, auto-run, RP walk, flights and the rest), the pet frame fades " ..
-			"with the rest of the UI. It comes back when the camera mode ends."])
-		petCam:SetPoint("TOPLEFT", pet, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
-		GreyUnless(petCam, function(db) return db.petUnhappyShow end)
-		last, lastIndent = petCam, PORTRAIT_INDENT
-	end
+		L["Which parts of the player, target, focus and pet frames show. Keeping a frame up, always, " ..
+		"in fights or while you recover, is on the Standard Frames page."])
 
 	-- The Unit frame parts grids (frames laid out as retail's: see
 	-- ns.ApplyUnitFrameParts), a section per frame that opens and closes with
@@ -4119,8 +4115,7 @@ local function CreatePortraitsPanel()
 	-- opens with the target's choices to start from.
 	local OpenSections -- (opens You and Target, and the frames set apart from the target)
 	if ns.HasUnitFrameParts and ns.HasUnitFrameParts() then
-		local header = Header(content, L["Unit frame parts"], last)
-		header:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 2 - lastIndent, -24)
+		local header = Header(content, L["Unit frame parts"], subtitle, -16)
 		local note = PageIntro(content, header,
 			L["Which parts of the unit frames show, CineMode or not: your own frame and your pet's, and " ..
 			"the target, focus and target of target frames by who they show. Click a frame's name to open " ..
@@ -4130,15 +4125,16 @@ local function CreatePortraitsPanel()
 			"group leader's crown, role and quest icons. Auras are the buffs and debuffs on the target and " ..
 			"focus frames. Hit text is the damage and healing numbers on your and your pet's portraits. " ..
 			"Threat is the threat percentage and aggro glow on the target and focus frames, for NPCs you " ..
-			"can fight."])
+			"can fight."] .. " " .. L["Cast bar is the bar under the target and focus frames as they cast."])
 
-		-- (Eight columns must fit the page's width: wider, the Threat column and the
-		-- Same as target tick were cut off at the right edge.)
-		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, SECTION_HEADER = 128, 58, 24, 26
+		-- (Nine columns must fit the page's width, no wider than eight were at
+		-- 128 + 8 * 58: wider, the last column and the Same as target tick were
+		-- cut off at the right edge.)
+		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, SECTION_HEADER = 124, 52, 24, 26
 		local COLUMNS = {
 			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
 			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] }, { "Auras", L["Auras"] },
-			{ "CombatText", L["Hit text"] }, { "Threat", L["Threat"] },
+			{ "CombatText", L["Hit text"] }, { "Threat", L["Threat"] }, { "CastBar", L["Cast bar"] },
 		}
 		-- Whether a row has a part: the frame has it, and it's not one only
 		-- some rows have (UNIT_PART_ONLY: hit text, threat). Cells without stay empty.
@@ -6127,8 +6123,17 @@ local function CreateHealerPanel()
 	stack:Add(Check(content, "healerHots", L["Show my heals over time"],
 		L["Your heals over time and shields on each player, as icons to the right of their bar (under it " ..
 		"side by side), with the time they have left."], Set("healerHots")), "check")
-	local hotMax = stack:Add(Slider(content, "healerHotMaxMinutes", L["Only buffs shorter than"], 1, 30, 1,
-		L["%d min"], nil, Apply), "slider", 20)
+	-- (Minutes, in 15-second steps.)
+	local hotMax = stack:Add(Slider(content, "healerHotMaxMinutes", L["Only buffs shorter than"], 0.25, 10, 0.25,
+		function(value)
+			local minutes, seconds = math.floor(value), math.floor((value % 1) * 60 + 0.5)
+			if minutes == 0 then
+				return L["%d sec"]:format(seconds)
+			elseif seconds == 0 then
+				return L["%d min"]:format(minutes)
+			end
+			return L["%d min %d sec"]:format(minutes, seconds)
+		end, nil, Apply), "slider", 20)
 	Tooltip(hotMax, L["Leaves out your long buffs (an hour's blessing or the like, and ones with no time at " ..
 		"all), so the icons are your heals over time and shields."])
 	GreyUnless(hotMax, function(db) return db.healerHots end)
@@ -8041,7 +8046,9 @@ ns.OnLanguage(function()
 	-- keybinds. (Standard Frames and Advanced Frames come right after CineMode.)
 	CreateRevealPanel()
 	CreateCombatPanel()
-	CreatePortraitsPanel()
+	if ns.HasUnitFrameParts and ns.HasUnitFrameParts() then -- (nothing else on it)
+		CreatePortraitsPanel()
+	end
 	-- WoW Forever's gamepad mode (retail's has no frames of its own).
 	if C_GamePad and not ns.isRetail then
 		CreateGamepadPanel()

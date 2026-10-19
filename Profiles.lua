@@ -222,7 +222,7 @@ ns.BUILTIN_PROFILES = {
 	{
 		name = "Pure Cinema",
 		icon = "Interface\\Icons\\Ability_Stealth",
-		tip = L["As little UI as possible: chat, buffs, the quest tracker and your portrait " ..
+		tip = L["As little UI as possible: chat, buffs and the quest tracker " ..
 			"don't pop up on their own (hovering still shows them), group members' " ..
 			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
 			"your target and your cast bar (hidden otherwise), and every camera can start music."],
@@ -232,7 +232,6 @@ ns.BUILTIN_PROFILES = {
 			set("debuffPeek", false)
 			set("questRevealOnAccept", false)
 			set("questRevealOnProgress", false)
-			set("portraitWhenNotFull", false)
 			set("letterboxOffInCombat", false)
 			set("timeOfDayMessage", false)
 			set("plateAlwaysGroupMembers", false)
@@ -281,6 +280,18 @@ ns.BUILTIN_PROFILES = {
 		end,
 	},
 }
+-- Every built-in: In combat rows stay for the Calm Timer, and the player
+-- frame and personal resource display stay up until full (both already on
+-- by default).
+for _, profile in ipairs(ns.BUILTIN_PROFILES) do
+	local apply = profile.apply
+	profile.apply = function(set)
+		set("combatShowCalm", true)
+		set("portraitWhenNotFull", true)
+		set("prdWhenNotFull", true)
+		apply(set)
+	end
+end
 ns.OnLanguage(function() ns.TranslateFields(ns.BUILTIN_PROFILES, "tip") end)
 local builtinByName = {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
