@@ -132,7 +132,6 @@ local DEFAULTS = {
 	portraitWhenNotFull = true, -- keep the player portrait up while health or power isn't full
 	portraitAfterCombat = true,  -- ...but only within the Calm Timer (calmTime) of combat
 	portraitAfterResurrect = true, -- ...or after coming back to life, until health and power are full
-	unitBarTexture = "default", -- the player, target, focus and pet frames' bars: the game's own (Frames)
 	buffPeek = true,          -- briefly show buffs/debuffs when a buff is gained or refreshed
 	buffPeekAfterCombat = false, -- ...or only within the Calm Timer of a fight
 	buffPeekIgnoreSelf = true,   -- ...and not for buffs you cast on yourself (or your pet does)
@@ -652,7 +651,7 @@ end
 -- with, as the game has them.
 ns.UNIT_PART_ROWS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer",
 	"FriendlyNPC", "Pet" }
-ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons" }
+ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons", "Auras" }
 for _, row in ipairs(ns.UNIT_PART_ROWS) do
 	for _, part in ipairs(ns.UNIT_PARTS) do
 		DEFAULTS["unitPart" .. row .. part] = true
@@ -3042,7 +3041,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			"taxiThirdsInterval", "taxiThirdsStrength", "taxiThirds", "walkThirds", "runThirds",
 			"idleThirds", "cozyThirds", "vistaThirds", "deathThirds",
 			"delay", "startCinematic", "startCinematicOnReload", "startDelay", "timeOfDayChange", "timeOfDaySound",
-			"revealOnTarget", "ignoreDeadTarget",
+			"revealOnTarget", "ignoreDeadTarget", "unitBarTexture",
 			"plateHurtMobs", "plateHurtNPCs", "plateHurtOwn", "plateHurtOther", "plateHurtPets",
 			"plateHurtTotems",
 			"camOffInCities", "camOffInInns", "camOffInDungeons", "camOffInRaids", "camOffInPvP",

@@ -4587,7 +4587,35 @@ do
 			"PlayerFrameContent.PlayerFrameContentContextual.GroupIndicator" },
 	}
 	-- (Fields on TargetFrame, and on FocusFrame, built the same way.)
-	local TARGET = {
+	local TARGET = {}
+	-- Buffs and debuffs: frames the game takes from a pool as it draws them
+	-- (auraPools), or numbered globals (TargetFrameBuff1...) on older frames.
+	-- (A function: the frames change as auras come and go. No locals of its
+	-- own here: this file's main chunk is at Lua's cap of 200.)
+	TARGET.Auras = function(frame)
+		local list = {}
+		local pools = frame.auraPools
+		-- (WoW Forever: one frame holds them all, from GetAuraContainer.)
+		local ok, container = pcall(function() return frame.GetAuraContainer and frame:GetAuraContainer() end)
+		if ok and type(container) == "table" and container.SetAlpha then
+			list[1] = container
+		elseif pools and pools.EnumerateActive then
+			for aura in pools:EnumerateActive() do
+				list[#list + 1] = aura
+			end
+		else
+			local name = frame.GetName and frame:GetName()
+			for _, kind in ipairs({ "Buff", "Debuff" }) do
+				for i = 1, 40 do
+					local aura = name and _G[name .. kind .. i]
+					if not aura then break end
+					list[#list + 1] = aura
+				end
+			end
+		end
+		return list
+	end
+	for part, paths in pairs({
 		Portrait = { "TargetFrameContainer.Portrait" },
 		Level = { "TargetFrameContent.TargetFrameContentMain.LevelBackgroundCircle",
 			"TargetFrameContent.TargetFrameContentMain.LevelText",
@@ -4597,7 +4625,9 @@ do
 			"TargetFrameContent.TargetFrameContentMain.ReputationColor" },
 		Art = { "TargetFrameContainer.FrameTexture", "TargetFrameContainer.Flash",
 			"TargetFrameContainer.BossPortraitFrameTexture" },
+		-- (PvpBackgroundIcon: the flag WoW Forever shows by the level, tested.)
 		PvP = { "TargetFrameContent.TargetFrameContentContextual.PvpIcon",
+			"TargetFrameContent.TargetFrameContentContextual.PvpBackgroundIcon",
 			"TargetFrameContent.TargetFrameContentContextual.PrestigePortrait",
 			"TargetFrameContent.TargetFrameContentContextual.PrestigeBadge" },
 		-- (The group leader's crown, and the quest and pet battle icons.)
@@ -4605,14 +4635,16 @@ do
 			"TargetFrameContent.TargetFrameContentContextual.GuideIcon",
 			"TargetFrameContent.TargetFrameContentContextual.QuestIcon",
 			"TargetFrameContent.TargetFrameContentContextual.PetBattleIcon" },
-	}
+	}) do
+		TARGET[part] = paths
+	end
 	-- Your pet's frame: no level, PvP or icons of its own.
 	local PET = {
 		Portrait = { "portrait", "_G.PetPortrait" },
 		Name = { "name", "_G.PetName" },
 		Art = { "_G.PetFrameTexture", "_G.PetFrameFlash", "_G.PetAttackModeTexture" },
 	}
-	ns.UNIT_PARTS_PET = PET
+	ns.UNIT_PARTS_PLAYER, ns.UNIT_PARTS_PET = PLAYER, PET
 	-- Each frame: its parts, the unit it shows, and its grid row when always the same.
 	local FRAMES = {
 		{ "PlayerFrame", PLAYER, "player" },
@@ -4714,159 +4746,50 @@ do
 				local row = entry[4] or Ask(UnitExists, entry[3]) and Row(entry[3])
 				for _, part in ipairs(ns.UNIT_PARTS) do
 					local hide = row and ns.db["unitPart" .. row .. part] == false or false
-					for _, path in ipairs(entry[2][part] or {}) do
-						local region = Field(frame, path)
-						if region then
+					local paths = entry[2][part]
+					if type(paths) == "function" then
+						for _, region in ipairs(paths(frame)) do
 							SetHidden(region, hide)
+						end
+					else
+						for _, path in ipairs(paths or {}) do
+							local region = Field(frame, path)
+							if region then
+								SetHidden(region, hide)
+							end
 						end
 					end
 				end
 			end
 		end
-		ns.ApplyUnitBarTexture()
 	end
 
-	-- The Unit Frames page's bar texture: the health and power bars of the
-	-- player, target, focus and pet frames (setting unitBarTexture: "default"
-	-- leaves the game's own, else a key of ns.UNIT_BAR_TEXTURES or "lsm:<name>"
-	-- for one of LibSharedMedia's, when another addon has loaded it).
-	-- (In a function of its own: this file's main chunk is at Lua's cap of 200
-	-- locals at once, and past it Frames.lua doesn't load at all.)
+	-- The game draws the target's and focus's auras again as they change,
+	-- taking frames from its pool: those go by the grid too. (In a function
+	-- of its own, for the cap of 200 locals.)
 	(function()
-	ns.UNIT_BAR_TEXTURES = {
-		raid = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
-		classic = "Interface\\TargetingFrame\\UI-StatusBar",
-		flat = "Interface\\Buttons\\WHITE8X8",
-	}
-	function ns.SharedMedia()
-		local stub = _G.LibStub
-		return stub and stub("LibSharedMedia-3.0", true)
-	end
-	-- Each frame's bars: retail's fields first, then the older globals.
-	local BARS = {
-		{ "PlayerFrame", "player", {
-			"PlayerFrameContent.PlayerFrameContentMain.HealthBarsContainer.HealthBar", "healthbar",
-			"_G.PlayerFrameHealthBar" }, {
-			"PlayerFrameContent.PlayerFrameContentMain.ManaBarArea.ManaBar", "manabar", "_G.PlayerFrameManaBar" } },
-		{ "TargetFrame", "target", {
-			"TargetFrameContent.TargetFrameContentMain.HealthBarsContainer.HealthBar", "healthbar",
-			"_G.TargetFrameHealthBar" }, {
-			"TargetFrameContent.TargetFrameContentMain.ManaBar", "manabar", "_G.TargetFrameManaBar" } },
-		{ "FocusFrame", "focus", {
-			"TargetFrameContent.TargetFrameContentMain.HealthBarsContainer.HealthBar", "healthbar",
-			"_G.FocusFrameHealthBar" }, {
-			"TargetFrameContent.TargetFrameContentMain.ManaBar", "manabar", "_G.FocusFrameManaBar" } },
-		{ "PetFrame", "pet", { "healthbar", "_G.PetFrameHealthBar" }, { "manabar", "_G.PetFrameManaBar" } },
-	}
-	-- [bar] = { unit, power = true for a power bar, game = the texture the
-	-- game last gave it, tinted = we coloured it (the game's was white) }.
-	local bars = {}
-	local barTexture -- (the file in use, nil for the game's own)
-	local painting = false
-
-	-- The colour a bar the game left white gets with our texture: the game's
-	-- own art has it drawn in (green health, the power type's colour).
-	local function BarColour(bar, info)
-		if info.power then
-			local ok, _, token = pcall(UnitPowerType, bar.unit or info.unit)
-			local colours = _G.PowerBarColor
-			local colour = ok and type(token) == "string" and not (issecretvalue and issecretvalue(token))
-				and colours and colours[token]
-			if colour then
-				return colour.r, colour.g, colour.b
-			end
-			return 0, 0, 1
-		end
-		return 0, 1, 0
-	end
-
-	local function IsWhite(bar)
-		local ok, r, g, b = pcall(bar.GetStatusBarColor, bar)
-		if not ok or (issecretvalue and (issecretvalue(r) or issecretvalue(g) or issecretvalue(b))) then
-			return false
-		end
-		return type(r) == "number" and r > 0.99 and g > 0.99 and b > 0.99
-	end
-
-	local function Paint(bar)
-		local info = bars[bar]
-		painting = true
-		if barTexture then
-			bar:SetStatusBarTexture(barTexture)
-			if IsWhite(bar) then
-				info.tinted = true
-				bar:SetStatusBarColor(BarColour(bar, info))
-			elseif info.tinted and info.power then
-				-- (A druid's form changed: the new power type's colour.)
-				bar:SetStatusBarColor(BarColour(bar, info))
-			end
-		elseif info.game then
-			bar:SetStatusBarTexture(info.game)
-			if info.tinted then
-				info.tinted = nil
-				bar:SetStatusBarColor(1, 1, 1)
-			end
-		end
-		painting = false
-	end
-
-	local function Track(bar, unit, power)
-		if bars[bar] or not bar.SetStatusBarTexture then
-			return
-		end
-		local info = { unit = unit, power = power }
-		local texture = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
-		if texture then
-			info.game = texture.GetAtlas and texture:GetAtlas() or texture:GetTexture()
-		end
-		bars[bar] = info
-		-- The game swaps the art (a vehicle, a druid's form): keep the new art
-		-- to put back, and ours on top.
-		hooksecurefunc(bar, "SetStatusBarTexture", function(self, asset)
-			if not painting then
-				info.game = asset
-				if barTexture then Paint(self) end
-			end
-		end)
-		hooksecurefunc(bar, "SetStatusBarColor", function(self)
-			if not painting and barTexture and IsWhite(self) then
-				Paint(self)
-			end
-		end)
-	end
-
-	function ns.ApplyUnitBarTexture()
+	local function AurasDrawn(frame)
 		if not ns.db then
 			return
 		end
-		local key = ns.db.unitBarTexture
-		local file = ns.UNIT_BAR_TEXTURES[key]
-		if not file and type(key) == "string" and key:sub(1, 4) == "lsm:" then
-			local lsm = ns.SharedMedia()
-			local ok, fetched = pcall(function() return lsm and lsm:Fetch("statusbar", key:sub(5), true) end)
-			file = ok and fetched or nil
-		end
-		if not file and not barTexture then
-			return -- (the game's own, untouched)
-		end
-		for _, entry in ipairs(BARS) do
-			local frame = _G[entry[1]]
-			if frame then
-				for i = 3, 4 do
-					for _, path in ipairs(entry[i]) do
-						local bar = Field(frame, path)
-						if bar and bar.SetStatusBarTexture then
-							Track(bar, entry[2], i == 4)
-							break
-						end
-					end
+		for _, entry in ipairs(FRAMES) do
+			if _G[entry[1]] == frame and entry[2].Auras then
+				local row = Ask(UnitExists, entry[3]) and Row(entry[3])
+				local hide = row and ns.db["unitPart" .. row .. "Auras"] == false or false
+				for _, region in ipairs(entry[2].Auras(frame)) do
+					SetHidden(region, hide)
 				end
 			end
 		end
-		barTexture = file
-		for bar in pairs(bars) do
-			Paint(bar)
+	end
+	for _, name in ipairs({ "TargetFrame", "FocusFrame" }) do
+		local frame = _G[name]
+		if frame and type(frame.UpdateAuras) == "function" then
+			hooksecurefunc(frame, "UpdateAuras", AurasDrawn)
 		end
+	end
+	if type(_G.TargetFrame_UpdateAuras) == "function" then
+		hooksecurefunc("TargetFrame_UpdateAuras", AurasDrawn)
 	end
 	end)()
 

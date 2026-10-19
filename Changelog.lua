@@ -17,12 +17,9 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-19", page = "Nameplates", title = "Role icons",
 		text = "A tank, healer or damage icon beside your group members' health bars. Tank and healer " ..
 		"icons, and enemy class icons, now show by default." },
-	{ date = "2026-10-19", page = "Unit Frames", title = "Bar texture",
-		text = "Pick the picture on the player, target, focus and pet frames' health and power bars: the " ..
-		"game's, flat raid style, Classic or plain colour." },
 	{ date = "2026-10-19", page = "Unit Frames", title = "More unit frame parts",
-		text = "Your pet's frame has a row in the Unit frame parts grid, and the PvP icon and the frames' " ..
-		"other icons have columns of their own." },
+		text = "Your pet's frame has a row in the Unit frame parts grid, and the PvP icon, the frames' " ..
+		"other icons and the target's buffs and debuffs have columns of their own." },
 	{ date = "2026-10-17", page = "3rd Party Frames", title = "WeakAuras support",
 		text = "WeakAuras' auras fade in CineMode; auras anchored to another frame fade with that frame." },
 	{ date = "2026-10-17", page = "3rd Party Frames", title = "Questie support",

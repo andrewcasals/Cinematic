@@ -4055,45 +4055,6 @@ local function CreatePortraitsPanel()
 		last, lastIndent = petCam, PORTRAIT_INDENT
 	end
 
-	-- Bar texture: the game's own pictures, and LibSharedMedia's when another
-	-- addon has loaded it (see ns.ApplyUnitBarTexture).
-	do
-		local BUILT_IN = {
-			{ value = "default", text = L["Game default"] },
-			{ value = "raid", text = L["Raid frames (flat)"] },
-			{ value = "classic", text = L["Classic"] },
-			{ value = "flat", text = L["Plain colour"] },
-		}
-		local function Textures()
-			local list = {}
-			for i, choice in ipairs(BUILT_IN) do list[i] = choice end
-			local lsm = ns.SharedMedia()
-			local ok, names = pcall(function() return lsm and lsm:List("statusbar") end)
-			for _, name in ipairs(ok and names or {}) do
-				list[#list + 1] = { value = "lsm:" .. name, text = name }
-			end
-			return list
-		end
-		local TEXTURE_TIP = L["The picture the health and power bars of the player, target, focus and pet " ..
-			"frames are drawn with. Raid frames and plain colour make them flat, like the raid frames. " ..
-			"Textures from other addons (LibSharedMedia) are listed too when one of them is loaded."]
-		local stack = Stack(last, "check")
-		stack.indent = lastIndent
-		stack:Header(content, L["Bar texture"])
-		local dropdown = Dropdown(content, "unitBarTexture", Textures, 220, ns.ApplyUnitBarTexture)
-		if dropdown then
-			stack:Add(dropdown, "dropdown")
-			Tooltip(dropdown, TEXTURE_TIP)
-		else
-			for _, choice in ipairs(BUILT_IN) do
-				local check = stack:Add(Choice(content, "unitBarTexture", choice.value, choice.text, TEXTURE_TIP), "check")
-				check:HookScript("OnClick", ns.ApplyUnitBarTexture)
-			end
-		end
-		-- (What's below lines up as from a checkbox: a dropdown sits 2 right of one.)
-		last, lastIndent = stack.last, dropdown and 2 or 0
-	end
-
 	-- The Unit frame parts grid (frames laid out as retail's: see
 	-- ns.ApplyUnitFrameParts): a row per kind of unit, a column per part.
 	if ns.HasUnitFrameParts and ns.HasUnitFrameParts() then
@@ -4103,22 +4064,23 @@ local function CreatePortraitsPanel()
 			L["Which parts of the unit frames show, CineMode or not: your own frame and your pet's, and " ..
 			"the target and focus frames by who they show. Untick parts to keep just the bars. The frame " ..
 			"art is the portrait ring, the name box and the bars' borders: the game draws them as one " ..
-			"picture. Icons are the rest Zzz, the group leader's crown, role and quest icons."])
+			"picture. Icons are the rest Zzz, the group leader's crown, role and quest icons. Auras are " ..
+			"the buffs and debuffs on the target and focus frames."])
 
-		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 160, 72, 24
+		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 160, 64, 24
 		local COLUMNS = {
 			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
-			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] },
+			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] }, { "Auras", L["Auras"] },
 		}
 		local ROWS = {
 			{ "Self", L["You"], L["Your own frame."] },
+			{ "Pet", L["Your pet"], L["Your pet's frame."] },
 			{ "EnemyPlayer", L["Enemy Players"], L["Players you can attack."] },
 			{ "EnemyNPC", L["Hostile NPCs"], L["NPCs you can attack (neutral ones have their own row)."] },
 			{ "NeutralPlayer", L["Neutral Players"], L["The other faction's players you can't attack."] },
 			{ "NeutralNPC", L["Neutral NPCs"], L["NPCs the game calls neutral (yellow names)."] },
 			{ "FriendlyPlayer", L["Friendly Players"], L["Players on your side."] },
 			{ "FriendlyNPC", L["Friendly NPCs"], L["NPCs on your side."] },
-			{ "Pet", L["Your pet"], L["Your pet's frame."] },
 		}
 		local top = CreateFrame("Frame", nil, content)
 		top:SetSize(1, 1)
@@ -4134,8 +4096,9 @@ local function CreatePortraitsPanel()
 			local rowLabel = Label(content, "GameFontHighlight", row[2])
 			rowLabel:SetPoint("TOPLEFT", top, "TOPLEFT", 0, y - 5)
 			for c, column in ipairs(COLUMNS) do
-				-- (The pet's frame has no level, PvP or icons.)
-				if row[1] ~= "Pet" or ns.UNIT_PARTS_PET[column[1]] then
+				-- (Your frame has no auras, and the pet's no level, PvP, icons or auras.)
+				local has = row[1] == "Pet" and ns.UNIT_PARTS_PET or row[1] == "Self" and ns.UNIT_PARTS_PLAYER
+				if not has or has[column[1]] then
 					local key = "unitPart" .. row[1] .. column[1]
 					local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
 						ns.GetDB()[key] = value
