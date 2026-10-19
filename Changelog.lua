@@ -11,6 +11,18 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-19", page = "Minimap", title = "Minimap Reveal",
+		text = "The faded minimap comes up when ore, herbs or treasure show on it, a quest of yours is " ..
+		"done, or another icon appears - with a ping on the node if you like." },
+	{ date = "2026-10-19", page = "Nameplates", title = "Role icons",
+		text = "A tank, healer or damage icon beside your group members' health bars. Tank and healer " ..
+		"icons, and enemy class icons, now show by default." },
+	{ date = "2026-10-19", page = "Unit Frames", title = "Bar texture",
+		text = "Pick the picture on the player, target, focus and pet frames' health and power bars: the " ..
+		"game's, flat raid style, Classic or plain colour." },
+	{ date = "2026-10-19", page = "Unit Frames", title = "More unit frame parts",
+		text = "Your pet's frame has a row in the Unit frame parts grid, and the PvP icon and the frames' " ..
+		"other icons have columns of their own." },
 	{ date = "2026-10-17", page = "3rd Party Frames", title = "WeakAuras support",
 		text = "WeakAuras' auras fade in CineMode; auras anchored to another frame fade with that frame." },
 	{ date = "2026-10-17", page = "3rd Party Frames", title = "Questie support",
@@ -21,7 +33,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-17", page = "Standard Frames", title = "Minimap header pieces",
 		text = "The zone name, tracking button, calendar and clock over the minimap fade on rows of their " ..
 		"own, and the frame behind the tracking button goes with the header bar." },
-	{ date = "2026-10-17", page = "Portraits", title = "Unit frame parts",
+	{ date = "2026-10-17", page = "Unit Frames", title = "Unit frame parts",
 		text = "Pick which parts of your frame and the target and focus frames show - portrait, name, " ..
 		"level, frame art - for you and each kind of unit, to keep just the bars." },
 	{ date = "2026-10-17", page = "Chat", title = "Update notices",
@@ -34,7 +46,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-17", page = "Quest tracker", title = "Quest tracker stays up longer",
 		text = "Accepting a quest, or progress on one, can keep the tracker up for the Calm Timer " ..
 		"instead of the mouseover time." },
-	{ date = "2026-10-17", page = "Portraits", title = "Misc page",
+	{ date = "2026-10-17", page = "Unit Frames", title = "Misc page",
 		text = "Your portrait, durability figure and pet happiness options have a page of their own " ..
 		"in UI Manager." },
 	{ date = "2026-10-17", page = "UI Manager", title = "Settings in hubs",
@@ -84,7 +96,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-15", page = "Hunter", client = "forever", title = "Hunter helpers",
 		text = "Right-click pulls with Auto Shot, a smart attack key, smallest ammo stack first, and a " ..
 		"Fill quiver button at vendors." },
-	{ date = "2026-10-15", page = "Portraits", client = "forever", title = "Unhappy pet",
+	{ date = "2026-10-15", page = "Unit Frames", client = "forever", title = "Unhappy pet",
 		text = "A hunter's pet frame stays up while the pet isn't happy." },
 	{ date = "2026-10-15", page = "Camera Settings", title = "Camera Settings page",
 		text = "Each camera's own settings in one place, a section apiece." },

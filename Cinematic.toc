@@ -62,6 +62,7 @@ QuestCam.lua
 Tint.lua
 Focus.lua
 Tracking.lua
+NodeSweep.lua
 Slash.lua
 Profiles.lua
 Share.lua

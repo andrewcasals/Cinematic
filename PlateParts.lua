@@ -189,7 +189,7 @@ local function ClassIcon(plate)
 end
 
 -- Shows or hides a plate's class icon as its row and its unit say.
-function ns.RefreshClassIcon(plate)
+local function RefreshClass(plate)
 	if not plate or (plate.IsForbidden and plate:IsForbidden()) then
 		return
 	end
@@ -213,6 +213,82 @@ function ns.RefreshClassIcon(plate)
 	end
 end
 
+-- The role icon rows (ns.PLATE_ROLE_PARTS): the game's role icon left of a
+-- group member's health bar (the level box is on the right), further out
+-- while the class icon or Duel Vision's badge is there. A row per role,
+-- shown like the class icons. Only players with a role set have one.
+local ROLE_TEXTURE = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES"
+local ROLES = {
+	TANK = { part = "RoleTank", coords = { 0, 19 / 64, 22 / 64, 41 / 64 } },
+	HEALER = { part = "RoleHealer", coords = { 20 / 64, 39 / 64, 1 / 64, 20 / 64 } },
+	DAMAGER = { part = "RoleDamager", coords = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 } },
+}
+local plateRole = {} -- [plate] = an entry of ROLES, or false for no icon
+local roleIcons = {} -- [plate] = icon frame
+
+-- A plate's unit's role in your group, if it's a player with one.
+local function ReadRole(plate)
+	local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+	if not unit or not UnitGroupRolesAssigned or not Ask(UnitIsPlayer, unit) then
+		return false
+	end
+	local ok, role = pcall(UnitGroupRolesAssigned, unit)
+	return ok and Known(role) and ROLES[role] or false
+end
+
+local function RoleIcon(plate)
+	local icon = roleIcons[plate]
+	local unitFrame = plate.UnitFrame
+	if icon or not Usable(unitFrame) then
+		return icon
+	end
+	local bar = unitFrame.HealthBarsContainer or unitFrame.healthBar or unitFrame
+	icon = CreateFrame("Frame", nil, unitFrame)
+	icon:SetSize(18, 18)
+	icon.bar = bar
+	icon:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
+	icon.texture = icon:CreateTexture(nil, "OVERLAY")
+	icon.texture:SetAllPoints()
+	icon.texture:SetTexture(ROLE_TEXTURE)
+	roleIcons[plate] = icon
+	return icon
+end
+
+-- Shows or hides a plate's role icon as its row and its unit say.
+local function RefreshRoleIcon(plate)
+	if not plate or (plate.IsForbidden and plate:IsForbidden()) then
+		return
+	end
+	if plateRole[plate] == nil then
+		plateRole[plate] = ReadRole(plate)
+	end
+	local role = plateRole[plate]
+	local level = role and plate ~= PersonalPlate() and levels[role.part] or 0
+	local icon = roleIcons[plate]
+	if level <= 0 then
+		if icon then
+			icon:Hide()
+		end
+		return
+	end
+	icon = RoleIcon(plate)
+	if icon then
+		local classIcon = icons[plate]
+		local beside = ns.DuelBadgeShown(plate) or (classIcon and classIcon:IsShown())
+		icon:ClearAllPoints()
+		icon:SetPoint("RIGHT", icon.bar, "LEFT", beside and -28 or -3, 0)
+		icon.texture:SetTexCoord(unpack(role.coords))
+		icon:SetAlpha(level)
+		icon:Show()
+	end
+end
+
+-- Both a plate's icons (the role icon goes by where the class icon is).
+function ns.RefreshClassIcon(plate)
+	RefreshClass(plate)
+	RefreshRoleIcon(plate)
+end
+
 local function RefreshClassIcons()
 	if C_NamePlate and C_NamePlate.GetNamePlates then
 		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
@@ -222,7 +298,7 @@ local function RefreshClassIcons()
 end
 
 local function AnyClassIcons()
-	for _, part in ipairs(ns.PLATE_CLASS_PARTS) do
+	for _, part in ipairs(ns.PLATE_ICON_PARTS) do
 		if (levels[part] or 0) > 0 then
 			return true
 		end
@@ -231,14 +307,23 @@ local function AnyClassIcons()
 end
 
 -- A plate given a new unit takes the parts' alphas (or lets go of its last
--- unit's), and its class icon. One whose player changes sides (a duel
--- starting) swaps icon rows.
+-- unit's), and its class and role icons. One whose player changes sides (a
+-- duel starting) swaps icon rows; roles are read again when the group changes.
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 watcher:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 watcher:RegisterEvent("UNIT_FACTION")
+watcher:RegisterEvent("GROUP_ROSTER_UPDATE")
+pcall(watcher.RegisterEvent, watcher, "PLAYER_ROLES_ASSIGNED") -- (not every client has it)
 watcher:SetScript("OnEvent", function(_, event, unit)
 	if not (ns.db and C_NamePlate and C_NamePlate.GetNamePlateForUnit) then
+		return
+	end
+	if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" then
+		wipe(plateRole)
+		if AnyClassIcons() or next(roleIcons) then
+			RefreshClassIcons()
+		end
 		return
 	end
 	if event == "UNIT_FACTION" and not (type(unit) == "string" and unit:find("^nameplate")) then
@@ -249,14 +334,17 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		return
 	end
 	if event == "NAME_PLATE_UNIT_REMOVED" then
-		plateClass[plate] = nil
+		plateClass[plate], plateRole[plate] = nil, nil
 		if icons[plate] then
 			icons[plate]:Hide()
 		end
+		if roleIcons[plate] then
+			roleIcons[plate]:Hide()
+		end
 		return
 	end
-	plateClass[plate] = nil
-	if AnyClassIcons() or icons[plate] then
+	plateClass[plate], plateRole[plate] = nil, nil
+	if AnyClassIcons() or icons[plate] or roleIcons[plate] then
 		ns.RefreshClassIcon(plate)
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" and AnyFaded() then
@@ -282,9 +370,9 @@ function ns.UpdatePlateParts(active, elapsed)
 	if changed then
 		ApplyAll()
 	end
-	-- The class icons: shown nowhere with the page's master switch off.
+	-- The class and role icons: shown nowhere with the page's master switch off.
 	local iconsChanged = false
-	for _, part in ipairs(ns.PLATE_CLASS_PARTS) do
+	for _, part in ipairs(ns.PLATE_ICON_PARTS) do
 		local wanted
 		if not ns.db.handlePlates then
 			wanted = false
@@ -367,6 +455,15 @@ function ns.DescribePlateParts(unitFrame)
 		end)
 		found[#found + 1] = part .. "=" .. (#names > 0 and table.concat(names, "+") or "NONE")
 	end
+	-- The role the game gives the plate's unit, and whether our role icon shows.
+	local unit = unitFrame.unit
+	local okRole, role = pcall(function() return unit and UnitGroupRolesAssigned(unit) end)
+	if okRole and issecretvalue and issecretvalue(role) then
+		role = "(secret)"
+	end
+	local roleIcon = roleIcons[unitFrame:GetParent()]
+	found[#found + 1] = "Role=" .. (okRole and tostring(role) or "?") .. " icon="
+		.. (roleIcon and (roleIcon:IsShown() and "shown" or "hidden") or "none")
 	-- The health bar's container, the bar, and any frame on the bar (its border).
 	local healthFields = {}
 	local container, bar = unitFrame.HealthBarsContainer, unitFrame.healthBar

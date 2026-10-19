@@ -42,6 +42,7 @@ read_globals = {
 	"C_Item",
 	"C_Map",
 	"C_Minimap",
+	"C_TooltipInfo",
 	"C_NamePlate",
 	"C_PlayerInfo",
 	"C_QuestLog",

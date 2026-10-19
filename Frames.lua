@@ -1109,6 +1109,7 @@ end
 -- back as soon as it starts to fade in. Its on-screen rect is saved first so
 -- hover still works over the empty spot.
 local SHRUNK_SCALE = 0.01
+ns.SHRUNK_SCALE = SHRUNK_SCALE
 -- Once shrunk, stay shrunk (at alpha 0) for a minimum time, so fading out and
 -- hovering straight back doesn't shrink and unshrink in quick succession.
 local MIN_SHRUNK_TIME = 0.5
@@ -1123,7 +1124,9 @@ local function ShrinkEntry(entry)
 		entry.savedRect = { frame:GetRect() }
 		entry.savedEffectiveScale = frame:GetEffectiveScale()
 	end
-	frame:SetScale(SHRUNK_SCALE)
+	-- (/cine debug nodes park: kept full size off the screen instead, to see
+	-- whether the game keeps adding tracking dots to it there.)
+	frame:SetScale(ns.parkMinimapFullSize and frame == Minimap and entry.savedScale or SHRUNK_SCALE)
 	if not parked then
 		ns.ParkShrunk(entry)
 	end
@@ -1182,9 +1185,14 @@ function ns.SetEntryAlpha(entry, alpha)
 			if entry.shrunk and GetTime() - entry.shrunkAt >= MIN_SHRUNK_TIME and not ns.ScaleBlocked(entry.frame) then
 				UnshrinkEntry(entry)
 			end
-		elseif ns.ScaleBlocked(entry.frame) then
+		elseif ns.ScaleBlocked(entry.frame) or (entry.frame == Minimap and ns.KeepMinimapFullSize()) then
 			-- Can't shrink in combat: it sits at alpha 0 full size until the
 			-- fight ends (tried again each tick), and is redrawn once shown.
+			-- (Nor while "Only while a herb or vein is on it" sweeps it: kept
+			-- full size in its place, its icons hidden, NodeSweep.lua.)
+			if entry.shrunk and not ns.ScaleBlocked(entry.frame) then
+				UnshrinkEntry(entry)
+			end
 			if not entry.shrunk and entry.frame == Minimap and Minimap.GetZoomLevels and IsIndoors
 				and ns.Flag(IsIndoors()) then
 				minimapNeedsRedraw = true
@@ -1193,7 +1201,8 @@ function ns.SetEntryAlpha(entry, alpha)
 			-- Shrink in the same step it reaches 0, so it's never at alpha 0
 			-- while full size.
 			ShrinkEntry(entry)
-		elseif math.abs(entry.frame:GetScale() - SHRUNK_SCALE) > SHRUNK_SCALE / 2 then
+		elseif not (ns.parkMinimapFullSize and entry.frame == Minimap)
+			and math.abs(entry.frame:GetScale() - SHRUNK_SCALE) > SHRUNK_SCALE / 2 then
 			-- Something put its size back (EllesmereUI does when it lays the
 			-- minimap out again): take that as its size and shrink it again.
 			ShrinkEntry(entry)
@@ -1201,6 +1210,10 @@ function ns.SetEntryAlpha(entry, alpha)
 			-- Laid out again at its shrunk size, or clamped again: back off the screen.
 			ns.ParkShrunk(entry)
 		end
+	end
+	if entry.frame == Minimap then
+		-- (Its arrow and icons ignore alpha: hidden while it's faded full size.)
+		ns.SetMinimapIconsHidden(alpha <= 0 and not entry.shrunk and ns.KeepMinimapFullSize())
 	end
 	ApplyAlpha(entry)
 end
@@ -1317,9 +1330,9 @@ ns.IsEntryHovered = ns.Profiled("IsEntryHovered", ns.IsEntryHovered)
 -- Frames the player can choose to show while fighting when staying cinematic
 -- in combat (db.combatShow[key], missing = the default here).
 ns.COMBAT_SHOW = {
-	{ key = "player", label = L["Player portrait"], default = true, frames = { "PlayerFrame" } },
-	-- Follows the portrait's ticks until set (see ROW_FALLBACK).
-	{ key = "petframe", label = L["Pet portrait"], default = true, frames = { "PetFrame" } },
+	{ key = "player", label = L["Player frame"], default = true, frames = { "PlayerFrame" } },
+	-- Follows the player frame's ticks until set (see ROW_FALLBACK).
+	{ key = "petframe", label = L["Pet frame"], default = true, frames = { "PetFrame" } },
 	{ key = "prd", label = L["Personal resource bars"], default = true,
 		frames = { "PersonalResourceDisplayFrame", "CinematicPersonalResource" } },
 	{ key = "target", label = L["Target"], default = true, frames = { "TargetFrame" } },
@@ -3783,7 +3796,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- "Always show in" (Chat page).
 	local place = ns.GetOptionPlace()
 	local fadeChat = not (place and ns.db[ns.CHAT_IN[place]])
-	local keepMinimapForTracking = ns.IsKeepingMinimapForTracking(now)
+	local keepForGathering, keepForCreatures = ns.IsKeepingMinimapForTracking(now)
 	local questTimerUp = ns.db.questTimerShow and HasQuestTimer()
 	-- (Hide in camera modes: not while one is running, it goes with the rest.)
 	local durabilityUp = ns.db.durabilityShow and not (ns.db.durabilityHideInCam and ns.activeCam)
@@ -3843,7 +3856,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 	events.chat, events.whisper, events.typing = dockPeek, whisperUnread, typing
 	events.aura = cinematic and (buffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone))
 	events.ping = pingReveal
-	events.tracking = ns.db.minimapForTracking and keepMinimapForTracking and not trackingPaused
+	-- (Keep open and Reveal, Minimap page: "Except in" is for gathering tracking only.)
+	events.tracking = (keepForGathering and not trackingPaused) or keepForCreatures
+		or ns.IsMinimapRevealed(now)
 	events.quest, events.gamepad, events.roster = questReveal, padReveal, rosterReveal
 	events.cooldown = cinematic and ns.db.cooldownWhileRecharging
 		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
@@ -4540,7 +4555,7 @@ do
 	end)
 end
 
--- Unit frame parts (Portraits page): pieces of the player, target and focus
+-- Unit frame parts (Unit Frames page): pieces of the player, target and focus
 -- frames hidden, CineMode or not, for those who only want the bars. A grid:
 -- a row per kind of unit (you, then enemy, neutral and friendly players and
 -- NPCs), a column per part; the target and focus frames go by the unit they
@@ -4557,6 +4572,19 @@ do
 			"PlayerFrameContainer.VehicleFrameTexture", "PlayerFrameContainer.FrameFlash",
 			"PlayerFrameContent.PlayerFrameContentMain.StatusTexture",
 			"PlayerFrameContent.PlayerFrameContentContextual.PlayerPortraitCornerIcon" },
+		-- (The faction flag, or the honor-level badge in its place, and the
+		-- flag's timer.)
+		PvP = { "PlayerFrameContent.PlayerFrameContentContextual.PVPIcon",
+			"PlayerFrameContent.PlayerFrameContentContextual.PrestigePortrait",
+			"PlayerFrameContent.PlayerFrameContentContextual.PrestigeBadge", "_G.PlayerPVPTimerText" },
+		-- (The rest Zzz, the group leader's crown, the role and combat icons
+		-- and the raid group number.)
+		Icons = { "PlayerFrameContent.PlayerFrameContentContextual.PlayerRestLoop",
+			"PlayerFrameContent.PlayerFrameContentContextual.LeaderIcon",
+			"PlayerFrameContent.PlayerFrameContentContextual.GuideIcon",
+			"PlayerFrameContent.PlayerFrameContentContextual.RoleIcon",
+			"PlayerFrameContent.PlayerFrameContentContextual.AttackIcon",
+			"PlayerFrameContent.PlayerFrameContentContextual.GroupIndicator" },
 	}
 	-- (Fields on TargetFrame, and on FocusFrame, built the same way.)
 	local TARGET = {
@@ -4569,12 +4597,28 @@ do
 			"TargetFrameContent.TargetFrameContentMain.ReputationColor" },
 		Art = { "TargetFrameContainer.FrameTexture", "TargetFrameContainer.Flash",
 			"TargetFrameContainer.BossPortraitFrameTexture" },
+		PvP = { "TargetFrameContent.TargetFrameContentContextual.PvpIcon",
+			"TargetFrameContent.TargetFrameContentContextual.PrestigePortrait",
+			"TargetFrameContent.TargetFrameContentContextual.PrestigeBadge" },
+		-- (The group leader's crown, and the quest and pet battle icons.)
+		Icons = { "TargetFrameContent.TargetFrameContentContextual.LeaderIcon",
+			"TargetFrameContent.TargetFrameContentContextual.GuideIcon",
+			"TargetFrameContent.TargetFrameContentContextual.QuestIcon",
+			"TargetFrameContent.TargetFrameContentContextual.PetBattleIcon" },
 	}
-	-- Each frame: its parts and the unit it shows.
+	-- Your pet's frame: no level, PvP or icons of its own.
+	local PET = {
+		Portrait = { "portrait", "_G.PetPortrait" },
+		Name = { "name", "_G.PetName" },
+		Art = { "_G.PetFrameTexture", "_G.PetFrameFlash", "_G.PetAttackModeTexture" },
+	}
+	ns.UNIT_PARTS_PET = PET
+	-- Each frame: its parts, the unit it shows, and its grid row when always the same.
 	local FRAMES = {
 		{ "PlayerFrame", PLAYER, "player" },
 		{ "TargetFrame", TARGET, "target" },
 		{ "FocusFrame", TARGET, "focus" },
+		{ "PetFrame", PET, "pet", "Pet" },
 	}
 
 	-- A field on a frame (_G. for a global of its own).
@@ -4654,7 +4698,7 @@ do
 		end
 	end
 
-	-- Whether this client's frames have the parts (the Portraits page shows the grid then).
+	-- Whether this client's frames have the parts (the Unit Frames page shows the grid then).
 	function ns.HasUnitFrameParts()
 		return _G.PlayerFrame ~= nil and Field(_G.PlayerFrame, PLAYER.Portrait[1]) ~= nil
 	end
@@ -4667,10 +4711,10 @@ do
 		for _, entry in ipairs(FRAMES) do
 			local frame = _G[entry[1]]
 			if frame then
-				local row = Ask(UnitExists, entry[3]) and Row(entry[3])
+				local row = entry[4] or Ask(UnitExists, entry[3]) and Row(entry[3])
 				for _, part in ipairs(ns.UNIT_PARTS) do
 					local hide = row and ns.db["unitPart" .. row .. part] == false or false
-					for _, path in ipairs(entry[2][part]) do
+					for _, path in ipairs(entry[2][part] or {}) do
 						local region = Field(frame, path)
 						if region then
 							SetHidden(region, hide)
@@ -4679,7 +4723,152 @@ do
 				end
 			end
 		end
+		ns.ApplyUnitBarTexture()
 	end
+
+	-- The Unit Frames page's bar texture: the health and power bars of the
+	-- player, target, focus and pet frames (setting unitBarTexture: "default"
+	-- leaves the game's own, else a key of ns.UNIT_BAR_TEXTURES or "lsm:<name>"
+	-- for one of LibSharedMedia's, when another addon has loaded it).
+	-- (In a function of its own: this file's main chunk is at Lua's cap of 200
+	-- locals at once, and past it Frames.lua doesn't load at all.)
+	(function()
+	ns.UNIT_BAR_TEXTURES = {
+		raid = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
+		classic = "Interface\\TargetingFrame\\UI-StatusBar",
+		flat = "Interface\\Buttons\\WHITE8X8",
+	}
+	function ns.SharedMedia()
+		local stub = _G.LibStub
+		return stub and stub("LibSharedMedia-3.0", true)
+	end
+	-- Each frame's bars: retail's fields first, then the older globals.
+	local BARS = {
+		{ "PlayerFrame", "player", {
+			"PlayerFrameContent.PlayerFrameContentMain.HealthBarsContainer.HealthBar", "healthbar",
+			"_G.PlayerFrameHealthBar" }, {
+			"PlayerFrameContent.PlayerFrameContentMain.ManaBarArea.ManaBar", "manabar", "_G.PlayerFrameManaBar" } },
+		{ "TargetFrame", "target", {
+			"TargetFrameContent.TargetFrameContentMain.HealthBarsContainer.HealthBar", "healthbar",
+			"_G.TargetFrameHealthBar" }, {
+			"TargetFrameContent.TargetFrameContentMain.ManaBar", "manabar", "_G.TargetFrameManaBar" } },
+		{ "FocusFrame", "focus", {
+			"TargetFrameContent.TargetFrameContentMain.HealthBarsContainer.HealthBar", "healthbar",
+			"_G.FocusFrameHealthBar" }, {
+			"TargetFrameContent.TargetFrameContentMain.ManaBar", "manabar", "_G.FocusFrameManaBar" } },
+		{ "PetFrame", "pet", { "healthbar", "_G.PetFrameHealthBar" }, { "manabar", "_G.PetFrameManaBar" } },
+	}
+	-- [bar] = { unit, power = true for a power bar, game = the texture the
+	-- game last gave it, tinted = we coloured it (the game's was white) }.
+	local bars = {}
+	local barTexture -- (the file in use, nil for the game's own)
+	local painting = false
+
+	-- The colour a bar the game left white gets with our texture: the game's
+	-- own art has it drawn in (green health, the power type's colour).
+	local function BarColour(bar, info)
+		if info.power then
+			local ok, _, token = pcall(UnitPowerType, bar.unit or info.unit)
+			local colours = _G.PowerBarColor
+			local colour = ok and type(token) == "string" and not (issecretvalue and issecretvalue(token))
+				and colours and colours[token]
+			if colour then
+				return colour.r, colour.g, colour.b
+			end
+			return 0, 0, 1
+		end
+		return 0, 1, 0
+	end
+
+	local function IsWhite(bar)
+		local ok, r, g, b = pcall(bar.GetStatusBarColor, bar)
+		if not ok or (issecretvalue and (issecretvalue(r) or issecretvalue(g) or issecretvalue(b))) then
+			return false
+		end
+		return type(r) == "number" and r > 0.99 and g > 0.99 and b > 0.99
+	end
+
+	local function Paint(bar)
+		local info = bars[bar]
+		painting = true
+		if barTexture then
+			bar:SetStatusBarTexture(barTexture)
+			if IsWhite(bar) then
+				info.tinted = true
+				bar:SetStatusBarColor(BarColour(bar, info))
+			elseif info.tinted and info.power then
+				-- (A druid's form changed: the new power type's colour.)
+				bar:SetStatusBarColor(BarColour(bar, info))
+			end
+		elseif info.game then
+			bar:SetStatusBarTexture(info.game)
+			if info.tinted then
+				info.tinted = nil
+				bar:SetStatusBarColor(1, 1, 1)
+			end
+		end
+		painting = false
+	end
+
+	local function Track(bar, unit, power)
+		if bars[bar] or not bar.SetStatusBarTexture then
+			return
+		end
+		local info = { unit = unit, power = power }
+		local texture = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+		if texture then
+			info.game = texture.GetAtlas and texture:GetAtlas() or texture:GetTexture()
+		end
+		bars[bar] = info
+		-- The game swaps the art (a vehicle, a druid's form): keep the new art
+		-- to put back, and ours on top.
+		hooksecurefunc(bar, "SetStatusBarTexture", function(self, asset)
+			if not painting then
+				info.game = asset
+				if barTexture then Paint(self) end
+			end
+		end)
+		hooksecurefunc(bar, "SetStatusBarColor", function(self)
+			if not painting and barTexture and IsWhite(self) then
+				Paint(self)
+			end
+		end)
+	end
+
+	function ns.ApplyUnitBarTexture()
+		if not ns.db then
+			return
+		end
+		local key = ns.db.unitBarTexture
+		local file = ns.UNIT_BAR_TEXTURES[key]
+		if not file and type(key) == "string" and key:sub(1, 4) == "lsm:" then
+			local lsm = ns.SharedMedia()
+			local ok, fetched = pcall(function() return lsm and lsm:Fetch("statusbar", key:sub(5), true) end)
+			file = ok and fetched or nil
+		end
+		if not file and not barTexture then
+			return -- (the game's own, untouched)
+		end
+		for _, entry in ipairs(BARS) do
+			local frame = _G[entry[1]]
+			if frame then
+				for i = 3, 4 do
+					for _, path in ipairs(entry[i]) do
+						local bar = Field(frame, path)
+						if bar and bar.SetStatusBarTexture then
+							Track(bar, entry[2], i == 4)
+							break
+						end
+					end
+				end
+			end
+		end
+		barTexture = file
+		for bar in pairs(bars) do
+			Paint(bar)
+		end
+	end
+	end)()
 
 	local watcher = CreateFrame("Frame")
 	watcher:RegisterEvent("PLAYER_LOGIN")

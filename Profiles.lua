@@ -70,6 +70,18 @@ local function Column(on)
 	return list
 end
 
+-- The Standard Frames page's Interface rows in the Immersive profiles: the
+-- minimap (its header, buttons, zone name and clock) and the quest tracker
+-- don't come up in fights or stay up in instances; the micro menu, bags and
+-- XP bar do, and with an enemy targeted.
+local MINIMAP_ROWS = { "minimap", "minimapheader", "minimaptracking", "minimapcalendar", "minimapzone", "minimapclock" }
+local function Except(rows, extra)
+	local list = {}
+	for _, key in ipairs(rows) do list[key] = false end
+	for key, on in pairs(extra or {}) do list[key] = on end
+	return list
+end
+
 -- The built-in profiles, in the order they're listed. apply(set) makes its
 -- changes to the defaults; a list (PROFILE_TABLES) is set whole.
 ns.BUILTIN_PROFILES = {
@@ -88,6 +100,10 @@ ns.BUILTIN_PROFILES = {
 			set("plateGroupFriendlyMinions", false)
 			-- Chat doesn't peek for NPC speech (guards, vendors, ambient chatter).
 			set("chatPeekTypes", { npc = false })
+			-- Interface rows (Standard Frames page): no minimap in fights or
+			-- instances, nor the quest tracker there.
+			set("combatShow", Except(MINIMAP_ROWS))
+			set("instanceShow", Except(MINIMAP_ROWS, { quests = false }))
 		end,
 	},
 	{
@@ -99,9 +115,12 @@ ns.BUILTIN_PROFILES = {
 			-- The Standard Frames page's columns.
 			set("cineShow", Column({}))
 			set("combatShow", Column({ "player", "prd", "target", "tot", "focus", "party", "raidplayers", "raidpets",
-				"minimap", "buffs", "swing", "cooldowns", "pet", "stance", "totems" }))
+				"buffs", "swing", "cooldowns", "pet", "stance", "totems", "micro", "xp" }))
 			set("enemyShow", Column({ "player", "prd", "target", "tot", "focus", "buffs", "pet", "stance",
-				"totems" }))
+				"totems", "micro", "xp" }))
+			-- (Interface rows as in Immersive: the minimap neither in fights
+			-- nor kept up in instances, nor the quest tracker there.)
+			set("instanceShow", Except(MINIMAP_ROWS, { quests = false }))
 			set("friendlyShow", Column({ "target", "tot" }))
 			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
 			set("cooldownWhileRecharging", true)
@@ -191,7 +210,7 @@ ns.BUILTIN_PROFILES = {
 	},
 	{
 		name = "Pure Cinema",
-		tip = L["As little UI as possible: chat, buffs, the quest tracker, the minimap and your portrait " ..
+		tip = L["As little UI as possible: chat, buffs, the quest tracker and your portrait " ..
 			"don't pop up on their own (hovering still shows them), group members' " ..
 			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
 			"your target and your cast bar (hidden otherwise), and every camera can start music."],
@@ -201,7 +220,6 @@ ns.BUILTIN_PROFILES = {
 			set("debuffPeek", false)
 			set("questRevealOnAccept", false)
 			set("questRevealOnProgress", false)
-			set("minimapRevealOnPing", false)
 			set("portraitWhenNotFull", false)
 			set("letterboxOffInCombat", false)
 			set("timeOfDayMessage", false)
@@ -241,8 +259,8 @@ ns.BUILTIN_PROFILES = {
 			set("runOffInInstances", false)
 			-- The death camera runs in instances too.
 			set("deathOffInInstances", false)
-			-- No minimap for tracking; no quest timer box.
-			set("minimapForTracking", false)
+			-- No quest timer box. (The minimap's Reveal and Keep open stay as
+			-- they are by default, as in every profile.)
 			set("questTimerShow", false)
 			-- Chat doesn't peek for General or LocalDefense.
 			set("chatPeekChannelList", { General = false, LocalDefense = false })

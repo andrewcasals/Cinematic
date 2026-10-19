@@ -1,5 +1,6 @@
 -- Cinematic tracking detection: keeps the minimap up while gathering or
--- creature tracking is active (see the minimapFor* settings).
+-- creature tracking is active (Keep open, Minimap page: minimapKeepGathering,
+-- minimapKeepCreatures).
 local _, ns = ...
 
 -- Gathering and creature tracking. There's no API for what appears on the
@@ -8,21 +9,21 @@ local _, ns = ...
 -- player's auras and the client's tracking list, plus the active tracking icon
 -- on clients that only expose that.
 local TRACKING = {
-	{ option = "minimapForHerbs", spells = { 2383 },
+	{ option = "minimapKeepGathering", spells = { 2383 }, -- Find Herbs
 		icons = { 136065, "interface\\icons\\inv_misc_flower_02" } },
-	{ option = "minimapForMinerals", spells = { 2580 },
+	{ option = "minimapKeepGathering", spells = { 2580 }, -- Find Minerals
 		icons = { 136025, "interface\\icons\\spell_nature_earthquake" } },
-	{ option = "minimapForTreasure", spells = { 2481 },
+	{ option = "minimapKeepGathering", spells = { 2481 }, -- Find Treasure
 		icons = { 135725, "interface\\icons\\racial_dwarf_findtreasure" } },
-	{ option = "minimapForFish", spells = { 43308 }, icons = {} },
-	{ option = "minimapForCreatures", icons = {}, spells = {
+	{ option = "minimapKeepCreatures", spells = { 43308 }, icons = {} }, -- Find Fish
+	{ option = "minimapKeepCreatures", icons = {}, spells = {
 		1494, 19878, 19879, 19880, 19882, 19883, 19884, 19885, -- hunter tracking
 		5225,                                                -- druid: Track Humanoids
 		5500, 5502,                                          -- Sense Demons, Sense Undead
 	} },
 }
 local TRACKING_CHECK_INTERVAL = 0.5
-local trackingCheckedAt, keepMinimapForTracking = 0, false
+local trackingCheckedAt, keepForGathering, keepForCreatures = 0, false, false
 
 local function IsSecret(value)
 	return issecretvalue and issecretvalue(value) or false
@@ -86,6 +87,8 @@ changeWatcher:SetScript("OnEvent", function(_, event, unit)
 	end
 end)
 
+-- Whether tracking that's ticked under Keep open is on: gathering (herbs,
+-- minerals, treasure), and creatures or fish.
 local function IsTrackingSomethingWanted()
 	local db = ns.GetDB()
 	if trackingChanged then
@@ -94,29 +97,36 @@ local function IsTrackingSomethingWanted()
 		activeIcon = GetActiveTrackingIcon()
 	end
 	local active, icon = activeSpells, activeIcon
+	local gathering, creatures = false, false
 	for _, kind in ipairs(TRACKING) do
 		if db[kind.option] then
+			local on = false
 			for _, spellID in ipairs(kind.spells) do
-				if active[spellID] then return true end
+				if active[spellID] then on = true end
 			end
 			for _, trackingIcon in ipairs(kind.icons) do
-				if icon and icon == trackingIcon then return true end
+				if icon and icon == trackingIcon then on = true end
+			end
+			if on and kind.option == "minimapKeepGathering" then
+				gathering = true
+			elseif on then
+				creatures = true
 			end
 		end
 	end
-	return false
+	return gathering, creatures
 end
 
--- Called from Core.lua's frame update: whether to keep the minimap up for
--- tracking. Auras are secret in combat, so the last answer is kept until it's
--- over.
+-- Called from Frames.lua's frame update: whether to keep the minimap up for
+-- gathering tracking, and for creature or fish tracking. Auras are secret in
+-- combat, so the last answer is kept until it's over.
 function ns.IsKeepingMinimapForTracking(now)
 	if now - trackingCheckedAt >= TRACKING_CHECK_INTERVAL and not InCombatLockdown()
 		and not ns.Flag(UnitAffectingCombat("player")) then
 		trackingCheckedAt = now
-		keepMinimapForTracking = IsTrackingSomethingWanted()
+		keepForGathering, keepForCreatures = IsTrackingSomethingWanted()
 	end
-	return keepMinimapForTracking
+	return keepForGathering, keepForCreatures
 end
 
 ns.GetActiveTrackingSpells = GetActiveTrackingSpells

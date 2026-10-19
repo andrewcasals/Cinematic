@@ -109,13 +109,16 @@ local DEFAULTS = {
 	                                 -- with Cooldown recharging ticked: the Cooldowns group by default)
 	cooldownAfterCombat = true,     -- ...only within the Calm Timer after a fight
 	minimapIndoors = false,    -- keep the minimap up indoors (hidden there, its map goes stale)
-	minimapForTracking = true, -- master switch for the minimapFor* tracking options below
-	minimapForHerbs = true,    -- keep the minimap visible while this tracking is active
-	minimapForMinerals = true,
-	minimapForTreasure = true,
-	minimapForFish = true,
-	minimapForCreatures = false,
-	trackingOffInCities = true,  -- ...and in these places (no nodes there; dungeons have some)
+	-- Reveal (Minimap page): the faded minimap comes up while one of these is on
+	-- it (NodeSweep.lua looks; with any ticked it's kept full size, icons hidden).
+	minimapRevealNodes = true,   -- ore, herbs and treasure (the tracking has to be on)
+	minimapNodePing = true,      -- ...with a minimap ping where one shows up (your group sees it too)
+	minimapRevealTurnIns = true, -- quests of yours that are done
+	minimapRevealIcons = true,   -- anything else (quest givers, flight masters, your quests' areas...)
+	-- Keep open (Minimap page): the minimap stays up the whole time this tracking is on.
+	minimapKeepCreatures = false, -- creatures (hunter, druid, warlock) or fish
+	minimapKeepGathering = false, -- herbs, minerals or treasure...
+	trackingOffInCities = true,  -- ...except in these places (no nodes there; dungeons have some)
 	trackingOffInDungeons = true,
 	trackingOffInRaids = true,
 	trackingOffInPvP = true,
@@ -129,6 +132,7 @@ local DEFAULTS = {
 	portraitWhenNotFull = true, -- keep the player portrait up while health or power isn't full
 	portraitAfterCombat = true,  -- ...but only within the Calm Timer (calmTime) of combat
 	portraitAfterResurrect = true, -- ...or after coming back to life, until health and power are full
+	unitBarTexture = "default", -- the player, target, focus and pet frames' bars: the game's own (Frames)
 	buffPeek = true,          -- briefly show buffs/debuffs when a buff is gained or refreshed
 	buffPeekAfterCombat = false, -- ...or only within the Calm Timer of a fight
 	buffPeekIgnoreSelf = true,   -- ...and not for buffs you cast on yourself (or your pet does)
@@ -642,27 +646,36 @@ for _, part in ipairs(ns.PLATE_PARTS) do
 		DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
 	end
 end
--- The Portraits page's Unit frame parts grid (see Frames): a row per kind
--- of unit the player, target and focus frames show, a column per part (keys
--- unitPart<row><part>). All shown to start with, as the game has them.
+-- The Unit Frames page's Unit frame parts grid (see Frames): a row per kind
+-- of unit the player, target and focus frames show (and one for your pet's
+-- frame), a column per part (keys unitPart<row><part>). All shown to start
+-- with, as the game has them.
 ns.UNIT_PART_ROWS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer",
-	"FriendlyNPC" }
-ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art" }
+	"FriendlyNPC", "Pet" }
+ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons" }
 for _, row in ipairs(ns.UNIT_PART_ROWS) do
 	for _, part in ipairs(ns.UNIT_PARTS) do
 		DEFAULTS["unitPart" .. row .. part] = true
 	end
 end
--- And two rows of our own: a class icon by friendly and by enemy players'
--- health bars (as Duel Vision shows). Off everywhere to start with.
+-- And rows of our own: a class icon by friendly and by enemy players' health
+-- bars (as Duel Vision shows), and a role icon by group members' (tank,
+-- healer, damage). Off everywhere to start with, except enemy class icons and
+-- tank and healer role icons: shown always.
 ns.PLATE_CLASS_PARTS = { "ClassFriendly", "ClassEnemy" }
-for _, part in ipairs(ns.PLATE_CLASS_PARTS) do
+ns.PLATE_ROLE_PARTS = { "RoleTank", "RoleHealer", "RoleDamager" }
+ns.PLATE_ICON_PARTS = { "ClassFriendly", "ClassEnemy", "RoleTank", "RoleHealer", "RoleDamager" }
+ns.PLATE_ICONS_ALWAYS = { "ClassEnemy", "RoleTank", "RoleHealer" }
+for _, part in ipairs(ns.PLATE_ICON_PARTS) do
 	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
 		DEFAULTS[prefix .. "Part" .. part] = false
 	end
 	for _, suffix in ipairs(ns.PLATE_PLACES) do
 		DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
 	end
+end
+for _, part in ipairs(ns.PLATE_ICONS_ALWAYS) do
+	DEFAULTS["plateAlwaysPart" .. part] = true
 end
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
 for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
@@ -3005,6 +3018,17 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then TentEight(saved) end
 			end
 			ns.db.cozyTentCloseV1 = true
+		end
+		-- Enemy class icons and tank and healer role icons on nameplates are now
+		-- on (Always) by default: into every profile too. Once.
+		if not ns.db.plateIconsAlwaysV1 then
+			for _, part in ipairs(ns.PLATE_ICONS_ALWAYS) do
+				ns.db["plateAlwaysPart" .. part] = true
+				for _, saved in pairs(ns.db.profiles or {}) do
+					if type(saved) == "table" then saved["plateAlwaysPart" .. part] = true end
+				end
+			end
+			ns.db.plateIconsAlwaysV1 = true
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.

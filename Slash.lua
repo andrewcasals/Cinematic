@@ -67,6 +67,8 @@ local function PrintDebugHelp()
 	print("  /cine debug cpu [seconds|stop] - time what the addon spends its time on (30 seconds), report in the log")
 	print("  /cine debug frame <name> - how faded frames with <name> in their name stand")
 	print("  /cine debug minimap - the minimap's settings, where it's anchored, and whether it's shrunk and moved off the screen")
+	print("  /cine debug minimapicons - the minimap's methods for its player arrow and icons on this client")
+	print("  /cine debug nodes [raw] [grow [update]|park|stay] [seconds] - sweep a pretend mouse over the minimap and list the names its tooltip gives (herbs, veins), faded or not; grow gives the faded minimap its size back for each sweep only; park keeps it full size off the screen while it watches (60 seconds), stay full size in its place; update has the game place its dots first; raw shows each name's line as the game wrote it; with seconds, once a second, then all of it in the copy window (again to stop early)")
 	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
 	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
@@ -750,6 +752,21 @@ local function HandleSlash(msg)
 		ns.HealthFadeDebug(arg:match("^healthfade%s+(%S+)"))
 	elseif cmd == "debug" and arg:find("^damage") then
 		ns.DamageDebug(arg:match("^damage%s+(%S+)"))
+	elseif cmd == "debug" and arg == "minimapicons" then
+		-- Which of the minimap's own methods for its arrow and icons this client
+		-- has (to hide them while it's faded but full size).
+		local methods = {}
+		local index = getmetatable(Minimap) and getmetatable(Minimap).__index
+		for name in pairs(type(index) == "table" and index or {}) do
+			if type(name) == "string" and (name:find("Texture") or name:find("Player") or name:find("Blip")
+				or name:find("POI") or name:find("Arrow") or name:find("Icon") or name:find("Quest")) then
+				methods[#methods + 1] = name
+			end
+		end
+		table.sort(methods)
+		ns.Print(("minimap icon methods (%d): %s"):format(#methods, #methods > 0 and table.concat(methods, ", ") or "none"))
+	elseif cmd == "debug" and arg:find("^nodes") then
+		ns.NodesDebug(arg:match("^nodes%s*(.*)$"))
 	elseif cmd == "facing" then
 		-- Test: can the addon tell when you turn? For 10 seconds, reports the
 		-- turning events, the turn keys, and your facing direction.
@@ -952,8 +969,11 @@ local function HandleSlash(msg)
 		table.sort(ids)
 		ns.Print("active buff/tracking spell IDs: " .. (#ids > 0 and table.concat(ids, ", ") or "none"))
 		ns.Print("tracking icon: " .. tostring(ns.GetActiveTrackingIcon()))
-		ns.Print("keeping minimap for tracking: " .. tostring(ns.IsTrackingSomethingWanted())
-			.. (ns.IsTrackingOffHere() and " (but not here: Except in, Minimap page)" or ""))
+		local gathering, creatures = ns.IsTrackingSomethingWanted()
+		ns.Print(("keeping minimap open for gathering tracking: %s%s, for creatures or fish: %s"):format(
+			tostring(gathering), gathering and ns.IsTrackingOffHere() and " (but not here: Except in, Minimap page)" or "",
+			tostring(creatures)))
+		ns.Print(ns.NodeSweepReport())
 	elseif cmd == "debug" and arg == "place" then
 		-- Shows how the addon classifies where you are (cities vs inns etc.).
 		local inInstance, instanceType = IsInInstance()

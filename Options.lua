@@ -69,6 +69,35 @@ local function Label(parent, font, text)
 	return fs
 end
 
+-- A page's intro, kept out of the way: a "?" beside its title shows it on
+-- hover (and search still finds its words). Returns a flat anchor under the
+-- title (or under, if given) for what goes below; hiding it hides the "?" too.
+local function PageIntro(parent, title, text, under)
+	local anchor = CreateFrame("Frame", nil, parent)
+	anchor:SetSize(1, 1)
+	anchor:SetPoint("TOPLEFT", under or title, "BOTTOMLEFT", 0, -2)
+
+	local help = CreateFrame("Button", nil, anchor)
+	help:SetSize(18, 18)
+	help:SetPoint("LEFT", title, "RIGHT", 6, 0)
+	-- (Above the title's own frame: a camera section's title is on its header.)
+	help:SetFrameLevel(math.max(anchor:GetFrameLevel(), title:GetParent():GetFrameLevel()) + 2)
+	local ring = help:CreateTexture(nil, "BACKGROUND")
+	ring:SetAllPoints()
+	ring:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+	ring:SetVertexColor(0.3, 0.3, 0.3, 0.9)
+	local mark = help:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	mark:SetPoint("CENTER", 1, 0)
+	mark:SetText("?")
+	mark.searchSkip = true
+	Tooltip(help, text)
+	help:HookScript("OnEnter", function() mark:SetTextColor(1, 1, 1) end)
+	help:HookScript("OnLeave", function() mark:SetTextColor(1, 0.82, 0) end)
+	help.searchNote = text
+	help.searchEdges = { top = title, bottom = title, left = title, right = help }
+	return anchor
+end
+
 local function Header(parent, text, anchor, yOffset)
 	local fs = Label(parent, "GameFontNormal", text)
 	fs:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOffset or -18)
@@ -109,6 +138,11 @@ local function Stack(anchor, kind)
 		note:SetWidth(width or 270)
 		note:SetJustifyV("TOP")
 		return self:Add(note, "label")
+	end
+	-- A note kept behind a "?" beside the header just added (see PageIntro).
+	function stack:Help(parent, text)
+		self.last, self.kind = PageIntro(parent, self.last, text), "label"
+		return self.last
 	end
 	-- Carries on from a control placed some other way.
 	function stack:Continue(control, controlKind)
@@ -269,7 +303,7 @@ local function Refresh()
 	end
 end
 
--- A page's master switch at the top (below anchor): "Let CineMode handle ...".
+-- A page's master switch at the top (below anchor): "CineMode <page>".
 local function RegisterPageSwitch(content, key, check)
 	pageSwitches[content] = { key = key, check = check }
 end
@@ -298,7 +332,8 @@ local function Choice(parent, key, value, label, tip)
 	return cb
 end
 
--- A dropdown for a db key with a fixed set of choices ({ value, text }).
+-- A dropdown for a db key with a fixed set of choices ({ value, text }), or
+-- a function giving them each time the menu opens.
 -- Returns nil on clients without the modern dropdown template.
 local function Dropdown(parent, key, choices, width, onChange)
 	local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
@@ -308,7 +343,7 @@ local function Dropdown(parent, key, choices, width, onChange)
 	dropdown:SetWidth(width or 200)
 	dropdown.searchSkip = true -- (it shows the current choice, not a label)
 	dropdown:SetupMenu(function(_, rootDescription)
-		for _, choice in ipairs(choices) do
+		for _, choice in ipairs(type(choices) == "function" and choices() or choices) do
 			rootDescription:CreateRadio(choice.text,
 				-- SetupMenu builds the menu right away, before saved settings load.
 				function()
@@ -497,6 +532,10 @@ local function BuildSearchIndex(pages)
 			-- pages that aren't open)
 			-- (A closed section's settings count: finding one opens it.)
 			if frame.searchSkip or not (frame:IsShown() or frame.searchAlways) then return end
+			if frame.searchNote then -- (a page intro behind its "?")
+				add(frame.searchNote, nil, 3, frame.searchEdges)
+				return
+			end
 			if frame.searchLabel then
 				add(frame.searchLabel, frame.searchTip, 1, frame.searchEdges)
 				return
@@ -749,14 +788,11 @@ local function CreatePanel()
 	local versionLabel = Label(panel, "GameFontDisableSmall", version)
 	versionLabel:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 6, 1)
 
-	local subtitle = Label(panel, "GameFontHighlightSmall",
+	local subtitle = PageIntro(panel, title,
 		L["Fades the UI and adds letterbox bars between fights. Combat, casting " ..
 		"and opening windows like the spellbook bring it back. Typing just shows the chat. The " ..
 		"pages under this one cover what shows when (CineMode, Standard Frames, 3rd Party Frames, Minimap, Quest tracker, Nameplates, " ..
 		"Chat), visual effects and sound, the camera modes and triggers, and keybinds."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	local searchBox = CreateSearch(mainCanvas, panel)
 	searchBox:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 6, -14)
@@ -971,7 +1007,7 @@ do
 			end },
 			{ "3rd Party Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
 			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot" },
-			{ "Portraits", "Interface\\Icons\\INV_Misc_Head_Dwarf_01" },
+			{ "Unit Frames", "Interface\\Icons\\INV_Misc_Head_Dwarf_01" },
 			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision" },
 			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01" },
 			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01" },
@@ -1220,15 +1256,12 @@ local function CreateRevealPanel()
 	local title = Label(content, "GameFontNormalLarge", "CineMode")
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["How fast the UI fades, what brings it (or parts of it) back while CineMode " ..
 		"is on, and combat text. Fights and targeting are on the Standard Frames page, names and " ..
 		"nameplates on the Nameplates page, buffs on the " ..
 		"Buffs/debuffs page, the minimap on the Minimap page, the quest tracker on the Quest tracker page, " ..
 		"chat on the Chat page."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- Fading (full width): how fast the UI goes and comes back
 	local fadingHeader = Header(content, L["Fading"], subtitle, -20)
@@ -1341,15 +1374,13 @@ local function CreateBuffsPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Buffs/debuffs"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local note = Label(content, "GameFontHighlightSmall",
+	local note = PageIntro(content, title,
 		L["Your buff and debuff icons. They fade with the UI in CineMode; these bring them back."])
-	note:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 
 	local buffPeek = Check(content, "buffPeek", L["Show buffs when you gain or refresh one"],
 		L["Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on flights."])
 	buffPeek:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -48)
-	PageSwitch(content, "handleBuffs", L["Let CineMode handle buffs and debuffs"],
+	PageSwitch(content, "handleBuffs", L["CineMode Buffs/debuffs"],
 		L["On: CineMode fades your buffs and debuffs as this page and their Standard Frames row say. " ..
 		"Off: it leaves them alone, with no peeks."], note)
 	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
@@ -1571,29 +1602,20 @@ local function CreateCameraPanel()
 	local title = Label(cameraPanel, "GameFontNormalLarge", L["Camera Modes"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(cameraPanel, "GameFontHighlightSmall",
+	local subtitle = PageIntro(cameraPanel, title,
 		L["While CineMode is on, the camera comes alive in eight situations: Flight (on " ..
 		"flight paths), AFK (once you've stood still a while, or go AFK), Cozy (campfires and " ..
 		"emotes), Tele (casting your Hearthstone or a teleport), Vista (/stare), Fish (fishing), " ..
 		"RP Walk (auto-walking) and Auto-run. Moving by hand cancels them all. Death Cam turns " ..
 		"round your body when you die, and Quest Cam swings behind you at quest givers. The Camera Triggers page picks which camera each emote or " ..
 		"event starts. Everything goes back to normal when the UI returns. The settings here apply " ..
-		"to all of them."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", cameraPanel, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
-
-	local holdNote = Label(cameraPanel, "GameFontHighlightSmall",
+		"to all of them."] .. "\n\n" ..
 		L["In the camera modes, the minimap and quest tracker hover holds and the buff and chat " ..
 		"peeks use their short default times, so they clear the view quickly."])
-	holdNote:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -12)
-	holdNote:SetWidth(520)
-	holdNote:SetJustifyV("TOP")
 
 	-- Turn off in: a grid of each camera (rows) by place or group (columns).
-	local offHeader = Header(cameraPanel, L["Turn off in"], holdNote, -24)
-	offHeader:SetPoint("TOPLEFT", holdNote, "BOTTOMLEFT", -2, -24)
-	local offNote = Label(cameraPanel, "GameFontHighlightSmall",
+	local offHeader = Header(cameraPanel, L["Turn off in"], subtitle, -18)
+	local offNote = PageIntro(cameraPanel, offHeader,
 		L["Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
 		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back " ..
 		"as usual. To keep the normal UI somewhere instead, use Turn off in on the main page. " ..
@@ -1601,9 +1623,6 @@ local function CreateCameraPanel()
 		"and Open World taking off anywhere else. " ..
 		"Calm Timer, on the right: ticked, that camera waits until the Calm Timer (CineMode page) " ..
 		"has run out after a fight before it starts."])
-	offNote:SetPoint("TOPLEFT", offHeader, "BOTTOMLEFT", 0, -6)
-	offNote:SetWidth(520)
-	offNote:SetJustifyV("TOP")
 	local GRID_NAME_WIDTH, GRID_COLUMN, GRID_GAP = 90, 72, 10
 	local GRID_PLACES = GRID_NAME_WIDTH
 	local WHERE = {
@@ -1966,7 +1985,7 @@ local function CameraSection(name)
 	local anchor = body:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	anchor:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -SECTION_HEADER + 2)
 	anchor:SetSize(1, 1)
-	return body, anchor
+	return body, anchor, title
 end
 
 -- Every camera mode's page is laid out the same way:
@@ -1985,12 +2004,9 @@ local INPUT_PAUSE_TIP = L["After you drag the camera, use camera keys or zoom, t
 	"this long, then carries on from your new view."]
 
 local function CreateCameraModePanel(opts)
-	local content, title = CameraSection(L[opts.name])
+	local content, top, title = CameraSection(L[opts.name])
 
-	local subtitle = Label(content, "GameFontHighlightSmall", opts.description)
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
+	local subtitle = PageIntro(content, title, opts.description, top)
 
 	local stack = Stack(subtitle, "label")
 	if opts.top then
@@ -2167,15 +2183,12 @@ local function CreateEventsPanel()
 
 	local title = Label(content, "GameFontNormalLarge", L["Camera Triggers"])
 	title:SetPoint("TOPLEFT", 16, -16)
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; a " ..
 		"Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a " ..
 		"drawn weapon, a campfire, and standing still last. Taking a flight has the flight " ..
 		"camera, talking to a quest giver the quest camera, and auto-walking, auto-running and " ..
 		"dying their own."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	local CAMERA_X, MUSIC_X, CINE_X = 250, 425, 490
 	local header = Header(content, L["Event"], subtitle, -20)
@@ -2559,14 +2572,11 @@ end
 -- Not a CreateCameraModePanel page (no sway, zoom profile or music switch of
 -- its own), but laid out the same way.
 local function CreateDeathPanel()
-	local content, title = CameraSection(L["Death Cam"])
-	local subtitle = Label(content, "GameFontHighlightSmall", L["When you die, the camera turns " ..
+	local content, top, title = CameraSection(L["Death Cam"])
+	local subtitle = PageIntro(content, title, L["When you die, the camera turns " ..
 		"slowly round your body until you release or are resurrected. CineMode stays on " ..
 		"(straight away), with the release button (and any soulstone or Reincarnation " ..
-		"button) still showing."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
+		"button) still showing."], top)
 	local function IfOn(db) return db.deathOrbit end
 
 	local stack = Stack(subtitle, "label")
@@ -2654,15 +2664,12 @@ local QUEST_SIDES = {
 	{ value = "left", text = L["Your left"] },
 }
 local function CreateQuestPanel()
-	local content, title = CameraSection(L["Quest Cam"])
-	local subtitle = Label(content, "GameFontHighlightSmall", L["Talking to a quest giver, the " ..
+	local content, top, title = CameraSection(L["Quest Cam"])
+	local subtitle = PageIntro(content, title, L["Talking to a quest giver, the " ..
 		"camera zooms in and swings round behind you, looking past you at them. It goes back " ..
 		"once you close the window or move off (your zoom stays if you zoomed yourself meanwhile). Works " ..
 		"whether or not CineMode is on. The \"Talk to a quest giver\" event on the Events " ..
-		"page can also turn it off or make it wait a moment."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
+		"page can also turn it off or make it wait a moment."], top)
 	local function IfOn(db) return db.eventQuestCamera ~= "none" end
 
 	local stack = Stack(subtitle, "label")
@@ -2761,16 +2768,13 @@ local function CreateQuestPanel()
 end
 
 local function CreateTelePanel()
-	local content, title = CameraSection(L["Tele Cam"])
-	local subtitle = Label(content, "GameFontHighlightSmall", L["Casting your Hearthstone or a " ..
+	local content, sectionTop, title = CameraSection(L["Tele Cam"])
+	local subtitle = PageIntro(content, title, L["Casting your Hearthstone or a " ..
 		"teleport, the camera swings round in front of you, quickly enough to be there before you " ..
 		"go, then spins round you faster and faster as it zooms in. Cancel the cast and it goes " ..
 		"back to where it was; once you're there, it swings round behind you. Its music, haze and " ..
 		"tooltips follow the Cozy Cam's settings. The events on the Camera Triggers page can also make it " ..
-		"wait a moment."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
+		"wait a moment."], sectionTop)
 	local function IfOn(db) return db.eventHearthCamera ~= "none" or db.eventTeleportCamera ~= "none" end
 
 	local stack = Stack(subtitle, "label")
@@ -2846,12 +2850,9 @@ local function CreateCameraSettingsPanel()
 	cameraSettingsContent = content
 	local title = Label(content, "GameFontNormalLarge", L["Camera Settings"])
 	title:SetPoint("TOPLEFT", 16, -16)
-	local subtitle = Label(content, "GameFontHighlightSmall", L["Each camera's own settings. Click a " ..
+	local subtitle = PageIntro(content, title, L["Each camera's own settings. Click a " ..
 		"camera's name to open its settings, and again to close them. The Camera Modes page has the " ..
 		"settings they share, and Camera Triggers what starts each one."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 	cameraSettingsTop = subtitle
 	subtitle.title = title
 
@@ -2938,18 +2939,15 @@ local function CreateTintPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Visual Effects"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the " ..
 		"main page): letterbox bars, colour " ..
 		"grading, vignette, inn glow and weather. The UI isn't tinted. Names and nameplates are " ..
 		"on the Nameplates page."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- The master switch: off, none of this page's effects show (each keeps its
 	-- own setting), and its other controls grey out.
-	local master = Check(content, "visualEffects", L["Enable visual effects"],
+	local master = Check(content, "visualEffects", L["CineMode Visual Effects"],
 		L["Turns everything on this page on or off at once: the letterbox, tint, time of day, " ..
 		"zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for when you " ..
 		"turn this back on."], function(value)
@@ -2965,14 +2963,10 @@ local function CreateTintPanel()
 	-- and camera modes (columns), like the Camera Modes page's.
 	local gridHeader = Header(content, L["Turn off in"], master, -18)
 	gridHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
-	local gridNote = Label(content, "GameFontHighlightSmall",
+	local gridNote = PageIntro(content, gridHeader,
 		L["Ticked, that effect doesn't show there. Always: not at all. Combat: it goes for fights, and comes back once the " ..
 		"Calm Timer (CineMode page) has run out after. Outside camera modes: it only shows while a " ..
 		"camera mode runs (flights, AFK, cozy and the rest)."])
-	gridNote:SetPoint("TOPLEFT", gridHeader, "BOTTOMLEFT", 0, -6)
-	gridNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	gridNote:SetJustifyH("LEFT")
-	gridNote:SetJustifyV("TOP")
 	local EFFECT_ROWS = { letterbox = L["Letterbox"], tint = L["Tint"], vignette = L["Vignette"], weather = L["Weather"] }
 	-- What the tooltips call them, mid-sentence (lower case in English; each
 	-- language has its own, since some capitalise nouns).
@@ -3312,13 +3306,10 @@ local function CreateTintPanel()
 
 	-- Per-zone overrides: a preset of its own, and colours for the Zone presets
 	local zoneHeader = Header(content, L["Zone tints"], previousPhase, -24)
-	local zoneHelp = Label(content, "GameFontHighlightSmall",
+	local zoneHelp = PageIntro(content, zoneHeader,
 		L["Give the zone you're standing in, or just the area within it (a town, a port), a " ..
 		"preset of its own: it replaces your main preset there. With a Zone preset you can also " ..
 		"choose its colour, which replaces the built-in mood. An area's choices win over its zone's."])
-	zoneHelp:SetPoint("TOPLEFT", zoneHeader, "BOTTOMLEFT", 0, -6)
-	zoneHelp:SetWidth(420)
-	zoneHelp:SetJustifyV("TOP")
 
 	local zoneText = Label(content, "GameFontHighlight")
 	zoneText:SetPoint("TOPLEFT", zoneHelp, "BOTTOMLEFT", 0, -10)
@@ -3658,21 +3649,21 @@ local function CreateGraphicsPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Graphics+"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["The game's own graphics settings one by one, past its Graphics menu either way: higher for a better " ..
-		"look, lower for a faster game. They're this computer's: the same in every profile."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
+		"look, lower for a faster game. They're this computer's: the same in every profile."] .. "\n\n" ..
+		L["A slider changes nothing until you move it. Higher (in gold) costs frame rate, lower " ..
+		"(in blue) saves it. Tick and untick a setting to compare it with the game's own; Reset page leaves them " ..
+		"all alone again."] .. "\n\n" ..
+		L["Ground clutter changes show as the ground around you loads again: move on a " ..
+		"little, or /reload. Changing the game's Graphics menu doesn't undo these: they're written again " ..
+		"over its new settings."])
 
 	local function Changed() ns.ApplyGraphicsPlus() end
-	local switch = PageSwitch(content, "graphicsPlus", L["Use Graphics+"],
+	local switch = PageSwitch(content, "graphicsPlus", L["Graphics+"],
 		L["On: the settings below, as you've set them. Off: the game's own settings, put back as they were."],
 		subtitle, Changed)
 	local stack = Stack(switch, "check")
-	stack:Note(content, L["A slider changes nothing until you move it. Higher (in gold) costs frame rate, lower " ..
-		"(in blue) saves it. Tick and untick a setting to compare it with the game's own; Reset page leaves them " ..
-		"all alone again."], 420)
 
 	local LABELS = {
 		graphicsPlusClutter = { L["Ground clutter density"], L["How thickly grass, flowers and stones grow " ..
@@ -3785,9 +3776,6 @@ local function CreateGraphicsPanel()
 	end
 	-- (Reset page: those marked so go back to the game's default, before the rest are put back.)
 	resetHooks[content] = ns.GraphicsPlusResetDefaults
-	stack:Note(content, L["Ground clutter changes show as the ground around you loads again: move on a " ..
-		"little, or /reload. Changing the game's Graphics menu doesn't undo these: they're written again " ..
-		"over its new settings."], 420)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -3801,17 +3789,14 @@ local function CreateAudioPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Audio"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["Sound during CineMode. Your own sound settings are saved first and put " ..
 		"back afterwards, even after a crash. Pick which cameras play music as they start."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- Left column: music, fatigue
 	local musicHeader = Header(content, L["Music"], subtitle, -20)
 
-	local music = Check(content, "musicInCinematic", L["Enable CineMode music"],
+	local music = Check(content, "musicInCinematic", L["CineMode Music"],
 		L["With your game music off, a camera starting (the ones ticked under Music on the Camera " ..
 		"Triggers page) switches it on and fades it in, at your music volume; it fades out when " ..
 		"the UI returns and your music is switched off again (logging out too). With your game " ..
@@ -3969,20 +3954,17 @@ local function CreateCombatPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Standard Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
 		"Always shows it the whole time, the next three only while you fight or have something " ..
 		"targeted, and the places the whole time while you're there (Grouped: in a party or raid). " ..
 		"Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
 		"frames are on the 3rd Party Frames page."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- The game's frames this client has, in sections (their page: see
 	-- ROW_SECTIONS), each a table of its own; the gamepad's are on the
 	-- Gamepad page, other addons' frames on the 3rd Party Frames page.
-	local switch = PageSwitch(content, "handleFrames", L["Let CineMode handle the game's frames"],
+	local switch = PageSwitch(content, "handleFrames", L["CineMode Standard Frames"],
 		L["On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
 		"alone, the minimap, quest tracker, buffs and Cooldown Manager included (their pages' " ..
 		"switches only count while this is on)."], subtitle)
@@ -4025,19 +4007,16 @@ end
 local function CreatePortraitsPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Portraits"])
+	local title = Label(content, "GameFontNormalLarge", L["Unit Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
-		L["Your portrait in CineMode, and which parts of the player, target and focus frames show. " ..
+	local subtitle = PageIntro(content, title,
+		L["Your player frame in CineMode, and which parts of the player, target, focus and pet frames show. " ..
 		"Always keeping a frame up, or in fights, is on the Standard Frames page."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
-	local portrait = Check(content, "portraitWhenNotFull", L["Show your portrait until health and power are full"],
-		L["Keeps your player portrait up while you're recovering. Rage and runic power don't " ..
-		"count, so a warrior's portrait hides once their health is full."])
+	local portrait = Check(content, "portraitWhenNotFull", L["Show your player frame until health and power are full"],
+		L["Keeps your player frame up while you're recovering. Rage and runic power don't " ..
+		"count, so a warrior's frame hides once their health is full."])
 	portrait:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -16)
 	portrait:HookScript("OnClick", Refresh) -- grey out / enable the options below
 
@@ -4046,14 +4025,14 @@ local function CreatePortraitsPanel()
 	local function IfPortrait(db) return db.portraitWhenNotFull end
 
 	local afterCombat = Check(content, "portraitAfterCombat", L["Only after combat"],
-		L["Only keep the portrait up if you've been in combat (or taken fall damage) within the " ..
+		L["Only keep the frame up if you've been in combat (or taken fall damage) within the " ..
 		"Calm Timer (CineMode page), so things like casting a buff in town don't bring it up."])
 	afterCombat:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(afterCombat, IfPortrait)
 	afterCombat:HookScript("OnClick", Refresh) -- grey out / enable the option below
 
 	local afterResurrect = Check(content, "portraitAfterResurrect", L["Also after you resurrect"],
-		L["After you come back to life, keep the portrait up until your health and power are full, " ..
+		L["After you come back to life, keep the frame up until your health and power are full, " ..
 		"however long that takes."])
 	afterResurrect:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", PORTRAIT_INDENT, -2)
 	GreyUnless(afterResurrect, function(db) return db.portraitWhenNotFull and db.portraitAfterCombat end)
@@ -4063,7 +4042,7 @@ local function CreatePortraitsPanel()
 	-- Pet happiness: classic hunters only.
 	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
 		local pet = Check(content, "petUnhappyShow", L["Show the pet frame when your pet isn't happy"],
-			L["Keeps your pet's portrait up in CineMode, and in fights, while its happiness isn't green: " ..
+			L["Keeps your pet frame up in CineMode, and in fights, while its happiness isn't green: " ..
 			"content (yellow) or unhappy (red). It goes again once your pet is happy."])
 		pet:SetPoint("TOPLEFT", afterResurrect, "BOTTOMLEFT", -2 * PORTRAIT_INDENT, -10)
 		pet:HookScript("OnClick", Refresh) -- grey out / enable the option below
@@ -4076,23 +4055,60 @@ local function CreatePortraitsPanel()
 		last, lastIndent = petCam, PORTRAIT_INDENT
 	end
 
+	-- Bar texture: the game's own pictures, and LibSharedMedia's when another
+	-- addon has loaded it (see ns.ApplyUnitBarTexture).
+	do
+		local BUILT_IN = {
+			{ value = "default", text = L["Game default"] },
+			{ value = "raid", text = L["Raid frames (flat)"] },
+			{ value = "classic", text = L["Classic"] },
+			{ value = "flat", text = L["Plain colour"] },
+		}
+		local function Textures()
+			local list = {}
+			for i, choice in ipairs(BUILT_IN) do list[i] = choice end
+			local lsm = ns.SharedMedia()
+			local ok, names = pcall(function() return lsm and lsm:List("statusbar") end)
+			for _, name in ipairs(ok and names or {}) do
+				list[#list + 1] = { value = "lsm:" .. name, text = name }
+			end
+			return list
+		end
+		local TEXTURE_TIP = L["The picture the health and power bars of the player, target, focus and pet " ..
+			"frames are drawn with. Raid frames and plain colour make them flat, like the raid frames. " ..
+			"Textures from other addons (LibSharedMedia) are listed too when one of them is loaded."]
+		local stack = Stack(last, "check")
+		stack.indent = lastIndent
+		stack:Header(content, L["Bar texture"])
+		local dropdown = Dropdown(content, "unitBarTexture", Textures, 220, ns.ApplyUnitBarTexture)
+		if dropdown then
+			stack:Add(dropdown, "dropdown")
+			Tooltip(dropdown, TEXTURE_TIP)
+		else
+			for _, choice in ipairs(BUILT_IN) do
+				local check = stack:Add(Choice(content, "unitBarTexture", choice.value, choice.text, TEXTURE_TIP), "check")
+				check:HookScript("OnClick", ns.ApplyUnitBarTexture)
+			end
+		end
+		-- (What's below lines up as from a checkbox: a dropdown sits 2 right of one.)
+		last, lastIndent = stack.last, dropdown and 2 or 0
+	end
+
 	-- The Unit frame parts grid (frames laid out as retail's: see
 	-- ns.ApplyUnitFrameParts): a row per kind of unit, a column per part.
 	if ns.HasUnitFrameParts and ns.HasUnitFrameParts() then
 		local header = Header(content, L["Unit frame parts"], last)
 		header:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 2 - lastIndent, -24)
-		local note = Label(content, "GameFontHighlightSmall",
-			L["Which parts of the unit frames show, CineMode or not: your own frame, and the target and " ..
-			"focus frames by who they show. Untick parts to keep just the bars. The frame art is the " ..
-			"portrait ring, the name box and the bars' borders: the game draws them as one picture."])
-		note:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
-		note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-		note:SetJustifyV("TOP")
+		local note = PageIntro(content, header,
+			L["Which parts of the unit frames show, CineMode or not: your own frame and your pet's, and " ..
+			"the target and focus frames by who they show. Untick parts to keep just the bars. The frame " ..
+			"art is the portrait ring, the name box and the bars' borders: the game draws them as one " ..
+			"picture. Icons are the rest Zzz, the group leader's crown, role and quest icons."])
 
-		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 160, 80, 24
+		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 160, 72, 24
 		local COLUMNS = {
 			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
-			{ "Art", L["Frame art"] },
+			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] },
 		}
 		local ROWS = {
 			{ "Self", L["You"], L["Your own frame."] },
@@ -4102,6 +4118,7 @@ local function CreatePortraitsPanel()
 			{ "NeutralNPC", L["Neutral NPCs"], L["NPCs the game calls neutral (yellow names)."] },
 			{ "FriendlyPlayer", L["Friendly Players"], L["Players on your side."] },
 			{ "FriendlyNPC", L["Friendly NPCs"], L["NPCs on your side."] },
+			{ "Pet", L["Your pet"], L["Your pet's frame."] },
 		}
 		local top = CreateFrame("Frame", nil, content)
 		top:SetSize(1, 1)
@@ -4117,19 +4134,22 @@ local function CreatePortraitsPanel()
 			local rowLabel = Label(content, "GameFontHighlight", row[2])
 			rowLabel:SetPoint("TOPLEFT", top, "TOPLEFT", 0, y - 5)
 			for c, column in ipairs(COLUMNS) do
-				local key = "unitPart" .. row[1] .. column[1]
-				local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
-					ns.GetDB()[key] = value
-					ns.ApplyUnitFrameParts()
-				end)
-				cb:SetPoint("TOPLEFT", top, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
+				-- (The pet's frame has no level, PvP or icons.)
+				if row[1] ~= "Pet" or ns.UNIT_PARTS_PET[column[1]] then
+					local key = "unitPart" .. row[1] .. column[1]
+					local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
+						ns.GetDB()[key] = value
+						ns.ApplyUnitFrameParts()
+					end)
+					cb:SetPoint("TOPLEFT", top, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
+				end
 			end
 		end
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Portraits")
+	RegisterSubpage(canvas, "Unit Frames")
 end
 
 -- Sub-page: chat bubbles (where they show, and how they look).
@@ -4139,11 +4159,8 @@ local function CreateBubblesPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Chat bubbles"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["Where chat bubbles show, and how they look."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	local function Changed() if ns.ApplyBubbles then ns.ApplyBubbles() end end
 	local function BubbleCheck(key, label, tip)
@@ -4153,14 +4170,14 @@ local function CreateBubblesPanel()
 		end)
 	end
 
-	local switch = PageSwitch(content, "handleBubbles", L["Let CineMode handle chat bubbles"],
+	local switch = PageSwitch(content, "handleBubbles", L["CineMode Chat bubbles"],
 		L["On: chat bubbles show where this page says, and look as it says. Off: the game's own " ..
 		"chat bubble settings, as you had them."], subtitle, Changed)
 	-- Hide in: a grid of the kinds of bubble (rows) by place (columns), like
 	-- the Visual Effects page's. Always greys the rest of its row.
 	local stack = Stack(switch, "check")
 	stack:Header(content, L["Hide in"])
-	stack:Note(content, L["Ticked, those bubbles don't show there. Always: not at all."], 420)
+	stack:Help(content, L["Ticked, those bubbles don't show there. Always: not at all."])
 	local BUBBLE_ROWS = {
 		{ kind = "Say", label = L["Say & yell"], tipName = L["say, yell and NPC speech bubbles"] },
 		{ kind = "Party", label = L["Party"], tipName = L["party chat bubbles"] },
@@ -4253,10 +4270,7 @@ local function CreateQualityPanel()
 	local title = Label(content, "GameFontNormalLarge", L["General"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall", L["Small helpers for getting about the world."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
+	local subtitle = PageIntro(content, title, L["Small helpers for getting about the world."])
 
 	local stack = Stack(subtitle, "label")
 	-- (WoW Forever only: Campfire.lua.)
@@ -4365,13 +4379,10 @@ local function CreateFishingPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Fishing"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["Casting and catching, with the mouse or a gamepad, CineMode or not."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
-	local switch = PageSwitch(content, "handleFishing", L["Let CineMode help with fishing"],
+	local switch = PageSwitch(content, "handleFishing", L["CineMode Fishing"],
 		L["On: right-click (or a gamepad button) casts again, and the Fishing cast bar hides, as this " ..
 		"page says. Off: fishing is left to the game. (The fish camera is on the Camera Modes and " ..
 		"Camera Triggers pages.)"], subtitle)
@@ -4451,15 +4462,12 @@ local function CreateGamepadPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Gamepad"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["The frames gamepad mode adds (Options, Controls, Gamepad): its action bars, the button hints " ..
 		"and the reticle (the dot you aim with). As on the Standard Frames page, " ..
 		"each is hidden in CineMode unless ticked: Always shows it the whole time, the next three only " ..
 		"while you fight or have something targeted, and the places while you're there. Rows also on the Standard Frames page (the " ..
 		"experience bars) follow this page in gamepad mode, and that one otherwise."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	local rows = {}
 	for _, item in ipairs(ns.COMBAT_SHOW) do
@@ -4467,7 +4475,7 @@ local function CreateGamepadPanel()
 			rows[#rows + 1] = item
 		end
 	end
-	local switch = PageSwitch(content, "handleGamepad", L["Let CineMode handle the gamepad frames"],
+	local switch = PageSwitch(content, "handleGamepad", L["CineMode Gamepad"],
 		L["On: CineMode fades the gamepad's bars, button hints and reticle as this page says. Off: it " ..
 		"leaves them alone."], subtitle)
 	local lastRow = ShowTable(content, switch, rows)
@@ -4584,15 +4592,12 @@ local function CreatePlatesPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Nameplates"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["Which nameplates and names stay up in CineMode: in groups, in fights and in each kind of place."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- The page's master switch: off, CineMode leaves nameplates and names to
 	-- the game's own options (everything below greys out).
-	local handleCheck = Check(content, "handlePlates", L["Let CineMode handle nameplates and names"],
+	local handleCheck = Check(content, "handlePlates", L["CineMode Nameplates"],
 		L["On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, " ..
 		"and the game's own options decide, in CineMode and out."],
 		function(value)
@@ -4803,8 +4808,12 @@ local function CreatePlatesPanel()
 		{ "Widgets", L["Quest/Widget Icons"], L[" Quest objective icons and other widgets over the plate."] },
 		{ "ClassFriendly", L["Class Icon (Friendly)"], L[" A class icon beside friendly players' health bars."], icon = true },
 		{ "ClassEnemy", L["Class Icon (Enemy)"], L[" A class icon beside enemy players' health bars."], icon = true },
+		{ "RoleTank", L["Role Icon (Tank)"], L[" A role icon beside your group's tanks' health bars."], icon = true },
+		{ "RoleHealer", L["Role Icon (Healer)"], L[" A role icon beside your group's healers' health bars."], icon = true },
+		{ "RoleDamager", L["Role Icon (Damage)"], L[" A role icon beside your group's damage dealers' health bars."],
+			icon = true },
 	}
-	-- (The class icons are the addon's own: off unless ticked, and outside
+	-- (The class and role icons are the addon's own: off unless ticked, and outside
 	-- CineMode shown only with Always ticked.)
 	local iconTip = L[" Off unless ticked. In CineMode, on the nameplates that are up; outside it, only with Always ticked."]
 	local partsHeader = Header(content, L["Plate Parts"], lastLabel, -24)
@@ -4924,15 +4933,12 @@ local function CreateChatPanel()
 	local title = Label(chatPanel, "GameFontNormalLarge", L["Chat"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(chatPanel, "GameFontHighlightSmall",
+	local subtitle = PageIntro(chatPanel, title,
 		L["The chat window fades with the rest of the UI in CineMode. Mousing over it or typing " ..
 		"always shows it."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", chatPanel, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- Left column: the chat window, message types
-	local switch = PageSwitch(chatPanel, "handleChat", L["Let CineMode handle chat"],
+	local switch = PageSwitch(chatPanel, "handleChat", L["CineMode Chat"],
 		L["On: CineMode fades the chat windows and tabs as this page says. Off: it leaves them alone."],
 		subtitle)
 	local windowHeader = Header(chatPanel, L["Chat window"], switch, -20)
@@ -5019,12 +5025,9 @@ local function CreateChatPanel()
 	local channelHeader = Label(chatPanel, "GameFontNormal", L["Show chat for these channels"])
 	channelHeader:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 2, -18)
 
-	chatPanel.channelHelp = Label(chatPanel, "GameFontHighlightSmall",
+	chatPanel.channelHelp = PageIntro(chatPanel, channelHeader,
 		L["Channels you've joined, like General or Trade. The list updates each time " ..
 		"you open this page."])
-	chatPanel.channelHelp:SetPoint("TOPLEFT", channelHeader, "BOTTOMLEFT", 0, -6)
-	chatPanel.channelHelp:SetWidth(260)
-	chatPanel.channelHelp:SetJustifyV("TOP")
 
 	chatPanel.noChannels = Label(chatPanel, "GameFontDisableSmall", L["No channels joined."])
 	chatPanel.noChannels:SetPoint("TOPLEFT", chatPanel.channelHelp, "BOTTOMLEFT", 0, -10)
@@ -5176,21 +5179,18 @@ end
 -- Sub-page: other addons' frames. The addons faded out of the box (a switch
 -- for each one installed; the rest listed), then frames beyond the built-in
 -- list, faded with /cine add.
--- Sub-page: the minimap in cinematic mode, always or while tracking.
+-- Sub-page: the minimap in cinematic mode: what reveals it, what keeps it open.
 local function CreateMinimapPanel()
 	local canvas, content = CreateScrollPage()
 
 	local title = Label(content, "GameFontNormalLarge", L["Minimap"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["When the minimap (and on retail the quest waypoint) stays up in CineMode. " ..
 		"Hovering the minimap always shows it. To keep it up all the time, or in fights, " ..
 		"see the Standard Frames page."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
-	local switch = PageSwitch(content, "handleMinimap", L["Let CineMode handle the minimap"],
+	local switch = PageSwitch(content, "handleMinimap", L["CineMode Minimap"],
 		L["On: CineMode fades and shrinks the minimap as this page and its Standard Frames row say. " ..
 		"Off: it leaves it alone."], subtitle)
 
@@ -5204,67 +5204,95 @@ local function CreateMinimapPanel()
 		aboveTracking = waypoint
 	end
 
-	-- Or only while tracking; the kinds of tracking below only apply while it's on.
-	local trackingMaster = Check(content, "minimapForTracking", L["Keep minimap open while tracking"],
-		L["While you're tracking one of the kinds ticked below, the minimap stays up during " ..
-		"CineMode. Also on the minimap button's menu."], function(value)
-			ns.GetDB().minimapForTracking = value
-			Refresh()
-		end)
-	local ping = Check(content, "minimapRevealOnPing", L["Reveal when a group member pings it"],
+	-- Reveal: the faded minimap comes up for a while (pings), or while
+	-- something is on it (NodeSweep.lua looks).
+	local revealLabel = Label(content, "GameFontHighlight", L["Reveal"])
+	revealLabel:SetPoint("TOPLEFT", aboveTracking or switch, "BOTTOMLEFT", 4, -14)
+	local ping = Check(content, "minimapRevealOnPing", L["Pings"],
 		L["Someone in your party or raid pinging the minimap shows it as if you'd hovered it, so " ..
 		"you can see where, with the rest of the Mouseover groups that have Minimap ping ticked: it " ..
 		"goes after \"Stays after mouseover\" (Mouseover groups page). Your own pings don't count."])
-	if aboveTracking then
-		ping:SetPoint("TOPLEFT", aboveTracking, "BOTTOMLEFT", 0, -2)
-	else
-		ping:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -10)
+	ping:SetPoint("TOPLEFT", revealLabel, "BOTTOMLEFT", 12, -4)
+	local SWEEP_NOTE = L["Cinematic looks every second or two by pointing at the minimap the way your " ..
+		"mouse would (not in combat), and the minimap fades again a few seconds after it's gone. While " ..
+		"any of these is ticked, the faded minimap stays in its place, invisible, instead of being " ..
+		"shrunk away."]
+	local previousReveal = ping
+	for _, kind in ipairs({
+		{ "minimapRevealNodes", L["Nearby ore, herbs and treasure"],
+			L["With Find Minerals, Find Herbs or Find Treasure on, the minimap comes up while a vein, " ..
+			"herb or chest shows on it."] },
+		{ "minimapRevealTurnIns", L["Quest turn-ins"],
+			L["The minimap comes up while a quest of yours that's done shows on it, where you hand it in."] },
+		{ "minimapRevealIcons", L["Other icons"],
+			L["The minimap comes up while anything else with a name shows on it: quest givers with a " ..
+			"quest for you, flight masters and innkeepers you track, your quests' areas and the like. " ..
+			"Your group and pets don't count."] },
+	}) do
+		local check = Check(content, kind[1], kind[2], kind[3] .. " " .. SWEEP_NOTE,
+			kind[1] == "minimapRevealNodes" and function(value)
+				ns.GetDB().minimapRevealNodes = value
+				Refresh()
+			end or nil)
+		check:SetPoint("TOPLEFT", previousReveal, "BOTTOMLEFT", previousReveal.nodeMark and -16 or 0, -2)
+		previousReveal = check
+		-- (Under it: a ping for each node.)
+		if kind[1] == "minimapRevealNodes" then
+			local nodePing = Check(content, "minimapNodePing", L["Ping where it is"],
+				L["When a vein, herb or chest shows up on the minimap, it's pinged there, the same ping as " ..
+				"clicking the minimap: in a group, everyone sees it."])
+			nodePing:SetPoint("TOPLEFT", check, "BOTTOMLEFT", 16, -2)
+			GreyUnless(nodePing, function(db) return db.minimapRevealNodes end)
+			nodePing.nodeMark = true
+			previousReveal = nodePing
+		end
 	end
-	local indoors = Check(content, "minimapIndoors", L["Keep minimap open indoors"],
+
+	-- Keep open: the minimap stays up the whole time.
+	local keepLabel = Label(content, "GameFontHighlight", L["Keep open"])
+	keepLabel:SetPoint("TOPLEFT", previousReveal, "BOTTOMLEFT", -12, -10)
+	local indoors = Check(content, "minimapIndoors", L["Indoors"],
 		L["Inside buildings, caves and cities like Ironforge, the minimap stays up during CineMode. " ..
 		"The game stops updating the indoor map while the minimap is hidden, so after walking " ..
 		"around it can come back blank or out of date for a moment. Off, it's redrawn as it comes back."])
-	indoors:SetPoint("TOPLEFT", ping, "BOTTOMLEFT", 0, -2)
-	trackingMaster:SetPoint("TOPLEFT", indoors, "BOTTOMLEFT", 0, -2)
-	local TRACKING_TIP = L["While this tracking is active, the minimap stays up during cinematic " ..
-		"mode so you can spot nodes or creatures."]
-	local previousTracking = trackingMaster
-	for i, kind in ipairs({
-		{ "minimapForHerbs", L["Herbs (Find Herbs)"] },
-		{ "minimapForMinerals", L["Minerals (Find Minerals)"] },
-		{ "minimapForTreasure", L["Treasure (Find Treasure)"] },
-		{ "minimapForFish", L["Fish (Find Fish)"] },
-		{ "minimapForCreatures", L["Creatures (hunter, druid, warlock)"] },
-	}) do
-		local check = Check(content, kind[1], kind[2], kind[3] or TRACKING_TIP)
-		check:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", i == 1 and 16 or 0, -2)
-		GreyUnless(check, function(db) return db.minimapForTracking end)
-		previousTracking = check
-	end
-	-- Places where tracking doesn't keep the minimap up, in the usual place order.
+	indoors:SetPoint("TOPLEFT", keepLabel, "BOTTOMLEFT", 12, -4)
+	local creatures = Check(content, "minimapKeepCreatures", L["Tracking creatures or fish"],
+		L["While hunter, druid or warlock creature tracking, or Find Fish, is on, the minimap stays " ..
+		"up during CineMode."])
+	creatures:SetPoint("TOPLEFT", indoors, "BOTTOMLEFT", 0, -2)
+	local gathering = Check(content, "minimapKeepGathering", L["Tracking herbs, minerals or treasure"],
+		L["While Find Herbs, Find Minerals or Find Treasure is on, the minimap stays up during CineMode, " ..
+		"except in the places below."], function(value)
+			ns.GetDB().minimapKeepGathering = value
+			Refresh()
+		end)
+	gathering:SetPoint("TOPLEFT", creatures, "BOTTOMLEFT", 0, -2)
+	-- Places where gathering tracking doesn't keep the minimap up, in the usual place order.
 	local exceptIn = Label(content, "GameFontHighlight", L["Except in"])
-	exceptIn:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", 4, -4)
+	exceptIn:SetPoint("TOPLEFT", gathering, "BOTTOMLEFT", 20, -4)
 	local PLACE_TIPS = {
 		Cities = L["Capital cities. "],
 		PvP = L["Battlegrounds and arenas (being flagged for PvP out in the world doesn't count). " ..
 			"Alterac Valley's mines do have ore, so untick this if you mine there. "],
 	}
+	-- (In a row.)
+	local PLACE_COLUMN = 120
+	local firstPlace
 	for i, place in ipairs(PLACES) do
 		-- (PvP here is battlegrounds and arenas only, so it's named for them.)
 		local label = place[1] == "PvP" and L["BGs"] or place[2]
 		local check = Check(content, "trackingOffIn" .. place[1], label, (PLACE_TIPS[place[1]] or "") ..
 			L["Tracking doesn't keep the minimap up here. Hovering it still shows it."])
-		check:SetPoint("TOPLEFT", i == 1 and exceptIn or previousTracking, "BOTTOMLEFT",
-			i == 1 and 12 or 0, i == 1 and -4 or -2)
-		GreyUnless(check, function(db) return db.minimapForTracking end)
-		previousTracking = check
+		check:SetPoint("TOPLEFT", exceptIn, "BOTTOMLEFT", 12 + (i - 1) * PLACE_COLUMN, -4)
+		GreyUnless(check, function(db) return db.minimapKeepGathering end)
+		firstPlace = firstPlace or check
 	end
 
 	-- Hide in camera modes: one box per camera (keys <cam>HideMinimap), in
-	-- two columns.
+	-- four columns.
 	local hideInCams = Label(content, "GameFontHighlight", L["Hide in camera modes"])
-	hideInCams:SetPoint("TOPLEFT", previousTracking, "BOTTOMLEFT", -30, -14)
-	local CAM_ROWS, CAM_COLUMN = math.ceil(#ns.CAMERA_OFF_CAMS / 2), 140
+	hideInCams:SetPoint("TOPLEFT", firstPlace, "BOTTOMLEFT", -44, -14)
+	local CAM_ROWS, CAM_COLUMN = math.ceil(#ns.CAMERA_OFF_CAMS / 4), 140
 	local camAbove = {}
 	for i, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 		local check = Check(content, cam[1] .. "HideMinimap", cam[2],
@@ -5291,19 +5319,16 @@ local function CreateQuestTrackerPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Quest tracker"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["When the quest tracker comes up in CineMode. Hovering it always shows it. To keep it " ..
 		"up all the time, or in fights, see the Standard Frames page."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	local reveal = Check(content, "questRevealOnAccept", L["Reveal on new quest"],
 		L["Accepting a quest shows the quest tracker as if you'd hovered it (with the rest of the " ..
 		"Mouseover groups that have Quest progress ticked): it goes after \"Stays after " ..
 		"mouseover\" (Mouseover groups page)."])
 	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -48)
-	PageSwitch(content, "handleQuests", L["Let CineMode handle the quest tracker"],
+	PageSwitch(content, "handleQuests", L["CineMode Quest tracker"],
 		L["On: CineMode fades the quest tracker (and the quest timer and waypoint) as this page and its " ..
 		"Standard Frames row say. Off: it leaves them alone."], subtitle)
 	reveal:HookScript("OnClick", Refresh) -- grey out / enable the option below
@@ -5372,16 +5397,13 @@ local function CreateSwingPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Swing timer"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["Which of the game's swing timer bars show, in CineMode and out. When they come up in " ..
 		"CineMode is the Swing timer row on the Standard Frames page."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- The page's master switch: off, CineMode leaves the swing timer alone
 	-- (everything below greys out, and its Standard Frames row).
-	local handleCheck = PageSwitch(content, "handleSwing", L["Let CineMode handle the swing timer"],
+	local handleCheck = PageSwitch(content, "handleSwing", L["CineMode Swing timer"],
 		L["On: CineMode fades the swing timer as this page and its Standard Frames row say. Off: it " ..
 		"leaves it alone, and the game shows every bar as usual, in CineMode and out."], subtitle)
 
@@ -5423,13 +5445,10 @@ local function CreateHealerPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Healer frame"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["A small frame for healing: your group's tank always shows, and beside them only the players " ..
 		"who have lost health, the ones taking the most damage right now first. Everyone at full health " ..
 		"is hidden, so you see who needs healing."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	local function Apply()
 		if ns.ApplyHealerFrame then ns.ApplyHealerFrame() end
@@ -5442,7 +5461,7 @@ local function CreateHealerPanel()
 		end
 	end
 
-	local switch = PageSwitch(content, "healerFrame", L["Show the healer frame"],
+	local switch = PageSwitch(content, "healerFrame", L["Healer frame"],
 		L["On: the healer frame shows while you're in a group, as this page says. Off: no healer frame."],
 		subtitle, Apply)
 	local stack = Stack(switch, "check")
@@ -5454,7 +5473,7 @@ local function CreateHealerPanel()
 	stack:Add(Check(content, "healerSolo", L["Also when I'm not in a group"],
 		L["Shows just you while you're on your own, to try it out."], Set("healerSolo")), "check")
 
-	stack:Header(content, L["Who's in it"])
+	local whoHeader = stack:Header(content, L["Who's in it"])
 	stack:Add(Check(content, "healerSelf", L["Include me"],
 		L["You're in the list too when you're hurt."], Set("healerSelf")), "check")
 	stack:Add(Slider(content, "healerThreshold", L["Show players below"], 50, 100, 5, "%d%%", nil, Apply), "slider")
@@ -5469,9 +5488,9 @@ local function CreateHealerPanel()
 		"straight to full still makes them go at once.)"])
 	stack:Add(Slider(content, "healerRows", L["Players besides the tank, at most"], 1, 10, 1, "%d", nil, Apply),
 		"slider")
-	stack:Note(content, L["The game keeps everyone's health hidden from addons, so the frame never knows " ..
+	PageIntro(content, whoHeader, L["The game keeps everyone's health hidden from addons, so the frame never knows " ..
 		"it: the game itself fades each player in once they're below the percent, and out again when " ..
-		"they're healed. Players stay in their place while they fade, so there can be gaps."], 300)
+		"they're healed. Players stay in their place while they fade, so there can be gaps."])
 	local sort = stack:Add(Check(content, "healerSort", L["Taking the most damage first"],
 		L["Orders the players by the damage they've taken in the last few seconds, less the healing they've " ..
 		"had. Players at full health have none, so they go to the end. Off: in group order."],
@@ -5538,17 +5557,14 @@ local function CreateCooldownPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Cooldown Manager"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["When the Cooldown Manager comes up in CineMode (Enhanced Cooldown Manager's bars too). Hovering " ..
 		"it always shows it. To keep it up all the time, or in fights, see the Standard Frames page; " ..
 		"what comes up with it is on the Mouseover groups page."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- The page's master switch: off, CineMode leaves the Cooldown Manager alone
 	-- (everything below greys out, and its Standard Frames row).
-	local handleCheck = PageSwitch(content, "handleCooldowns", L["Let CineMode handle the Cooldown Manager"],
+	local handleCheck = PageSwitch(content, "handleCooldowns", L["CineMode Cooldown Manager"],
 		L["On: CineMode fades the Cooldown Manager as this page and its Standard Frames row say. Off: " ..
 		"it leaves it alone, and the game's own options decide, in CineMode and out."], subtitle)
 	local function Handled() return ns.GetDB().handleCooldowns end
@@ -5571,16 +5587,12 @@ local function CreateCooldownPanel()
 	-- Cooldown Manager's spell bars now, then any ticked that aren't in it.
 	local readyHeader = Label(content, "GameFontNormal", L["Only when ready in combat"])
 	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", -14, -18)
-	local readyNote = Label(content, "GameFontHighlightSmall",
+	local readyNote = PageIntro(content, readyHeader,
 		L["Tick a spell to show its icon only in fights, and only once it's nearly ready: out of fights, " ..
 		"and while it recharges, it fades out, in CineMode or not. It comes back once it's ready, or " ..
 		"with Show Early ticked the seconds set beside it before (left empty: %d%% of its cooldown). " ..
 		"Its place in the bar stays, so it sits best at the end of one. In fights the game may not " ..
 		"say how long is left, so then it goes by when you last cast it."]:format(ns.READY_EARLY * 100))
-	readyNote:SetPoint("TOPLEFT", readyHeader, "BOTTOMLEFT", 0, -6)
-	readyNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	readyNote:SetJustifyH("LEFT")
-	readyNote:SetJustifyV("TOP")
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
 	RecordKey(content, "cooldownReadyEarly")
 	RecordKey(content, "cooldownEarlyOn")
@@ -5731,19 +5743,16 @@ local function CreateTooltipPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Tooltips"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleTooltips", L["Let CineMode handle tooltips"],
-		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], title)
-
-	local note = Label(content, "GameFontHighlightSmall", L["Only in CineMode. Hold your Show hidden tooltips " ..
+	local note = PageIntro(content, title, L["Only in CineMode. Hold your Show hidden tooltips " ..
 		"key (set it on the Keybinds page) to see a hidden one anyway."])
-	note:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -4)
-	note:SetWidth(560)
+	local switch = PageSwitch(content, "handleTooltips", L["CineMode Tooltips"],
+		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], note)
 
 	-- A header, then its ticks under it, each on a line of its own.
-	local previous = note
+	local previous = switch
 	local function Section(text)
 		local header = Label(content, "GameFontNormal", text)
-		header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == note and -2 or -10, -14)
+		header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == switch and 2 or -10, -14)
 		previous = header
 		return header
 	end
@@ -5810,15 +5819,15 @@ local function CreateExtrasPanel()
 	local title = Label(content, "GameFontNormalLarge", L["3rd Party Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleAddonFrames", L["Let CineMode handle other addons' frames"],
+	local switch = PageSwitch(content, "handleAddonFrames", L["CineMode 3rd Party Frames"],
 		L["On: CineMode fades the supported addons' frames, and frames you added, as this page says. " ..
 		"Off: it leaves them all alone."], title)
 	local stack = Stack(switch, "check")
 	stack:Header(content, L["Supported addons"])
-	stack:Note(content, L["These addons' frames are hidden in CineMode unless ticked, like the game's " ..
+	stack:Help(content, L["These addons' frames are hidden in CineMode unless ticked, like the game's " ..
 		"frames on the Standard Frames page. Tick Always to leave an addon's frames alone (shown the " ..
 		"whole time); the next three show them only while you fight or have something targeted, and " ..
-		"the places while you're there."], 560)
+		"the places while you're there."])
 
 	-- The addons, laid out afresh each time the page opens (most load after
 	-- this one, so whether they're loaded isn't known when it's built): those
@@ -6064,11 +6073,11 @@ local function CreateExtrasPanel()
 	end
 
 	stack:Header(content, L["Custom frames"])
-	content.help = stack:Note(content,
+	content.help = stack:Help(content,
 		L["To fade something else, hover over it and type |cffffd100/cine add|r, " ..
 			"or type |cffffd100/cine add|r and its frame name. To pick up several, use the button below " ..
 			"(or |cffffd100/cine add mode|r) and hover over each one. " ..
-		"The columns work as for the supported addons above; the X takes a frame off the list."], 560)
+		"The columns work as for the supported addons above; the X takes a frame off the list."])
 
 	-- Add mode (/cine add mode): pick up frames by hovering, then fade them all.
 	local addMode = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
@@ -6164,7 +6173,7 @@ local KEYBINDS = {
 			"while you're on a unit or something in the world brings its tooltip up; anything else, " ..
 			"hover it again with the key held."] },
 	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = L["Toggle tooltip hiding"],
-		tip = L["Turns the Tooltips page's \"Let CineMode handle tooltips\" switch on or off."] },
+		tip = L["Turns the Tooltips page's \"CineMode Tooltips\" switch on or off."] },
 }
 
 local IGNORED_KEYS = {
@@ -6286,12 +6295,9 @@ local function CreateKeybindsPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Keybinds"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["Keys for Cinematic. These are the same bindings as under Key Bindings > AddOns, " ..
 		"so setting them in either place works."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	local previous = Header(content, L["Keys"], subtitle, -20)
 	for i, bind in ipairs(KEYBINDS) do
@@ -6475,15 +6481,12 @@ local function CreateProfilesPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Profiles"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["A profile is a whole set of settings. Pick one to switch to it; changes you make go into the " ..
 		"active profile and stay with it. The built-in ones keep your changes too, until you reset them. " ..
 		"New profile starts one of your own from the settings you have now. Every character uses " ..
 		"the same profile unless you tick the box below for one. Not part of a profile: the minimap button, frames you added or stopped fading, " ..
 		"and the zone and time tint colours you picked."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	subtitle:SetJustifyV("TOP")
 
 	-- Ticked, this character keeps the one it's on as its own.
 	local perChar = Check(content, nil, L["Use a profile just for this character"],
@@ -6646,15 +6649,12 @@ local function CreateMouseoverPanel()
 
 	local title = Label(content, "GameFontNormalLarge", L["Mouseover groups"])
 	title:SetPoint("TOPLEFT", LEFT, -16)
-	local subtitle = Label(content, "GameFontHighlightSmall",
+	local subtitle = PageIntro(content, title,
 		L["Frames in the same group come up together when you mouse over any of them. A frame can " ..
 		"be in more than one group; one in no group comes up on its own."] .. " " ..
 		L["Click a group's icon below to go to it, or the + to make one of your own."])
-	subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	subtitle:SetWidth(WIDTH)
-	subtitle:SetJustifyV("TOP")
 
-	local mouseover = Check(content, "mouseover", L["Let CineMode reveal frames on mouseover"],
+	local mouseover = Check(content, "mouseover", L["CineMode Mouseover"],
 		L["Pointing at a faded frame shows it, with the rest of its groups."], function(value)
 			ns.GetDB().mouseover = value
 			Refresh() -- grey out / enable the hold time

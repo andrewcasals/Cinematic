@@ -305,6 +305,8 @@ local function CreateWindow()
 
 	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
 	close:SetPoint("TOPRIGHT", -2, -2)
+	-- The template's click goes through HideUIPanel, which does nothing in combat.
+	close:SetScript("OnClick", function() window:Hide() end)
 
 	local scroll = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", 12, -34)
@@ -973,5 +975,171 @@ do
 			end
 		end
 		ns.Print(("unitframes: logged %d parts of the player and target frames (have a target). /reload to write the log"):format(total))
+	end
+end
+
+-- Minimap nodes (/cine debug nodes) -------------------------------------------
+-- Test for showing the minimap when a herb or vein is on it: sweep a pretend
+-- mouse over the minimap (Minimap:UpdateMouseoverAtPoint) and print the names
+-- its tooltip would show there (C_TooltipInfo.GetMinimapMouseover). Mainly to
+-- find out whether the tracking dots still answer while CineMode has the
+-- minimap faded (shrunk and moved off the screen). With seconds, it sweeps once
+-- a second for that long and prints only when what it finds changes.
+do
+	local STEP = 10 -- minimap units between two points of the grid
+	local watcher, untilTime, lastFound
+	local growing = false -- /cine debug nodes grow: each sweep grows the faded minimap first
+	local showRaw = false -- /cine debug nodes raw: each name's line as the game wrote it
+
+	-- /cine debug nodes park: while watching, the faded minimap stays full size
+	-- (off the screen, where it's moved while faded) instead of shrinking, and
+	-- is swept there. Does the game keep adding tracking dots to it then?
+	local function Park(on)
+		ns.parkMinimapFullSize = on or nil
+		for _, entry in ipairs(ns.managed or {}) do
+			if entry.frame == Minimap and entry.shrunk then
+				Minimap:SetScale(on and (entry.savedScale or 1) or ns.SHRUNK_SCALE)
+			end
+		end
+	end
+
+	-- /cine debug nodes stay: while watching, the faded minimap isn't shrunk
+	-- or moved at all: full size in its place at alpha 0 (its player arrow
+	-- shows). Does the game keep adding tracking dots to it then? (Off, it's
+	-- shrunk again on the next tick.)
+	-- (Its icons are hidden meanwhile, as for the option: NodeSweep.lua.)
+	local function Stay(on)
+		ns.minimapStayFullSize = on or nil
+		if not on then return end
+		for _, entry in ipairs(ns.managed or {}) do
+			if entry.frame == Minimap and entry.shrunk then
+				Minimap:SetScale(entry.savedScale or 1)
+				ns.UnparkShrunk(entry)
+				entry.shrunk = false
+			end
+		end
+	end
+	local watched -- while watching: every line printed, for the copy window at the end
+
+	-- Names of the tracking that's on (Find Herbs, Find Minerals...).
+	local function Tracking()
+		local list = {}
+		if not (C_Minimap and C_Minimap.GetNumTrackingTypes and C_Minimap.GetTrackingInfo) then
+			return "no tracking API"
+		end
+		local ok, count = pcall(C_Minimap.GetNumTrackingTypes)
+		for i = 1, ok and type(count) == "number" and count or 0 do
+			local okInfo, info, _, active = pcall(C_Minimap.GetTrackingInfo, i)
+			if okInfo and type(info) == "table" then
+				if info.active == true and type(info.name) == "string" then list[#list + 1] = info.name end
+			elseif okInfo and active == true and type(info) == "string" then
+				list[#list + 1] = info
+			end
+		end
+		return #list > 0 and table.concat(list, ", ") or "none"
+	end
+
+	-- The sweep is NodeSweep.lua's, every name kept (not just herbs and veins).
+	local refreshing = false -- /cine debug nodes update: Minimap:UpdateBlips before each sweep
+	local function Sweep(grow)
+		return ns.SweepMinimap(STEP, grow, nil, refreshing)
+	end
+
+	local function State()
+		local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+		local x, y = Minimap:GetCenter()
+		local onScreen = x and y and x > 0 and y > 0 and x < screenW and y < screenH
+		return ("minimap visible %s, alpha %.2f, scale %.3f, %s; %s; tracking: %s"):format(
+			tostring(ns.Flag(Minimap:IsVisible())), Minimap:GetEffectiveAlpha(), Minimap:GetEffectiveScale(),
+			onScreen and "on screen" or "off screen", IsIndoors and IsIndoors() and "indoors" or "outdoors", Tracking())
+	end
+
+	local function Describe(found)
+		local names = {}
+		for name, entry in pairs(found) do
+			local kind = ns.NodeKind(name)
+			-- (raw: the game's line with its codes showing, and its colour.)
+			local rawText = showRaw and entry.raw and (", raw \"" .. entry.raw:gsub("|", "||"):gsub("\n", "\\n")
+				.. "\" colour " .. tostring(entry.color)) or ""
+			names[#names + 1] = ("%s (%d%s%s%s)"):format(name, entry.points, entry.gray and ", gray" or "",
+				kind and (", " .. kind) or "", rawText)
+		end
+		table.sort(names)
+		return #names > 0 and table.concat(names, "; ") or "nothing"
+	end
+
+	local function Report(onlyChanges)
+		local found, probes, grown = Sweep(growing and not ns.parkMinimapFullSize)
+		local text = (grown and "(grown for the sweep) " or "")
+			.. (found and Describe(found) or ("can't sweep: " .. probes))
+		-- (the minimap fading or coming back counts as a change too)
+		local key = text .. (Minimap:GetEffectiveAlpha() < 0.5 and " faded" or " shown")
+		if onlyChanges and key == lastFound then return end
+		lastFound = key
+		local first = ("nodes: %s"):format(text)
+		local second = "  " .. State() .. (found and (", %d points tried"):format(probes) or "")
+		ns.Print(first)
+		print(second)
+		ns.Log("nodes", second) -- (only ns.Print's lines reach the log by themselves)
+		if watched then
+			watched[#watched + 1] = date("%H:%M:%S ") .. first
+			watched[#watched + 1] = second
+		end
+	end
+
+	-- The watch is over: everything it printed opens in the copy window.
+	local function Done(why)
+		watcher:Hide()
+		if ns.parkMinimapFullSize or ns.minimapStayFullSize then
+			Park(false)
+			Stay(false)
+			ns.Print("nodes: the faded minimap shrinks again")
+		end
+		ns.Print("nodes: " .. why)
+		local lines = watched
+		watched = nil
+		if lines and #lines > 0 then
+			ShowText("/cine debug nodes: press Ctrl+C to copy",
+				("/cine debug nodes (Cinematic %s)\n%s"):format(Version(), table.concat(lines, "\n")))
+		end
+	end
+
+	function ns.NodesDebug(args)
+		args = args or ""
+		local seconds = tonumber(args:match("%d+"))
+		growing = args:find("grow") ~= nil
+		showRaw = args:find("raw") ~= nil
+		refreshing = args:find("update") ~= nil
+		if (args:find("park") or args:find("stay")) and not seconds then seconds = 60 end
+		lastFound = nil
+		if not seconds and watcher and watcher:IsShown() then
+			Done("stopped watching")
+			return
+		end
+		watched = seconds and {} or nil
+		if args:find("park") then
+			Park(true)
+			ns.Print("nodes: the faded minimap stays full size off the screen while this watches")
+		elseif args:find("stay") then
+			Stay(true)
+			ns.Print("nodes: the faded minimap stays full size in its place (alpha 0, icons hidden) while this watches")
+		end
+		Report(false)
+		if not seconds then return end
+		watcher = watcher or CreateFrame("Frame")
+		untilTime = GetTime() + math.min(seconds, 600)
+		local wait = 1
+		watcher:SetScript("OnUpdate", function(_, elapsed)
+			wait = wait - elapsed
+			if wait > 0 then return end
+			wait = 1
+			if GetTime() >= untilTime then
+				Done("done watching")
+				return
+			end
+			Report(true)
+		end)
+		watcher:Show()
+		ns.Print(("nodes: sweeping once a second for %d seconds, printing when it changes"):format(math.min(seconds, 600)))
 	end
 end
