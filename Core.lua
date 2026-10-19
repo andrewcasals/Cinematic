@@ -534,6 +534,14 @@ end
 for _, key in ipairs({ "plateCombatPvPEnemies", "plateCombatPvPFriends", "plateCombatPvPEnemyMinions" }) do
 	DEFAULTS[key] = true
 end
+-- Friendly plates in dungeons and raids (Nameplates page): the game won't let
+-- addons fade them there, so each kind is "hide", "show" or (players and
+-- NPCs) "target": on while you have one of that kind targeted. See Effects.
+-- To start with: friendly players and NPCs with one targeted, pets never.
+ns.PLATE_INSTANCE_KINDS = { "Friends", "FriendlyMinions", "FriendlyNPCs" }
+DEFAULTS.plateInstanceFriends = "target"
+DEFAULTS.plateInstanceFriendlyMinions = "hide"
+DEFAULTS.plateInstanceFriendlyNPCs = "target"
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
@@ -645,18 +653,27 @@ for _, part in ipairs(ns.PLATE_PARTS) do
 		DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
 	end
 end
--- The Unit Frames page's Unit frame parts grid (see Frames): a row per kind
--- of unit the player, target and focus frames show (and one for your pet's
--- frame), a column per part (keys unitPart<row><part>). All shown to start
--- with, as the game has them.
-ns.UNIT_PART_ROWS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer",
-	"FriendlyNPC", "Pet" }
+-- The Unit Frames page's Unit frame parts grids (see Frames), a column per
+-- part: your own frame and your pet's (keys unitPartPlayer<part>,
+-- unitPartPet<part>), then the target, focus and target of target frames, a
+-- row per kind of unit they show (keys unitPart<kind><part> for the target,
+-- unitPartFocus<kind><part> and unitPartToT<kind><part>). The focus and
+-- target of target go as the target's grid says until their "Same as target"
+-- is unticked. All shown to start with, as the game has them.
+ns.UNIT_PART_KINDS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer",
+	"FriendlyNPC" }
 ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons", "Auras" }
-for _, row in ipairs(ns.UNIT_PART_ROWS) do
-	for _, part in ipairs(ns.UNIT_PARTS) do
-		DEFAULTS["unitPart" .. row .. part] = true
+for _, part in ipairs(ns.UNIT_PARTS) do
+	DEFAULTS["unitPartPlayer" .. part] = true
+	DEFAULTS["unitPartPet" .. part] = true
+	for _, kind in ipairs(ns.UNIT_PART_KINDS) do
+		for _, prefix in ipairs({ "", "Focus", "ToT" }) do
+			DEFAULTS["unitPart" .. prefix .. kind .. part] = true
+		end
 	end
 end
+DEFAULTS.unitPartsFocusSame = true
+DEFAULTS.unitPartsToTSame = true
 -- And rows of our own: a class icon by friendly and by enemy players' health
 -- bars (as Duel Vision shows), and a role icon by group members' (tank,
 -- healer, damage). Off everywhere to start with, except enemy class icons and
@@ -2696,6 +2713,77 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then AddPetRow(saved.hoverGroups) end
 			end
 			ns.db.petFrameHoverV1 = true
+		end
+		-- Your own frame's parts got settings apart from the target grid's You
+		-- row (unitPartSelf<part>, which covered both): each starts as that row
+		-- had it. The live settings and each saved profile alike. Once.
+		if not ns.db.unitPartPlayerV1 then
+			local function CarryPlayerParts(settings)
+				for _, part in ipairs(ns.UNIT_PARTS) do
+					if settings["unitPartPlayer" .. part] == nil and settings["unitPartSelf" .. part] ~= nil then
+						settings["unitPartPlayer" .. part] = settings["unitPartSelf" .. part]
+					end
+				end
+			end
+			CarryPlayerParts(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then CarryPlayerParts(saved) end
+			end
+			ns.db.unitPartPlayerV1 = true
+		end
+		-- Friendly plates in dungeons and raids got a setting of their own
+		-- (plateInstance<kind>): each starts as the grids left it there, grouped
+		-- and out of fights (what kept that kind on before), else hidden. The
+		-- live settings and each saved profile alike. Once.
+		if not ns.db.plateInstanceModesV1 then
+			local ROWS = {
+				Friends = { "Friends", "GroupMembers" },
+				FriendlyMinions = { "FriendlyMinions", "MyPet", "GroupMinions" },
+				FriendlyNPCs = { "FriendlyNPCs" },
+			}
+			local function CarryInstanceModes(settings)
+				local function On(key)
+					local value = settings[key]
+					if value == nil then value = DEFAULTS[key] end
+					return value and true or false
+				end
+				for kind, rows in pairs(ROWS) do
+					if settings["plateInstance" .. kind] == nil then
+						local shown = false
+						for _, row in ipairs(rows) do
+							for _, prefix in ipairs({ "plateInInstances", "plateAlways", "plateGroup", "plateCombat" }) do
+								shown = shown or On(prefix .. row)
+							end
+						end
+						settings["plateInstance" .. kind] = shown and "show" or "hide"
+					end
+				end
+			end
+			if not ns.newInstall then
+				CarryInstanceModes(ns.db)
+			end
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then CarryInstanceModes(saved) end
+			end
+			ns.db.plateInstanceModesV1 = true
+		end
+		-- The personal resource bars' power half got a row apart from the
+		-- health bar: into saved Mouseover groups with it. Once.
+		if not ns.db.prdPowerHoverV1 then
+			local function AddPowerRow(groups)
+				for _, group in ipairs(groups or {}) do
+					local has = {}
+					for _, key in ipairs(group.members or {}) do has[key] = true end
+					if has.prd and not has.prdpower then
+						table.insert(group.members, "prdpower")
+					end
+				end
+			end
+			AddPowerRow(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then AddPowerRow(saved.hoverGroups) end
+			end
+			ns.db.prdPowerHoverV1 = true
 		end
 		-- The minimap header got a row apart from the minimap: into saved
 		-- Mouseover groups with the minimap, as the default groups have it. Once.

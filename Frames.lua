@@ -26,6 +26,7 @@ local FRAME_GROUPS = {
 	-- game only shows or hides, never its alpha; Forever's is your own
 	-- nameplate, so a stand-in fades for it (see below).
 	prd = { "PersonalResourceDisplayFrame", "CinematicPersonalResource" },
+	prdpower = { "CinematicPersonalPower" },
 	totems = {
 		"MultiCastActionBarFrame", "MultiCastSummonSpellButton", "MultiCastRecallSpellButton",
 		"MultiCastFlyoutFrame", "MultiCastSlotButton1", "MultiCastSlotButton2",
@@ -99,9 +100,17 @@ local FRAME_GROUPS = {
 -- goes as the game likes: this stand-in fades with the row instead, and the
 -- plate takes its alpha (ns.SetPersonalPlateAlpha, Effects). (Clients with
 -- no personal resource display have no setting for it.)
-local personalStandIn
+-- Their resource bars (mana, rage, energy and the like, with class resources
+-- such as combo points) have a row of their own, faded through a stand-in
+-- too: while either row fades, those bars stop taking the health bar's fade
+-- (their parent's) and take this one (see personalPower.Apply). (One table:
+-- this file is near Lua's 200 locals.)
+local personalPower = { level = 1, health = 1, held = {}, pass = 0 }
 if not ns.isRetail and GetCVar("nameplateShowSelf") ~= nil then
-	personalStandIn = CreateFrame("Frame", "CinematicPersonalResource", UIParent)
+	personalPower.healthStandIn = CreateFrame("Frame", "CinematicPersonalResource", UIParent)
+end
+if personalPower.healthStandIn or _G.PersonalResourceDisplayFrame then
+	personalPower.standIn = CreateFrame("Frame", "CinematicPersonalPower", UIParent)
 end
 
 -- The queue eye (dungeon finder, battlegrounds): Forever pins it to the
@@ -1333,8 +1342,12 @@ ns.COMBAT_SHOW = {
 	{ key = "player", label = L["Player frame"], default = true, frames = { "PlayerFrame" } },
 	-- Follows the player frame's ticks until set (see ROW_FALLBACK).
 	{ key = "petframe", label = L["Pet frame"], default = true, frames = { "PetFrame" } },
-	{ key = "prd", label = L["Personal resource bars"], default = true,
+	{ key = "prd", label = L["Personal health bar"], default = true,
 		frames = { "PersonalResourceDisplayFrame", "CinematicPersonalResource" } },
+	-- Follows the health bar's ticks until set (see ROW_FALLBACK).
+	{ key = "prdpower", label = L["Personal resource bar"], default = true, frames = { "CinematicPersonalPower" },
+		tip = L["Mana, rage, energy, focus or runic power under your character, and class resources " ..
+			"such as combo points."] },
 	{ key = "target", label = L["Target"], default = true, frames = { "TargetFrame" } },
 	{ key = "tot", label = L["Target of target"], default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = L["Focus"], default = true, frames = { "FocusFrame" } },
@@ -1481,7 +1494,7 @@ ns.COMBAT_SHOW = {
 -- The Standard Frames page's sections (page) for the rows not given one
 -- above. (Kept in the order above within each.)
 local ROW_SECTIONS = {
-	player = "units", petframe = "units", prd = "units", target = "units", tot = "units", focus = "units",
+	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
@@ -1532,7 +1545,7 @@ end
 -- bar with action bar 1, the minimap's clock with the minimap...); an
 -- addon's or added frame's row is its fade group ("addon:<key>", "extra:<name>").
 local HOVER_ROW_BY_GROUP = {
-	bars = "mainbar", sidebars = "right1", player = "player", prd = "prd", totems = "totems", target = "target",
+	bars = "mainbar", sidebars = "right1", player = "player", prd = "prd", prdpower = "prdpower", totems = "totems", target = "target",
 	party = "party",
 	raidplayers = "raidplayers", raidpets = "raidpets", raidmanager = "raidmanager", flags = "flags",
 	raidroles = "raidroles", raidnames = "raidnames", raidpetnames = "raidpetnames", raidtitles = "raidtitles",
@@ -1582,7 +1595,9 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "bars68", icon = "Interface\\Icons\\Ability_DualWield", name = L["Action bars 6-8"],
 		members = { "bar6", "bar7", "bar8" } },
 	{ preset = "player", icon = "Interface\\Icons\\INV_Misc_Head_Human_01", name = L["Player"],
-		members = { "player", "petframe", "prd", "totemtimers", "castbar" } },
+		members = { "player", "petframe", "totemtimers", "castbar" } },
+	{ preset = "prd", icon = "Interface\\Icons\\Spell_Nature_Rejuvenation", name = L["Personal resource bars"],
+		members = { "prd", "prdpower" } },
 	{ preset = "target", icon = "Interface\\Icons\\Ability_Hunter_SniperShot", name = L["Target and focus"],
 		members = { "target", "tot", "focus" } },
 	-- (Raid-style party frames are the raid frames; the Raid Frame Manager
@@ -1708,7 +1723,7 @@ end
 local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
-	player = true, prd = true, raidroles = true, raidnames = true, partyroles = true, partynames = true,
+	player = true, prd = true, prdpower = true, raidroles = true, raidnames = true, partyroles = true, partynames = true,
 	raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true, raidthreat = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
 	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
 	gamepadbars = true, gamepadreticle = true, castbar = true,
@@ -1740,7 +1755,7 @@ end
 -- bar art follows action bar 1, the pet portrait yours and the minimap header and its buttons the minimap, so profiles and lists
 -- from before it was a row (the Cooldown Manager profile's: no action bars) still hold.
 local ROW_FALLBACK = {
-	art = "mainbar", petframe = "player", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
+	art = "mainbar", petframe = "player", prdpower = "prd", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap",
 }
 
@@ -2939,6 +2954,187 @@ local function ReleaseReadyIcons()
 	end
 end
 
+-- The personal resource bars' power half (personalPower, above). The bars are
+-- found inside the personal bars by the fields each client gives them: in
+-- the Edit Mode frame (retail's, and Forever's where it has one), or on your
+-- own nameplate's unit frame or the nameplate driver, which parents them to
+-- that plate (not when it puts combo points on your target's plate: those
+-- are left alone).
+-- /cine debug plates lists what's found.
+do
+	local POWER_FIELDS = { "PowerBar", "AlternatePowerBar", "ClassFrameContainer", "powerBar", "classPowerBar" }
+	local DRIVER_FIELDS = { "classNamePlatePowerBar", "classNamePlateAlternatePowerBar", "classNamePlateMechanicFrame" }
+	local held = personalPower.held -- [bar] = the pass it was last faded on
+
+	-- Where the personal bars are: the Edit Mode frame, and (Forever) your
+	-- own nameplate. Either can be missing.
+	local function Roots()
+		local plate = personalPower.healthStandIn and C_NamePlate and C_NamePlate.GetNamePlateForUnit
+			and C_NamePlate.GetNamePlateForUnit("player")
+		return _G.PersonalResourceDisplayFrame, plate or nil
+	end
+
+	local function Open(root)
+		return root and not (root.IsForbidden and root:IsForbidden()) and root or nil
+	end
+
+	local function Usable(frame)
+		return type(frame) == "table" and frame.SetAlpha and frame.SetIgnoreParentAlpha and frame.GetParent
+			and not (frame.IsForbidden and frame:IsForbidden())
+	end
+
+	-- Whether a frame sits inside the personal bars (a few parents up at most).
+	local function Inside(frame, root)
+		local parent = frame:GetParent()
+		for _ = 1, 6 do
+			if parent == root then
+				return true
+			elseif not parent then
+				return false
+			end
+			parent = parent:GetParent()
+		end
+		return false
+	end
+
+	-- Calls fn(bar, root, ...) for each power bar found on owner's fields.
+	local function EachOn(owner, fields, root, fn, ...)
+		if type(owner) ~= "table" then
+			return
+		end
+		for _, field in ipairs(fields) do
+			local bar = owner[field]
+			if Usable(bar) and Inside(bar, root) then
+				fn(bar, root, ...)
+			end
+		end
+	end
+
+	-- Fields not in the lists above, found by name (power, mana, class
+	-- resources), so a client naming them otherwise is still covered. Not the
+	-- elite dragon (classification), nor anything holding the health bar.
+	local function NamedLikePower(field)
+		if type(field) ~= "string" or field:lower():find("classification") then
+			return false
+		end
+		local lower = field:lower()
+		return lower:find("power") or lower:find("mana") or lower:find("class") or lower:find("combo")
+			or lower:find("rune") or lower:find("resource")
+	end
+
+	local function HoldsHealth(frame, root)
+		local health = root.healthBar or (root.UnitFrame and root.UnitFrame.healthBar) or root.HealthBarsContainer
+			or (root.UnitFrame and root.UnitFrame.HealthBarsContainer)
+		if type(health) ~= "table" or not health.GetParent then
+			return false
+		end
+		return health == frame or Inside(health, frame)
+	end
+
+	-- The bars found ([bar] = the root it's in), looked for again when the
+	-- personal bars change (Forever's plate comes and goes) or every second
+	-- (bars made later).
+	local found, foundFrame, foundPlate, foundPass = {}, nil, nil, -math.huge
+	local function Add(bar, root)
+		if not found[bar] and not HoldsHealth(bar, root) then
+			found[bar] = root
+		end
+	end
+	local function AddNamed(owner, root)
+		if type(owner) ~= "table" then
+			return
+		end
+		for field, bar in pairs(owner) do
+			if NamedLikePower(field) and Usable(bar) and Inside(bar, root) then
+				Add(bar, root)
+			end
+		end
+	end
+	local function FindIn(root)
+		if not root then
+			return
+		end
+		EachOn(root, POWER_FIELDS, root, Add)
+		EachOn(root.UnitFrame, POWER_FIELDS, root, Add)
+		EachOn(_G.NamePlateDriverFrame, DRIVER_FIELDS, root, Add)
+		AddNamed(root, root)
+		AddNamed(root.UnitFrame, root)
+		AddNamed(_G.NamePlateDriverFrame, root)
+	end
+
+	local function EachPowerBar(fn, ...)
+		local frame, plate = Roots()
+		frame, plate = Open(frame), Open(plate)
+		if frame ~= foundFrame or plate ~= foundPlate or personalPower.pass - foundPass > 60 then
+			wipe(found)
+			foundFrame, foundPlate, foundPass = frame, plate, personalPower.pass
+			FindIn(frame)
+			FindIn(plate)
+		end
+		for bar, root in pairs(found) do
+			if Usable(bar) and Inside(bar, root) then
+				fn(bar, root, ...)
+			end
+		end
+	end
+
+	local function Hold(bar, _, alpha)
+		if not held[bar] then
+			bar:SetIgnoreParentAlpha(true)
+		end
+		held[bar] = personalPower.pass
+		bar:SetAlpha(alpha)
+	end
+
+	local function LetGo(bar)
+		held[bar] = nil
+		bar:SetIgnoreParentAlpha(false)
+		bar:SetAlpha(1)
+	end
+
+	-- Each tick, after the fade: while either row is faded the power bars
+	-- take their own row's alpha; with both up they're the game's again.
+	function personalPower.Apply()
+		personalPower.pass = personalPower.pass + 1
+		if personalPower.level < 1 or personalPower.health < 1 then
+			EachPowerBar(Hold, personalPower.level)
+		end
+		-- (Bars not found this time, or all of them with both rows up.)
+		for bar, pass in pairs(held) do
+			if pass ~= personalPower.pass then
+				LetGo(bar)
+			end
+		end
+	end
+
+	-- For /cine debug plates: the two rows' fades and the power bars found.
+	function ns.DescribePersonalPower()
+		if not personalPower.standIn then
+			return "no personal resource bars on this client"
+		end
+		local names = {}
+		EachPowerBar(function(bar)
+			local okName, name = pcall(bar.GetDebugName, bar)
+			local ok, alpha = pcall(function() return ("%.2f"):format(bar:GetAlpha()) end)
+			names[#names + 1] = (okName and tostring(name):match("[^.]*%.?[^.]+$") or "?") .. " " .. (ok and alpha or "?")
+				.. (held[bar] and " (ours)" or "")
+		end)
+		-- (And the nameplate driver's bars wherever they are, by their parents.)
+		local driver = {}
+		for field, bar in pairs(type(_G.NamePlateDriverFrame) == "table" and _G.NamePlateDriverFrame or {}) do
+			if NamedLikePower(field) and type(bar) == "table" and bar.GetParent then
+				local okParent, parent = pcall(function() return bar:GetParent():GetDebugName() end)
+				driver[#driver + 1] = field .. " in " .. (okParent and tostring(parent) or "?")
+			end
+		end
+		local frame, plate = Roots()
+		return ("health row %.2f, resource row %.2f, frame %s, plate %s, bars: %s; driver: %s"):format(
+			personalPower.health, personalPower.level, frame and (ns.Flag(frame:IsShown()) and "shown" or "hidden") or "none",
+			plate and "up" or "none", #names > 0 and table.concat(names, ", ") or "NONE found",
+			#driver > 0 and table.concat(driver, ", ") or "none")
+	end
+end
+
 -- The master switches changing (on their pages, or with a profile): frames
 -- no longer handled are let go, and switched back on they're picked up and
 -- fade from now. Looked at each frame.
@@ -3887,6 +4083,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- Keep minimap open indoors (Minimap page): see RedrawMinimapWhenShown.
 	local keepIndoors = ns.db.minimapIndoors and IsIndoors and ns.Flag(IsIndoors())
 
+	-- (Up unless their rows' frames are faded below: let go, they're up.)
+	personalPower.health, personalPower.level = 1, 1
 	for _, entry in ipairs(ns.managed) do
 		if entry.ownAlpha then
 			SyncOwnAlpha(entry)
@@ -3965,9 +4163,17 @@ function ns.UpdateFrames(cinematic, elapsed)
 			end
 			ns.SetEntryAlpha(entry, ns.Approach(entry.alpha, target, elapsed, duration))
 		end
-		if entry.frame == personalStandIn then
+		if entry.frame == personalPower.healthStandIn then
 			ns.SetPersonalPlateAlpha(entry.alpha)
 		end
+		if entry.group == "prd" then
+			personalPower.health = entry.alpha
+		elseif entry.group == "prdpower" then
+			personalPower.level = entry.alpha
+		end
+	end
+	if personalPower.standIn then
+		personalPower.Apply()
 	end
 end
 
@@ -4557,11 +4763,11 @@ do
 	end)
 end
 
--- Unit frame parts (Unit Frames page): pieces of the player, target and focus
--- frames hidden, CineMode or not, for those who only want the bars. A grid:
--- a row per kind of unit (you, then enemy, neutral and friendly players and
--- NPCs), a column per part; the target and focus frames go by the unit they
--- show. One texture (FrameTexture) draws the portrait ring, the name box and
+-- Unit frame parts (Unit Frames page): pieces of the player, pet, target,
+-- focus and target of target frames hidden, CineMode or not, for those who
+-- only want the bars. A grid per frame, a column per part: your frame's and
+-- your pet's a row each, the others a row per kind of unit (you, then enemy,
+-- neutral and friendly players and NPCs), going by the unit they show. One texture (FrameTexture) draws the portrait ring, the name box and
 -- the bars' borders, so the frame art goes as a whole. Frames laid out as
 -- retail's (and WoW Forever's) only: others haven't these fields.
 do
@@ -4646,14 +4852,38 @@ do
 		Name = { "name", "_G.PetName" },
 		Art = { "_G.PetFrameTexture", "_G.PetFrameFlash", "_G.PetAttackModeTexture" },
 	}
+	-- The target of target frames (the target's and the focus's): a portrait,
+	-- a name and the frame art, and on older frames numbered debuffs
+	-- (TargetFrameToTDebuff1...). (In ns, not a local: see the cap above.)
+	ns.UNIT_PARTS_TOT = { Portrait = { "Portrait" }, Name = { "Name" }, Art = { "FrameTexture" } }
+	if _G.TargetFrameToTDebuff1 then
+		ns.UNIT_PARTS_TOT.Auras = function(frame)
+			local list, name = {}, frame.GetName and frame:GetName()
+			for i = 1, 40 do
+				local aura = name and _G[name .. "Debuff" .. i]
+				if not aura then break end
+				list[#list + 1] = aura
+			end
+			return list
+		end
+	end
 	ns.UNIT_PARTS_PLAYER, ns.UNIT_PARTS_PET = PLAYER, PET
-	-- Each frame: its parts, the unit it shows, and its grid row when always the same.
+	-- Each frame: its parts, the unit it shows, and its grid row when always
+	-- the same. The focus and target of target ones: the setting that has
+	-- them go by the target's grid, and the grid of their own otherwise.
 	local FRAMES = {
-		{ "PlayerFrame", PLAYER, "player" },
+		{ "PlayerFrame", PLAYER, "player", "Player" },
 		{ "TargetFrame", TARGET, "target" },
-		{ "FocusFrame", TARGET, "focus" },
+		{ "FocusFrame", TARGET, "focus", nil, "unitPartsFocusSame", "Focus" },
+		{ "TargetFrameToT", ns.UNIT_PARTS_TOT, "targettarget", nil, "unitPartsToTSame", "ToT" },
+		{ "FocusFrameToT", ns.UNIT_PARTS_TOT, "focustarget", nil, "unitPartsToTSame", "ToT" },
 		{ "PetFrame", PET, "pet", "Pet" },
 	}
+	-- The setting for a frame's part, for the unit it shows (nil: none shown).
+	function FRAMES.Key(entry, row, part)
+		local own = entry[5] and ns.db[entry[5]] == false
+		return row and "unitPart" .. (own and entry[6] or "") .. row .. part
+	end
 
 	-- A field on a frame (_G. for a global of its own).
 	local function Field(frame, path)
@@ -4692,7 +4922,15 @@ do
 		if enemy == nil then
 			return nil
 		end
-		local who = Ask(UnitIsPlayer, unit) and "Player" or "NPC"
+		-- (WoW Forever: after you buff a player, UnitIsPlayer can say no for
+		-- them, tested; their GUID still says Player.)
+		local who = "Player"
+		if not Ask(UnitIsPlayer, unit) then
+			local guid = Ask(UnitGUID, unit)
+			if not (type(guid) == "string" and guid:find("^Player%-")) then
+				who = "NPC"
+			end
+		end
 		if not enemy then
 			return "Friendly" .. who
 		end
@@ -4723,6 +4961,15 @@ do
 			if not hooked[region] then
 				hooked[region] = true
 				hooksecurefunc(region, "SetAlpha", KeepHidden)
+				-- (WoW Forever's frames also set it this way, which SetAlpha's hook misses.)
+				if type(region.SetAlphaFromBoolean) == "function" then
+					hooksecurefunc(region, "SetAlphaFromBoolean", KeepHidden)
+				end
+				-- (A texture's colour carries its alpha: the game colouring the
+				-- target's name strip by its faction shows it again, tested.)
+				if type(region.SetVertexColor) == "function" then
+					hooksecurefunc(region, "SetVertexColor", KeepHidden)
+				end
 			end
 			KeepHidden(region)
 		elseif not hide and hidden[region] then
@@ -4737,7 +4984,7 @@ do
 		return _G.PlayerFrame ~= nil and Field(_G.PlayerFrame, PLAYER.Portrait[1]) ~= nil
 	end
 
-	-- (Settings unitPart<row><part>, ticked = shown: see ns.UNIT_PART_ROWS.)
+	-- (Settings unitPart<grid><row><part>, ticked = shown: see ns.UNIT_PART_KINDS.)
 	function ns.ApplyUnitFrameParts()
 		if not ns.db then
 			return
@@ -4747,7 +4994,8 @@ do
 			if frame then
 				local row = entry[4] or Ask(UnitExists, entry[3]) and Row(entry[3])
 				for _, part in ipairs(ns.UNIT_PARTS) do
-					local hide = row and ns.db["unitPart" .. row .. part] == false or false
+					local key = FRAMES.Key(entry, row, part)
+					local hide = key and ns.db[key] == false or false
 					local paths = entry[2][part]
 					if type(paths) == "function" then
 						for _, region in ipairs(paths(frame)) do
@@ -4776,8 +5024,8 @@ do
 		end
 		for _, entry in ipairs(FRAMES) do
 			if _G[entry[1]] == frame and entry[2].Auras then
-				local row = Ask(UnitExists, entry[3]) and Row(entry[3])
-				local hide = row and ns.db["unitPart" .. row .. "Auras"] == false or false
+				local key = FRAMES.Key(entry, Ask(UnitExists, entry[3]) and Row(entry[3]), "Auras")
+				local hide = key and ns.db[key] == false or false
 				for _, region in ipairs(entry[2].Auras(frame)) do
 					SetHidden(region, hide)
 				end
@@ -4793,15 +5041,43 @@ do
 	if type(_G.TargetFrame_UpdateAuras) == "function" then
 		hooksecurefunc("TargetFrame_UpdateAuras", AurasDrawn)
 	end
+
+	-- The game redrawing a frame's level or art (logging in, a level-up, a
+	-- vehicle) can bring a hidden part back: hidden again straight after.
+	local function Rehide()
+		for region in pairs(hidden) do
+			KeepHidden(region)
+		end
+	end
+	for _, name in ipairs({ "PlayerFrame_UpdateLevel", "PlayerFrame_ToPlayerArt", "PlayerFrame_ToVehicleArt",
+		"TargetFrame_CheckLevel" }) do
+		if type(_G[name]) == "function" then
+			hooksecurefunc(name, Rehide)
+		end
+	end
+	for _, name in ipairs({ "TargetFrame", "FocusFrame" }) do
+		local frame = _G[name]
+		if frame and type(frame.CheckLevel) == "function" then
+			hooksecurefunc(frame, "CheckLevel", Rehide)
+		end
+	end
 	end)()
 
 	local watcher = CreateFrame("Frame")
 	watcher:RegisterEvent("PLAYER_LOGIN")
+	-- (Again once the world is up: the player frame's parts may not be there,
+	-- or be drawn again, by then. And once after the game's own updates.)
+	watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 	watcher:RegisterEvent("PLAYER_TARGET_CHANGED")
 	watcher:RegisterEvent("PLAYER_FOCUS_CHANGED")
 	-- (A unit turning hostile, or a duel starting.)
 	watcher:RegisterUnitEvent("UNIT_FACTION", "target", "focus")
-	watcher:SetScript("OnEvent", function()
+	-- (The target or focus picking someone else: their target of target frames.)
+	watcher:RegisterUnitEvent("UNIT_TARGET", "target", "focus")
+	watcher:SetScript("OnEvent", function(_, event)
 		ns.ApplyUnitFrameParts()
+		if event == "PLAYER_ENTERING_WORLD" then
+			C_Timer.After(0, ns.ApplyUnitFrameParts)
+		end
 	end)
 end

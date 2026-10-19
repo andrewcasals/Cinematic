@@ -1831,6 +1831,21 @@ function ns.PrintPlatesDebug()
 			ns.Print("  health bar fields: " .. healthFields)
 		end
 	end
+	-- Your personal resource bars' power half (Frames), and on Forever your
+	-- own plate's fields, for finding power bars a client names otherwise.
+	if ns.DescribePersonalPower then
+		ns.Print("personal resource bars: " .. ns.DescribePersonalPower())
+		local own = PersonalPlate()
+		if own and own.UnitFrame and not (own.IsForbidden and own:IsForbidden()) then
+			local _, fields = ns.DescribePlateParts(own.UnitFrame)
+			ns.Print("  your plate's fields: " .. fields)
+		end
+		local display = _G.PersonalResourceDisplayFrame
+		if display and not (display.IsForbidden and display:IsForbidden()) then
+			local _, fields = ns.DescribePlateParts(display)
+			ns.Print("  the frame's fields: " .. fields)
+		end
+	end
 	-- Every nameplate setting this client has, for comparing.
 	local names = {}
 	for _, name in ipairs({ "nameplateShowFriends", "nameplateShowFriendlyPlayers", "nameplateShowEnemies",
@@ -1979,15 +1994,23 @@ function ns.EnsurePlateRows()
 			end
 		end
 	end
+	-- (And friendly kinds shown in dungeons and raids, by their own setting.)
+	for _, kind in ipairs(ns.PLATE_INSTANCE_KINDS) do
+		if ns.db["plateInstance" .. kind] ~= "hide" then
+			ns.EnablePlateRow(kind)
+		end
+	end
 end
 
 -- In dungeons and raids the game locks friendly plates away from addons, so
--- they can't be faded. There, in cinematic mode, a friendly row hidden both in
--- and out of fights has its game settings switched off instead (put back on
+-- they can't be faded. There, in cinematic mode, each friendly kind is on or
+-- off as the Nameplates page's "Friendly plates in dungeons and raids" says
+-- (plateInstance<kind>: "hide", "show", or "target": on while you have one of
+-- that kind targeted). Off means its game settings switched off (put back on
 -- the way out). Friendly players' setting covers their minions too, so it
--- only goes off with the Minions row hidden as well. Not in fights: the game
--- won't change plate settings then, so they're set before.
-local LOCKED_PLATE_KINDS = { "Friends", "FriendlyMinions", "FriendlyNPCs" }
+-- only goes off with the minions off as well. Not in fights: the game won't
+-- change plate settings then, so they stay as the fight found them.
+local LOCKED_PLATE_KINDS = ns.PLATE_INSTANCE_KINDS
 local LOCKED_PLATE_SETS = {}
 for _, kind in ipairs(LOCKED_PLATE_KINDS) do
 	local values = {}
@@ -1998,18 +2021,17 @@ for _, kind in ipairs(LOCKED_PLATE_KINDS) do
 end
 ns.LOCKED_PLATE_SETS = LOCKED_PLATE_SETS -- (ns.ShowPlatesNow, above)
 
+-- Which kind your target is, for the "target" choice.
+local TARGET_ROW_KIND = { MyFriendlyPlayerTarget = "Friends", MyFriendlyNPCTarget = "FriendlyNPCs" }
+local lockedHidden = {} -- (kept: made each tick, it was garbage)
+
 local function UpdateLockedPlates()
 	local locked = platesActive and placeSuffix == "Instances"
-	local hidden = {}
+	local targetKind = locked and Ask(UnitExists, "target") and TARGET_ROW_KIND[TargetRow("target") or ""]
+	local hidden = lockedHidden
 	for _, kind in ipairs(LOCKED_PLATE_KINDS) do
-		hidden[kind] = locked and not KeptHere(kind) and not ShownInFights(kind)
-	end
-	-- (Nor where a unit row keeps some of them up, in fights or out.)
-	for row, kind in pairs(UNIT_ROW_KIND) do
-		if hidden[kind] and (KeptHere(row) or ShownInFights(row))
-			and (row == "MyPet" and Ask(UnitExists, "pet") or row ~= "MyPet" and ns.InGroup()) then
-			hidden[kind] = false
-		end
+		local mode = ns.db["plateInstance" .. kind]
+		hidden[kind] = locked and (mode == "hide" or (mode == "target" and targetKind ~= kind)) or false
 	end
 	hidden.Friends = hidden.Friends and hidden.FriendlyMinions
 	local changed = false

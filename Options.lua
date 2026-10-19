@@ -4096,26 +4096,34 @@ local function CreatePortraitsPanel()
 		last, lastIndent = petCam, PORTRAIT_INDENT
 	end
 
-	-- The Unit frame parts grid (frames laid out as retail's: see
-	-- ns.ApplyUnitFrameParts): a row per kind of unit, a column per part.
+	-- The Unit frame parts grids (frames laid out as retail's: see
+	-- ns.ApplyUnitFrameParts), a section per frame that opens and closes with
+	-- a click on its name: a row per kind of unit (your frame's and your
+	-- pet's a row each), a column per part the frame has. The focus and
+	-- target of target sections have a "Same as target" tick: ticked, the
+	-- grid greys and closes and the frame goes by the target's; unticked, it
+	-- opens with the target's choices to start from.
+	local OpenSections -- (opens You and Target, and the frames set apart from the target)
 	if ns.HasUnitFrameParts and ns.HasUnitFrameParts() then
 		local header = Header(content, L["Unit frame parts"], last)
 		header:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 2 - lastIndent, -24)
 		local note = PageIntro(content, header,
 			L["Which parts of the unit frames show, CineMode or not: your own frame and your pet's, and " ..
-			"the target and focus frames by who they show. Untick parts to keep just the bars. The frame " ..
-			"art is the portrait ring, the name box and the bars' borders: the game draws them as one " ..
-			"picture. Icons are the rest Zzz, the group leader's crown, role and quest icons. Auras are " ..
-			"the buffs and debuffs on the target and focus frames."])
+			"the target, focus and target of target frames by who they show. Click a frame's name to open " ..
+			"its grid: the focus and target of target go as the target's grid says until you untick Same " ..
+			"as target. Untick parts to keep just the bars. The frame art is the portrait ring, the name " ..
+			"box and the bars' borders: the game draws them as one picture. Icons are the rest Zzz, the " ..
+			"group leader's crown, role and quest icons. Auras are the buffs and debuffs on the target and " ..
+			"focus frames."])
 
-		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 160, 64, 24
+		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, SECTION_HEADER = 160, 64, 24, 26
 		local COLUMNS = {
 			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
 			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] }, { "Auras", L["Auras"] },
 		}
-		local ROWS = {
-			{ "Self", L["You"], L["Your own frame."] },
-			{ "Pet", L["Your pet"], L["Your pet's frame."] },
+		-- { row, label, tip, the frame's parts (nil: all of them) }
+		local KIND_ROWS = {
+			{ "Self", L["You"], L["You, when the frame shows you."] },
 			{ "EnemyPlayer", L["Enemy Players"], L["Players you can attack."] },
 			{ "EnemyNPC", L["Hostile NPCs"], L["NPCs you can attack (neutral ones have their own row)."] },
 			{ "NeutralPlayer", L["Neutral Players"], L["The other faction's players you can't attack."] },
@@ -4123,35 +4131,177 @@ local function CreatePortraitsPanel()
 			{ "FriendlyPlayer", L["Friendly Players"], L["Players on your side."] },
 			{ "FriendlyNPC", L["Friendly NPCs"], L["NPCs on your side."] },
 		}
+		local function KindRows(parts)
+			local rows = {}
+			for i, row in ipairs(KIND_ROWS) do
+				rows[i] = { row[1], row[2], row[3], parts }
+			end
+			return rows
+		end
+		-- Each grid: its title, its keys' prefix, its rows and its "Same as target" setting.
+		local SECTIONS = {
+			{ title = L["You"], prefix = "", rows = {
+				{ "Player", L["You"], L["Your own frame."], ns.UNIT_PARTS_PLAYER },
+				{ "Pet", L["Your pet"], L["Your pet's frame."], ns.UNIT_PARTS_PET },
+			} },
+			{ title = L["Target"], prefix = "", rows = KindRows() },
+		}
+		if _G.TargetFrameToT then
+			SECTIONS[#SECTIONS + 1] = { title = L["Target of target"], prefix = "ToT", same = "unitPartsToTSame",
+				rows = KindRows(ns.UNIT_PARTS_TOT) }
+		end
+		if _G.FocusFrame then
+			SECTIONS[#SECTIONS + 1] = { title = L["Focus"], prefix = "Focus", same = "unitPartsFocusSame",
+				rows = KindRows() }
+		end
+
 		local top = CreateFrame("Frame", nil, content)
 		top:SetSize(1, 1)
 		top:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -10)
-		for c, column in ipairs(COLUMNS) do
-			local text = Label(content, "GameFontNormalSmall", column[2])
-			text:SetWidth(COLUMN_WIDTH)
-			text:SetJustifyH("CENTER")
-			text:SetPoint("TOPLEFT", top, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+
+		-- Stacks the sections, each its name row and, open, its grid.
+		local function Layout()
+			local above
+			for _, section in ipairs(SECTIONS) do
+				section.frame:ClearAllPoints()
+				if above then
+					section.frame:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -6)
+				else
+					section.frame:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
+				end
+				for _, widget in ipairs(section.widgets) do
+					widget:SetShown(section.open)
+				end
+				section.frame:SetHeight(SECTION_HEADER + (section.open and section.height or 0))
+				section.icon:SetTexture(section.open and "Interface\\Buttons\\UI-MinusButton-Up"
+					or "Interface\\Buttons\\UI-PlusButton-Up")
+				above = section.frame
+			end
+			FitContentHeight(content)
 		end
-		for r, row in ipairs(ROWS) do
-			local y = -16 - (r - 1) * ROW_HEIGHT
-			local rowLabel = Label(content, "GameFontHighlight", row[2])
-			rowLabel:SetPoint("TOPLEFT", top, "TOPLEFT", 0, y - 5)
-			for c, column in ipairs(COLUMNS) do
-				-- (Your frame has no auras, and the pet's no level, PvP, icons or auras.)
-				local has = row[1] == "Pet" and ns.UNIT_PARTS_PET or row[1] == "Self" and ns.UNIT_PARTS_PLAYER
-				if not has or has[column[1]] then
-					local key = "unitPart" .. row[1] .. column[1]
-					local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
-						ns.GetDB()[key] = value
-						ns.ApplyUnitFrameParts()
-					end)
-					cb:SetPoint("TOPLEFT", top, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
+		function OpenSections()
+			-- (The page is built before the settings load: the defaults then.)
+			local db = ns.GetDB()
+			for _, section in ipairs(SECTIONS) do
+				section.open = not section.same or db ~= nil and db[section.same] == false
+			end
+			Layout()
+		end
+		resetHooks[content] = OpenSections
+
+		-- Set apart from the target: its grid starts as the target's, unless
+		-- it has choices of its own from before.
+		local function CopyTarget(section)
+			local db = ns.GetDB()
+			for _, row in ipairs(section.rows) do
+				for _, column in ipairs(COLUMNS) do
+					if db["unitPart" .. section.prefix .. row[1] .. column[1]] == false then
+						return
+					end
+				end
+			end
+			for _, row in ipairs(section.rows) do
+				for _, column in ipairs(COLUMNS) do
+					db["unitPart" .. section.prefix .. row[1] .. column[1]] = db["unitPart" .. row[1] .. column[1]]
 				end
 			end
 		end
+
+		for _, section in ipairs(SECTIONS) do
+			section.widgets = {}
+			local frame = CreateFrame("Frame", nil, content)
+			frame:SetWidth(LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH)
+			section.frame = frame
+
+			-- The name row: click to open or close (the +/- sits in the page margin).
+			local nameRow = CreateFrame("Button", nil, frame)
+			nameRow:SetPoint("TOPLEFT", -18, 0)
+			nameRow:SetPoint("TOPRIGHT")
+			nameRow:SetHeight(SECTION_HEADER)
+			local band = nameRow:CreateTexture(nil, "BACKGROUND")
+			band:SetAllPoints()
+			band:SetColorTexture(1, 1, 1, 0.05)
+			local hover = nameRow:CreateTexture(nil, "HIGHLIGHT")
+			hover:SetAllPoints()
+			hover:SetColorTexture(1, 0.82, 0, 0.08)
+			section.icon = nameRow:CreateTexture(nil, "ARTWORK")
+			section.icon:SetSize(14, 14)
+			section.icon:SetPoint("LEFT", nameRow, "LEFT", 1, 0)
+			Label(nameRow, "GameFontNormal", section.title):SetPoint("LEFT", nameRow, "LEFT", 18, 0)
+			nameRow:SetScript("OnClick", function()
+				section.open = not section.open
+				Layout()
+			end)
+
+			if section.same then
+				local same = section.same
+				local check = Check(content, same, L["Same as target"],
+					L["Ticked: this frame shows the parts the Target grid says. Untick it to give the frame " ..
+					"choices of its own."], function(value)
+					ns.GetDB()[same] = value
+					if not value then
+						CopyTarget(section)
+					end
+					section.open = not value
+					ns.ApplyUnitFrameParts()
+					Refresh()
+					Layout()
+				end)
+				local text = check.Text or check.text
+				check:SetPoint("RIGHT", nameRow, "RIGHT", -6 - (text and text:GetStringWidth() or 90), 0)
+				check:SetFrameLevel(nameRow:GetFrameLevel() + 2)
+			end
+
+			-- The grid: just the columns this frame has.
+			local columns = {}
+			for _, column in ipairs(COLUMNS) do
+				for _, row in ipairs(section.rows) do
+					if not row[4] or row[4][column[1]] then
+						columns[#columns + 1] = column
+						break
+					end
+				end
+			end
+			local gridTop = -SECTION_HEADER - 6
+			for c, column in ipairs(columns) do
+				local text = Label(content, "GameFontNormalSmall", column[2])
+				text:SetWidth(COLUMN_WIDTH)
+				text:SetJustifyH("CENTER")
+				text:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, gridTop)
+				section.widgets[#section.widgets + 1] = text
+			end
+			for r, row in ipairs(section.rows) do
+				local y = gridTop - 16 - (r - 1) * ROW_HEIGHT
+				local rowLabel = Label(content, "GameFontHighlight", row[2])
+				rowLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y - 5)
+				section.widgets[#section.widgets + 1] = rowLabel
+				for c, column in ipairs(columns) do
+					-- (Your frame has no auras, the pet's no level, PvP, icons or auras.)
+					if not row[4] or row[4][column[1]] then
+						local key = "unitPart" .. section.prefix .. row[1] .. column[1]
+						local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
+							ns.GetDB()[key] = value
+							ns.ApplyUnitFrameParts()
+						end)
+						cb:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
+						if section.same then
+							local same = section.same
+							GreyUnless(cb, function(db) return db[same] == false end)
+						end
+						section.widgets[#section.widgets + 1] = cb
+					end
+				end
+			end
+			section.height = 6 + 16 + #section.rows * ROW_HEIGHT + 4
+		end
+		OpenSections()
 	end
 
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	local pageShown = PageShown(Refresh, content)
+	canvas:SetScript("OnShow", function()
+		if OpenSections then OpenSections() end
+		pageShown()
+	end)
 	canvas:Hide()
 	RegisterSubpage(canvas, "Unit Frames")
 end
@@ -4643,9 +4793,12 @@ local function CreatePlatesPanel()
 	local function PlaceRow(top, r, label, indent, ...)
 		local y = -16 - (r - 1) * ROW_HEIGHT
 		local rowLabel = Label(content, indent and "GameFontHighlightSmall" or "GameFontHighlight", label)
-		rowLabel:SetPoint("TOPLEFT", top, "TOPLEFT", indent and 18 or 0, y - 5)
+		rowLabel.indentX = indent and 18 or 0 -- (what goes below lines up with the grid, not the indent)
+		rowLabel:SetPoint("TOPLEFT", top, "TOPLEFT", rowLabel.indentX, y - 5)
 		for c, check in ipairs({ ... }) do
-			check:SetPoint("TOPLEFT", top, "TOPLEFT", top.xs[c] + (top.width - 26) / 2, y)
+			if top.xs[c] then -- (a grid without the last columns leaves them out)
+				check:SetPoint("TOPLEFT", top, "TOPLEFT", top.xs[c] + (top.width - 26) / 2, y)
+			end
 		end
 		return rowLabel
 	end
@@ -4658,7 +4811,7 @@ local function CreatePlatesPanel()
 	local PVP_COMBAT_TIP = L["Show in fights while you're PvP flagged, and for the Calm Timer after."]
 	local GROUP_TIP = L["Always show while you're in a party or raid."]
 
-	local showHeader = Header(content, L["Nameplates"], subtitle, -18)
+	local showHeader = Header(content, L["Friendly Nameplates"], subtitle, -18)
 	-- The grid can't keep plates up out of fights while the game's own
 	-- "Always Show Nameplates" is off: say so beside it (checked as the page shows).
 	local showAllWarning = Label(content, "GameFontRedSmall",
@@ -4687,24 +4840,35 @@ local function CreatePlatesPanel()
 			or (place.group and L["Grouped"]) or place[2]
 	end
 	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 10
-	local columnTop = TableTop(showHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	-- (The friendly grid has no Instances column: Friendly Plates in Dungeons
+	-- and Raids, below it, stands in for it.)
+	local friendlyHeadings = {}
+	for c, heading in ipairs(headings) do
+		if PLACE_COLUMNS[c][1] ~= "Instances" then
+			friendlyHeadings[#friendlyHeadings + 1] = heading
+		end
+	end
+	local columnTop = TableTop(showHeader, friendlyHeadings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 
-	-- Rows for particular units first (they only add to the rows below:
-	-- ns.PLATE_UNIT_ROWS; group members have no use for Grouped), then the
-	-- game's own nameplate options, with enemy players and NPCs apart.
-	local KINDS = {
+	-- Two grids: friendly units, then enemy and neutral ones (below Friendly
+	-- Plates in Dungeons and Raids). Rows for particular units (your pet first,
+	-- your group last) only add to the game's own nameplate options' rows:
+	-- ns.PLATE_UNIT_ROWS; group members have no use for Grouped.
+	local FRIENDLY_KINDS = {
 		{ "MyPet", L["Your Pet"] },
+		{ "Friends", L["Friendly Players"] },
+		{ "FriendlyMinions", L["Minions"], true },
+		{ "FriendlyNPCs", L["Friendly NPCs"] },
 		{ "GroupMembers", L["Group Members"], nil, true },
 		{ "GroupMinions", L["Minions"], true, true },
+	}
+	local ENEMY_KINDS = {
 		{ "Enemies", L["Enemy Players"] },
 		{ "EnemyMinions", L["Minions"], true },
 		{ "EnemyNPCs", L["Hostile NPCs"] },
 		{ "EnemyMinor", L["Minor"], true },
 		{ "NeutralNPCs", L["Neutral NPCs"] },
 		{ "NeutralMinor", L["Minor"], true },
-		{ "Friends", L["Friendly Players"] },
-		{ "FriendlyMinions", L["Minions"], true },
-		{ "FriendlyNPCs", L["Friendly NPCs"] },
 	}
 	local tip = L[" Also turns these nameplates on in the game's options."]
 	local UNIT_ROW_TIPS = {
@@ -4719,8 +4883,8 @@ local function CreatePlatesPanel()
 		MyFriendlyNPCTarget = L[" Your target's nameplate while it's a friendly or dead NPC, whatever the " ..
 			"Nameplates grid says."],
 		MyPet = L[" Your pet's nameplate, whatever the Minions rows say, grouped or not."],
-		GroupMembers = L[" Your party or raid members' nameplates, whatever Friendly Players says. In dungeons and " ..
-			"raids on retail the game won't let addons pick them out: there every friendly player's nameplate shows."],
+		GroupMembers = L[" Your party or raid members' nameplates, whatever Friendly Players says. Not in dungeons " ..
+			"and raids: there, Friendly Plates in Dungeons and Raids decides."],
 		GroupMinions = L[" Your party or raid members' pets, whatever the Minions rows say."],
 	}
 	-- The Target Nameplate grid's rows, below (your target, by what it is).
@@ -4731,6 +4895,12 @@ local function CreatePlatesPanel()
 		{ "MyNeutralNPCTarget", L["Neutral NPC"] },
 		{ "MyFriendlyPlayerTarget", L["Friendly Player"] },
 		{ "MyFriendlyNPCTarget", L["Friendly NPC"] },
+	}
+	-- Friendly rows: in dungeons and raids, Friendly Plates in Dungeons and
+	-- Raids decides (below the Nameplates grid), so they have no Instances box.
+	local INSTANCE_LOCKED = {
+		Friends = true, FriendlyMinions = true, FriendlyNPCs = true, MyPet = true, GroupMembers = true,
+		GroupMinions = true, MyFriendlyPlayerTarget = true, MyFriendlyNPCTarget = true,
 	}
 	local lastLabel
 	local function AddPlateRow(top, r, kind)
@@ -4750,7 +4920,7 @@ local function CreatePlatesPanel()
 		local rowTip = UNIT_ROW_TIPS[kind[1]]
 		local part = kind[1]:find("^Part") -- (Plate Parts rows: no game settings of their own)
 		local tip = rowTip and (part or kind[1]:find("Target$")) and rowTip or (rowTip or "") .. tip
-		local groupColumn
+		local emptyColumns = {} -- (cells with no box: they'd never do anything)
 		for _, place in ipairs(PLACE_COLUMNS) do
 			if place.always then
 				checks[#checks + 1] = Check(content, alwaysKey, "", ALWAYS_TIP .. tip, Ticked(alwaysKey))
@@ -4760,14 +4930,23 @@ local function CreatePlatesPanel()
 				pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "", PVP_COMBAT_TIP .. tip,
 					Ticked("plateCombatPvP" .. kind[1]))
 				checks[#checks + 1] = pvpCheck
+			elseif place.group and kind[4] then
+				-- (Group members' rows only apply grouped: no Grouped box, an empty cell.)
+				checks[#checks + 1] = CreateFrame("Frame", nil, content)
+				emptyColumns[#checks] = true
 			elseif place.group then
 				local groupKey = "plateGroup" .. kind[1]
 				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. tip, Ticked(groupKey))
-				groupColumn = #checks
 			else
 				-- The open world keeps the original "keep up in CineMode" key.
 				local key = place[1] == "" and ("plateCinematic" .. kind[1]) or ("plateIn" .. place[1] .. kind[1])
-				checks[#checks + 1] = Check(content, key, "", place[3] .. tip, Ticked(key))
+				if place[1] == "Instances" and INSTANCE_LOCKED[kind[1]] then
+					-- (An empty cell, holding the column's place.)
+					checks[#checks + 1] = CreateFrame("Frame", nil, content)
+					emptyColumns[#checks] = true
+				else
+					checks[#checks + 1] = Check(content, key, "", place[3] .. tip, Ticked(key))
+				end
 			end
 		end
 		-- Greyed out where this client has no such setting.
@@ -4776,16 +4955,62 @@ local function CreatePlatesPanel()
 			return part or ns.HasPlateSettings(kind[1])
 		end
 		for c, check in ipairs(checks) do
-			GreyUnless(check, function(db)
-				return Available() and (c == 1 or not db[alwaysKey]) and not (kind[4] and c == groupColumn)
-			end)
+			if not emptyColumns[c] then
+				GreyUnless(check, function(db)
+					return Available() and (c == 1 or not db[alwaysKey])
+				end)
+			end
 		end
 		lastLabel = PlaceRow(top, r, kind[2], kind[3], unpack(checks))
 	end
-	for r, kind in ipairs(KINDS) do
+	for r, kind in ipairs(FRIENDLY_KINDS) do
 		AddPlateRow(columnTop, r, kind)
 	end
 	local lastPlateRow = lastLabel
+
+	-- Friendly plates in dungeons and raids: the game won't let addons fade
+	-- them there, so each kind is just on or off (see Effects). The grids
+	-- have no Instances boxes for them (INSTANCE_LOCKED, AddPlateRow).
+	local instanceHeader = Header(content, L["Friendly Plates in Dungeons and Raids"], lastLabel, -24)
+	local instanceAnchor = PageIntro(content, instanceHeader,
+		L["In dungeons and raids the game won't let addons fade friendly nameplates, so each kind below is " ..
+		"either all on or all off there, in CineMode. The grids' friendly rows (your target's included) have no " ..
+		"Instances box: these take its place.\n\nWith a friendly target: on while you have one of that kind " ..
+		"targeted, out of fights. Every plate of that kind shows then, not just your target's.\n\nThe game won't " ..
+		"switch nameplates on or off during a fight: they stay as the fight found them.\n\nFriendly players' " ..
+		"setting covers their pets too, so with pets shown, friendly players' plates show as well."])
+	local INSTANCE_CHOICES = {
+		{ "Friends", L["Friendly Players"], target = true },
+		{ "FriendlyMinions", L["Pets and Minions"] },
+		{ "FriendlyNPCs", L["Friendly NPCs"], target = true },
+	}
+	local lastInstanceRow = instanceAnchor
+	for i, row in ipairs(INSTANCE_CHOICES) do
+		local key = "plateInstance" .. row[1]
+		local choices = { { value = "hide", text = L["Hidden"] }, { value = "show", text = L["Shown"] } }
+		if row.target then
+			choices[3] = { value = "target", text = L["With a friendly target"] }
+		end
+		local rowLabel = Label(content, "GameFontHighlight", row[2])
+		rowLabel:SetPoint("TOPLEFT", lastInstanceRow, "BOTTOMLEFT", 0, i == 1 and -12 or -14)
+		local dropdown = Dropdown(content, key, choices, 200, function(value)
+			if value ~= "hide" then
+				ns.EnablePlateRow(row[1])
+			end
+		end)
+		if dropdown then
+			dropdown:SetPoint("LEFT", rowLabel, "LEFT", GRID_LABEL + 30, 0)
+		end
+		lastInstanceRow = rowLabel
+	end
+
+	-- Enemy and neutral units, laid out the same way.
+	local enemyHeader = Header(content, L["Enemy Nameplates"], lastInstanceRow, -24)
+	local enemyTop = TableTop(enemyHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	for r, kind in ipairs(ENEMY_KINDS) do
+		AddPlateRow(enemyTop, r, kind)
+	end
+	local lastEnemyRow = lastLabel
 
 	-- Your target's plate, laid out the same way.
 	local targetHeader = Header(content, L["Target Nameplate"], lastLabel, -24)
@@ -4879,13 +5104,19 @@ local function CreatePlatesPanel()
 		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
 
-	-- Laid out top to bottom: the master switch, then the four grids
-	-- (nameplates, your target's, their parts, then names).
+	-- Laid out top to bottom: the master switch, then the grids (friendly
+	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
+	-- your target's, their parts, then names).
 	showHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -14)
 	-- (Lined up with the nameplate grid, so the grids' columns match.)
-	targetHeader:SetPoint("TOPLEFT", lastPlateRow, "BOTTOMLEFT", 0, -24)
-	partsHeader:SetPoint("TOPLEFT", lastTargetRow, "BOTTOMLEFT", 0, -24)
-	namesHeader:SetPoint("TOPLEFT", lastPartRow, "BOTTOMLEFT", 0, -24)
+	local function Below(header, row)
+		header:SetPoint("TOPLEFT", row, "BOTTOMLEFT", -(row.indentX or 0), -24)
+	end
+	Below(instanceHeader, lastPlateRow)
+	Below(enemyHeader, lastInstanceRow)
+	Below(targetHeader, lastEnemyRow)
+	Below(partsHeader, lastTargetRow)
+	Below(namesHeader, lastPartRow)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -6571,8 +6802,8 @@ local function CreateProfilesPanel()
 		StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
 	end)
 	delete:SetPoint("LEFT", note, "RIGHT", 8, 0)
-	local reset = Button(L["Reset profile"], 120, L["Put the active profile back to how it started: a built-in " ..
-		"profile's own values, or the defaults for one of yours."], function()
+	local reset = Button(L["Reset profile"], 120, L["Put the active built-in profile back to its own values (your own " ..
+		"profiles keep your changes as you go)."], function()
 		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ActiveProfile())
 	end)
 	reset:SetPoint("LEFT", delete, "RIGHT", 8, 0)
@@ -6610,7 +6841,8 @@ local function CreateProfilesPanel()
 				if profile.name == name then builtin = profile end
 			end
 			local text = name
-			if name == active and ns.ProfileChanged() then
+			-- (Only a built-in's: one of yours saves as you go, so there's nothing to go back to.)
+			if name == active and builtin and ns.ProfileChanged() then
 				text = text .. " |cff808080(changed)|r"
 			end
 			row.label:SetText(text)
@@ -6630,6 +6862,7 @@ local function CreateProfilesPanel()
 		rename:SetEnabled(own)
 		note:SetEnabled(own)
 		delete:SetEnabled(own)
+		reset:SetEnabled(active ~= nil and not own)
 		export:SetEnabled(own)
 		FitContentHeight(content)
 	end

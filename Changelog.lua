@@ -11,6 +11,15 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-19", page = "Unit Frames", title = "Focus and target of target parts",
+		text = "The Unit frame parts grid covers the focus and target of target frames too. They follow " ..
+		"the target's grid until you untick Same as target." },
+	{ date = "2026-10-19", page = "Nameplates", title = "Friendly plates in dungeons and raids",
+		text = "Choose whether friendly players, pets and NPCs show their nameplates in dungeons and " ..
+		"raids: hidden, shown, or only while you have one targeted." },
+	{ date = "2026-10-19", page = "Standard Frames", title = "Personal resource bar",
+		text = "Your mana, rage, energy and combo points under your character have a row of their own, " ..
+		"so they can stay up while the health bar fades." },
 	{ date = "2026-10-19", page = "Minimap", title = "Minimap Reveal",
 		text = "The faded minimap comes up when ore, herbs or treasure show on it, a quest of yours is " ..
 		"done, or another icon appears - with a ping on the node if you like." },

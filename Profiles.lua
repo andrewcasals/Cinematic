@@ -58,7 +58,7 @@ end
 
 -- A Standard Frames column as a list: every row given true (in on) or false.
 local STANDARD_ROWS = {
-	"player", "prd", "target", "tot", "focus", "party", "raidplayers", "raidpets", "raidmanager", "minimap", "quests",
+	"player", "prd", "prdpower", "target", "tot", "focus", "party", "raidplayers", "raidpets", "raidmanager", "minimap", "quests",
 	"buffs", "swing", "cooldowns", "mainbar", "art",
 	"bottomleft", "bottomright", "right1", "right2", "bar6", "bar7", "bar8", "pet", "stance", "totems",
 	"micro", "xp",
@@ -116,9 +116,9 @@ ns.BUILTIN_PROFILES = {
 		apply = function(set)
 			-- The Standard Frames page's columns.
 			set("cineShow", Column({}))
-			set("combatShow", Column({ "player", "prd", "target", "tot", "focus", "party", "raidplayers", "raidpets",
+			set("combatShow", Column({ "player", "prd", "prdpower", "target", "tot", "focus", "party", "raidplayers", "raidpets",
 				"buffs", "swing", "cooldowns", "pet", "stance", "totems", "micro", "xp" }))
-			set("enemyShow", Column({ "player", "prd", "target", "tot", "focus", "buffs", "pet", "stance",
+			set("enemyShow", Column({ "player", "prd", "prdpower", "target", "tot", "focus", "buffs", "pet", "stance",
 				"totems", "micro", "xp" }))
 			-- (Interface rows as in Immersive: the minimap neither in fights
 			-- nor kept up in instances, nor the quest tracker there.)
@@ -234,10 +234,10 @@ ns.BUILTIN_PROFILES = {
 			-- Fights bring up only your target and its target (and the cast
 			-- bar): no portrait, bars, buffs, minimap or swing timer. (Rows not
 			-- listed keep the defaults.)
-			set("combatShow", { tot = true, prd = false, party = false, raidplayers = false, raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false,
+			set("combatShow", { tot = true, prd = false, prdpower = false, party = false, raidplayers = false, raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false,
 				art = false, bottomleft = false, bottomright = false, pet = false, stance = false, totems = false,
 				micro = false, xp = false, focus = false })
-			set("enemyShow", { target = true, tot = true, player = false, prd = false, party = false, raidplayers = false,
+			set("enemyShow", { target = true, tot = true, player = false, prd = false, prdpower = false, party = false, raidplayers = false,
 				raidpets = false, focus = false, buffs = false,
 				mainbar = false, art = false, bottomleft = false, bottomright = false, pet = false, stance = false,
 				totems = false, micro = false, xp = false })
