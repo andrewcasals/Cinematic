@@ -4118,7 +4118,9 @@ local function CreatePortraitsPanel()
 			"Threat is the threat percentage and aggro glow on the target and focus frames, for NPCs you " ..
 			"can fight."])
 
-		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, SECTION_HEADER = 160, 64, 24, 26
+		-- (Eight columns must fit the page's width: wider, the Threat column and the
+		-- Same as target tick were cut off at the right edge.)
+		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, SECTION_HEADER = 128, 58, 24, 26
 		local COLUMNS = {
 			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
 			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] }, { "Auras", L["Auras"] },
@@ -4273,8 +4275,13 @@ local function CreatePortraitsPanel()
 					Refresh()
 					Layout()
 				end)
+				-- The label hangs off the row's right edge and the box sits left of it,
+				-- so the text never runs past the edge whatever its width (measuring it
+				-- here came up short and cut it off).
 				local text = check.Text or check.text
-				check:SetPoint("RIGHT", nameRow, "RIGHT", -6 - (text and text:GetStringWidth() or 90), 0)
+				text:ClearAllPoints()
+				text:SetPoint("RIGHT", nameRow, "RIGHT", -6, 0)
+				check:SetPoint("RIGHT", text, "LEFT", -2, 0)
 				check:SetFrameLevel(nameRow:GetFrameLevel() + 2)
 			end
 
