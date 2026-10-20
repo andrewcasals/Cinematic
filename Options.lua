@@ -4509,6 +4509,19 @@ local function CreateQualityPanel()
 					ns.RefreshTalentLink()
 				end
 			end), "check")
+		-- (TalentCalc.lua.)
+		stack:Add(Check(content, "talentCalc", L["Talent calculator button on the talents window"],
+			L["A button on your talents window opens a talent calculator: your class's three trees side by side, " ..
+			"to plan a build without learning anything. Left-click adds a point, right-click takes one back; above " ..
+			"the trees, the level the build needs and the points left. It opens in the talents window's place, " ..
+			"and a button on it takes you back. It starts from the talents you have; Copy Over Changes puts what the plan " ..
+			"adds in your talents window, to apply there. Also /cine talents."],
+			function(value)
+				ns.GetDB().talentCalc = value
+				if ns.RefreshTalentCalc then
+					ns.RefreshTalentCalc()
+				end
+			end), "check")
 	end
 	-- (CenterPanels.lua.)
 	stack:Add(Check(content, "centerPanels", L["Open windows in the middle of the screen"],

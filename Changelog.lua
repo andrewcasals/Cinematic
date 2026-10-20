@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-20", page = "General", client = "forever", title = "Talent calculator",
+		text = "A calculator button on your talents window opens a talent planner that looks just like it, " ..
+		"starting from your talents. Plan a build, see the level it needs, then copy it over to your talents " ..
+		"window to apply." },
 	{ date = "2026-10-20", page = "Vision", title = "Heal Vision",
 		text = "The party and raid frames show only who needs healing. Pick where it works on the Vision page." },
 	{ date = "2026-10-19", page = "Advanced Frames", title = "Custom Visibility Rules",

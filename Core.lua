@@ -244,6 +244,8 @@ local DEFAULTS = {
 	-- default where unit values are secret: opening it taints the player bars, and BugSack shows their errors.
 	dragEquipCharacter = issecretvalue == nil,
 	talentLink = true,         -- Forever: inspecting someone, a button to their talents, and one back on the talents window (TalentLink.lua)
+	talentCalc = true,         -- Forever: a Talent calculator button on the talents window (TalentCalc.lua)
+	talentCalcTalented = false, -- ...counting the Legacy Tree's Talented (points from level 5) for the level a build needs
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
