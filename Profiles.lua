@@ -110,16 +110,16 @@ ns.BUILTIN_PROFILES = {
 	{
 		name = "Immersive (CDM)",
 		icon = "Interface\\Icons\\Spell_Shadow_AntiShadow", -- (Preparation)
-		tip = L["Immersive, with the Cooldown Manager in place of action bars 1 to 3 in fights and with an " ..
-			"enemy targeted. After a fight it stays up until its cooldowns are ready."],
+		tip = L["Immersive, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
+			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
 		apply = function(set)
 			-- The Standard Frames page's In combat and Tar Enemy columns as in
 			-- Immersive (no minimap in fights either), but with the Cooldown
-			-- Manager in place of action bars 1 to 3.
+			-- Manager in place of action bars 1 to 3, the micro menu and bags and the XP bar.
 			set("combatShow", Column({ "player", "prd", "prdpower", "target", "tot", "focus", "party", "raidplayers", "raidpets",
-				"buffs", "swing", "cooldowns", "pet", "stance", "totems", "micro", "xp" }))
+				"buffs", "swing", "cooldowns", "pet", "stance", "totems" }))
 			set("enemyShow", Column({ "player", "prd", "prdpower", "target", "tot", "focus", "buffs", "cooldowns", "pet",
-				"stance", "totems", "micro", "xp" }))
+				"stance", "totems" }))
 			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
 			set("cooldownWhileRecharging", true)
 			-- Auto-walking and auto-running can start music, with the same

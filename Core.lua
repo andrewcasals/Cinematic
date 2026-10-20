@@ -3247,6 +3247,21 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			if (ns.db.liveProfile or ns.db.profile) == "Immersive (CDM)" then CooldownsOn(ns.db) end
 			ns.db.cdmEnemyV1 = true
 		end
+		-- ...and keeps the micro menu and bags and the XP bar hidden then. Once,
+		-- in each of those columns still as it was.
+		if not ns.db.cdmBarsV1 then
+			local function BarsOff(t)
+				for _, key in ipairs({ "combatShow", "enemyShow" }) do
+					local list = type(t) == "table" and t[key]
+					if type(list) == "table" and list.mainbar == false and list.micro == true and list.xp == true then
+						list.micro, list.xp = false, false
+					end
+				end
+			end
+			BarsOff((ns.db.profiles or {})["Immersive (CDM)"])
+			if (ns.db.liveProfile or ns.db.profile) == "Immersive (CDM)" then BarsOff(ns.db) end
+			ns.db.cdmBarsV1 = true
+		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
 		for _, key in ipairs({
