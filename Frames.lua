@@ -1322,6 +1322,25 @@ function ns.IsEntryHovered(entry)
 		return ns.Flag(entry.frame:IsVisible()) and IsNearIcon(BUFF_HOVER_DEPTH,
 			ns.db.buffHoverPadX or 20, ns.db.buffHoverPadY or 20, entry.frame:GetChildren())
 	end
+	-- Retail's quest tracker only takes the mouse on its headers and quest
+	-- names, so the objective lines under them count by their rect: the mouse
+	-- over any shown section (Campaign, Quests...), which is as tall as its
+	-- quests, unlike the tracker itself. (NineSlice is the background, the
+	-- whole tracker.) A frame of something else on top has the mouse instead.
+	if entry.group == "quests" and ns.isRetail and entry.frame == _G.ObjectiveTrackerFrame then
+		local tracker, focus = entry.frame, MouseFocus()
+		if not ns.Flag(tracker:IsVisible()) or (focus and not IsInside(focus, tracker)) then
+			return false
+		end
+		for i = 1, select("#", tracker:GetChildren()) do
+			local child = select(i, tracker:GetChildren())
+			if child ~= tracker.NineSlice and not IsForbidden(child) and ns.Flag(child:IsVisible())
+				and ns.Flag(child:IsMouseOver(4, -4, -4, 4)) then
+				return true
+			end
+		end
+		return false
+	end
 	-- (The mouse over the 3D world, as it mostly is in CineMode: none of the
 	-- rest can be hovered, so no need to ask each frame.)
 	if entry.group ~= "chat" and not MouseFocus() then
