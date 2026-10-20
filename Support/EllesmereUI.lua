@@ -200,6 +200,115 @@ ns.WhenAddonLoads("EllesmereUIRaidFrames", function()
 	end)
 end)
 
+-- Its nameplates are its own frames on the game's plates (its plate, or the
+-- name over a friendly NPC), beside the game's unit frame, which it keeps at
+-- alpha 0. The fade only reached that unit frame, so its plates popped up and
+-- went at full as plates were switched on and off. Its frames on a plate fade
+-- with it, as Plater's do: its alpha (target and range fading) times ours,
+-- hooked. They're pooled and move from plate to plate: one moved takes the
+-- alpha of the plate it lands on.
+do
+	local pieces = setmetatable({}, { __mode = "k" }) -- [game plate] = its frames on it (and how many children it had)
+	local applying = false
+
+	local function Apply(frame)
+		applying = true
+		frame:SetAlpha((frame.cinematicOwnAlpha or 1) * (frame.cinematicPlateAlpha or 1))
+		applying = false
+	end
+
+	local function SetPieceAlpha(frame, alpha)
+		alpha = alpha and alpha < 1 and alpha or nil
+		if frame.cinematicPlateAlpha ~= alpha then
+			frame.cinematicPlateAlpha = alpha
+			Apply(frame) -- (back to its own alpha at full)
+		end
+	end
+
+	local function HookPiece(frame)
+		if frame.cinematicHooked then
+			return
+		end
+		frame.cinematicHooked = true
+		local alpha = frame:GetAlpha()
+		frame.cinematicOwnAlpha = not (issecretvalue and issecretvalue(alpha)) and alpha or nil
+		hooksecurefunc(frame, "SetAlpha", ns.Profiled("EllesmereUI plate SetAlpha hook", function(self, own)
+			if applying then
+				return
+			end
+			self.cinematicOwnAlpha = type(own) == "number" and not (issecretvalue and issecretvalue(own)) and own or nil
+			if self.cinematicPlateAlpha then
+				Apply(self)
+			end
+		end))
+		hooksecurefunc(frame, "SetParent", function(self, parent)
+			local unitFrame = type(parent) == "table" and not (parent.IsForbidden and parent:IsForbidden())
+				and parent.UnitFrame
+			SetPieceAlpha(self, type(unitFrame) == "table" and unitFrame.cinematicAlpha or nil)
+		end)
+	end
+
+	-- Its frames on a plate: the plate's unnamed children but the game's own
+	-- (the widgets and interact prompt it moves off the unit frame). Game
+	-- frames' methods aren't hooked: that breaks the game's calls to them.
+	-- Looked for again when the plate's number of children changes.
+	local function Pieces(plate)
+		local count = plate:GetNumChildren()
+		local list = pieces[plate]
+		if list and list.count == count then
+			return list
+		end
+		list = { count = count }
+		local unitFrame = plate.UnitFrame
+		for _, child in ipairs({ plate:GetChildren() }) do
+			if child ~= unitFrame and not child:GetName() and not (unitFrame and (child == unitFrame.WidgetContainer
+				or child == unitFrame.SoftTargetFrame)) and not (child.IsForbidden and child:IsForbidden()) then
+				HookPiece(child)
+				list[#list + 1] = child
+			end
+		end
+		pieces[plate] = list
+		return list
+	end
+
+	local function SetPlateAlpha(plate, alpha)
+		for _, frame in ipairs(Pieces(plate)) do
+			if frame:GetParent() == plate then
+				SetPieceAlpha(frame, alpha)
+			end
+		end
+	end
+
+	ns.WhenAddonLoads("EllesmereUINameplates", function()
+		local other = ns.addonPlateAlpha
+		ns.addonPlateAlpha = function(plate, alpha)
+			if other then
+				other(plate, alpha)
+			end
+			SetPlateAlpha(plate, alpha)
+		end
+		-- A new plate's frames are put on it in its own handler, which runs
+		-- after ours (Core: NAME_PLATE_UNIT_ADDED): give them the plate's
+		-- alpha straight after, before they're drawn. That handler also sets
+		-- the game's unit frame of a friendly plate to 1 if it's below 0.01
+		-- (ours, faded): put ours back too, or the name flashed up for a
+		-- frame on every plate coming into view (turning the camera round in
+		-- a city).
+		local watcher = CreateFrame("Frame")
+		watcher:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+		watcher:SetScript("OnEvent", function(_, _, unit)
+			local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit(unit)
+			local unitFrame = plate and not (plate.IsForbidden and plate:IsForbidden()) and plate.UnitFrame
+			if unitFrame then
+				SetPlateAlpha(plate, unitFrame.cinematicAlpha)
+				if unitFrame.cinematicAlpha then
+					unitFrame:SetAlpha(unitFrame.cinematicAlpha)
+				end
+			end
+		end)
+	end)
+end
+
 ns.WhenAddonLoads("EllesmereUIQuestTracker", function()
 	FadeWithRows({ { "quests", "quests", "EllesmereUIQTBackground" } })
 end)

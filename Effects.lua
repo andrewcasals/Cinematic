@@ -769,6 +769,9 @@ plateKeeper:SetScript("OnUpdate", ns.Profiled("Plate keeper", function(self)
 			-- (A secret alpha can't be compared: set ours again.)
 			local alpha = frame:GetAlpha()
 			if (issecretvalue and issecretvalue(alpha)) or alpha ~= wanted then
+				if ns.plateWatch then
+					ns.plateWatch.PutBack(frame, alpha, wanted)
+				end
 				frame:SetAlpha(wanted)
 			end
 		else
@@ -779,6 +782,91 @@ plateKeeper:SetScript("OnUpdate", ns.Profiled("Plate keeper", function(self)
 		self:Hide()
 	end
 end))
+
+-- /cine debug platewatch: logs, as it changes, how each faded plate is drawn
+-- (its unit frame and name: alpha, shown, parent, ignoring the parent's
+-- alpha), and each time the keeper above finds its alpha changed, to track
+-- down a faded plate flashing up. Read at the start of each frame and again
+-- once the frame's updates are done (OnUpdate here, and a C_Timer after).
+do
+	local LIMIT = 400
+	local watch
+	local function Num(value)
+		if issecretvalue and issecretvalue(value) then
+			return "secret"
+		end
+		return type(value) == "number" and ("%.2f"):format(value) or tostring(value)
+	end
+	local function State(plate, frame)
+		local name = frame.name
+		local nameState = "-"
+		if type(name) == "table" and name.GetAlpha then
+			local parent = name:GetParent()
+			nameState = ("name a=%s shown=%s visible=%s ignoreParent=%s parent=%s"):format(Num(name:GetAlpha()),
+				tostring(name:IsShown()), tostring(name:IsVisible()),
+				tostring(name.IsIgnoringParentAlpha and name:IsIgnoringParentAlpha()),
+				parent == frame and "unitframe" or (parent and (parent:GetName() or tostring(parent)) or "nil"))
+		end
+		local parent = frame:GetParent()
+		return ("plate a=%s shown=%s | unitframe a=%s effective=%s shown=%s parent=%s | %s"):format(
+			Num(plate:GetAlpha()), tostring(plate:IsShown()), Num(frame:GetAlpha()),
+			Num(frame.GetEffectiveAlpha and frame:GetEffectiveAlpha()), tostring(frame:IsShown()),
+			parent == plate and "plate" or (parent and (parent:GetName() or tostring(parent)) or "nil"), nameState)
+	end
+	local function Line(text)
+		if watch.lines >= LIMIT then
+			return
+		end
+		watch.lines = watch.lines + 1
+		ns.Log("platewatch", text)
+		if watch.lines == LIMIT then
+			ns.Log("platewatch", "line limit reached: /reload and run it again for more")
+		end
+	end
+	local function Scan(when)
+		if not (C_NamePlate and C_NamePlate.GetNamePlates) then
+			return
+		end
+		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+			local frame = plate.UnitFrame
+			if frame and frame.cinematicAlpha and not (plate.IsForbidden and plate:IsForbidden()) then
+				local state = State(plate, frame)
+				if watch.last[frame] ~= state then
+					watch.last[frame] = state
+					local unit = frame.unit
+					local name = unit and UnitName(unit)
+					Line(("%s %s (%s, ours %.2f): %s"):format(when,
+						(name and not (issecretvalue and issecretvalue(name))) and name or "?", tostring(unit),
+						frame.cinematicAlpha, state))
+				end
+			end
+		end
+	end
+	function ns.TogglePlateWatch()
+		if ns.plateWatch then
+			ns.plateWatch.frame:SetScript("OnUpdate", nil)
+			ns.plateWatch = nil
+			return false
+		end
+		watch = { lines = 0, last = setmetatable({}, { __mode = "k" }), frame = CreateFrame("Frame") }
+		function watch.PutBack(frame, alpha, wanted)
+			local unit = frame.unit
+			local name = unit and UnitName(unit)
+			Line(("keeper: %s (%s) was at %s, put back to %.2f"):format(
+				(name and not (issecretvalue and issecretvalue(name))) and name or "?", tostring(unit), Num(alpha), wanted))
+		end
+		watch.frame:SetScript("OnUpdate", function()
+			Scan("start")
+			C_Timer.After(0, function()
+				if ns.plateWatch == watch then
+					Scan("after")
+				end
+			end)
+		end)
+		ns.plateWatch = watch
+		return true
+	end
+end
 
 -- The interact prompt on a plate (gamepad mode's button, over a bobber or
 -- someone you can talk to: the plate's SoftTargetFrame) stays up while the

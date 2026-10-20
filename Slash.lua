@@ -89,6 +89,7 @@ local function PrintDebugHelp()
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
 	print("  /cine debug unitframes - log every part of the player, pet, target and focus frames (names, textures, sizes, held hidden) to the saved log")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
+	print("  /cine debug platewatch - log how faded nameplates are drawn each time it changes, to find one flashing up")
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
 	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
@@ -733,6 +734,9 @@ local function HandleSlash(msg)
 		ns.LogUnitFrames()
 	elseif cmd == "debug" and arg == "plates" then
 		ns.PrintPlatesDebug()
+	elseif cmd == "debug" and arg == "platewatch" then
+		ns.Print("log how faded nameplates are drawn as it changes: " .. OnOff(ns.TogglePlateWatch())
+			.. " (/reload to write the log)")
 	elseif cmd == "debug" and arg == "duels" then
 		ns.PrintDuelsDebug()
 	elseif cmd == "debug" and arg:find("^talents?%p*$") then
