@@ -47,7 +47,7 @@ end
 
 local function CreateWindow()
 	window = CreateFrame("Frame", "CinematicWelcome", UIParent, BackdropTemplateMixin and "BackdropTemplate")
-	window:SetWidth(600)
+	window:SetWidth(632)
 	window:SetPoint("CENTER", 0, 60)
 	window:SetFrameStrata("DIALOG")
 	window:SetToplevel(true)
@@ -73,7 +73,7 @@ local function CreateWindow()
 
 	local intro = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
-	intro:SetWidth(564)
+	intro:SetWidth(596)
 	intro:SetJustifyH("LEFT")
 	intro:SetText(L["Between fights, Cinematic fades your UI away, adds letterbox bars and a colour " ..
 		"tint, and brings the camera to life: on flights, standing still, sitting by a campfire. " ..
@@ -82,9 +82,15 @@ local function CreateWindow()
 
 	local last, height = intro, 0
 	for _, profile in ipairs(ns.BUILTIN_PROFILES) do
+		-- Its icon, as on the Profiles page.
+		local icon = window:CreateTexture(nil, "ARTWORK")
+		icon:SetSize(26, 26)
+		icon:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, last == intro and -16 or -10)
+		icon:SetTexture(profile.icon)
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 		local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
 		button:SetSize(150, 26)
-		button:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, last == intro and -16 or -10)
+		button:SetPoint("LEFT", icon, "RIGHT", 6, 0)
 		button:SetText(profile.name)
 		button:SetScript("OnClick", function() Pick(profile.name) end)
 		-- A tick on the one being tried.
@@ -103,14 +109,14 @@ local function CreateWindow()
 		-- A long description pushes the next button down.
 		local spacer = CreateFrame("Frame", nil, window)
 		spacer:SetSize(1, math.max(26, tip:GetStringHeight() + 4))
-		spacer:SetPoint("TOPLEFT", button, "TOPLEFT")
+		spacer:SetPoint("TOPLEFT", icon, "TOPLEFT")
 		last = spacer
 		height = height + spacer:GetHeight() + 10
 	end
 
 	local note = window:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	note:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -16)
-	note:SetWidth(564)
+	note:SetWidth(596)
 	note:SetJustifyH("LEFT")
 	note:SetText(L["Try as many as you like: each one starts straight away behind this window. " ..
 		"Afterwards you can switch any time, tweak a profile or make your own on the Profiles page " ..
