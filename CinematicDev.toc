@@ -36,7 +36,7 @@ Support\FlareUI.lua
 Support\WeakAuras.lua
 Support\Questie.lua
 Frames.lua
-HealerFrame.lua
+HealVisionFrames.lua
 Chat.lua
 Bubbles.lua
 Campfire.lua

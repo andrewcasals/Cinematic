@@ -94,7 +94,6 @@ local function PrintDebugHelp()
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
 	print("  /cine debug raidparts - log every part of the party and raid frames and how each is faded, print shown icons that aren't")
 	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
-	print("  /cine debug healer - the healer frame's rows and their HoT icons' containers")
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
@@ -746,8 +745,6 @@ local function HandleSlash(msg)
 		ns.LogRaidFrames()
 	elseif cmd == "debug" and arg == "health" then
 		ns.HealthDebug()
-	elseif cmd == "debug" and arg == "healer" then
-		if ns.HealerDebug then ns.HealerDebug() end
 	elseif cmd == "debug" and arg:find("^healthfade") then
 		ns.HealthFadeDebug(arg:match("^healthfade%s+(%S+)"))
 	elseif cmd == "debug" and arg:find("^damage") then
