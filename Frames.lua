@@ -4332,10 +4332,12 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local events = tickTables.events
 	events.chat, events.whisper, events.typing = dockPeek, whisperUnread, typing
 	events.aura = cinematic and (buffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone))
-	events.ping = pingReveal
+	-- (Not on flight paths, Minimap page: no pings, reveals or tracking bring it up then.)
+	local taxiHidesMinimap = ns.db.minimapHideOnTaxi and ns.Flag(UnitOnTaxi("player"))
+	events.ping = pingReveal and not taxiHidesMinimap
 	-- (Keep open and Reveal, Minimap page: "Except in" is for gathering tracking only.)
-	events.tracking = (keepForGathering and not trackingPaused) or keepForCreatures
-		or ns.IsMinimapRevealed(now)
+	events.tracking = not taxiHidesMinimap and ((keepForGathering and not trackingPaused) or keepForCreatures
+		or ns.IsMinimapRevealed(now))
 	events.quest, events.gamepad, events.roster = questReveal, padReveal, rosterReveal
 	events.cooldown = cinematic and ns.db.cooldownWhileRecharging
 		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)

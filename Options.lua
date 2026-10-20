@@ -5982,6 +5982,12 @@ local function CreateMinimapPanel()
 			previousReveal = nodePing
 		end
 	end
+	local onTaxi = Check(content, "minimapHideOnTaxi", L["Not on flight paths"],
+		L["On a flight path the minimap stays hidden: pings, the reveals above and the tracking under " ..
+		"Keep open don't bring it up (you can't gather while flying), and nothing is pinged. Hovering it " ..
+		"still shows it."])
+	onTaxi:SetPoint("TOPLEFT", previousReveal, "BOTTOMLEFT", 0, -2)
+	previousReveal = onTaxi
 
 	-- Keep open: the minimap stays up the whole time.
 	local keepLabel = Label(content, "GameFontHighlight", L["Keep open"])

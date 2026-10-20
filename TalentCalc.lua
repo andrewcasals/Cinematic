@@ -140,9 +140,8 @@ local function SpellOf(info)
 end
 
 -- The level a number of points needs: a point a level from 10, or from 5
--- with Talented if the tickbox says to count it (off by default: not
--- everyone has it, and your own points can't tell the calculator who will
--- use the build).
+-- with Talented if the tickbox says to count it (ticked when the window
+-- opens if you have it yourself).
 local function ReadLevels()
 	offset = ns.db and ns.db.talentCalcTalented and TALENTED_OFFSET or 9
 	local maxLevel = GetMaxLevelForPlayerExpansion and Num(GetMaxLevelForPlayerExpansion())
@@ -354,6 +353,22 @@ local function YourPoints()
 	local currency = C_Traits.GetTreeCurrencyInfo(configID, treeID, false)
 	currency = currency and currency[1]
 	return currency and Num(currency.quantity) and Num(currency.spent) and currency.quantity + currency.spent or 0
+end
+
+-- Whether you have Talented (any rank), by your points: each rank brings the
+-- first point a level sooner, so you have more than a point a level from 10.
+-- nil when your points can't tell: below level 9, or at the 51 points both
+-- reach by the top level.
+local function HasTalented()
+	local without = (Num(UnitLevel("player")) or 0) - 9
+	if without < 0 or without >= MOST_POINTS then
+		return nil
+	end
+	local yours = YourPoints()
+	if yours <= 0 and without > 0 then
+		return nil -- (couldn't read them)
+	end
+	return yours > without
 end
 
 local function LoadLearned()
@@ -1255,6 +1270,13 @@ local function OpenWindow()
 	end
 	-- From your talents as they are, each time it opens.
 	LoadLearned()
+	-- With Legacy ticked if you have Talented, unticked if not (as you left it
+	-- when your points can't tell).
+	local talented = HasTalented()
+	if talented ~= nil then
+		ns.GetDB().talentCalcTalented = talented
+		ReadLevels()
+	end
 	if not window then
 		MakeWindow()
 	end
@@ -1402,6 +1424,7 @@ function ns.PrintTalentCalcDebug()
 		.. (lastError and " (" .. lastError .. ")" or ""))
 	print(("  config %s, tree %s, level %s, points at max level %d (level = points + %d)"):format(
 		tostring(configID), tostring(treeID), tostring(UnitLevel("player")), maxPoints, offset))
+	print(("  your points %d, Talented %s"):format(YourPoints(), tostring(HasTalented())))
 	for i, tree in ipairs(trees) do
 		local cols = 0
 		for _, talent in ipairs(tree.talents) do
