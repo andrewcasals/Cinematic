@@ -6343,6 +6343,8 @@ local function CreateVisionPanel()
 		Option("healVisionHealerOnly", L["Only while you're a healer"],
 			L["Only while your specialization is a healing one (or, without one, the role you picked in the group " ..
 			"finder is Healer)."])
+		Option("healVisionTarget", L["Always show your target"],
+			L["The member you've targeted always shows, at full health too."])
 		Option("healVisionTanks", L["Always show tanks"],
 			L["Your group's tanks (by role, or main tanks in a raid) always show, at full health too."])
 		-- (Any debuff takes in the ones you can dispel: that box greys while it's ticked.)

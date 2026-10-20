@@ -112,7 +112,9 @@ end
 -- Shown whatever their health, as the Vision page's options say.
 local function AlwaysShown(unit)
 	local db = ns.db
-	return (db.healVisionTanks and Tank(unit))
+	-- (Your target too: hidden, only its selection outline would show.)
+	return (db.healVisionTarget and Plain(UnitIsUnit(unit, "target")) == true)
+		or (db.healVisionTanks and Tank(unit))
 		or (db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
 		or (db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
 end
@@ -334,7 +336,8 @@ end
 
 local watcher = CreateFrame("Frame")
 for _, event in ipairs({ "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_IN_RANGE_UPDATE",
-	"UNIT_AURA", "PLAYER_SPECIALIZATION_CHANGED", "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }) do
+	"UNIT_AURA", "PLAYER_SPECIALIZATION_CHANGED", "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
+	"PLAYER_TARGET_CHANGED" }) do
 	pcall(watcher.RegisterEvent, watcher, event) -- (not every client has every event)
 end
 watcher:SetScript("OnEvent", function(_, event, unit)
@@ -342,6 +345,8 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		or event == "UNIT_IN_RANGE_UPDATE" or event == "UNIT_AURA" then
 		if Secret(unit) or not byUnit[unit] then return end
 		for _, frame in ipairs(byUnit[unit]) do Update(frame) end
+	elseif event == "PLAYER_TARGET_CHANGED" then
+		UpdateAll()
 	else
 		-- (After the game has set its frames up for the new group, or place:
 		-- the Vision grid may say otherwise there.)

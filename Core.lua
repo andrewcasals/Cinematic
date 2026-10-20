@@ -597,6 +597,7 @@ local VISION_PLACE = { dungeon = "Dungeons", raid = "Raids", pvp = "BGs" }
 DEFAULTS.healVision = false
 DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-0.9)
 DEFAULTS.healVisionHealerOnly = true -- only while you're a healer
+DEFAULTS.healVisionTarget = true -- your target always shows
 DEFAULTS.healVisionTanks = true -- tanks always show
 DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
 DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
