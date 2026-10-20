@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-20", page = "Mouseover groups", title = "Mouseover groups in or out of combat",
+		text = "Each mouseover group can work any time, only out of combat or only in combat. By default the " ..
+		"Raid Frame Manager comes up with the raid and party frames out of combat only." },
 	{ date = "2026-10-19", page = "Unit Frames", title = "Target and focus cast bars",
 		text = "The Unit frame parts grids have a Cast bar column: hide the bar under the target and focus " ..
 		"frames as they cast." },

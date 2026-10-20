@@ -1018,6 +1018,7 @@ do
 			{ "Chat", "Interface\\Icons\\INV_Scroll_03" },
 			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout" },
 			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01" },
+			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl" },
 		} },
 		{ name = "Camera", pages = {
 			{ "Camera Modes", "Interface\\Icons\\INV_Misc_Spyglass_03" },
@@ -1368,32 +1369,6 @@ local function CreateRevealPanel()
 	worldText:HookScript("OnClick", function()
 		StaticPopup_Show("CINEMATIC_WORLD_TEXT_RESTART")
 	end)
-
-	local visionHeader = Header(content, L["Vision"], worldText, -24)
-	visionHeader:SetPoint("TOPLEFT", worldText, "BOTTOMLEFT", 2, -24)
-
-	-- Duels near you: the two players' plates show (see Effects).
-	local duelCheck = Check(content, "duelPlates", L["Duel Vision"],
-		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
-		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
-		"kept invisible and click-through bar the duelists'. Each duel has its own colour, and the winner " ..
-		"and loser show when it ends. Needs CineMode Nameplates on (Nameplates page)."])
-	duelCheck:SetPoint("TOPLEFT", visionHeader, "BOTTOMLEFT", -2, -6)
-	GreyUnless(duelCheck, function(db) return db.handlePlates end)
-
-	-- The game's party and raid frames show only who's hurt (HealVisionFrames.lua).
-	-- (Work in progress: the dev copy only.)
-	if ns.isDev then
-		local healCheck = Check(content, "healVision", L["Heal Vision"],
-			L["The game's party and raid frames show only who needs healing: tanks always, everyone else " ..
-			"(pets too) only while they're below full health, and the group titles hide. The members stay " ..
-			"in their places, so there are gaps. The mouse over the frames brings everyone back."],
-			function(value)
-				ns.GetDB().healVision = value
-				if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
-			end)
-		healCheck:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 0, -2)
-	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -6240,6 +6215,128 @@ local function CreateCooldownPanel()
 	RegisterSubpage(canvas, L["Cooldown Manager"])
 end
 
+-- Sub-page: the visions, each a way of showing just what matters. Duel
+-- Vision: the plates of two players dueling near you (see Effects). Heal
+-- Vision: the party and raid frames show only who needs healing
+-- (HealVisionFrames.lua; work in progress, the dev copy only).
+local function CreateVisionPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Vision"])
+	title:SetPoint("TOPLEFT", 16, -16)
+
+	local note = PageIntro(content, title,
+		L["Ways of showing just what matters: the health of a duel near you, or who in your group needs healing."])
+
+	local duelHeader = Header(content, L["Duel Vision"], note, -18)
+	local duelCheck = Check(content, "duelPlates", L["Enable"],
+		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
+		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
+		"kept invisible and click-through bar the duelists'. Each duel has its own colour, and the winner " ..
+		"and loser show when it ends. Needs CineMode Nameplates on (Nameplates page)."])
+	duelCheck:SetPoint("TOPLEFT", duelHeader, "BOTTOMLEFT", -2, -6)
+	GreyUnless(duelCheck, function(db) return db.handlePlates end)
+
+	if ns.isDev then
+		local function Apply()
+			if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
+			Refresh() -- grey out / enable the rest
+		end
+		local function IfAny(db) return ns.HealVisionAny(db) end
+
+		local healHeader = Header(content, L["Heal Vision"], duelCheck, -24)
+		healHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -24)
+		local healNote = PageIntro(content, healHeader,
+			L["The game's party and raid frames show only who needs healing: everyone (pets too) while below full " ..
+			"health, and as ticked below, tanks and members with debuffs. The group titles hide. The members stay " ..
+			"in their places, so there are gaps. Out of combat, the mouse over the frames brings everyone back. " ..
+			"Ticked in the grid, it's on there. Always: everywhere. Party and Raid: while you're in one, wherever you are."])
+
+		-- Show in: by place, then group (columns), like the Visual Effects
+		-- page's grid but ticked where it's on. Always greys the rest.
+		local PLACES = {
+			World = { L["Open World"], L["out in the world, capital cities and inns included"] },
+			Dungeons = { L["Dungeons"], L["in dungeons and scenarios"] },
+			Raids = { L["Raids"], L["in raids"] },
+			BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
+		}
+		local COLUMNS = { { key = "", heading = L["Always"] } }
+		for _, where in ipairs(ns.VISION_WHERE) do
+			COLUMNS[#COLUMNS + 1] = { key = "In" .. where, heading = PLACES[where][1], where = where }
+		end
+		-- (Party and Raid set apart: they aren't places.)
+		local firstGroup = #COLUMNS + 1
+		COLUMNS[#COLUMNS + 1] = { key = "InParty", heading = L["Party"] }
+		COLUMNS[#COLUMNS + 1] = { key = "InRaid", heading = L["Raid"] }
+		local NAME_WIDTH, COLUMN_WIDTH, GAP = 90, 66, 10
+		local function ColumnX(c)
+			return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= 2 and GAP or 0) + (c >= firstGroup and GAP or 0)
+		end
+		local gridTop = CreateFrame("Frame", nil, content)
+		gridTop:SetSize(ColumnX(#COLUMNS) + COLUMN_WIDTH, 26)
+		gridTop:SetPoint("TOPLEFT", healNote, "BOTTOMLEFT", 0, -10)
+		for c, column in ipairs(COLUMNS) do
+			local heading = Label(gridTop, "GameFontNormalSmall", column.heading)
+			heading:SetWidth(COLUMN_WIDTH)
+			heading:SetJustifyH("CENTER")
+			heading:SetPoint("BOTTOMLEFT", gridTop, "BOTTOMLEFT", ColumnX(c), 0)
+		end
+		local row = CreateFrame("Frame", nil, content)
+		row:SetSize(gridTop:GetWidth(), 24)
+		row:SetPoint("TOPLEFT", gridTop, "BOTTOMLEFT", 0, -2)
+		Label(row, "GameFontHighlight", L["Show in"]):SetPoint("LEFT", row, "LEFT", 0, 0)
+		for c, column in ipairs(COLUMNS) do
+			local key = "healVision" .. column.key
+			local tip = (c == 1 and L["Heal Vision everywhere. The rest of the row keeps its ticks for when you untick this."])
+				or (column.where and L["Heal Vision %s."]:format(PLACES[column.where][2]))
+				or (column.key == "InParty" and L["Heal Vision while you're in a party (not a raid), wherever you are."])
+				or L["Heal Vision while you're in a raid, wherever you are."]
+			local check = Check(content, key, "", tip, function(value)
+				ns.GetDB()[key] = value
+				Apply()
+			end)
+			check:SetPoint("CENTER", row, "LEFT", ColumnX(c) + COLUMN_WIDTH / 2, 0)
+			if c > 1 then
+				GreyUnless(check, function(db) return not db.healVision end)
+			end
+		end
+
+		local previous = row
+		local function Option(key, label, tip, enabled)
+			local check = Check(content, key, label, tip, function(value)
+				ns.GetDB()[key] = value
+				Apply()
+			end)
+			check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == row and -2 or 0, previous == row and -10 or -2)
+			GreyUnless(check, enabled or IfAny)
+			previous = check
+		end
+		Option("healVisionHealerOnly", L["Only while you're a healer"],
+			L["Only while your specialization is a healing one (or, without one, the role you picked in the group " ..
+			"finder is Healer)."])
+		Option("healVisionTanks", L["Always show tanks"],
+			L["Your group's tanks (by role, or main tanks in a raid) always show, at full health too."])
+		-- (Any debuff takes in the ones you can dispel: that box greys while it's ticked.)
+		Option("healVisionDispel", L["Show members with a debuff you can dispel"],
+			L["A member with a debuff you can dispel shows, at full health too."],
+			function(db) return IfAny(db) and not db.healVisionAnyDebuff end)
+		Option("healVisionAnyDebuff", L["Show members with any debuff"],
+			L["A member with any debuff at all shows, at full health too."])
+
+		-- How faded the members it hides are (0: gone).
+		local healMin = Slider(content, "healVisionMinAlpha", L["Hidden members' opacity"], 0, 90, 1, "%d%%", 100,
+			Apply)
+		healMin:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 4, -26)
+		Tooltip(healMin, L["How much of the members Heal Vision hides still shows, and of the group titles. " ..
+			"0% hides them completely."])
+		GreyUnless(healMin, IfAny)
+	end
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Vision")
+end
+
 -- Sub-page: tooltips. In CineMode, world tooltips and unit frames' hide by
 -- kind out of combat, enemies or everything else (the UI's too) in combat,
 -- and all of them in the camera modes ticked.
@@ -7759,6 +7856,25 @@ local function CreateMouseoverPanel()
 				end
 			end)
 
+			-- When it works: any time, or only out of fights or in them (click
+			-- for the next). (when: nil, "calm" or "combat".)
+			local when = Take("when", function()
+				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+				button:SetSize(140, 22)
+				Tooltip(button, L["When this group works: any time, only out of combat or only in combat. " ..
+					"Click to change. The rest of the time its frames come up on their own (or with their other " ..
+					"groups), and its events don't bring it up."])
+				return button
+			end)
+			At(when, LEFT + 224, -1)
+			when:SetText(group.when == "calm" and L["Only out of combat"]
+				or group.when == "combat" and L["Only in combat"] or L["Any time"])
+			when:SetScript("OnClick", function()
+				local editable = Writable()[index]
+				editable.when = (editable.when == nil and "calm") or (editable.when == "calm" and "combat") or nil
+				Layout()
+			end)
+
 			local delete = Take("delete", function()
 				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 				button:SetSize(100, 22)
@@ -7961,6 +8077,7 @@ ns.OnLanguage(function()
 		CreateCooldownPanel()
 	end
 	CreateTooltipPanel()
+	CreateVisionPanel()
 	CreateBuffsPanel()
 	CreatePlatesPanel()
 	CreateChatPanel()

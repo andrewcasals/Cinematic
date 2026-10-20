@@ -583,8 +583,63 @@ DEFAULTS.handleSwing = true -- Swing timer
 -- ship: they show only there.
 ns.isDev = ADDON_NAME == "CinematicDev"
 -- Heal Vision (CineMode page, HealVisionFrames.lua): the game's party and raid
--- frames show the tanks always, and everyone else only while hurt.
+-- frames show the tanks always, and everyone else only while hurt. Its row of
+-- the Vision grid: healVision is Always, healVisionIn<where> (ns.VISION_WHERE:
+-- the open world, capital cities included, dungeons and scenarios, raids, and
+-- battlegrounds and arenas), healVisionInParty and healVisionInRaid (in one,
+-- wherever you are; not healVisionInRaids, the place). All off to start with.
+ns.VISION_WHERE = { "World", "Dungeons", "Raids", "BGs" }
+local VISION_PLACE = { dungeon = "Dungeons", raid = "Raids", pvp = "BGs" }
 DEFAULTS.healVision = false
+DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-0.9)
+DEFAULTS.healVisionHealerOnly = true -- only while you're a healer
+DEFAULTS.healVisionTanks = true -- tanks always show
+DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
+DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
+do
+	local HEAL_VISION_KEYS = { "healVision" }
+	for _, column in ipairs({ "World", "Dungeons", "Raids", "BGs", "Party", "Raid" }) do
+		DEFAULTS["healVisionIn" .. column] = false
+		HEAL_VISION_KEYS[#HEAL_VISION_KEYS + 1] = "healVisionIn" .. column
+	end
+
+	-- Whether you're a healer: your specialization's role, or without one the
+	-- role you picked in the group finder. Yes when there's no telling.
+	local function IsHealer()
+		if GetSpecialization and GetSpecializationRole then
+			local spec = GetSpecialization()
+			local role = spec and GetSpecializationRole(spec)
+			if type(role) == "string" then return role == "HEALER" end
+		end
+		if UnitGroupRolesAssigned then
+			local role = UnitGroupRolesAssigned("player")
+			if type(role) == "string" and role ~= "NONE" then return role == "HEALER" end
+		end
+		return true
+	end
+
+	-- Whether Heal Vision is on where you are now (in a party or raid or not,
+	-- a healer or not).
+	function ns.HealVisionHere(db)
+		db = db or ns.db
+		if not db then return false end
+		if db.healVisionHealerOnly and not IsHealer() then return false end
+		if db.healVision or db["healVisionIn" .. (VISION_PLACE[ns.GetPlaceType()] or "World")] then return true end
+		if IsInRaid() then return db.healVisionInRaid end
+		return IsInGroup() and db.healVisionInParty
+	end
+
+	-- Whether any of its boxes is ticked.
+	function ns.HealVisionAny(db)
+		db = db or ns.db
+		if not db then return false end
+		for _, key in ipairs(HEAL_VISION_KEYS) do
+			if db[key] then return true end
+		end
+		return false
+	end
+end
+
 -- Swing timer page: the ranged bar on top (it and the main hand's trade
 -- places), per class so one profile suits them all. To start with, the
 -- classes that shoot most: hunters, and the casters with wands.
@@ -2901,6 +2956,20 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then saved.weatherTintStrength = 1 end
 			end
 			ns.db.weatherStrengthV1 = true
+		end
+		-- Heal Vision (Vision page) as its defaults in every profile: its grid
+		-- unticked, the options as the defaults say. Once. (Saved profiles drop
+		-- theirs, to follow their base.)
+		if not ns.db.healVisionDefaultsV1 then
+			for key, value in pairs(DEFAULTS) do
+				if key:find("^healVision") then
+					ns.db[key] = value
+					for _, saved in pairs(ns.db.profiles or {}) do
+						if type(saved) == "table" then saved[key] = nil end
+					end
+				end
+			end
+			ns.db.healVisionDefaultsV1 = true
 		end
 		-- The Plate Parts' Buffs/debuffs row (Part Auras) was split into Buffs
 		-- and Debuffs rows: each takes its boxes, in every profile.

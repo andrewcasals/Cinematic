@@ -1616,13 +1616,15 @@ ns.HOVER_GROUPS_DEFAULT = {
 		members = { "prd", "prdpower" } },
 	{ preset = "target", icon = "Interface\\Icons\\Ability_Hunter_SniperShot", name = L["Target and focus"],
 		members = { "target", "tot", "focus" } },
-	-- (Raid-style party frames are the raid frames; the Raid Frame Manager
-	-- goes with both.)
+	-- (Raid-style party frames are the raid frames. The Raid Frame Manager
+	-- comes up with both out of fights only: its own group, below.)
 	{ preset = "raid", icon = "Interface\\Icons\\Spell_Holy_PrayerOfFortitude", name = L["Raid frames"],
 		members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidnames", "raidpetnames", "raidtitles",
-		"raidbuffs", "raiddebuffs", "raidmanager" }, triggers = { roster = true } },
+		"raidbuffs", "raiddebuffs" }, triggers = { roster = true } },
 	{ preset = "party", icon = "Interface\\Icons\\Spell_Holy_PrayerOfHealing02", name = L["Party frames"],
-		members = { "party", "partyroles", "partynames", "partystatus", "raidmanager" }, triggers = { roster = true } },
+		members = { "party", "partyroles", "partynames", "partystatus" }, triggers = { roster = true } },
+	{ preset = "raidmanager", icon = "Interface\\Icons\\Ability_Warrior_RallyingCry", name = L["Raid Frame Manager"],
+		members = { "raidmanager", "raidplayers", "raidpets", "party" }, triggers = { roster = true }, when = "calm" },
 	{ preset = "minimap", icon = "Interface\\Icons\\INV_Misc_Map_01", name = L["Minimap"],
 		members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock" },
 		triggers = { ping = true, tracking = true } },
@@ -1767,7 +1769,7 @@ function ns.CopyHoverGroups()
 		for i, key in ipairs(group.members or {}) do members[i] = key end
 		for key, on in pairs(group.triggers or {}) do triggers[key] = on end
 		local preset = ns.HoverGroupPreset(group)
-		copy[#copy + 1] = { name = group.name, members = members, triggers = triggers,
+		copy[#copy + 1] = { name = group.name, members = members, triggers = triggers, when = group.when,
 			preset = preset and preset.preset or nil, icon = not preset and group.icon or nil }
 	end
 	return copy
@@ -4218,7 +4220,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 	if cinematic then
 		combatShown = GetCombatShownFrames()
 	end
-	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
+	local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+	if fighting then
 		lastCombatAt = now
 		buffPeekUntil = 0 -- (a peek from just before the fight doesn't outlast it)
 		debuffHeld = false
@@ -4269,6 +4272,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- Mouseover groups: the rows the mouse is on (each held a while after it
 	-- leaves), and the events going on now, bring up every row in their groups.
 	local hoverGroups = ns.GetHoverGroups()
+	-- (A group set to work only in fights, or only out of them: left out
+	-- otherwise, its frames still coming up on their own. offWhen: the "when"
+	-- that's left out now.)
+	local offWhen = fighting and "calm" or "combat"
 	local hovered, triggered, pinged = wipe(tickTables.hovered), wipe(tickTables.triggered), wipe(tickTables.pinged)
 	if cinematic and ns.db.mouseover then
 		local mouseRows = wipe(tickTables.mouseRows)
@@ -4295,7 +4302,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		-- (Only groups a hovered row is in directly: groups sharing a row don't chain.)
 		local mouseGroups = wipe(tickTables.mouseGroups)
 		for _, group in ipairs(hoverGroups) do
-			for _, key in ipairs(group.members) do
+			for _, key in ipairs(group.when ~= offWhen and group.members or NO_DEFAULTS) do
 				if hovered[key] then
 					mouseGroups[#mouseGroups + 1] = group
 					break
@@ -4320,7 +4327,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
 		and AnyCooldownRecharging(now)
 	for _, group in ipairs(hoverGroups) do
-		for key, on in pairs(group.triggers or NO_DEFAULTS) do
+		for key, on in pairs(group.when ~= offWhen and group.triggers or NO_DEFAULTS) do
 			if on and events[key] then
 				for _, member in ipairs(group.members) do
 					triggered[member] = true

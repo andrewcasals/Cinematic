@@ -1,8 +1,8 @@
 -- Cinematic: Heal Vision on the game's own party and raid frames (the
--- CineMode page, Vision section). Tanks stay fully visible; everyone else
--- (pets too) shows only while below full
--- health, and the group titles ("Group 1", "Party") hide. The mouse over the
--- frames fades everyone back in while it's there.
+-- Vision page). Members (pets too) show only while below full health, or as
+-- the page's options say tanks and those with a debuff (you can dispel, or
+-- any), and the group titles ("Group 1", "Party") hide. The mouse over the
+-- frames fades everyone back in while it's there, out of combat.
 --
 -- As in HealerFrame.lua, the addon never knows anyone's health: their health
 -- percent goes through a curve (1 below full, 0 at full) straight into
@@ -34,6 +34,7 @@ local titles = {}   -- group titles hidden now
 local touched = {}  -- frame or part -> true: its alpha was set here (put back to 1 once let go)
 local hooked = {}   -- member frames whose scripts are followed
 local curves = {}   -- step -> the curve for it (false: none on this client)
+local curvesFloor   -- the opacity setting those curves were made for
 local hovered = false
 local reveal, revealStep = 0, 0 -- the mouse's fade: how far in (0-1), and as a step
 local sinceScan, sinceUpdate = RESCAN_EVERY, 0
@@ -46,9 +47,21 @@ local function Forbidden(frame)
 	return frame.IsForbidden and frame:IsForbidden()
 end
 
--- Health percent to alpha: 1 when hurt; at full, this step of the mouse's
--- fade (0: hidden).
+-- The alpha a hidden member has at this step of the mouse's fade: the
+-- opacity setting (Vision section) at 0, full at STEPS.
+local function Shown(step)
+	local floor = ns.db and tonumber(ns.db.healVisionMinAlpha) or 0
+	floor = math.max(0, math.min(floor, 1))
+	return floor + (1 - floor) * step / STEPS
+end
+
+-- Health percent to alpha: 1 when hurt; at full, Shown(step).
 local function Curve(step)
+	local floor = ns.db and ns.db.healVisionMinAlpha
+	if floor ~= curvesFloor then
+		wipe(curves)
+		curvesFloor = floor
+	end
 	if curves[step] ~= nil then return curves[step] end
 	curves[step] = false
 	if not (C_CurveUtil and C_CurveUtil.CreateCurve and Enum.LuaCurveType and UnitHealthPercent) then
@@ -58,7 +71,7 @@ local function Curve(step)
 	if ok and made then
 		made:SetType(Enum.LuaCurveType.Step)
 		made:AddPoint(0, 1)
-		made:AddPoint(0.9995, step / STEPS)
+		made:AddPoint(0.9995, Shown(step))
 		curves[step] = made
 	end
 	return curves[step]
@@ -75,9 +88,40 @@ local function Tank(unit)
 	return IsInRaid() and GetPartyAssignment and Plain(GetPartyAssignment("MAINTANK", unit)) == true
 end
 
+-- A debuff on them that the game's filters find: ones you can dispel
+-- (newer filter first), or any. Unsure (secret, or no such filter here): no,
+-- so they go by their health.
+local DISPEL_FILTERS = { "HARMFUL|RAID_PLAYER_DISPELLABLE", "HARMFUL|RAID" }
+local ANY_FILTERS = { "HARMFUL" }
+local function Debuffed(unit, filters, oldFilter)
+	if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+		for _, filter in ipairs(filters) do
+			local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, unit, 1, filter)
+			if ok and not Secret(data) and type(data) == "table" then
+				return true
+			end
+		end
+		return false
+	end
+	if UnitDebuff then
+		local ok, name = pcall(UnitDebuff, unit, 1, oldFilter)
+		return ok and not Secret(name) and type(name) == "string"
+	end
+	return false
+end
+
+-- Shown whatever their health, as the Vision page's options say.
+local function AlwaysShown(unit)
+	local db = ns.db
+	return (db.healVisionTanks and Tank(unit))
+		or (db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
+		or (db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
+end
+
+-- (kind: its setting, as the Vision grid's row has it: on here, see ns.HealVisionHere.)
 local function Wanted(kind)
 	local db = ns.db
-	return db and ns.isDev and db[kind] and not ns.IsSuspended()
+	return db and ns.isDev and kind == "healVision" and ns.HealVisionHere(db) and not ns.IsSuspended()
 end
 
 -- Not while CineMode is fading it (it fades it its own way, back to full once shown).
@@ -146,11 +190,13 @@ local function AddTitle(group, kind, list)
 	if title and not Forbidden(title) and title.SetAlpha then list[#list + 1] = title end
 end
 
--- The frames the members are in: the mouse over any brings everyone back.
+-- The frames the members are in: the mouse over any brings everyone back,
+-- out of combat only (in a fight, the hurt stay the only ones shown).
 local HOLDERS = { "PartyFrame", "CompactPartyFrame", "CompactRaidFrameContainer",
 	"PartyMemberFrame1", "PartyMemberFrame2", "PartyMemberFrame3", "PartyMemberFrame4" }
 
 local function Hovered()
+	if InCombatLockdown() then return false end
 	for _, name in ipairs(HOLDERS) do
 		local holder = _G[name]
 		if holder and not Forbidden(holder) then
@@ -239,7 +285,7 @@ local function Update(frame)
 	if not member or not fade then return end
 	local unit = member.unit
 	local alpha = 1
-	if revealStep < STEPS and UnitExists(unit) and not Tank(unit) then
+	if revealStep < STEPS and UnitExists(unit) and not AlwaysShown(unit) then
 		-- (Health as it is, not with heals being cast. Secret: straight to the game.)
 		local ok, value = pcall(UnitHealthPercent, unit, false, fade)
 		if ok and type(value) ~= "nil" then alpha = value end
@@ -274,7 +320,7 @@ local function UpdateAll()
 	for frame in pairs(members) do Update(frame) end
 	for _, title in ipairs(titles) do
 		if Free(title) then
-			title:SetAlpha(revealStep / STEPS)
+			title:SetAlpha(Shown(revealStep))
 			touched[title] = true
 		end
 	end
@@ -289,21 +335,22 @@ end
 
 local watcher = CreateFrame("Frame")
 for _, event in ipairs({ "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_IN_RANGE_UPDATE",
-	"GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD" }) do
+	"UNIT_AURA", "PLAYER_SPECIALIZATION_CHANGED", "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }) do
 	pcall(watcher.RegisterEvent, watcher, event) -- (not every client has every event)
 end
 watcher:SetScript("OnEvent", function(_, event, unit)
 	if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION"
-		or event == "UNIT_IN_RANGE_UPDATE" then
+		or event == "UNIT_IN_RANGE_UPDATE" or event == "UNIT_AURA" then
 		if Secret(unit) or not byUnit[unit] then return end
 		for _, frame in ipairs(byUnit[unit]) do Update(frame) end
 	else
-		-- (After the game has set its frames up for the new group.)
+		-- (After the game has set its frames up for the new group, or place:
+		-- the Vision grid may say otherwise there.)
 		C_Timer.After(0.5, ns.ApplyHealVisionFrames)
 	end
 end)
 watcher:SetScript("OnUpdate", function(_, elapsed)
-	if not next(members) and not next(touched) and not (ns.db and ns.db.healVision) then
+	if not next(members) and not next(touched) and not ns.HealVisionAny() then
 		return
 	end
 	-- The mouse over the frames: everyone fades in (as fast as CineMode's

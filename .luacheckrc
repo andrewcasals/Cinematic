@@ -218,6 +218,8 @@ read_globals = {
 	"UnitHealthMissing",
 	"UnitHealthPercent",
 	"UnitGroupRolesAssigned",
+	"GetSpecialization",
+	"GetSpecializationRole",
 	"GetPartyAssignment",
 	"UnitIsConnected",
 	"UnitInRange",
