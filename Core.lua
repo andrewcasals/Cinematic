@@ -597,7 +597,6 @@ local VISION_PLACE = { dungeon = "Dungeons", raid = "Raids", pvp = "BGs" }
 DEFAULTS.healVision = false
 DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-0.9)
 DEFAULTS.healVisionShowBelow = 0.95 -- members show below this much health (0-1; 1: any damage)
-DEFAULTS.healVisionHealerOnly = true -- only while you're a healer
 DEFAULTS.healVisionTarget = true -- your target always shows
 DEFAULTS.healVisionTanks = true -- tanks always show
 DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
@@ -623,10 +622,16 @@ do
 		end
 	end
 
-	-- Whether you're a healer. Yes when there's no telling.
-	local function IsHealer()
-		local role = ns.PlayerRole()
-		return role == nil or role == "HEALER"
+	-- A grid row's roles button (tankHide, healerHide, damageHide: row key ->
+	-- true, hidden or off while you're that role; false, ticked back on). Rows
+	-- not set go by these: Heal Vision is for healers to start with.
+	ns.ROLE_HIDE_DEFAULTS = { tankHide = { healVision = true }, damageHide = { healVision = true } }
+	function ns.RoleHidden(db, list, key)
+		local value = db[list] and db[list][key]
+		if value == nil then
+			value = ns.ROLE_HIDE_DEFAULTS[list] and ns.ROLE_HIDE_DEFAULTS[list][key]
+		end
+		return value and true or false
 	end
 
 	-- Whether Heal Vision is on where you are now (in a party or raid or not,
@@ -634,7 +639,11 @@ do
 	function ns.HealVisionHere(db)
 		db = db or ns.db
 		if not db then return false end
-		if db.healVisionHealerOnly and not IsHealer() then return false end
+		-- (Off while you're a role its roles button has unticked: healers only to start with.)
+		local role = ns.PlayerRole()
+		local list = role == "TANK" and "tankHide" or role == "HEALER" and "healerHide"
+			or role == "DAMAGER" and "damageHide"
+		if list and ns.RoleHidden(db, list, "healVision") then return false end
 		if db.healVision or db["healVisionIn" .. (VISION_PLACE[ns.GetPlaceType()] or "World")] then return true end
 		if IsInRaid() then return db.healVisionInRaid end
 		return IsInGroup() and db.healVisionInParty
@@ -1896,6 +1905,10 @@ function ns.EnsureTables()
 	ns.db.tooltipCineMode = nil -- (a test build's: the Tooltips page's master switch decides now)
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode
 	ns.db.frameRules = ns.db.frameRules or {} -- row key -> rule text (Custom Visibility Rules, Advanced Frames page)
+	-- Row key -> true: kept hidden in CineMode while you're that role (a frames grid row's roles button).
+	ns.db.tankHide = ns.db.tankHide or {}
+	ns.db.healerHide = ns.db.healerHide or {}
+	ns.db.damageHide = ns.db.damageHide or {}
 	ns.db.playerRule = nil -- (a test build's one rule, the player frame's)
 	-- The minimap button's old spot, 225 (never dragged: dragging never lands
 	-- exactly on it), covered the dungeon finder's eye: the new default.
@@ -2932,6 +2945,25 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then MetersOff(saved) end
 			end
 			ns.db.metersCombatV1 = true
+		end
+		-- Heal Vision's "Only while you're a healer" is its roles button now
+		-- (healers only by default): unticked, it's ticked back on for tanks
+		-- and damage, in every profile too. Once.
+		if not ns.db.healVisionRolesV1 then
+			local function Roles(t)
+				if t.healVisionHealerOnly == false then
+					for _, list in ipairs({ "tankHide", "damageHide" }) do
+						if type(t[list]) ~= "table" then t[list] = {} end
+						t[list].healVision = false
+					end
+				end
+				t.healVisionHealerOnly = nil
+			end
+			Roles(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then Roles(saved) end
+			end
+			ns.db.healVisionRolesV1 = true
 		end
 		-- The party frames and raid frames' players show while you're grouped
 		-- by default: their Grouped boxes ticked in every profile too. Once.

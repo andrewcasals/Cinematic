@@ -143,6 +143,7 @@ read_globals = {
 	"JumpOrAscendStart",
 	"LootFrame",
 	"MenuUtil",
+	"MenuResponse",
 	"Minimap",
 	"MoveViewDownStart",
 	"MoveViewDownStop",

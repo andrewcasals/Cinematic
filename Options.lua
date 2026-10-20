@@ -3944,6 +3944,78 @@ local function FrameHeading(parent, text)
 	return heading
 end
 
+-- A grid row's roles button: the icons of the roles it shows for (All with
+-- all three, None with none), a menu of them on click. Unticked, the row is
+-- kept hidden in CineMode while you're that role (tankHide, healerHide,
+-- damageHide: row key -> true). key: the row's key, or a function giving it
+-- (rows reused for other frames). page: the page whose Reset ticks them all
+-- again (string keys only). tip, onChange: its own tooltip, and what else a
+-- change needs. nil on clients without menus: ROLES_MENU.
+local ROLES_MENU = MenuUtil and MenuUtil.CreateContextMenu and true or false
+local RolesButton
+do
+	local ICON = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:16:16:0:0:64:64:%s|t"
+	local ROLES = { { "tankHide", L["Tank"], ICON:format("0:19:22:41") },
+		{ "healerHide", L["Healer"], ICON:format("20:39:1:20") }, { "damageHide", L["Damage"], ICON:format("20:39:22:41") } }
+	function RolesButton(parent, page, key, tip, onChange)
+		if not ROLES_MENU then return nil end
+		local function Key() if type(key) == "function" then return key() end return key end
+		local button = CreateFrame("Button", nil, parent)
+		button:SetSize(52, 22)
+		button:SetNormalFontObject("GameFontNormalSmall")
+		button:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+		button:SetText(" ") -- (makes its font string)
+		local function ShowRoles()
+			local db, rowKey, on = ns.GetDB(), Key(), {}
+			if not (db and rowKey) then return end
+			for _, role in ipairs(ROLES) do
+				if not ns.RoleHidden(db, role[1], rowKey) then on[#on + 1] = role[3] end
+			end
+			button:SetText(#on == #ROLES and L["All"] or #on == 0 and L["None"] or table.concat(on))
+		end
+		button:SetScript("OnClick", function(self)
+			MenuUtil.CreateContextMenu(self, function(_, root)
+				for _, role in ipairs(ROLES) do
+					local setting = role[1]
+					root:CreateCheckbox(role[3] .. " " .. role[2],
+						function()
+							local db, rowKey = ns.GetDB(), Key()
+							return db ~= nil and rowKey ~= nil and not ns.RoleHidden(db, setting, rowKey)
+						end,
+						function()
+							local db, rowKey = ns.GetDB(), Key()
+							if not rowKey then return end
+							db[setting] = db[setting] or {}
+							-- (Back to nil when it's the row's default again.)
+							local hide = not ns.RoleHidden(db, setting, rowKey)
+							if hide == ns.RoleHidden({}, setting, rowKey) then
+								db[setting][rowKey] = nil
+							else
+								db[setting][rowKey] = hide
+							end
+							ShowRoles()
+							if onChange then onChange() end
+							-- (Kept open, for ticking another.)
+							return MenuResponse and MenuResponse.Refresh
+						end)
+				end
+			end)
+		end)
+		button.Refresh = ShowRoles
+		controls[#controls + 1] = button
+		Tooltip(button, tip or L["The roles it shows for: untick one to keep it hidden in CineMode while you're " ..
+			"that role (your specialization's, or the one picked in the group finder), whatever " ..
+			"its ticks or rule say."])
+		if type(key) == "string" then
+			for _, role in ipairs(ROLES) do
+				RecordKey(page, role[1])
+				RecordRow(page, role[1], key)
+			end
+		end
+		return button
+	end
+end
+
 -- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
 -- items), a column per situation. Used by the Gamepad page too. ...: where
 -- the rows are, for the Rules section's menu.
@@ -3957,6 +4029,11 @@ local function ShowTable(content, anchor, rows, ...)
 	for c, column in ipairs(COLUMNS) do
 		FrameHeading(content, column[1]):SetPoint("TOPLEFT", columnTop, "TOPLEFT",
 			LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+	end
+	-- (Over the rows' roles buttons.)
+	if ROLES_MENU then
+		FrameHeading(content, L["Role"]):SetPoint("TOPLEFT", columnTop, "TOPLEFT",
+			LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0)
 	end
 
 	local lastLabel = columnTop
@@ -3984,6 +4061,11 @@ local function ShowTable(content, anchor, rows, ...)
 		end
 		if ns.CINE_SHOW_SETTING[item.key] then
 			RecordKey(content, ns.CINE_SHOW_SETTING[item.key]) -- (for the page's Reset)
+		end
+		-- The roles it shows for, after its last column.
+		local roles = RolesButton(content, content, item.key)
+		if roles then
+			roles:SetPoint("LEFT", rowLabel, "LEFT", LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0)
 		end
 		for c, column in ipairs(COLUMNS) do
 			local isOn, tableKey, needsStay = column[2], column[3], column[4]
@@ -4833,8 +4915,9 @@ local function CreatePlatesPanel()
 
 	-- Nameplates and names each get a table: a row per kind of unit, a column
 	-- per situation. A narrower table can set its first column apart (gap).
+	-- roles: a Role column after the last, for the rows' roles buttons (rolesX).
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 120, 24
-	local function TableTop(anchor, headings, labelWidth, columnWidth, gap)
+	local function TableTop(anchor, headings, labelWidth, columnWidth, gap, roles)
 		local top = CreateFrame("Frame", nil, content)
 		top:SetSize(1, 1)
 		top:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
@@ -4845,6 +4928,13 @@ local function CreatePlatesPanel()
 			text:SetWidth(top.width)
 			text:SetJustifyH("CENTER")
 			text:SetPoint("TOPLEFT", top, "TOPLEFT", top.xs[c], 0)
+		end
+		if roles and ROLES_MENU then
+			top.rolesX = top.xs[#top.xs] + top.width
+			local text = Label(content, "GameFontNormalSmall", L["Role"])
+			text:SetWidth(top.width)
+			text:SetJustifyH("CENTER")
+			text:SetPoint("TOPLEFT", top, "TOPLEFT", top.rolesX, 0)
 		end
 		return top
 	end
@@ -4907,7 +4997,7 @@ local function CreatePlatesPanel()
 			friendlyHeadings[#friendlyHeadings + 1] = heading
 		end
 	end
-	local columnTop = TableTop(showHeader, friendlyHeadings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local columnTop = TableTop(showHeader, friendlyHeadings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
 
 	-- Two grids: friendly units, then enemy and neutral ones (below Friendly
 	-- Plates in Dungeons and Raids). Rows for particular units (your pet first,
@@ -5025,6 +5115,10 @@ local function CreatePlatesPanel()
 			end
 		end
 		lastLabel = PlaceRow(top, r, kind[2], kind[3], unpack(checks))
+		local roles = top.rolesX and RolesButton(content, content, ruleKey)
+		if roles then
+			roles:SetPoint("LEFT", lastLabel, "LEFT", top.rolesX + (top.width - 52) / 2 - lastLabel.indentX, 0)
+		end
 	end
 	for r, kind in ipairs(FRIENDLY_KINDS) do
 		AddPlateRow(columnTop, r, kind)
@@ -5069,7 +5163,7 @@ local function CreatePlatesPanel()
 
 	-- Enemy and neutral units, laid out the same way.
 	local enemyHeader = Header(content, L["Enemy Nameplates"], lastInstanceRow, -24)
-	local enemyTop = TableTop(enemyHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local enemyTop = TableTop(enemyHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
 	for r, kind in ipairs(ENEMY_KINDS) do
 		AddPlateRow(enemyTop, r, kind)
 	end
@@ -5077,7 +5171,7 @@ local function CreatePlatesPanel()
 
 	-- Your target's plate, laid out the same way.
 	local targetHeader = Header(content, L["Target Nameplate"], lastLabel, -24)
-	local targetTop = TableTop(targetHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local targetTop = TableTop(targetHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
 	for r, kind in ipairs(TARGET_KINDS) do
 		AddPlateRow(targetTop, r, kind)
 	end
@@ -5109,7 +5203,7 @@ local function CreatePlatesPanel()
 	-- CineMode shown only with Always ticked.)
 	local iconTip = L[" Off unless ticked. In CineMode, on the nameplates that are up; outside it, only with Always ticked."]
 	local partsHeader = Header(content, L["Plate Parts"], lastLabel, -24)
-	local partsTop = TableTop(partsHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local partsTop = TableTop(partsHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
 	local r = 0
 	for _, part in ipairs(PARTS) do
 		if not (part[1] == "Level" and ns.isRetail) then
@@ -5685,6 +5779,10 @@ local function GetExtraHeadings()
 		FrameHeading(headings, column[1]):SetPoint("TOPLEFT",
 			THIRD_PARTY_LABEL_WIDTH + (c - 1) * THIRD_PARTY_COLUMN_WIDTH, 0)
 	end
+	if ROLES_MENU then -- (over the rows' roles buttons)
+		FrameHeading(headings, L["Role"]):SetPoint("TOPLEFT",
+			THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH - 6, 0)
+	end
 	extrasPanel.headings = headings
 	return headings
 end
@@ -5747,6 +5845,10 @@ local function GetExtraRow(index)
 		check:SetPoint("LEFT", ThirdPartyColumnX(c), 0)
 		row.checks[c] = check
 	end
+	row.roles = RolesButton(row, extrasPanel, function() return row.item and "extra:" .. row.item.name end)
+	if row.roles then
+		row.roles:SetPoint("LEFT", THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH - 6, 0)
+	end
 	extraRows[index] = row
 	return row
 end
@@ -5777,6 +5879,16 @@ RefreshExtras = function()
 					RecordRow(extrasPanel, list, "extra:" .. item.name)
 				end
 				check:Refresh()
+			end
+		end
+		if row.roles then
+			row.roles:SetShown(not item.picked and item.added)
+			if not item.picked and item.added then
+				for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+					RecordKey(extrasPanel, list)
+					RecordRow(extrasPanel, list, "extra:" .. item.name)
+				end
+				row.roles:Refresh()
 			end
 		end
 		if item.picked then
@@ -6334,6 +6446,18 @@ local function CreateVisionPanel()
 				GreyUnless(check, function(db) return not db.healVision end)
 			end
 		end
+		-- The roles it's on for, in a column after the last.
+		local roles = RolesButton(content, content, "healVision",
+			L["The roles Heal Vision is on for: untick one to keep it off while you're that role (your " ..
+			"specialization's, or the one picked in the group finder), whatever the row says."], Apply)
+		if roles then
+			local rolesX = ColumnX(#COLUMNS) + COLUMN_WIDTH
+			local heading = Label(gridTop, "GameFontNormalSmall", L["Role"])
+			heading:SetWidth(COLUMN_WIDTH)
+			heading:SetJustifyH("CENTER")
+			heading:SetPoint("BOTTOMLEFT", gridTop, "BOTTOMLEFT", rolesX, 0)
+			roles:SetPoint("CENTER", row, "LEFT", rolesX + COLUMN_WIDTH / 2, 0)
+		end
 
 		local previous = row
 		local function Option(key, label, tip, enabled)
@@ -6345,9 +6469,6 @@ local function CreateVisionPanel()
 			GreyUnless(check, enabled or IfAny)
 			previous = check
 		end
-		Option("healVisionHealerOnly", L["Only while you're a healer"],
-			L["Only while your specialization is a healing one (or, without one, the role you picked in the group " ..
-			"finder is Healer)."])
 		Option("healVisionTarget", L["Always show your target"],
 			L["The member you've targeted always shows, at full health too."])
 		Option("healVisionTanks", L["Always show tanks"],
@@ -6500,6 +6621,7 @@ local function CreateExtrasPanel()
 	for c, column in ipairs(COLUMNS) do
 		headings[c] = FrameHeading(box, column[1])
 	end
+	local rolesHeading = ROLES_MENU and FrameHeading(box, L["Role"]) -- (over the rows' roles buttons)
 
 	-- A row per installed addon: CineMode (ticked: left alone, so shown), then
 	-- the Standard Frames page's columns. Made once, placed by Layout. (The
@@ -6543,6 +6665,7 @@ local function CreateExtrasPanel()
 			end
 			row.checks[c] = check
 		end
+		row.roles = RolesButton(box, content, item)
 		return row
 	end
 	for _, known in ipairs(ns.ADDON_FRAMES) do
@@ -6624,6 +6747,7 @@ local function CreateExtrasPanel()
 		for _, row in ipairs(rows) do
 			row.label:Hide()
 			for _, check in ipairs(row.checks) do check:Hide() end
+			if row.roles then row.roles:Hide() end
 		end
 		for _, row in ipairs(notes) do row.frame:Hide() end
 
@@ -6637,6 +6761,11 @@ local function CreateExtrasPanel()
 				check:SetPoint("TOPLEFT", box, "TOPLEFT",
 					LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, -y)
 				check:Show()
+			end
+			if row.roles then
+				row.roles:ClearAllPoints()
+				row.roles:SetPoint("TOPLEFT", box, "TOPLEFT", LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, -y - 2)
+				row.roles:Show()
 			end
 			y = y + ROW_HEIGHT
 		end
@@ -6698,9 +6827,11 @@ local function CreateExtrasPanel()
 			for c, heading in ipairs(headings) do
 				Place(heading, LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
 			end
+			if rolesHeading then Place(rolesHeading, LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0) end
 			y = FRAME_HEADING_HEIGHT + 4
 		else
 			for _, heading in ipairs(headings) do heading:Hide() end
+			if rolesHeading then rolesHeading:Hide() end
 		end
 		Section(L["Loaded"], function(known) return ns.AddOnLoaded(known.addon) end)
 		Section(L["Installed, not loaded"], function(known) return not ns.AddOnLoaded(known.addon) end)

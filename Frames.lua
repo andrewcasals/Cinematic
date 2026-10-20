@@ -2066,6 +2066,14 @@ do
 		return test, not test and err or nil
 	end
 
+	-- The rows kept hidden in CineMode while you're the role you are (a grid
+	-- row's roles button: tankHide, healerHide, damageHide), key -> true.
+	local NO_ROWS = {}
+	function ns.RoleHides(facts)
+		return facts.tank and ns.db.tankHide or facts.healer and ns.db.healerHide
+			or facts.damage and ns.db.damageHide or NO_ROWS
+	end
+
 	function ns.RuleShows(key, facts)
 		local test = ns.RuleTest(key)
 		if test then
@@ -2172,6 +2180,8 @@ do
 		-- Rows for gamepad mode only, and the ones they stand in for then.
 		local gamepad = ns.IsGamePadOn()
 		local facts = ns.RuleFacts(inCombat)
+		-- The rows kept hidden while you're the role you are (their roles buttons), ticks or rule.
+		local roleHide = ns.RoleHides(facts)
 		for _, item in ipairs(ns.COMBAT_SHOW) do
 			local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
 			local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
@@ -2181,6 +2191,7 @@ do
 			if ticked == nil then
 				ticked = ns.IsCineShowOn(item.key) or KeptHere(placeLists, item.key) or (isOn and isOn(item.key)) or calmRow
 			end
+			if roleHide[item.key] then ticked = false end
 			if applies and ticked then
 				for _, name in ipairs(item.frames or NO_DEFAULTS) do
 					shown[name] = true
@@ -2197,7 +2208,7 @@ do
 			if ticked == nil then
 				ticked = KeptHere(placeLists, key) or (isOn and isOn(key))
 			end
-			if ticked then
+			if ticked and not roleHide[key] then
 				shown[GROUP_KEY[key]] = true
 			end
 		end

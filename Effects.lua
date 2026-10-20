@@ -980,11 +980,15 @@ ns.InPvPFight = InPvPFight
 -- whatever its other boxes say).
 -- A row with a rule (Rules section, key plate:<row>) goes by it instead,
 -- in fights and out: nil without one. (Keys made once each, not each frame.)
+-- Hidden by its roles button while you're that role: no, whatever the rest says.
 local PLATE_RULE_KEY = setmetatable({}, { __index = function(keys, kind)
 	keys[kind] = "plate:" .. kind
 	return keys[kind]
 end })
 local function RuleSays(kind)
+	if ns.RoleHides(ns.RuleFactsNow())[PLATE_RULE_KEY[kind]] then
+		return false
+	end
 	local test = ns.RuleTest(PLATE_RULE_KEY[kind])
 	if test then
 		return test(ns.RuleFactsNow()) and true or false

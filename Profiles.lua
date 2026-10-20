@@ -29,6 +29,7 @@ local PROFILE_TABLES = {
 	"friendlyShow", "bgShow", "worldShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
 	"hoverGroups", "cooldownReadyOnly", "cooldownReadyEarly", "cooldownEarlyOn",
 	"frameRules", -- (none in any built-in profile: each starts with no Custom Visibility Rules)
+	"tankHide", "healerHide", "damageHide",
 }
 
 local DEFAULT_PROFILE = "Immersive"
