@@ -22,7 +22,8 @@ Cinematic's settings end with a **What's new** hub of two pages:
 2. **Decide if there's a new feature.** Be selective: the page is for the big
    things, and most commits have none. It's worth listing only when it's
    something new a player would go looking for: a new page, mode, camera or
-   Vision, or a new feature in its own right. It isn't when it's a fix, a tweak
+   Vision, support for an addon not supported before, or a new feature in its
+   own right. It isn't when it's a fix, a tweak
    or extra choice on something that already exists (a new button or option on
    an existing setting), an existing feature made to work with another addon
    (e.g. EllesmereUI's frames now following a page), a debug command, a
