@@ -216,12 +216,18 @@ local function Probe(step, found, stop)
 	return found, probes
 end
 
+-- Whether this client lets the minimap be swept at all (retail doesn't,
+-- tested: its Reveal boxes that need a sweep are hidden, Options.lua).
+function ns.CanSweepMinimap()
+	return Minimap.UpdateMouseoverAtPoint ~= nil and Minimap.SetUsingSoftCursor ~= nil
+		and C_TooltipInfo ~= nil and C_TooltipInfo.GetMinimapMouseover ~= nil
+end
+
 -- One sweep: found (name -> { points, gray }), points tried, and whether the
 -- faded minimap was grown for it (grow); or nil and why not. (refresh: has
 -- the game place its dots first, Minimap:UpdateBlips, for /cine debug nodes update.)
 function ns.SweepMinimap(step, grow, stop, refresh)
-	if not (Minimap.UpdateMouseoverAtPoint and Minimap.SetUsingSoftCursor
-		and C_TooltipInfo and C_TooltipInfo.GetMinimapMouseover) then
+	if not ns.CanSweepMinimap() then
 		return nil, "this client can't move a pretend mouse over the minimap"
 	end
 	-- (Not in combat; nor with your own mouse there, whose tooltip it would change.)
@@ -257,7 +263,7 @@ end
 
 local function AnyReveal()
 	local db = ns.db
-	return db and db.handleMinimap ~= false and (db.minimapRevealNodes
+	return db and db.handleMinimap ~= false and ns.CanSweepMinimap() and (db.minimapRevealNodes
 		or db.minimapRevealTurnIns or db.minimapRevealIcons) or false
 end
 
@@ -281,7 +287,7 @@ local keep = false
 function ns.KeepMinimapFullSize()
 	if not (InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))) then
 		keep = ns.minimapStayFullSize -- (/cine debug nodes stay)
-			or (Minimap.SetIconScale ~= nil and Minimap.UpdateMouseoverAtPoint ~= nil and AnyReveal())
+			or (Minimap.SetIconScale ~= nil and AnyReveal())
 	end
 	return keep or false
 end
@@ -476,6 +482,7 @@ end
 ns.IsMinimapRevealed = ns.Profiled("Minimap sweep", ns.IsMinimapRevealed)
 
 function ns.NodeSweepReport()
+	if not ns.CanSweepMinimap() then return "minimap sweep: this client can't move a pretend mouse over the minimap" end
 	if not last.at then return "minimap sweep: hasn't run (needs a Reveal box ticked, Minimap page)" end
 	-- (Each node's place in the world should stay put as you move: if it drifts,
 	-- the sums turning minimap offsets into yards are off.)

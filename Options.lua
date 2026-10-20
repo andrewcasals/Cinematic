@@ -5953,7 +5953,8 @@ local function CreateMinimapPanel()
 		"any of these is ticked, the faded minimap stays in its place, invisible, instead of being " ..
 		"shrunk away."]
 	local previousReveal = ping
-	for _, kind in ipairs({
+	-- (Hidden where the minimap can't be swept: retail.)
+	for _, kind in ipairs(not ns.CanSweepMinimap() and {} or {
 		{ "minimapRevealNodes", L["Nearby ore, herbs and treasure"],
 			L["With Find Minerals, Find Herbs or Find Treasure on, the minimap comes up while a vein, " ..
 			"herb or chest shows on it."] },
