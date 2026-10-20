@@ -19,12 +19,16 @@ Cinematic's settings end with a **What's new** hub of two pages:
    may have edits in the same checkout). Use `git diff` on your files, or
    `git diff --cached` once staged.
 
-2. **Decide if there's a new feature.** It's worth listing when a player would
-   notice it and want to know: a new option, page, camera, behaviour or
-   supported addon. It isn't when it's a fix, a tweak to how something already
-   works, a debug command, a refactor, a translation, a default changed, or
-   anything internal. When unsure, ask instead of skipping. If there's nothing,
-   say so in one line and go on with the commit.
+2. **Decide if there's a new feature.** Be selective: the page is for the big
+   things, and most commits have none. It's worth listing only when it's
+   something new a player would go looking for: a new page, mode, camera or
+   Vision, or a new feature in its own right. It isn't when it's a fix, a tweak
+   or extra choice on something that already exists (a new button or option on
+   an existing setting), an existing feature made to work with another addon
+   (e.g. EllesmereUI's frames now following a page), a debug command, a
+   refactor, a translation, a default changed, or anything internal. When
+   unsure, lean toward skipping. If there's nothing, say so in one line and go
+   on with the commit.
 
 3. **Draft the entry** for each feature:
    - `date`: today (YYYY-MM-DD)

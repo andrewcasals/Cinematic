@@ -13,11 +13,6 @@ local _, ns = ...
 ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-20", page = "Vision", title = "Heal Vision",
 		text = "The party and raid frames show only who needs healing. Pick where it works on the Vision page." },
-	{ date = "2026-10-20", page = "Nameplates", title = "EllesmereUI nameplates",
-		text = "EllesmereUI's nameplates now fade in CineMode and follow the Nameplates page, like the game's own." },
-	{ date = "2026-10-20", page = "Mouseover groups", title = "Mouseover groups in or out of combat",
-		text = "Each mouseover group can work any time, only out of combat or only in combat. By default the " ..
-		"Raid Frame Manager comes up with the raid and party frames out of combat only." },
 	{ date = "2026-10-19", page = "Unit Frames", title = "Target and focus cast bars",
 		text = "The Unit frame parts grids have a Cast bar column: hide the bar under the target and focus " ..
 		"frames as they cast." },
