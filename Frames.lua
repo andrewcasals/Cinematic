@@ -5052,8 +5052,10 @@ do
 		CombatText = { "feedbackText", "PlayerFrameContent.PlayerFrameContentMain.HitIndicator.HitText",
 			"_G.PlayerHitIndicator" },
 		-- (The faction flag, or the honor-level badge in its place, and the
-		-- flag's timer.)
+		-- flag's timer. PvpBackgroundIcon: the flag WoW Forever shows by the
+		-- level while the flag's timer runs, from /fstack.)
 		PvP = { "PlayerFrameContent.PlayerFrameContentContextual.PVPIcon",
+			"PlayerFrameContent.PlayerFrameContentMain.PvpBackgroundIcon",
 			"PlayerFrameContent.PlayerFrameContentContextual.PrestigePortrait",
 			"PlayerFrameContent.PlayerFrameContentContextual.PrestigeBadge", "_G.PlayerPVPTimerText" },
 		-- (The rest Zzz, the group leader's crown, the role and combat icons
