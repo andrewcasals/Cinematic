@@ -6289,14 +6289,19 @@ local function CreateVisionPanel()
 			Raids = { L["Raids"], L["in raids"] },
 			BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
 		}
+		-- (Each group beside its place: Party, Dungeons, then Raid, Raids, set
+		-- apart at the end.)
 		local COLUMNS = { { key = "", heading = L["Always"] } }
-		for _, where in ipairs(ns.VISION_WHERE) do
+		local function Place(where)
 			COLUMNS[#COLUMNS + 1] = { key = "In" .. where, heading = PLACES[where][1], where = where }
 		end
-		-- (Party and Raid set apart: they aren't places.)
+		Place("World")
+		Place("BGs")
 		local firstGroup = #COLUMNS + 1
 		COLUMNS[#COLUMNS + 1] = { key = "InParty", heading = L["Party"] }
+		Place("Dungeons")
 		COLUMNS[#COLUMNS + 1] = { key = "InRaid", heading = L["Raid"] }
+		Place("Raids")
 		local NAME_WIDTH, COLUMN_WIDTH, GAP = 90, 66, 10
 		local function ColumnX(c)
 			return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= 2 and GAP or 0) + (c >= firstGroup and GAP or 0)
@@ -6354,13 +6359,30 @@ local function CreateVisionPanel()
 		Option("healVisionAnyDebuff", L["Show members with any debuff"],
 			L["A member with any debuff at all shows, at full health too."])
 
-		-- How faded the members it hides are (0: gone).
-		local healMin = Slider(content, "healVisionMinAlpha", L["Hidden members' opacity"], 0, 90, 1, "%d%%", 100,
-			Apply)
+		-- How faded the members it hides are (0: gone), and the health they
+		-- show below (100%: any damage). Neither slider goes past the other.
+		local healMin, healBelow
+		healMin = Slider(content, "healVisionMinAlpha", L["Hidden members' opacity"], 0, 90, 1, "%d%%", 100,
+			function(value)
+				local below = math.floor((ns.GetDB().healVisionShowBelow or 0.95) * 100 + 0.5)
+				if value > below then healMin:SetValue(below) return end
+				Apply()
+			end)
 		healMin:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 4, -26)
 		Tooltip(healMin, L["How much of the members Heal Vision hides still shows, and of the group titles. " ..
 			"0% hides them completely."])
 		GreyUnless(healMin, IfAny)
+
+		healBelow = Slider(content, "healVisionShowBelow", L["Show members below health"], 0, 100, 1, "%d%%",
+			100, function(value)
+				local floor = math.floor((ns.GetDB().healVisionMinAlpha or 0) * 100 + 0.5)
+				if value < floor then healBelow:SetValue(floor) return end
+				Apply()
+			end)
+		healBelow:SetPoint("TOPLEFT", healMin, "BOTTOMLEFT", 0, -30)
+		Tooltip(healBelow, L["A member shows once their health drops below this. 100% shows them at any damage; " ..
+			"lower keeps them hidden through small hits."])
+		GreyUnless(healBelow, IfAny)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

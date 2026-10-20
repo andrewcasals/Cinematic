@@ -33,7 +33,7 @@ local titles = {}   -- group titles hidden now
 local touched = {}  -- frame or part -> true: its alpha was set here (put back to 1 once let go)
 local hooked = {}   -- member frames whose scripts are followed
 local curves = {}   -- step -> the curve for it (false: none on this client)
-local curvesFloor   -- the opacity setting those curves were made for
+local curvesFloor, curvesBelow -- the opacity and health settings those curves were made for
 local hovered = false
 local reveal, revealStep = 0, 0 -- the mouse's fade: how far in (0-1), and as a step
 local sinceScan, sinceUpdate = RESCAN_EVERY, 0
@@ -54,12 +54,15 @@ local function Shown(step)
 	return floor + (1 - floor) * step / STEPS
 end
 
--- Health percent to alpha: 1 when hurt; at full, Shown(step).
+-- Health percent to alpha: 1 below the health setting (Vision section);
+-- at or above it, Shown(step). 100% there means any damage (full is 1),
+-- 0% never.
 local function Curve(step)
 	local floor = ns.db and ns.db.healVisionMinAlpha
-	if floor ~= curvesFloor then
+	local below = ns.db and ns.db.healVisionShowBelow
+	if floor ~= curvesFloor or below ~= curvesBelow then
 		wipe(curves)
-		curvesFloor = floor
+		curvesFloor, curvesBelow = floor, below
 	end
 	if curves[step] ~= nil then return curves[step] end
 	curves[step] = false
@@ -69,8 +72,13 @@ local function Curve(step)
 	local ok, made = pcall(C_CurveUtil.CreateCurve)
 	if ok and made then
 		made:SetType(Enum.LuaCurveType.Step)
-		made:AddPoint(0, 1)
-		made:AddPoint(0.9995, Shown(step))
+		below = math.min(tonumber(below) or 0.95, 0.9995)
+		if below > 0 then
+			made:AddPoint(0, 1)
+			made:AddPoint(below, Shown(step))
+		else
+			made:AddPoint(0, Shown(step)) -- (0%: never by health)
+		end
 		curves[step] = made
 	end
 	return curves[step]

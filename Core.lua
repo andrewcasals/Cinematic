@@ -596,6 +596,7 @@ ns.VISION_WHERE = { "World", "Dungeons", "Raids", "BGs" }
 local VISION_PLACE = { dungeon = "Dungeons", raid = "Raids", pvp = "BGs" }
 DEFAULTS.healVision = false
 DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-0.9)
+DEFAULTS.healVisionShowBelow = 0.95 -- members show below this much health (0-1; 1: any damage)
 DEFAULTS.healVisionHealerOnly = true -- only while you're a healer
 DEFAULTS.healVisionTarget = true -- your target always shows
 DEFAULTS.healVisionTanks = true -- tanks always show
