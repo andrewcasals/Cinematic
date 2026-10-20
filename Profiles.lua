@@ -72,15 +72,13 @@ local function Column(on)
 	return list
 end
 
--- The Standard Frames page's Interface rows in the Immersive profiles: the
--- minimap (its header, buttons, zone name and clock) and the quest tracker
--- don't come up in fights or stay up in instances; the micro menu, bags and
--- XP bar do, and with an enemy targeted.
+-- The Standard Frames page's Interface rows in the Immersive profile: the
+-- minimap (its header, buttons, zone name and clock) doesn't come up in
+-- fights; the micro menu, bags and XP bar do, and with an enemy targeted.
 local MINIMAP_ROWS = { "minimap", "minimapheader", "minimaptracking", "minimapcalendar", "minimapzone", "minimapclock" }
-local function Except(rows, extra)
+local function Except(rows)
 	local list = {}
 	for _, key in ipairs(rows) do list[key] = false end
-	for key, on in pairs(extra or {}) do list[key] = on end
 	return list
 end
 
@@ -105,10 +103,8 @@ ns.BUILTIN_PROFILES = {
 			set("plateGroupFriendlyMinions", false)
 			-- Chat doesn't peek for NPC speech (guards, vendors, ambient chatter).
 			set("chatPeekTypes", { npc = false })
-			-- Interface rows (Standard Frames page): no minimap in fights or
-			-- instances, nor the quest tracker there.
+			-- Interface rows (Standard Frames page): no minimap in fights.
 			set("combatShow", Except(MINIMAP_ROWS))
-			set("instanceShow", Except(MINIMAP_ROWS, { quests = false }))
 		end,
 	},
 	{
@@ -124,9 +120,7 @@ ns.BUILTIN_PROFILES = {
 				"buffs", "swing", "cooldowns", "pet", "stance", "totems", "micro", "xp" }))
 			set("enemyShow", Column({ "player", "prd", "prdpower", "target", "tot", "focus", "buffs", "pet", "stance",
 				"totems", "micro", "xp" }))
-			-- (Interface rows as in Immersive: the minimap neither in fights
-			-- nor kept up in instances, nor the quest tracker there.)
-			set("instanceShow", Except(MINIMAP_ROWS, { quests = false }))
+			-- (No minimap in fights, as in Immersive: these columns leave it out.)
 			set("friendlyShow", Column({ "target", "tot" }))
 			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
 			set("cooldownWhileRecharging", true)
@@ -237,12 +231,12 @@ ns.BUILTIN_PROFILES = {
 			set("timeOfDayMessage", false)
 			set("plateAlwaysGroupMembers", false)
 			set("plateAlwaysGroupMinions", false)
-			-- No cast bar out of fights (it's up in them, with the default).
+			-- No cast bar out of fights (it's up in them).
 			set("cineShow", { castbar = false })
 			-- Fights bring up only your target and its target (and the cast
 			-- bar): no portrait, bars, buffs, minimap or swing timer. (Rows not
 			-- listed keep the defaults.)
-			set("combatShow", { tot = true, prd = false, prdpower = false, party = false, raidplayers = false, raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false,
+			set("combatShow", { tot = true, castbar = true, prd = false, prdpower = false, party = false, raidplayers = false, raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false,
 				art = false, bottomleft = false, bottomright = false, pet = false, stance = false, totems = false,
 				micro = false, xp = false, focus = false })
 			set("enemyShow", { target = true, tot = true, player = false, prd = false, prdpower = false, party = false, raidplayers = false,
@@ -251,7 +245,7 @@ ns.BUILTIN_PROFILES = {
 				totems = false, micro = false, xp = false })
 			set("friendlyShow", { target = true, tot = true })
 			-- Nor in dungeons, scenarios and raids (the Instances column starts
-			-- all ticked): every row off there too.
+			-- with the party and raid frames ticked): every row off there too.
 			local instances = {}
 			for _, row in ipairs(ns.COMBAT_SHOW) do instances[row.key] = false end
 			set("instanceShow", instances)

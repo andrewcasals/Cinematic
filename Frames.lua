@@ -1367,10 +1367,11 @@ ns.COMBAT_SHOW = {
 	-- The Standard Frames page's Party frames section (page = "party"); the
 	-- raid-style ones are the Raid frames section's.
 	{ key = "party", label = L["Party frames"], default = true, page = "party", groups = { "party" } },
-	-- Their parts, Always ticked to start with (CINE_SHOW_DEFAULT), as the raid frames' are.
-	{ key = "partyroles", label = L["Role icons"], default = true, page = "party", groups = { "partyroles" }, part = true },
-	{ key = "partynames", label = L["Names"], default = true, page = "party", groups = { "partynames" }, part = true },
-	{ key = "partystatus", label = L["Status icons"], default = true, page = "party", groups = { "partystatus" }, part = true,
+	-- Their parts, Always ticked to start with (CINE_SHOW_DEFAULT), as the raid frames' are,
+	-- and nothing else (so the greyed columns show no ticks).
+	{ key = "partyroles", label = L["Role icons"], default = false, page = "party", groups = { "partyroles" }, part = true },
+	{ key = "partynames", label = L["Names"], default = false, page = "party", groups = { "partynames" }, part = true },
+	{ key = "partystatus", label = L["Status icons"], default = false, page = "party", groups = { "partystatus" }, part = true,
 		tip = L["The icon on a member's portrait for a summon on its way, or a member phased, in another " ..
 			"instance or too far away."] },
 	-- The raid frames (raid-style party frames too), members and pets apart,
@@ -1383,28 +1384,28 @@ ns.COMBAT_SHOW = {
 	-- Parts of them, Always ticked to start with (CINE_SHOW_DEFAULT): untick
 	-- one to hide it in CineMode (names and role icons while you heal, say).
 	-- (part: Always means whenever its frame shows, over its Mouseover groups.)
-	{ key = "raidroles", label = L["Role icons"], default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidroles", label = L["Role icons"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidroles" }, part = true },
 	-- The glow round a member with threat. (tip: the row name's tooltip.)
-	{ key = "raidthreat", label = L["Threat highlight"], default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidthreat", label = L["Threat highlight"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidthreat" }, part = true,
 		tip = L["The glow round a member with threat (aggro). To hide it all the time, CineMode or not, " ..
 			"turn off the game's own Display Aggro Highlight raid frame option."] },
-	{ key = "raidnames", label = L["Player names"], default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidnames", label = L["Player names"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidnames" }, part = true },
-	{ key = "raidpetnames", label = L["Pet names"], default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidpetnames", label = L["Pet names"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidpetnames" }, part = true },
-	{ key = "raidtitles", label = L["Group titles"], default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidtitles", label = L["Group titles"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidtitles" }, part = true },
-	{ key = "raidbuffs", label = L["Buffs"], default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raidbuffs", label = L["Buffs"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidbuffs" }, part = true },
-	{ key = "raiddebuffs", label = L["Debuffs"], default = true, addon = "Blizzard_CompactRaidFrames",
+	{ key = "raiddebuffs", label = L["Debuffs"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raiddebuffs" }, part = true },
 	{ key = "raidmanager", label = L["Raid Frame Manager"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", frames = { "CompactRaidFrameManager" } },
 	-- The battlegrounds' flag carriers: its Battlegrounds section (page = "bg").
 	-- Always shown to start with (CINE_SHOW_DEFAULT), as before it had a row.
-	{ key = "flags", label = L["Flag carriers"], default = true, addon = "Blizzard_Deprecated_ArenaUI",
+	{ key = "flags", label = L["Flag carriers"], default = false, addon = "Blizzard_Deprecated_ArenaUI",
 		page = "bg", frames = { "ArenaEnemyFramesContainer" } },
 	-- morePage: the options page with more settings for it, which can keep it up besides.
 	{ key = "minimap", label = L["Minimap"], default = true, groups = { "minimap" }, morePage = "Minimap",
@@ -1445,9 +1446,10 @@ ns.COMBAT_SHOW = {
 	{ key = "swing", label = L["Swing timer"], default = true, retail = false, handledBy = "handleSwing",
 		tip = L["The Swing timer page can fade out the bars of weapons you aren't using, and the off-hand's."],
 		frames ={ "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
-	-- Always ticked to start with (CINE_SHOW_DEFAULT), as before it had a row:
-	-- untick it to hide your cast bar in CineMode but for fights.
-	{ key = "castbar", label = L["Cast bar"], default = true, frames = FRAME_GROUPS.castbar },
+	-- Always ticked to start with (CINE_SHOW_DEFAULT), as before it had a row,
+	-- and nothing else: untick it and tick In combat to hide your cast bar
+	-- in CineMode but for fights.
+	{ key = "castbar", label = L["Cast bar"], default = false, frames = FRAME_GROUPS.castbar },
 	-- The game's own damage meter (made when first opened).
 	{ key = "meters", label = L["Damage meter (the game's)"], default = false, frames = FRAME_GROUPS.meters },
 	-- (handledBy: a master switch that, off, leaves its frames alone: its row greys out.)
@@ -1490,7 +1492,7 @@ ns.COMBAT_SHOW = {
 		"StatusTrackingBarManager",
 	} },
 	-- Always ticked to start with (CINE_SHOW_DEFAULT): it's what a quest or fight asks you to press.
-	{ key = "extra", label = L["Extra action and zone ability"], default = true, retail = true,
+	{ key = "extra", label = L["Extra action and zone ability"], default = false, retail = true,
 		frames = { "ExtraActionBarFrame", "ZoneAbilityFrame" } },
 	-- WoW Forever's gamepad mode, on the Gamepad page (page = "gamepad") rather
 	-- than the Standard Frames page.
@@ -1804,11 +1806,9 @@ end
 local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
-	player = true, prd = true, prdpower = true, raidroles = true, raidnames = true, partyroles = true, partynames = true,
-	partystatus = true,
-	raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true, raidthreat = true, target = true, tot = true, focus = true, buffs = true, mainbar = true, bottomleft = true,
-	bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true, extra = true,
-	gamepadbars = true, gamepadreticle = true, castbar = true,
+	player = true, prd = true, prdpower = true, target = true, tot = true, focus = true, buffs = true, mainbar = true,
+	bottomleft = true, bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true,
+	gamepadbars = true, gamepadreticle = true,
 }
 -- Other addons' frames too.
 for _, known in ipairs(ns.ADDON_FRAMES) do
@@ -1912,14 +1912,15 @@ ns.PLACE_SHOW = {
 		tip = L["Show all through CineMode in dungeons, scenarios and raids."] },
 }
 local NO_DEFAULTS = {}
--- Ticked to start with: every row in dungeons, scenarios and raids (not
--- 3rd party frames), the raid and party frames in battlegrounds and
--- arenas, where you're always in a group, and the party frames and raid
--- frames' players whenever you're grouped.
+-- Ticked to start with: the raid and party frames in battlegrounds and
+-- arenas, where you're always in a group, and in dungeons, scenarios and
+-- raids (nothing else: what you'd want hidden out of fights elsewhere you'd
+-- want hidden there too); and the party frames and raid frames' players
+-- whenever you're grouped.
 local PLACE_SHOW_DEFAULTS = {
 	bgShow = { raidplayers = true, raidpets = true, party = true },
 	groupShow = { raidplayers = true, party = true },
-	instanceShow = setmetatable({}, { __index = function() return true end }),
+	instanceShow = { raidplayers = true, raidpets = true, party = true },
 }
 local function PlaceDefaults(list)
 	return PLACE_SHOW_DEFAULTS[list] or NO_DEFAULTS
