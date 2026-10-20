@@ -1,6 +1,6 @@
 -- Cinematic: effects that follow cinematic mode. Hidden names, music,
 -- nameplates, world tooltips and the letterbox bars.
-local _, ns = ...
+local ADDON_NAME, ns = ...
 local L = ns.L
 
 local letterboxProgress = 0
@@ -618,6 +618,34 @@ function ns.StopDeathSongNow()
 	if deathSong.playing then
 		UpdateDeathSong()
 	end
+end
+
+-- Switching music on or off yourself (the Sound settings' box, the Toggle
+-- Music key) while the addon has it switched for now: that's your setting, so
+-- it's what comes back afterwards and at logout. (Music the addon switched on
+-- for a camera used to go back off at logout even after you ticked it.)
+local function MusicSwitchedByPlayer(name)
+	if name ~= "Sound_EnableMusic" then
+		return
+	end
+	local stack = debugstack(3) or ""
+	if stack:find("AddOns/" .. ADDON_NAME .. "/", 1, true) then
+		return -- the addon's own switch
+	end
+	local value = GetCVar("Sound_EnableMusic")
+	MusicTrace(("PLAYER switched music %s"):format(tostring(value)))
+	if ns.db and ns.db.savedCVars.Sound_EnableMusic ~= nil then
+		ns.db.savedCVars.Sound_EnableMusic = value
+	end
+	if deathSong.playing then
+		deathSong.enable = value
+	end
+end
+
+if C_CVar and C_CVar.SetCVar then
+	hooksecurefunc(C_CVar, "SetCVar", MusicSwitchedByPlayer)
+else
+	hooksecurefunc("SetCVar", MusicSwitchedByPlayer)
 end
 
 -- /cine debug music: a chat line whenever the music state changes. Levels are

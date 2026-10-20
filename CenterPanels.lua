@@ -63,7 +63,7 @@ end
 
 -- Dragging. Kept in our own tables: fields added to the game's frames taint them.
 local hooked = {}  -- frame -> true once it can be dragged
-local moving = {}  -- frame -> true while it's being dragged
+local moving = {}  -- frame -> where the mouse and the window started, while it's being dragged
 local dropped = {} -- frame -> { point, relativePoint, x, y } for windows without a name, while they stay open
 
 -- Where the window was last dropped, or nil.
@@ -93,6 +93,7 @@ end
 -- logged (where it starts and stops, the mouse, and anything else that moves
 -- the window or starts moving it meanwhile, with who called), printed next time.
 local dragLog, logging, logHooked = {}, false, {}
+local following = false -- (our own moves while dragging aren't logged)
 
 local function Where(frame)
 	local point, _, relativePoint, x, y = frame:GetPoint(1)
@@ -124,33 +125,80 @@ local function LogHook(frame)
 	logHooked[frame] = true
 	for _, method in ipairs({ "SetPoint", "ClearAllPoints", "StartMoving", "StopMovingOrSizing" }) do
 		hooksecurefunc(frame, method, function()
-			if Held(frame) or method == "StartMoving" then
+			if (Held(frame) or method == "StartMoving") and not following then
 				Log(frame, method .. " by " .. Caller())
 			end
 		end)
 	end
 end
 
+-- The drag itself is ours: the game's StartMoving anchors the window by
+-- offsets that can be far off its real spot (seen on the settings window:
+-- 500 above the screen's top), and keeping it on the screen then pins it to
+-- the edge until the mouse has gone that far back. Instead the window
+-- follows the mouse from where it really is, kept on the screen.
+local dragger = CreateFrame("Frame")
+dragger:Hide()
+
+local function Follow(frame, drag)
+	local scale = Number(frame:GetEffectiveScale())
+	local width, height = Number(frame:GetWidth()), Number(frame:GetHeight())
+	local uiScale = Number(UIParent:GetEffectiveScale())
+	local screenWidth, screenHeight = Number(UIParent:GetWidth()), Number(UIParent:GetHeight())
+	if not scale or scale <= 0 or not width or not height or not uiScale or not screenWidth or not screenHeight then
+		return
+	end
+	-- (all in the window's own units)
+	screenWidth, screenHeight = screenWidth * uiScale / scale, screenHeight * uiScale / scale
+	local cx, cy = GetCursorPosition()
+	local x = drag.left + (cx - drag.cx) / scale
+	local y = drag.top + (cy - drag.cy) / scale
+	x = math.max(0, math.min(x, screenWidth - width))
+	y = math.min(screenHeight, math.max(y, height))
+	following = true
+	frame:ClearAllPoints()
+	frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+	following = false
+end
+
+dragger:SetScript("OnUpdate", function(self)
+	local any = false
+	for frame, drag in pairs(moving) do
+		any = true
+		if Locked(frame) then
+			moving[frame] = nil
+		else
+			Follow(frame, drag)
+		end
+	end
+	if not any then
+		self:Hide()
+	end
+end)
+
 local function DragStart(frame)
 	Log(frame, "drag start")
 	if ns.db and ns.db.dragPanels and not Locked(frame) then
-		-- (a drag whose end was never heard is ended first, or the window can
-		-- stay held where it was)
-		if moving[frame] then
-			frame:StopMovingOrSizing()
+		local left, top = Number(frame:GetLeft()), Number(frame:GetTop())
+		if not left or not top then
+			return
 		end
-		moving[frame] = true
-		frame:StartMoving()
+		local cx, cy = GetCursorPosition()
+		moving[frame] = { cx = cx, cy = cy, left = left, top = top }
+		dragger:Show()
 	end
 end
 
 local function DragStop(frame)
-	if not moving[frame] then
+	local drag = moving[frame]
+	if not drag then
 		return
+	end
+	if not Locked(frame) then
+		Follow(frame, drag)
 	end
 	Log(frame, "drag stop")
 	moving[frame] = nil
-	frame:StopMovingOrSizing()
 	frame:SetUserPlaced(false)
 	local point, _, relativePoint, x, y = frame:GetPoint(1)
 	x, y = Number(x), Number(y)
@@ -170,11 +218,7 @@ local function DragStop(frame)
 end
 
 local function Closed(frame)
-	if moving[frame] then
-		moving[frame] = nil
-		frame:StopMovingOrSizing()
-		frame:SetUserPlaced(false)
-	end
+	moving[frame] = nil
 	dropped[frame] = nil
 end
 
