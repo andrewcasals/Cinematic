@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-20", page = "General", client = "forever", title = "Remember your playstyle",
+		text = "The Looking For Group window's playstyle dropdown starts on the one you picked last time, so " ..
+		"listing yourself is one click less." },
 	{ date = "2026-10-19", page = "Unit Frames", title = "Target and focus cast bars",
 		text = "The Unit frame parts grids have a Cast bar column: hide the bar under the target and focus " ..
 		"frames as they cast." },

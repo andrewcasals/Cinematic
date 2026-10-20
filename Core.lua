@@ -244,7 +244,8 @@ local DEFAULTS = {
 	-- default where unit values are secret: opening it taints the player bars, and BugSack shows their errors.
 	dragEquipCharacter = issecretvalue == nil,
 	talentLink = true,         -- Forever: inspecting someone, a button to their talents, and one back on the talents window (TalentLink.lua)
-	centerPanels = true,       -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
+	rememberPlaystyle = true,  -- Forever: the group finder's playstyle starts on the last one picked (lfgPlaystyle, LFGPlaystyle.lua)
+	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
 	cozyZoomClose = 10,       -- yards: the distance it zooms in to (if you're further out); far side of a fire

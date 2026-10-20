@@ -86,7 +86,7 @@ read_globals = {
 	"GetChannelList", "C_FriendList", "IsInGuild", "GetNumGuildMembers", "GetGuildRosterInfo",
 	"GetCurrentBindingSet",
 	"GetCursorInfo",
-	"CharacterFrame", "HideUIPanel", "ToggleCharacter", "ToggleTalentFrame", "UnitLevel", "EnumerateFrames", "TalentMicroButton", "PlayerSpellsUtil", "InspectLevelText", "InspectFrame", "InspectPaperDollFrame", "InspectPaperDollItemsFrame", "PlayerSpellsFrame_LoadUI", "ClassTalentFrame_LoadUI", "PlayerSpellsFrame", "ClassTalentFrame", "LoadAddOn", "InspectUnit", "UnitTokenFromGUID", "CanInspect", "INSPECT", "TALENTS", "GetUIPanel",
+	"CharacterFrame", "HideUIPanel", "ToggleCharacter", "ToggleTalentFrame", "UnitLevel", "EnumerateFrames", "TalentMicroButton", "PlayerSpellsUtil", "InspectLevelText", "InspectFrame", "InspectPaperDollFrame", "InspectPaperDollItemsFrame", "PlayerSpellsFrame_LoadUI", "ClassTalentFrame_LoadUI", "PlayerSpellsFrame", "ClassTalentFrame", "LoadAddOn", "InspectUnit", "UnitTokenFromGUID", "CanInspect", "INSPECT", "TALENTS", "GetUIPanel", "LFGListingFrame", "LFGListingActivityView_OnPlayStyleSelectedInternal",
 	"ContainerFrameCombinedBags", "UpdateContainerFrameAnchors",
 	"C_Container", "PickupContainerItem", "GetContainerNumSlots", "GetContainerItemInfo", "NUM_BAG_SLOTS",
 	"ClearCursor", "SortBags",

@@ -53,6 +53,7 @@ Hunter.lua
 HunterAmmo.lua
 DragEquip.lua
 TalentLink.lua
+LFGPlaystyle.lua
 CenterPanels.lua
 CameraWheel.lua
 MenuWheel.lua

@@ -4509,6 +4509,10 @@ local function CreateQualityPanel()
 					ns.RefreshTalentLink()
 				end
 			end), "check")
+		-- (LFGPlaystyle.lua; WoW Forever only.)
+		stack:Add(Check(content, "rememberPlaystyle", L["Remember your group finder playstyle"],
+			L["Listing yourself in the Looking For Group window, the playstyle dropdown (Learning, Relaxed, " ..
+			"Competitive, Carry Offered) starts on the one you picked last time, so you don't have to pick it again."]), "check")
 	end
 	-- (CenterPanels.lua.)
 	stack:Add(Check(content, "centerPanels", L["Open windows in the middle of the screen"],
