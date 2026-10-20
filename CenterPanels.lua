@@ -34,6 +34,10 @@ local AREAS = { "left", "center", "right", "doublewide" }
 local TALK = { QuestFrame = true, GossipFrame = true }
 local TALK_LEFT = 0.12
 
+-- Windows that share one spot: talking to someone goes from the gossip window
+-- to the quest window and back, two windows to the game, one to the player.
+local SPOT_NAME = { QuestFrame = "GossipFrame" }
+
 -- Rows narrower than this (UIParent's units) sit there too. Retail's
 -- character window with its stats open is 540 wide; the group finder, 563,
 -- stays in the middle.
@@ -74,7 +78,20 @@ local function Spot(frame)
 	local name = frame:GetName()
 	if name then
 		local spots = ns.db and ns.db.panelSpots
-		return type(spots) == "table" and spots[name] or nil
+		if type(spots) ~= "table" then
+			return nil
+		end
+		local key = SPOT_NAME[name] or name
+		if spots[key] then
+			return spots[key]
+		end
+		-- (a spot saved before they were shared is still used, for both)
+		for other, shared in pairs(SPOT_NAME) do
+			if shared == key and spots[other] then
+				return spots[other]
+			end
+		end
+		return nil
 	end
 	return dropped[frame]
 end
@@ -211,7 +228,11 @@ local function DragStop(frame)
 		if type(ns.db.panelSpots) ~= "table" then
 			ns.db.panelSpots = {}
 		end
-		ns.db.panelSpots[name] = spot
+		local shared = SPOT_NAME[name]
+		if shared then
+			ns.db.panelSpots[name] = nil
+		end
+		ns.db.panelSpots[shared or name] = spot
 	else
 		dropped[frame] = spot
 	end
