@@ -1043,7 +1043,7 @@ L["Tooltips"] = "滑鼠提示"
 
 -- Profiles.lua
 L["Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, and how the developer plays every day."] = "全部開啟:介面淡出、黑邊與色調,以及所有鏡頭模式。這是預設值,也是開發者每天遊玩的方式。"
-L["Immersive, with the Cooldown Manager in place of the action bars in fights: your portrait, target, buffs, swing timer, pet, stance and totem bars and the Cooldown Manager come up, the action bars don't. After a fight it stays up until its cooldowns are ready."] = "沉浸式,戰鬥中以冷卻管理器取代快捷列:你的頭像、目標、增益、揮擊計時器、寵物列、姿態列、圖騰列與冷卻管理器會顯示,快捷列則不會。戰鬥後冷卻管理器會保持顯示,直到其冷卻全部就緒。"
+L["Immersive, with the Cooldown Manager in place of action bars 1 to 3 in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."] = "沉浸式,在戰鬥中與以敵人為目標時,以冷卻管理器取代快捷列1到3。戰鬥後冷卻管理器會保持顯示,直到其冷卻全部就緒。"
 L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."] = "介面淡出並保留畫面效果,只使用少數鏡頭:飛行(及掠過鏡頭)、暫離,以及爐石與傳送。不使用悠閒、遠景、釣魚、RP 漫步、自動奔跑、死亡或任務鏡頭。"
 L["Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no letterbox, and the camera's left to you."] = "只在一般介面上套用視覺效果(色調、暗角、天氣):不淡出任何東西,沒有黑邊,鏡頭由你自己控制。"
 L["The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), then CineMode until it ends. The letterbox, tint, vignette and weather show only while a camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music."] = "在鏡頭啟動前(站著不動、暫離、飛行、表情動作……)都是一般介面,之後進入 CineMode 直到鏡頭結束。黑邊、色調、暗角與天氣只在鏡頭模式運作時顯示;沒有邊緣模糊。站著不動會啟動暫離鏡頭,而且每個鏡頭都可以播放音樂。"

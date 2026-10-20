@@ -3233,6 +3233,20 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.plateIconsAlwaysV1 = true
 		end
+		-- Immersive (CDM) now shows the Cooldown Manager in place of action
+		-- bars 1 to 3 with an enemy targeted too. Once, in that profile (and the
+		-- live settings when they're its), where its Tar Enemy column is still as it was.
+		if not ns.db.cdmEnemyV1 then
+			local function CooldownsOn(t)
+				local list = type(t) == "table" and t.enemyShow
+				if type(list) == "table" and list.cooldowns == false and list.mainbar == false then
+					list.cooldowns = true
+				end
+			end
+			CooldownsOn((ns.db.profiles or {})["Immersive (CDM)"])
+			if (ns.db.liveProfile or ns.db.profile) == "Immersive (CDM)" then CooldownsOn(ns.db) end
+			ns.db.cdmEnemyV1 = true
+		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
 		for _, key in ipairs({
