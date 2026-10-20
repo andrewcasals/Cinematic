@@ -1370,6 +1370,21 @@ local function CreateRevealPanel()
 		StaticPopup_Show("CINEMATIC_WORLD_TEXT_RESTART")
 	end)
 
+	-- The red error text at the top of the screen, in and out of fights
+	-- (CineMode or not).
+	local errorsHeader = Header(content, L["Hide error messages"], worldText, -24)
+	errorsHeader:SetPoint("TOPLEFT", worldText, "BOTTOMLEFT", 2, -24)
+
+	local errorsInCombat = Check(content, "hideErrorsInCombat", L["In combat"],
+		L["No red error text at the top of the screen (like \"Target not in line of sight\" or " ..
+		"\"Can't do that while moving\") while you're fighting, and for the Calm Timer after it."])
+	errorsInCombat:SetPoint("TOPLEFT", errorsHeader, "BOTTOMLEFT", -2, -6)
+
+	local errorsOutOfCombat = Check(content, "hideErrorsOutOfCombat", L["Out of combat"],
+		L["No red error text at the top of the screen (like \"Target not in line of sight\" or " ..
+		"\"Can't do that while moving\") while you're out of combat."])
+	errorsOutOfCombat:SetPoint("TOPLEFT", errorsInCombat, "BOTTOMLEFT", 0, -2)
+
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "CineMode")

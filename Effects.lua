@@ -173,6 +173,12 @@ function ns.UpdateCVars(cinematic, fightStarting)
 	-- (Kept through the Calm Timer after a fight, like the plates.)
 	local fighting = inCombat or (ns.FightLingering and ns.FightLingering())
 	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not fighting) or false)
+	-- The red error text ("Target not in line of sight"): its own In combat
+	-- and Out of combat boxes, CineMode or not (the addon off: always shown).
+	if UIErrorsFrame then
+		local hide = ns.db.enabled and ns.db[fighting and "hideErrorsInCombat" or "hideErrorsOutOfCombat"]
+		UIErrorsFrame:SetAlpha(hide and 0 or 1)
+	end
 end
 
 -- The last chance to switch names to the "In combat" choices before lockdown.
