@@ -20,8 +20,8 @@ local function Secret(value)
 	return issecretvalue ~= nil and issecretvalue(value) == true
 end
 
--- What a name on the minimap is (ns.NodeKind): "group" (someone in your
--- group, or a pet), "turnin" (a quest of yours that's done), "objective" (one of yours
+-- What a name on the minimap is (ns.NodeKind): "group" (you, someone in
+-- your group, or a pet), "turnin" (a quest of yours that's done), "objective" (one of yours
 -- that isn't), "herb", "ore", "treasure", or "other" (quest givers among
 -- them: their mark's name is just the NPC's, tested). A herb's dot has the name of
 -- the herb it gives, so the client names them (item IDs, Classic's herbs); a
@@ -93,9 +93,10 @@ local function ReadLists()
 	listsChanged = false
 	wipe(groupNames)
 	wipe(questTitles)
-	-- (Pets too: a warlock's demon is on the minimap the whole time.)
+	-- (Pets too: a warlock's demon is on the minimap the whole time; and you:
+	-- your arrow's tooltip has your name, tested.)
 	local raid = IsInRaid and IsInRaid()
-	local units = { "pet" }
+	local units = { "player", "pet" }
 	for i = 1, GetNumGroupMembers and GetNumGroupMembers() or 0 do
 		units[#units + 1] = raid and ("raid" .. i) or ("party" .. i)
 		units[#units + 1] = raid and ("raidpet" .. i) or ("partypet" .. i)
