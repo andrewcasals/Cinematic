@@ -11,6 +11,10 @@ local L = ns.L
 local ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
 local EDGE_OFFSET = 10 -- how far outside the minimap's rim the button sits
 local button
+-- With EllesmereUI's minimap, the button is the minimap's child instead, so its
+-- button drawer collects it (it only takes the minimap's own children). It's
+-- then anchored to the minimap and left alone, as EllesmereUI lays it out.
+local onMinimap
 
 local function Print(msg)
 	ns.Print(msg)
@@ -18,7 +22,17 @@ end
 
 local function UpdatePosition()
 	local db = ns.GetDB()
-	if not button or not db or Minimap:GetScale() < 0.5 then
+	if not button or not db then
+		return
+	end
+	if onMinimap then
+		local radius = Minimap:GetWidth() / 2 + EDGE_OFFSET
+		local angle = math.rad(db.minimapAngle)
+		button:ClearAllPoints()
+		button:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+		return
+	end
+	if Minimap:GetScale() < 0.5 then
 		return -- minimap is shrunk while faded; keep the last good position
 	end
 	local mx, my = Minimap:GetCenter()
@@ -40,7 +54,15 @@ local function UpdateIcon()
 	button.icon:SetDesaturated(not active)
 	-- (Not in gamepad mode with hideMinimapButtonGamepad: clicking it there
 	-- tends to freeze WoW Forever.)
-	button:SetShown(db.minimapButton and not (db.hideMinimapButtonGamepad and ns.IsGamePadOn()))
+	local shown = db.minimapButton and not (db.hideMinimapButtonGamepad and ns.IsGamePadOn())
+	if not onMinimap then
+		button:SetShown(shown)
+	elseif shown ~= button.wanted then
+		-- Only on a change, and with Show/Hide, which EllesmereUI follows: it
+		-- hides drawer buttons itself.
+		button.wanted = shown
+		if shown then button:Show() else button:Hide() end
+	end
 end
 
 local function FormatTime(seconds)
@@ -168,7 +190,9 @@ local function OnEnter(self)
 	end
 	GameTooltip:AddLine(L["Left-click: options"], 1, 1, 1)
 	GameTooltip:AddLine(L["Right-click: settings"], 1, 1, 1)
-	GameTooltip:AddLine(L["Drag: move"], 1, 1, 1)
+	if not onMinimap then
+		GameTooltip:AddLine(L["Drag: move"], 1, 1, 1)
+	end
 	GameTooltip:Show()
 end
 
@@ -186,12 +210,16 @@ local function OnDragUpdate()
 end
 
 local function Create()
-	button = CreateFrame("Button", "CinematicMinimapButton", UIParent)
+	local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+	onMinimap = isLoaded("EllesmereUIMinimap") and true or false
+	button = CreateFrame("Button", "CinematicMinimapButton", onMinimap and Minimap or UIParent)
 	button:SetSize(31, 31)
 	button:SetFrameStrata("MEDIUM")
 	button:SetFrameLevel(8)
 	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-	button:RegisterForDrag("LeftButton")
+	if not onMinimap then -- (EllesmereUI places it: dragging would pull it out of the drawer)
+		button:RegisterForDrag("LeftButton")
+	end
 	button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
 	local background = button:CreateTexture(nil, "BACKGROUND")
@@ -235,8 +263,9 @@ end
 function ns.UpdateMinimapButton()
 	if not button then
 		Create()
+	elseif not onMinimap then
+		UpdatePosition()
 	end
-	UpdatePosition()
 	UpdateIcon()
 end
 
