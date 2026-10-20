@@ -1088,8 +1088,10 @@ local duels = {
 	ended = {}, -- [name] = when their duel ended (not picked again while they cool down)
 	scanAt = 0,
 	selfUntil = 0, -- dueling yourself (asked or asking) until then, or until it ends
+	-- (Name-only friendly players have no health bar to watch: off meanwhile.)
 	cvars = { secure = true, playerWins = true,
-		values = { nameplateShowFriends = "1", nameplateShowFriendlyPlayers = "1" } },
+		values = { nameplateShowFriends = "1", nameplateShowFriendlyPlayers = "1",
+			nameplateShowOnlyNameForFriendlyPlayerUnits = "0" } },
 }
 do
 	local SCAN_EVERY = 0.5
@@ -1961,6 +1963,37 @@ function ns.PrintPlatesDebug()
 			ns.Print(("  plate shown=%s alpha=%.2f, frame shown=%s alpha=%.2f, health bar shown=%s"):format(
 				tostring(plate:IsShown()), plate:GetAlpha(), tostring(frame:IsShown()), frame:GetAlpha(),
 				tostring(frame.healthBar and frame.healthBar:IsShown())))
+			-- The health bar's value and fill, for a bar that looks empty.
+			local bar = frame.healthBar
+			if type(bar) == "table" and bar.GetValue then
+				local function Show(fn)
+					local ok, a, b = pcall(fn)
+					if not ok then
+						return "?"
+					end
+					local shown = {}
+					for _, value in ipairs({ a, b }) do
+						if issecretvalue and issecretvalue(value) then
+							shown[#shown + 1] = "secret"
+						else
+							shown[#shown + 1] = type(value) == "number" and ("%.2f"):format(value) or tostring(value)
+						end
+					end
+					return table.concat(shown, "/")
+				end
+				local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+				local container = frame.HealthBarsContainer
+				ns.Print(("  health value=%s range=%s bar alpha=%s visible=%s size=%s | fill=%s shown=%s alpha=%s"
+					.. " size=%s color=%s | container shown=%s alpha=%s | UnitHealth=%s"):format(
+					Show(function() return bar:GetValue() end), Show(function() return bar:GetMinMaxValues() end),
+					Show(function() return bar:GetAlpha() end), Show(function() return bar:IsVisible() end),
+					Show(function() return bar:GetSize() end), Show(function() return fill:GetTexture() end),
+					Show(function() return fill:IsShown() end), Show(function() return fill:GetAlpha() end),
+					Show(function() return fill:GetSize() end),
+					Show(function() local r, g = fill:GetVertexColor() return r, g end),
+					Show(function() return container:IsShown() end), Show(function() return container:GetAlpha() end),
+					Show(function() return UnitHealth("target"), UnitHealthMax("target") end)))
+			end
 			local parts, fields, healthFields = ns.DescribePlateParts(frame)
 			ns.Print("  parts: " .. parts)
 			ns.Print("  fields: " .. fields)
