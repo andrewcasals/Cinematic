@@ -63,7 +63,7 @@ local STANDARD_ROWS = {
 	"player", "prd", "prdpower", "target", "tot", "focus", "party", "raidplayers", "raidpets", "raidmanager", "minimap", "quests",
 	"buffs", "swing", "cooldowns", "mainbar", "art",
 	"bottomleft", "bottomright", "right1", "right2", "bar6", "bar7", "bar8", "pet", "stance", "totems",
-	"micro", "xp",
+	"micro", "bags", "xp",
 }
 local function Column(on)
 	local list = {}
@@ -236,11 +236,11 @@ ns.BUILTIN_PROFILES = {
 			-- listed keep the defaults.)
 			set("combatShow", { tot = true, castbar = true, prd = false, prdpower = false, party = false, raidplayers = false, raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false,
 				art = false, bottomleft = false, bottomright = false, pet = false, stance = false, totems = false,
-				micro = false, xp = false, focus = false })
+				micro = false, bags = false, xp = false, focus = false })
 			set("enemyShow", { target = true, tot = true, player = false, prd = false, prdpower = false, party = false, raidplayers = false,
 				raidpets = false, focus = false, buffs = false,
 				mainbar = false, art = false, bottomleft = false, bottomright = false, pet = false, stance = false,
-				totems = false, micro = false, xp = false })
+				totems = false, micro = false, bags = false, xp = false })
 			set("friendlyShow", { target = true, tot = true })
 			-- Nor in dungeons, scenarios and raids (the Instances column starts
 			-- with the party and raid frames ticked): every row off there too.

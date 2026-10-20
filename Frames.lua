@@ -1503,8 +1503,12 @@ ns.COMBAT_SHOW = {
 		"MultiCastSlotButton3", "MultiCastSlotButton4",
 		"MultiCastActionPage1", "MultiCastActionPage2", "MultiCastActionPage3", "TotemFrame",
 	} },
-	{ key = "micro", label = L["Micro menu and bags"], default = true,
-		frames = { "MicroButtonAndBagsBar", "MicroMenuContainer", "BagsBar" } },
+	-- Classic clients' micro menu and bags are one frame (MicroButtonAndBagsBar),
+	-- so the Bags row is retail's only. Follows the micro menu's ticks until
+	-- set (see ROW_FALLBACK).
+	{ key = "micro", label = _G.BagsBar and L["Micro menu"] or L["Micro menu and bags"], default = true,
+		frames = { "MicroButtonAndBagsBar", "MicroMenuContainer" } },
+	{ key = "bags", label = L["Bags"], default = true, frames = { "BagsBar" } },
 	-- (In gamepad mode the Gamepad page's row has them instead: notGamepad.)
 	{ key = "xp", label = L["Experience and reputation bars"], default = true, notGamepad = true, frames = {
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
@@ -1537,7 +1541,7 @@ local ROW_SECTIONS = {
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
 	minimap = "interface", minimapheader = "interface", minimaptracking = "interface", minimapcalendar = "interface",
 	minimapzone = "interface", minimapclock = "interface",
-	quests = "interface", waypoint = "interface", micro = "interface", xp = "interface",
+	quests = "interface", waypoint = "interface", micro = "interface", bags = "interface", xp = "interface",
 }
 for _, item in ipairs(ns.COMBAT_SHOW) do
 	item.page = item.page or ROW_SECTIONS[item.key]
@@ -1626,7 +1630,7 @@ ns.HOVER_TRIGGERS = {
 -- you make.)
 ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "bars", icon = "Interface\\Icons\\INV_Sword_04", name = L["Action bars"],
-		members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "micro", "xp", "extra" } },
+		members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "micro", "bags", "xp", "extra" } },
 	{ preset = "side", icon = "Interface\\Icons\\Ability_Warrior_DefensiveStance", name = L["Side bars"],
 		members = { "right1", "right2" } },
 	{ preset = "bars68", icon = "Interface\\Icons\\Ability_DualWield", name = L["Action bars 6-8"],
@@ -1826,7 +1830,7 @@ local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
 	player = true, prd = true, prdpower = true, target = true, tot = true, focus = true, buffs = true, mainbar = true,
-	bottomleft = true, bottomright = true, pet = true, stance = true, totems = true, micro = true, xp = true,
+	bottomleft = true, bottomright = true, pet = true, stance = true, totems = true, micro = true, bags = true, xp = true,
 	gamepadbars = true, gamepadreticle = true,
 }
 -- Other addons' frames too.
@@ -1853,11 +1857,12 @@ local function IsExtraKey(key)
 end
 
 -- Rows that take another row's tick in a column until given their own: the
--- bar art follows action bar 1, the pet portrait yours and the minimap header and its buttons the minimap, so profiles and lists
+-- bar art follows action bar 1, the pet portrait yours, the bags the micro menu
+-- and the minimap header and its buttons the minimap, so profiles and lists
 -- from before it was a row (the Cooldown Manager profile's: no action bars) still hold.
 local ROW_FALLBACK = {
 	art = "mainbar", petframe = "player", prdpower = "prd", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
-	minimapzone = "minimap", minimapclock = "minimap",
+	minimapzone = "minimap", minimapclock = "minimap", bags = "micro",
 }
 
 function ns.IsCombatShowOn(key)

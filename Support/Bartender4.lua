@@ -34,7 +34,9 @@ local ROWS = {
 	{ "bar8", "bars", "BT4Bar15" },
 	{ "pet", "bars", "BT4BarPetBar" },
 	{ "stance", "bars", "BT4BarStanceBar" },
-	{ "micro", "bars", "BT4BarMicroMenu", "BT4BarBagBar" },
+	{ "micro", "bars", "BT4BarMicroMenu" },
+	-- (Classic clients have no Bags row: their bags go with the micro menu.)
+	{ _G.BagsBar and "bags" or "micro", "bars", "BT4BarBagBar" },
 	{ "xp", "bars", "BT4BarStatusTrackingBar", "BT4BarStatus", "BT4BarXP", "BT4BarRep" },
 	{ "extra", "bars", "BT4BarExtraActionBar", "BT4BarZoneAbilityBar" },
 	{ "art", "barart", "BT4BarBlizzardArt" },

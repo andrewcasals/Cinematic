@@ -2797,6 +2797,36 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.petFrameHoverV1 = true
 		end
+		-- The bags got a row apart from the micro menu's: each mouseover group
+		-- with the micro menu gets them too, and its role hides and rule (its
+		-- ticks they follow until set). The live settings and each saved
+		-- profile's alike. Once.
+		if not ns.db.bagsHoverV1 then
+			local function AddBagsRow(groups)
+				for _, group in ipairs(groups or {}) do
+					local has, at = {}, nil
+					for i, key in ipairs(group.members or {}) do
+						has[key] = true
+						if key == "micro" then at = i end
+					end
+					if at and not has.bags then
+						table.insert(group.members, at + 1, "bags")
+					end
+				end
+			end
+			local function CarryMicro(settings)
+				AddBagsRow(settings.hoverGroups)
+				for _, list in ipairs({ "tankHide", "healerHide", "damageHide", "frameRules" }) do
+					local t = settings[list]
+					if type(t) == "table" and t.micro ~= nil and t.bags == nil then t.bags = t.micro end
+				end
+			end
+			CarryMicro(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then CarryMicro(saved) end
+			end
+			ns.db.bagsHoverV1 = true
+		end
 		-- Your own frame's parts got settings apart from the target grid's You
 		-- row (unitPartSelf<part>, which covered both): each starts as that row
 		-- had it. The live settings and each saved profile alike. Once.
