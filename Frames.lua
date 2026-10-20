@@ -1968,6 +1968,7 @@ ns.RULE_WORDS = {
 	world = "world", group = "group", grouped = "group", instance = "instance",
 	dungeon = "dungeon", raid = "raid", city = "city", inn = "inn",
 	flagged = "flagged", mounted = "mounted",
+	tank = "tank", healer = "healer", heal = "healer", damage = "damage", dps = "damage",
 }
 do
 	local OPERATORS = { ["and"] = "and", ["&"] = "and", ["&&"] = "and", ["or"] = "or", ["|"] = "or", ["||"] = "or",
@@ -2107,6 +2108,8 @@ do
 		facts.group = ns.InGroup() and true or false
 		facts.flagged = ns.IsPvPFlagged() and true or false
 		facts.mounted = ns.Flag(IsMounted()) and true or false
+		local role = ns.PlayerRole()
+		facts.tank, facts.healer, facts.damage = role == "TANK", role == "HEALER", role == "DAMAGER"
 		return facts
 	end
 	-- The same, in a fight only while really in one (the nameplates and unit frame parts).

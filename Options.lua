@@ -5478,6 +5478,7 @@ local function RulesSection(content, anchor)
 		{ "Location", { 0.45, 0.75, 1 }, { { "world", L["Open World"] }, { "city", "City" }, { "inn", "Inn" },
 			{ "bg", L["BGs & Arenas"] }, { "instance", L["Instances"] }, { "dungeon", "Dungeon" }, { "raid", "Raid" } } },
 		{ "You", { 0.8, 0.6, 1 }, { { "mounted", "Mounted" }, { "flagged", "PvP flagged" }, { "group", L["Grouped"] } } },
+		{ "Role", { 0.4, 0.85, 0.5 }, { { "tank", "Tank" }, { "healer", "Healer" }, { "damage", "Damage" } } },
 	}
 	local pieceButtons, wordButtons = {}, {}
 	local x, y = GROUP_WIDTH, 0

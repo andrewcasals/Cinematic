@@ -603,19 +603,24 @@ do
 		HEAL_VISION_KEYS[#HEAL_VISION_KEYS + 1] = "healVisionIn" .. column
 	end
 
-	-- Whether you're a healer: your specialization's role, or without one the
-	-- role you picked in the group finder. Yes when there's no telling.
-	local function IsHealer()
+	-- Your role ("TANK", "HEALER" or "DAMAGER"): your specialization's, or
+	-- without one the one you picked in the group finder. nil when there's no telling.
+	function ns.PlayerRole()
 		if GetSpecialization and GetSpecializationRole then
 			local spec = GetSpecialization()
 			local role = spec and GetSpecializationRole(spec)
-			if type(role) == "string" then return role == "HEALER" end
+			if type(role) == "string" then return role end
 		end
 		if UnitGroupRolesAssigned then
 			local role = UnitGroupRolesAssigned("player")
-			if type(role) == "string" and role ~= "NONE" then return role == "HEALER" end
+			if type(role) == "string" and role ~= "NONE" then return role end
 		end
-		return true
+	end
+
+	-- Whether you're a healer. Yes when there's no telling.
+	local function IsHealer()
+		local role = ns.PlayerRole()
+		return role == nil or role == "HEALER"
 	end
 
 	-- Whether Heal Vision is on where you are now (in a party or raid or not,
