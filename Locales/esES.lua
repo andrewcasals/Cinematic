@@ -1614,3 +1614,4 @@ L["Mouseover groups in or out of combat"] = "Grupos de ratón dentro o fuera de 
 L["Each mouseover group can work any time, only out of combat or only in combat. By default the Raid Frame Manager comes up with the raid and party frames out of combat only."] = "Cada grupo de ratón puede funcionar siempre, solo fuera de combate o solo en combate. Por defecto, el Gestor de marcos de banda aparece con los marcos de banda y de grupo solo fuera de combate."
 L["EllesmereUI nameplates"] = "Placas de nombre de EllesmereUI"
 L["EllesmereUI's nameplates now fade in CineMode and follow the Nameplates page, like the game's own."] = "Las placas de nombre de EllesmereUI ahora se desvanecen en CineMode y siguen la página Placas de nombre, como las del juego."
+L["The party and raid frames show only who needs healing. Pick where it works on the Vision page."] = "Los marcos de grupo y de banda muestran solo a quien necesita sanación. Elige dónde funciona en la página Visión."

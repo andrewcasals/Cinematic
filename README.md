@@ -79,7 +79,7 @@ Cinematic supports every WoW game mode, from retail to the Classic versions. It'
 
 ## Found a bug?
 
-Type **`/cine log`**, press Ctrl+C and paste the result into your report. It holds the addon's recent history, any Lua errors and a summary of your setup (game version, changed settings, other addons). It doesn't include your character's name or realm.
+**[Report it on GitHub](https://github.com/andrewcasals/Cinematic/issues/new?template=bug_report.yml).** Type **`/cine log`**, press Ctrl+C and paste the result into your report. It holds the addon's recent history, any Lua errors and a summary of your setup (game version, changed settings, other addons). It doesn't include your character's name or realm.
 
 If the addon keeps hitting an error, it stops itself for the session and puts your UI and game settings back. **`/cine panic`** does the same by hand, and **`/cine resume`** starts it again.
 

@@ -19,7 +19,6 @@
 -- own alpha: the fade goes on their parts. Either way, parts that ignore the
 -- frame's alpha (your target's outline) are skipped, and so is anything
 -- CineMode is fading right now (a row unticked), so nothing fights.
--- Work in progress: only in the dev copy (ns.isDev).
 local _, ns = ...
 
 local RESCAN_EVERY = 5   -- seconds between finding each member's parts again
@@ -121,7 +120,7 @@ end
 -- (kind: its setting, as the Vision grid's row has it: on here, see ns.HealVisionHere.)
 local function Wanted(kind)
 	local db = ns.db
-	return db and ns.isDev and kind == "healVision" and ns.HealVisionHere(db) and not ns.IsSuspended()
+	return db and kind == "healVision" and ns.HealVisionHere(db) and not ns.IsSuspended()
 end
 
 -- Not while CineMode is fading it (it fades it its own way, back to full once shown).

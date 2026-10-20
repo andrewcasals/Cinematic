@@ -6218,7 +6218,7 @@ end
 -- Sub-page: the visions, each a way of showing just what matters. Duel
 -- Vision: the plates of two players dueling near you (see Effects). Heal
 -- Vision: the party and raid frames show only who needs healing
--- (HealVisionFrames.lua; work in progress, the dev copy only).
+-- (HealVisionFrames.lua).
 local function CreateVisionPanel()
 	local canvas, content = CreateScrollPage()
 
@@ -6237,7 +6237,7 @@ local function CreateVisionPanel()
 	duelCheck:SetPoint("TOPLEFT", duelHeader, "BOTTOMLEFT", -2, -6)
 	GreyUnless(duelCheck, function(db) return db.handlePlates end)
 
-	if ns.isDev then
+	do
 		local function Apply()
 			if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
 			Refresh() -- grey out / enable the rest
