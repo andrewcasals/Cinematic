@@ -265,7 +265,7 @@ local innLevel, innWanted, innCheckedAt = 0, false, 0
 -- builds or you go indoors. Only on clients with C_Weather.
 local WEATHER_TYPE = Enum and Enum.WeatherType or {}
 local WEATHER_COLORS = {
-	[WEATHER_TYPE.Rain or 1] = { 0.74, 0.79, 0.88 },      -- grey and cool, overcast
+	[WEATHER_TYPE.Rain or 1] = { 0.62, 0.66, 0.74 },      -- dark grey and cool, gloomy overcast
 	[WEATHER_TYPE.Snow or 2] = { 0.86, 0.91, 1 },         -- pale blue, bright and cold
 	[WEATHER_TYPE.Sandstorm or 3] = { 1, 0.82, 0.6 },     -- dusty orange haze
 	[WEATHER_TYPE.Miscellaneous or 4] = { 0.86, 0.86, 0.9 }, -- a neutral grey haze
