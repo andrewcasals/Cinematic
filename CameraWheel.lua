@@ -20,11 +20,15 @@ local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask" -- (a round ma
 local RADIUS = 110     -- from the middle to each icon's centre (UI units)
 local ICON_SIZE = 52
 local PICKED_SCALE = 1.25
-local DEAD_ZONE = 34   -- the cursor this near the middle picks nothing
+local DEAD_ZONE = 64   -- the cursor this near the middle picks nothing (the middle circle)
 local TAP = 0.25       -- let go sooner than this (with nothing picked): the wheel stays up to click
 local FADE_TIME = 0.12
+-- (The middle lights up while the cursor's in it: nothing picked, so letting
+-- go there leaves the wheel up.)
+local HUB_COLOR = { 0, 0, 0, 0.5 }
+local HUB_LIT = { 0.45, 0.36, 0.12, 0.6 }
 
-local wheel, face, centerText, stateText
+local wheel, face, centerText, stateText, hub
 local slots = {}
 local picked             -- the slot the cursor points at, or nil
 local heldSince          -- when the key went down, while it's held
@@ -78,6 +82,7 @@ local function Pick(index)
 		slots[picked].glow:Hide()
 	end
 	picked = index
+	hub:SetColorTexture(unpack(index and HUB_COLOR or HUB_LIT))
 	if index then
 		SizeSlot(slots[index], ICON_SIZE * PICKED_SCALE)
 		slots[index].glow:Show()
@@ -124,6 +129,13 @@ local function Choose(index)
 end
 
 local function Open()
+	-- (One wheel at a time. It only opens out of a fight, so ours may hide
+	-- the secure ones.)
+	for _, other in ipairs({ CinematicMenuWheel, CinematicMarkerWheel, CinematicMasterWheel, CinematicWorldMarkerWheel }) do
+		if other:IsShown() and not InCombatLockdown() then
+			other:Hide()
+		end
+	end
 	-- (Shown again before it finished going: picks up from where it was.)
 	Pick(nil)
 	clickMode = false
@@ -234,10 +246,10 @@ local disc = face:CreateTexture(nil, "BACKGROUND")
 disc:SetPoint("CENTER")
 disc:SetSize((RADIUS + ICON_SIZE * 0.85) * 2, (RADIUS + ICON_SIZE * 0.85) * 2)
 disc:SetColorTexture(0, 0, 0, 0.55)
-local hub = face:CreateTexture(nil, "BORDER")
+hub = face:CreateTexture(nil, "BORDER")
 hub:SetPoint("CENTER")
-hub:SetSize(DEAD_ZONE * 2 + 60, DEAD_ZONE * 2 + 60)
-hub:SetColorTexture(0, 0, 0, 0.5)
+hub:SetSize(DEAD_ZONE * 2, DEAD_ZONE * 2)
+hub:SetColorTexture(unpack(HUB_LIT)) -- (nothing picked yet)
 if face.CreateMaskTexture then
 	for _, texture in ipairs({ disc, hub }) do
 		local mask = face:CreateMaskTexture()
@@ -249,10 +261,10 @@ end
 
 centerText = face:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 centerText:SetPoint("CENTER", 0, 6)
-centerText:SetWidth(DEAD_ZONE * 2 + 50)
+centerText:SetWidth(DEAD_ZONE * 2 - 10)
 stateText = face:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 stateText:SetPoint("TOP", centerText, "BOTTOM", 0, -3)
-stateText:SetWidth(DEAD_ZONE * 2 + 50)
+stateText:SetWidth(DEAD_ZONE * 2 - 10)
 
 for i, camera in ipairs(CAMERAS) do
 	local slot = CreateFrame("Frame", nil, face)
@@ -297,5 +309,30 @@ wheel:SetScript("OnHide", function()
 	Pick(nil)
 end)
 wheel:SetScript("OnUpdate", ns.Profiled("Camera wheel", OnUpdate))
+-- (The other wheels put it away as they open.)
+function ns.CloseCameraWheel()
+	if wheel:IsShown() then
+		wheel:Hide()
+	end
+end
+
+-- For the master wheel: why it can't open now (a fight), or nil.
+function ns.CameraWheelCant()
+	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
+		return L["not in a fight"]
+	end
+	return nil
+end
+
+-- The master wheel opens it round the cursor, waiting for a click (as if its
+-- key had been tapped).
+function ns.OpenCameraWheel()
+	if not ns.db or ns.CameraWheelCant() then
+		return
+	end
+	Open()
+	clickMode = true
+	wheel:EnableMouse(true)
+end
 tinsert(UISpecialFrames, "CinematicCameraWheel") -- Escape closes it
 ns.AddOverlay(wheel) -- (stays with the UI hidden, like the bars)

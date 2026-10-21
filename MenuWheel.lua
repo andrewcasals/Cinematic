@@ -51,10 +51,14 @@ local MIN_RADIUS = 110 -- from the middle to each icon's centre (UI units); more
 local ICON_SIZE = 52
 local ICON_GAP = 14    -- at least this between icons round the ring
 local PICKED_SCALE = 1.25
-local DEAD_ZONE = 34   -- the cursor this near the middle picks nothing
+local DEAD_ZONE = 64   -- the cursor this near the middle picks nothing (the middle circle)
 local FADE_TIME = 0.12
+-- (The middle lights up while the cursor's in it: nothing picked, so letting
+-- go there leaves the wheel up.)
+local HUB_COLOR = { 0, 0, 0, 0.5 }
+local HUB_LIT = { 0.45, 0.36, 0.12, 0.6 }
 
-local wheel, disc, centerText, stateText, keyButton, area, gameMenuButton
+local wheel, disc, hub, centerText, stateText, keyButton, area, gameMenuButton
 local slots = {}         -- secure buttons, one per button the bar could have
 local shown = {}         -- the bar's buttons as last laid out, by slot
 local openButtons = {}   -- by slot: what it clicks for a button with no OnClick
@@ -136,6 +140,7 @@ local function Pick(index)
 		slots[picked].glow:Hide()
 	end
 	picked = index
+	hub:SetColorTexture(unpack(index and HUB_COLOR or HUB_LIT))
 	if index and slots[index] then
 		SizeSlot(slots[index], ICON_SIZE * PICKED_SCALE)
 		slots[index].glow:Show()
@@ -302,7 +307,9 @@ end)
 -- The wheel (secure, so the snippets can show, place and hide it in a fight;
 -- outside UIParent, so it shows with the UI hidden): icons round a dark
 -- disc, names in the middle.
-wheel = CreateFrame("Frame", "CinematicMenuWheel", nil, "SecureHandlerShowHideTemplate")
+-- (Opened from the master wheel's snippet as well: MarkerWheel.lua gives it
+-- the handler.)
+wheel = CreateFrame("Frame", "CinematicMenuWheel", nil, "SecureHandlerShowHideTemplate, SecureHandlerAttributeTemplate")
 wheel:SetFrameStrata("FULLSCREEN_DIALOG")
 wheel:SetClampedToScreen(true) -- (it opens round the cursor, kept on screen)
 wheel:SetSize((MIN_RADIUS + ICON_SIZE) * 2, (MIN_RADIUS + ICON_SIZE) * 2)
@@ -314,10 +321,10 @@ wheel:Hide()
 disc = wheel:CreateTexture(nil, "BACKGROUND")
 disc:SetPoint("CENTER")
 disc:SetColorTexture(0, 0, 0, 0.55)
-local hub = wheel:CreateTexture(nil, "BORDER")
+hub = wheel:CreateTexture(nil, "BORDER")
 hub:SetPoint("CENTER")
-hub:SetSize(DEAD_ZONE * 2 + 60, DEAD_ZONE * 2 + 60)
-hub:SetColorTexture(0, 0, 0, 0.5)
+hub:SetSize(DEAD_ZONE * 2, DEAD_ZONE * 2)
+hub:SetColorTexture(unpack(HUB_LIT)) -- (nothing picked yet)
 if wheel.CreateMaskTexture then
 	for _, texture in ipairs({ disc, hub }) do
 		local mask = wheel:CreateMaskTexture()
@@ -329,10 +336,10 @@ end
 
 centerText = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 centerText:SetPoint("CENTER", 0, 6)
-centerText:SetWidth(DEAD_ZONE * 2 + 50)
+centerText:SetWidth(DEAD_ZONE * 2 - 10)
 stateText = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 stateText:SetPoint("TOP", centerText, "BOTTOM", 0, -3)
-stateText:SetWidth(DEAD_ZONE * 2 + 50)
+stateText:SetWidth(DEAD_ZONE * 2 - 10)
 
 -- The click-catcher: the whole screen, behind the icons. It only takes the
 -- mouse once the key's let go in the middle; then a click anywhere but an
@@ -351,6 +358,9 @@ for i = 1, #BUTTONS do
 	slot:SetSize(ICON_SIZE, ICON_SIZE)
 	slot:SetFrameLevel(wheel:GetFrameLevel() + 5)
 	slot:RegisterForClicks("AnyUp")
+	-- (Acts as the click comes up, which is all it hears: else, with the game's
+	-- "act on key down" setting on, it waits for a down that never comes.)
+	slot:SetAttribute("useOnKeyDown", false)
 	slot:SetAttribute("type", "click")
 	slot:SetScript("PreClick", function()
 		ShowUIFor(i)
@@ -401,6 +411,7 @@ keyButton:SetScript("PreClick", function(_, _, down)
 	if down then
 		if not wheel:IsShown() then
 			Build() -- (out of a fight: freshly laid out)
+			ns.CloseCameraWheel()
 		end
 	elseif wheel:IsShown() then
 		ShowUIFor(SlotAtCursor())
@@ -422,6 +433,14 @@ wheel:WrapScript(keyButton, "OnClick", [[
 		end
 		if (owner:GetAttribute("count") or 0) == 0 then
 			return false
+		end
+		-- (One wheel at a time: the marker wheels are put away. MarkerWheel.lua
+		-- sets the refs.)
+		for i = 1, owner:GetAttribute("others") or 0 do
+			local other = owner:GetFrameRef("other" .. i)
+			if other then
+				other:Hide()
+			end
 		end
 		owner:ClearAllPoints()
 		owner:SetPoint("CENTER", "$cursor")
@@ -504,3 +523,4 @@ watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
 watcher:RegisterEvent("UI_SCALE_CHANGED")
 watcher:SetScript("OnEvent", Build)
+ns.BuildMenuWheel = Build -- (the master wheel's, before it opens this one)

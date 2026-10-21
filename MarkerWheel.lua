@@ -1,0 +1,622 @@
+-- Cinematic: the marker wheels. Like the menu wheel, but their icons are the
+-- raid markers (skull, cross, square...). Holding a wheel's key brings up its
+-- ring round the cursor: point at a marker and let go to use it. Letting go
+-- in the middle leaves the wheel up to click one; clicking elsewhere, Escape
+-- or the key again puts it away.
+--
+-- The marker wheel puts a marker over a unit, in the order of the game's
+-- Target Marker Icon menu, and None takes theirs off. Who it marks is
+-- settled as the key goes down: your target, or with none (out of a fight),
+-- whatever the cursor's on. In a fight, always your target: our code can't
+-- change the buttons then, and the snippets can't tell who the mouseover is.
+--
+-- The ground marker wheel drops a world marker (the coloured light on the
+-- floor) under the cursor, where you let go (on the icon you picked).
+-- Picking one that's down moves it there; Clear all takes them all up.
+--
+-- Marking is protected (an addon setting a marker itself is blocked), so the
+-- wheels mark through secure buttons (the game's own "raidtarget" and
+-- "worldmarker" actions), and opening, picking and closing run as secure
+-- snippets, as in the menu wheel.
+local _, ns = ...
+local L = ns.L
+
+local ICON = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_"
+local CLEAR_ICON = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
+local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask" -- (a round mask every client has)
+local RADIUS = 110     -- from the middle to each icon's centre (UI units)
+local ICON_SIZE = 46
+local PICKED_SCALE = 1.3
+local DEAD_ZONE = 64   -- the cursor this near the middle picks nothing (the middle circle)
+local FADE_TIME = 0.12
+-- (The middle lights up while the cursor's in it: nothing picked, so letting
+-- go there leaves the wheel up.)
+local HUB_COLOR = { 0, 0, 0, 0.5 }
+local HUB_LIT = { 0.45, 0.36, 0.12, 0.6 }
+
+-- By the game's unit marker number (the icon's too): its English name and
+-- the game menu's colour.
+local ENGLISH = { "Star", "Circle", "Diamond", "Triangle", "Moon", "Square", "Cross", "Skull" }
+local COLORS = {
+	{ 1, 0.92, 0 },        -- star
+	{ 0.98, 0.57, 0 },     -- circle
+	{ 0.83, 0.22, 0.9 },   -- diamond
+	{ 0.04, 0.95, 0 },     -- triangle
+	{ 0.7, 0.82, 0.88 },   -- moon
+	{ 0, 0.71, 1 },        -- square
+	{ 1, 0.24, 0.17 },     -- cross
+	{ 1, 1, 1 },           -- skull
+}
+-- The ring's order, skull first (the menu's), by unit marker number.
+local RING = { 8, 7, 6, 5, 4, 3, 2, 1 }
+-- A world marker's number by its icon's (the game numbers them otherwise:
+-- blue square first, white skull last).
+local WORLD = { [6] = 1, [4] = 2, [3] = 3, [7] = 4, [1] = 5, [2] = 6, [5] = 7, [8] = 8 }
+
+local wheels = {} -- each wheel made, so each can put the others away
+
+local function Known(value)
+	return not (issecretvalue and issecretvalue(value))
+end
+
+local function Exists(token)
+	local ok, exists = pcall(UnitExists, token)
+	return ok and ns.Flag(exists)
+end
+
+-- The marker's name as the game gives it, in the game's language (else
+-- English, for L).
+local function IconName(icon)
+	local name = _G["RAID_TARGET_" .. icon]
+	return type(name) == "string" and name or ENGLISH[icon]
+end
+
+-- In a raid only the leader and assistants mark, unless everyone's one.
+local function MayMark()
+	return not (IsInRaid and ns.Flag(IsInRaid())) or ns.Flag(UnitIsGroupLeader("player"))
+		or ns.Flag(UnitIsGroupAssistant("player"))
+		or (IsEveryoneAssistant and ns.Flag(IsEveryoneAssistant()))
+end
+
+-- Opens a secure wheel from another's snippet (the master wheel's): round
+-- the cursor, waiting for a click, as if its key had been tapped. Run as its
+-- _onattributechanged when a snippet sets its "cineopen".
+local OPEN_SNIPPET = [[
+	if name ~= "cineopen" or not value then
+		return
+	end
+	self:SetAttribute("cineopen", nil)
+	if (self:GetAttribute("count") or 0) == 0 then
+		return
+	end
+	for i = 1, self:GetAttribute("others") or 0 do
+		local other = self:GetFrameRef("other" .. i)
+		if other then
+			other:Hide()
+		end
+	end
+	local area = self:GetFrameRef("area")
+	self:ClearAllPoints()
+	self:SetPoint("CENTER", "$cursor")
+	area:EnableMouse(true)
+	self:Show()
+	self:SetBindingClick(true, "ESCAPE", area:GetName())
+]]
+
+-- Makes a wheel. spec: name (its frame's; its key's button and click-catcher
+-- are named from it), title, binding (its key's name), slots (each: icon,
+-- color, label, and attributes for its secure action, or opens: a secure
+-- wheel it opens; optional: trim, for an icon with an edge of its own, and
+-- Cant(), why that slot can't be used now), and these, all optional:
+-- Cant() (why it can't be used now, or nil), Active(slot) (true: shows its
+-- ring), Title() (the middle's text with nothing picked), activeText (under a
+-- picked slot that's active), OnOpen() (as the key goes down, before the
+-- snippet: out of a fight our code may still change the buttons). Text is
+-- English, translated as it's shown (the language is only known later).
+local function MakeWheel(spec)
+	local keyName, areaName = spec.name .. "Button", spec.name .. "Area"
+	local list = spec.slots
+	local slots = {}
+	local picked -- the slot the cursor points at, or nil
+	local wheel, hub, centerText, stateText
+
+	-- (The art grows, not the secure button: that can't change in a fight.)
+	local function SizeSlot(slot, size)
+		slot.art:SetSize(size, size)
+		slot.glow:SetSize(size + 16, size + 16)
+		slot.ring:SetSize(size + 10, size + 10)
+	end
+
+	local function Pick(index)
+		if picked == index then
+			return
+		end
+		if picked then
+			SizeSlot(slots[picked], ICON_SIZE)
+			slots[picked].glow:Hide()
+		end
+		picked = index
+		hub:SetColorTexture(unpack(index and HUB_COLOR or HUB_LIT))
+		if index then
+			SizeSlot(slots[index], ICON_SIZE * PICKED_SCALE)
+			slots[index].glow:Show()
+		end
+	end
+
+	local function UpdateText()
+		local entry = picked and list[picked]
+		local cant = spec.Cant and spec.Cant()
+		cant = cant or (entry and entry.Cant and entry.Cant())
+		if entry then
+			centerText:SetText(L[entry.label])
+			centerText:SetTextColor(entry.color[1], entry.color[2], entry.color[3])
+		else
+			-- (A secret title on WoW Forever is still shown, just not joined to anything.)
+			local ok = not cant and spec.Title and pcall(centerText.SetText, centerText, spec.Title())
+			if not ok then
+				centerText:SetText(L[spec.title])
+			end
+			centerText:SetTextColor(1, 0.82, 0)
+		end
+		if cant then
+			stateText:SetText(cant)
+		elseif entry and spec.activeText and spec.Active and spec.Active(entry) then
+			stateText:SetText(L[spec.activeText])
+		else
+			stateText:SetText("")
+		end
+	end
+
+	local function Refresh()
+		local usable = not (spec.Cant and spec.Cant())
+		for i, entry in ipairs(list) do
+			local slot = slots[i]
+			local can = usable and not (entry.Cant and entry.Cant())
+			slot.ring:SetShown(can and spec.Active ~= nil and spec.Active(entry) == true)
+			slot.icon:SetDesaturated(not can)
+			slot.icon:SetAlpha(can and 1 or 0.5)
+		end
+		UpdateText()
+	end
+
+	-- Which slot the cursor points at: the nearest by angle, once it's out of
+	-- the dead zone in the middle. (The secure snippet below works it out the
+	-- same way.)
+	local function SlotAtCursor()
+		local x, y = GetCursorPosition()
+		local scale = wheel:GetEffectiveScale()
+		local cx, cy = wheel:GetCenter()
+		if not cx then
+			return nil
+		end
+		x, y = x / scale - cx, y / scale - cy
+		if x * x + y * y < DEAD_ZONE * DEAD_ZONE then
+			return nil
+		end
+		local step = 360 / #list
+		-- (Slot 1 straight up, the rest round clockwise.)
+		local angle = (90 - math.deg(math.atan2(y, x))) % 360
+		return math.floor((angle + step / 2) / step) % #list + 1
+	end
+
+	-- The wheel (secure, so the snippets can show, place and hide it in a
+	-- fight; outside UIParent, so it shows with the UI hidden): icons round a
+	-- dark disc, names in the middle.
+	wheel = CreateFrame("Frame", spec.name, nil, "SecureHandlerShowHideTemplate, SecureHandlerAttributeTemplate")
+	wheel:SetFrameStrata("FULLSCREEN_DIALOG")
+	wheel:SetClampedToScreen(true) -- (it opens round the cursor, kept on screen)
+	wheel:SetSize((RADIUS + ICON_SIZE) * 2, (RADIUS + ICON_SIZE) * 2)
+	wheel:SetPoint("CENTER", UIParent)
+	wheel:SetAttribute("count", #list)
+	wheel:SetAttribute("deadzone", DEAD_ZONE)
+	wheel:Hide()
+
+	local disc = wheel:CreateTexture(nil, "BACKGROUND")
+	disc:SetPoint("CENTER")
+	disc:SetSize((RADIUS + ICON_SIZE * 0.9) * 2, (RADIUS + ICON_SIZE * 0.9) * 2)
+	disc:SetColorTexture(0, 0, 0, 0.55)
+	hub = wheel:CreateTexture(nil, "BORDER")
+	hub:SetPoint("CENTER")
+	hub:SetSize(DEAD_ZONE * 2, DEAD_ZONE * 2)
+	hub:SetColorTexture(unpack(HUB_LIT)) -- (nothing picked yet)
+
+	-- (Round, all of them: the markers have no square of their own to show.)
+	local function Round(frame, texture)
+		if frame.CreateMaskTexture then
+			local mask = frame:CreateMaskTexture()
+			mask:SetAllPoints(texture)
+			mask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIONAL", "CLAMPTOBLACKADDITIONAL")
+			texture:AddMaskTexture(mask)
+		end
+	end
+	Round(wheel, disc)
+	Round(wheel, hub)
+
+	centerText = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	centerText:SetPoint("CENTER", 0, 6)
+	centerText:SetWidth(DEAD_ZONE * 2 - 10)
+	stateText = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	stateText:SetPoint("TOP", centerText, "BOTTOM", 0, -3)
+	stateText:SetWidth(DEAD_ZONE * 2 - 10)
+
+	-- The click-catcher: the whole screen, behind the icons. It only takes
+	-- the mouse once the key's let go in the middle; then a click anywhere but
+	-- an icon puts the wheel away. The snippets also measure the cursor with it.
+	local area = CreateFrame("Button", areaName, wheel, "SecureActionButtonTemplate")
+	area:SetAllPoints(WorldFrame)
+	area:SetFrameLevel(wheel:GetFrameLevel())
+	area:RegisterForClicks("AnyUp")
+	area:EnableMouse(false)
+	wheel:SetFrameRef("area", area)
+
+	-- The key's button: its binding clicks it on the way down and up. Its
+	-- action only ever runs on the way up, and only when the snippet picks a
+	-- slot (as the "button" slotN, set up as that slot's).
+	local keyButton = CreateFrame("Button", keyName, nil, "SecureActionButtonTemplate")
+	keyButton:RegisterForClicks("AnyDown", "AnyUp")
+	keyButton:SetAttribute("useOnKeyDown", false)
+
+	-- The icons: secure buttons doing their marker's action.
+	for i, entry in ipairs(list) do
+		local slot = CreateFrame("Button", nil, wheel, "SecureActionButtonTemplate")
+		slot:SetSize(ICON_SIZE, ICON_SIZE)
+		slot:SetFrameLevel(wheel:GetFrameLevel() + 5)
+		local angle = math.rad(90 - (i - 1) * 360 / #list)
+		slot:SetPoint("CENTER", wheel, "CENTER", RADIUS * math.cos(angle), RADIUS * math.sin(angle))
+		slot:RegisterForClicks("AnyUp")
+		-- (Acts as the click comes up, which is all it hears: else, with the game's
+		-- "act on key down" setting on, it waits for a down that never comes.)
+		slot:SetAttribute("useOnKeyDown", false)
+		for key, value in pairs(entry.attributes or {}) do
+			slot:SetAttribute(key, value)
+			keyButton:SetAttribute(key .. "-slot" .. i, value)
+		end
+		if entry.opens then
+			wheel:SetFrameRef("open" .. i, entry.opens)
+		end
+		local art = CreateFrame("Frame", nil, slot)
+		art:SetPoint("CENTER")
+		local glow = art:CreateTexture(nil, "BACKGROUND") -- the cursor's on it
+		glow:SetPoint("CENTER")
+		glow:SetColorTexture(entry.color[1], entry.color[2], entry.color[3], 0.45)
+		glow:Hide()
+		local ring = art:CreateTexture(nil, "BORDER") -- active (theirs now, or down)
+		ring:SetPoint("CENTER")
+		ring:SetColorTexture(1, 1, 1, 0.3)
+		ring:Hide()
+		local icon = art:CreateTexture(nil, "ARTWORK")
+		icon:SetAllPoints()
+		icon:SetTexture(entry.icon)
+		if entry.trim then
+			icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		end
+		Round(art, glow)
+		Round(art, ring)
+		slot.art, slot.glow, slot.ring, slot.icon = art, glow, ring, icon
+		slots[i] = slot
+		SizeSlot(slot, ICON_SIZE)
+		-- (A click on it puts the wheel away; the click itself goes on, or
+		-- opens the wheel it's for.)
+		wheel:WrapScript(slot, "OnClick", [[
+			owner:Hide()
+			local sub = owner:GetFrameRef("open]] .. i .. [[")
+			if sub then
+				sub:SetAttribute("cineopen", true)
+				return false
+			end
+		]])
+	end
+
+	keyButton:SetScript("PreClick", function(_, _, down)
+		if down and not wheel:IsShown() then
+			if spec.OnOpen then
+				spec.OnOpen()
+			end
+			ns.CloseCameraWheel()
+		end
+	end)
+	_G["BINDING_NAME_CLICK " .. keyName .. ":LeftButton"] = "Cinematic: " .. L[spec.binding]
+	ns.OnLanguage(function()
+		_G["BINDING_NAME_CLICK " .. keyName .. ":LeftButton"] = "Cinematic: " .. L[spec.binding]
+	end)
+
+	-- Down: up round the cursor (or, already up, away). Up: does the slot the
+	-- cursor points at; let go in the middle, it stays up to click one.
+	wheel:WrapScript(keyButton, "OnClick", [[
+		local area = owner:GetFrameRef("area")
+		if down then
+			if owner:IsShown() then
+				owner:Hide()
+				return false
+			end
+			-- (One wheel at a time: the other secure ones are put away.)
+			for i = 1, owner:GetAttribute("others") or 0 do
+				local other = owner:GetFrameRef("other" .. i)
+				if other then
+					other:Hide()
+				end
+			end
+			owner:ClearAllPoints()
+			owner:SetPoint("CENTER", "$cursor")
+			area:EnableMouse(false)
+			owner:Show()
+			owner:SetBindingClick(true, "ESCAPE", "]] .. areaName .. [[")
+			held = true
+			return false
+		end
+		if not held or not owner:IsShown() then
+			return false
+		end
+		held = false
+		local fx, fy = area:GetMousePosition()
+		local al, ab, aw, ah = area:GetRect()
+		local wl, wb, ww, wh = owner:GetRect()
+		if not (fx and al and wl) then
+			owner:Hide()
+			return false
+		end
+		local dx = al + fx * aw - (wl + ww / 2)
+		local dy = ab + fy * ah - (wb + wh / 2)
+		local dead = owner:GetAttribute("deadzone")
+		if dx * dx + dy * dy < dead * dead then
+			area:EnableMouse(true)
+			return false
+		end
+		local count = owner:GetAttribute("count")
+		local step = 360 / count
+		local angle = (90 - math.deg(math.atan2(dy, dx))) % 360
+		local index = math.floor((angle + step / 2) / step) % count + 1
+		owner:Hide()
+		local sub = owner:GetFrameRef("open" .. index)
+		if sub then
+			sub:SetAttribute("cineopen", true)
+			return false
+		end
+		return "slot" .. index
+	]])
+	-- A click on the catcher (or Escape) puts it away.
+	wheel:WrapScript(area, "OnClick", [[
+		owner:Hide()
+		return false
+	]])
+	wheel:SetAttribute("_onhide", [[
+		self:ClearBindings()
+		held = false
+	]])
+	wheel:SetAttribute("_onattributechanged", OPEN_SNIPPET)
+
+	-- Our side: fades in, and shows what the cursor points at.
+	local sinceRefresh = 0
+	local function OnUpdate(_, elapsed)
+		local alpha = wheel:GetAlpha()
+		if alpha < 1 then
+			wheel:SetAlpha(math.min(1, alpha + elapsed / FADE_TIME))
+		end
+		Pick(SlotAtCursor())
+		sinceRefresh = sinceRefresh + elapsed
+		if sinceRefresh >= 0.2 then
+			sinceRefresh = 0
+			Refresh() -- (someone else marking, them going away...)
+		else
+			UpdateText()
+		end
+	end
+	wheel:HookScript("OnShow", function()
+		wheel:SetAlpha(0)
+		Pick(nil)
+		Refresh()
+	end)
+	wheel:HookScript("OnHide", function()
+		Pick(nil)
+	end)
+	wheel:SetScript("OnUpdate", ns.Profiled(spec.title, OnUpdate))
+
+	wheel.keyButton, wheel.slots = keyButton, slots
+	wheels[#wheels + 1] = wheel
+	return wheel
+end
+
+-- The marker wheel ----------------------------------------------------------
+
+local unit = "target" -- who its buttons mark
+
+-- The mouseover only lasts while the cursor's on them, so it's swapped for a
+-- token that stays: one of these that's the same unit.
+local STEADY = { "target", "focus", "player", "pet" }
+for i = 1, 4 do
+	STEADY[#STEADY + 1] = "party" .. i
+	STEADY[#STEADY + 1] = "partypet" .. i
+end
+for i = 1, 40 do
+	STEADY[#STEADY + 1] = "raid" .. i
+end
+for i = 1, 40 do
+	STEADY[#STEADY + 1] = "nameplate" .. i
+end
+
+-- Who the wheel marks: the target; with none, the mouseover, if a steady
+-- token names them (one with no plate or frame can't be).
+local function MarkUnit()
+	if not Exists("target") and Exists("mouseover") then
+		for _, token in ipairs(STEADY) do
+			if Exists(token) then
+				local ok, same = pcall(UnitIsUnit, "mouseover", token)
+				if ok and ns.Flag(same) then
+					return token
+				end
+			end
+		end
+	end
+	return "target"
+end
+
+local unitSlots = {}
+for _, icon in ipairs(RING) do
+	unitSlots[#unitSlots + 1] = { icon = ICON .. icon, color = COLORS[icon], label = IconName(icon), index = icon,
+		attributes = { type = "raidtarget", action = "set", marker = icon, unit = unit } }
+end
+unitSlots[#unitSlots + 1] = { icon = CLEAR_ICON, color = { 1, 1, 1 }, index = 0,
+	label = type(NONE) == "string" and NONE or "None",
+	attributes = { type = "raidtarget", action = "clear", unit = unit } }
+
+local markerWheel
+
+-- Points the buttons at who to mark. Out of a fight only.
+local function SetUnit(token)
+	if InCombatLockdown() then
+		return
+	end
+	unit = token
+	markerWheel.keyButton:SetAttribute("unit", token)
+	for _, slot in ipairs(markerWheel.slots) do
+		slot:SetAttribute("unit", token)
+	end
+end
+
+markerWheel = MakeWheel({
+	name = "CinematicMarkerWheel",
+	title = "Marker wheel",
+	binding = "Marker wheel (hold)",
+	slots = unitSlots,
+	OnOpen = function() SetUnit(MarkUnit()) end,
+	Title = function() return UnitName(unit) end,
+	-- Why they can't be marked now, or nil if they can.
+	Cant = function()
+		if not Exists(unit) then
+			return L["no target"]
+		end
+		if CanBeRaidTarget then
+			local ok, can = pcall(CanBeRaidTarget, unit)
+			if ok and Known(can) and not can then
+				return L["can't be marked"]
+			end
+		end
+		if not MayMark() then
+			return L["only the leader and assistants can mark"]
+		end
+		return nil
+	end,
+	-- The marker they have now (None with none). Not known on WoW Forever,
+	-- where it's secret.
+	Active = function(entry)
+		local ok, index = pcall(GetRaidTargetIndex, unit)
+		if not ok or not Known(index) then
+			return nil
+		end
+		return (index or 0) == entry.index
+	end,
+})
+
+-- The ground marker wheel (where the client has world markers) --------------
+
+local count = type(NUM_WORLD_RAID_MARKERS) == "number" and NUM_WORLD_RAID_MARKERS or 8
+if PlaceRaidMarker then
+	local worldSlots = {}
+	for _, icon in ipairs(RING) do
+		local index = WORLD[icon]
+		if index <= count then
+			worldSlots[#worldSlots + 1] = { icon = ICON .. icon, color = COLORS[icon], label = IconName(icon),
+				index = index, attributes = { type = "macro", macrotext = "/wm [@cursor] " .. index } }
+		end
+	end
+	worldSlots[#worldSlots + 1] = { icon = CLEAR_ICON, color = { 1, 1, 1 }, label = "Clear all",
+		attributes = { type = "worldmarker", action = "clear" } }
+
+	MakeWheel({
+		name = "CinematicWorldMarkerWheel",
+		title = "Ground marker wheel",
+		binding = "Ground marker wheel (hold)",
+		slots = worldSlots,
+		activeText = "down: pick it to move it",
+		Cant = function()
+			if not (IsInGroup and ns.Flag(IsInGroup())) then
+				return L["only in a group"]
+			end
+			if not MayMark() then
+				return L["only the leader and assistants can mark"]
+			end
+			return nil
+		end,
+		-- It's down now. Not known where the game won't say.
+		Active = function(entry)
+			if not (entry.index and IsRaidMarkerActive) then
+				return nil
+			end
+			local ok, active = pcall(IsRaidMarkerActive, entry.index)
+			if not ok or not Known(active) then
+				return nil
+			end
+			return active and true or false
+		end,
+	})
+end
+-- For the keybinds page: whether this client has the ground marker wheel.
+ns.hasWorldMarkerWheel = CinematicWorldMarkerWheel ~= nil
+
+-- The master wheel: one icon for each of the other wheels. Picking one opens
+-- it round the cursor, waiting for a click. The camera wheel isn't secure:
+-- its slot clicks a plain button of ours (no size: never seen) that opens
+-- it, out of a fight only (like its own key).
+local cameraOpener = CreateFrame("Button")
+cameraOpener:SetScript("OnClick", function() ns.OpenCameraWheel() end)
+local masterSlots = {
+	{ icon = "Interface\\Icons\\INV_Misc_Spyglass_03", trim = true, color = { 1, 0.82, 0.3 }, label = "Camera wheel",
+		attributes = { type = "click", clickbutton = cameraOpener },
+		Cant = function() return ns.CameraWheelCant() end },
+	{ icon = "Interface\\Icons\\INV_Misc_Gear_01", trim = true, color = { 1, 0.82, 0.3 }, label = "Menu wheel",
+		opens = CinematicMenuWheel },
+	{ icon = ICON .. 8, color = COLORS[8], label = "Marker wheel", opens = markerWheel },
+}
+if CinematicWorldMarkerWheel then
+	masterSlots[#masterSlots + 1] = { icon = ICON .. 6, color = COLORS[6], label = "Ground marker wheel",
+		opens = CinematicWorldMarkerWheel }
+end
+MakeWheel({
+	name = "CinematicMasterWheel",
+	title = "Master wheel",
+	binding = "Master wheel (hold)",
+	slots = masterSlots,
+	-- (Out of a fight: the menu wheel laid out fresh, and who the marker
+	-- wheel marks settled from where the cursor is now.)
+	OnOpen = function()
+		ns.BuildMenuWheel()
+		SetUnit(MarkUnit())
+	end,
+})
+-- (The menu wheel opens from the master wheel's snippet too.)
+CinematicMenuWheel:SetAttribute("_onattributechanged", OPEN_SNIPPET)
+
+-- (Each secure wheel can put the others away, in a fight too: the menu
+-- wheel's snippet reads the same refs.)
+local secure = { CinematicMenuWheel }
+for _, wheel in ipairs(wheels) do
+	secure[#secure + 1] = wheel
+end
+for _, wheel in ipairs(secure) do
+	local others = 0
+	for _, other in ipairs(secure) do
+		if other ~= wheel then
+			others = others + 1
+			wheel:SetFrameRef("other" .. others, other)
+		end
+	end
+	wheel:SetAttribute("others", others)
+end
+
+-- Scaled like the UI (they aren't in UIParent) out of a fight; and the
+-- marker wheel back to the target as a fight starts (just before the
+-- lockdown), as a mouseover's token could name someone else by the time the
+-- key's next pressed.
+local watcher = CreateFrame("Frame")
+watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+watcher:RegisterEvent("UI_SCALE_CHANGED")
+watcher:SetScript("OnEvent", function()
+	if InCombatLockdown() then
+		return
+	end
+	for _, wheel in ipairs(wheels) do
+		wheel:SetScale(UIParent:GetEffectiveScale())
+	end
+	SetUnit("target")
+end)

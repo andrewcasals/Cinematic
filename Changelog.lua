@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-21", page = "Keybinds", title = "Marker wheels",
+		text = "Hold a key to bring up a wheel of raid markers and put one on your target, or drop a ground " ..
+		"marker where you let go. A master wheel opens any of the wheels from one key. Set the keys on the " ..
+		"Keybinds page." },
 	{ date = "2026-10-21", page = "Profiles", client = "forever", title = "Retail profile",
 		text = "A new Retail profile gives WoW Forever retail's look: Cinematic's own Edit Mode layout, with " ..
 		"action bars 1 to 3, the micro menu and bags, and the XP bar each coming up on its own. Switch back " ..

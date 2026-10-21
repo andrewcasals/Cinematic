@@ -7170,6 +7170,10 @@ local KEYBINDS = {
 			"and time-of-day title. Press again (or Blizzard's key) to bring it back."] },
 	{ action = "CINEMATIC_TOGGLE", label = L["Toggle CineMode"],
 		tip = L["Turns CineMode on or off, like /cine."] },
+	{ action = "CLICK CinematicMasterWheelButton:LeftButton", label = L["Master wheel"],
+		tip = L["Hold to bring up a wheel of the wheels below (camera, menu, marker...): point at one and " ..
+			"let go to open it, then click what you want on it. Tap it instead and the wheel stays up for you " ..
+			"to click one. The camera wheel can't open in a fight."] },
 	{ action = "CINEMATIC_CAMWHEEL", label = L["Camera wheel"],
 		tip = L["Hold to bring up a wheel of the cameras below, an icon for each: point at one and let go " ..
 			"to start it. Tap it instead and the wheel stays up for you to click one. Picking the camera " ..
@@ -7178,6 +7182,15 @@ local KEYBINDS = {
 		tip = L["Hold to bring up a wheel of the game's menu buttons (character, spellbook, quest log...), " ..
 			"the ones on your menu bar: point at one and let go to open its window, even with the UI hidden. " ..
 			"Tap it instead and the wheel stays up for you to click one."] },
+	{ action = "CLICK CinematicMarkerWheelButton:LeftButton", label = L["Marker wheel"],
+		tip = L["Hold to bring up a wheel of the raid target markers (skull, cross, square...) for your " ..
+			"target, or with none, whatever the cursor is on: point at one and let go to put it on them, or at None to take theirs off. Tap it instead " ..
+			"and the wheel stays up for you to click one."] },
+	{ action = "CLICK CinematicWorldMarkerWheelButton:LeftButton", label = L["Ground marker wheel"],
+		show = function() return ns.hasWorldMarkerWheel end,
+		tip = L["Hold to bring up a wheel of the ground markers (the coloured lights you drop on the floor): " ..
+			"point at one and let go, and it drops under the cursor. Picking one that's down moves it; Clear " ..
+			"all takes them all up. Tap it instead and the wheel stays up for you to click one. Only in a group."] },
 	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"],
 		tip = L["Starts the AFK camera now, without waiting out its delay. " ..
 			"Press again, move or jump to stop it."] },
@@ -7325,19 +7338,24 @@ local function CreateKeybindsPanel()
 		"so setting them in either place works."])
 
 	local previous = Header(content, L["Keys"], subtitle, -20)
-	for i, bind in ipairs(KEYBINDS) do
-		local label = Label(content, "GameFontHighlight", bind.label)
-		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, i == 1 and -14 or -18)
-		label:SetWidth(200)
-		local first = CreateKeybindButton(content, bind.action, 1)
-		first:SetPoint("LEFT", label, "RIGHT", 10, 0)
-		local second = CreateKeybindButton(content, bind.action, 2)
-		second:SetPoint("LEFT", first, "RIGHT", 8, 0)
-		local note = Label(content, "GameFontDisableSmall", bind.tip)
-		note:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -8)
-		note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-		note:SetJustifyV("TOP")
-		previous = note
+	local rows = 0
+	for _, bind in ipairs(KEYBINDS) do
+		-- (A key for something this client doesn't have: no row.)
+		if not bind.show or bind.show() then
+			rows = rows + 1
+			local label = Label(content, "GameFontHighlight", bind.label)
+			label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, rows == 1 and -14 or -18)
+			label:SetWidth(200)
+			local first = CreateKeybindButton(content, bind.action, 1)
+			first:SetPoint("LEFT", label, "RIGHT", 10, 0)
+			local second = CreateKeybindButton(content, bind.action, 2)
+			second:SetPoint("LEFT", first, "RIGHT", 8, 0)
+			local note = Label(content, "GameFontDisableSmall", bind.tip)
+			note:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -8)
+			note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+			note:SetJustifyV("TOP")
+			previous = note
+		end
 	end
 
 	canvas:RegisterEvent("UPDATE_BINDINGS")
