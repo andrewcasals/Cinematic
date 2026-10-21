@@ -60,6 +60,7 @@ Slash.lua
 Profiles.lua
 Share.lua
 Welcome.lua
+Layouts.lua
 Options.lua
 Changelog.lua
 ChangelogCommits.lua

@@ -35,6 +35,8 @@ read_globals = {
 	"C_CVar",
 	"C_ChatBubbles",
 	"C_GamePad",
+	"C_EditMode",
+	"Constants",
 	"C_Console",
 	"C_ChatInfo",
 	"C_CreatureInfo",

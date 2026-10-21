@@ -6208,8 +6208,8 @@ local function CreateSwingPanel()
 	-- (Per class: your current one's.)
 	local className, class = UnitClass("player")
 	local rangedTop = Check(content, "swingRangedOnTop" .. class, L["Ranged bar on top for %s"]:format(className),
-		L["The main hand and ranged bars trade places, so the ranged bar is where the main hand's " ..
-		"was. Set for each class on its own (ticked for hunters, mages, priests and warlocks to start with), so one profile " ..
+		L["The ranged bar goes on top, where the main hand's was, and the main hand and off-hand bars " ..
+		"each move down one. Set for each class on its own (ticked for hunters, mages, priests and warlocks to start with), so one profile " ..
 		"suits all your characters."])
 	rangedTop:SetPoint("TOPLEFT", offHand, "BOTTOMLEFT", 0, -2)
 
@@ -8357,6 +8357,11 @@ ns.OnLanguage(function()
 	if ns.CreateWhatsNewPanels then
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
+	end
+	-- The dev build's own page, at the very end (Layouts.lua).
+	if ns.isDev and ns.CreateLayoutPanel and C_EditMode and C_EditMode.GetLayouts then
+		ns.CreateLayoutPanel({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
+			RegisterSubpage = RegisterSubpage })
 	end
 	GuardGamepadClose()
 end)

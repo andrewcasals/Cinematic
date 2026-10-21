@@ -4189,10 +4189,13 @@ do
 			"no bar to read; switched on " .. tostring(inUse[weapon]) .. ", in range " .. tostring(inRange))
 	end
 
-	-- Ranged bar on top (swingRangedOnTop<CLASS>, for your class): the main hand and ranged bars
-	-- trade places. Each takes the other's anchors, and one anchored to the
-	-- other (stacked) is anchored the other way round. The game's own anchors
-	-- are kept (and taken afresh whenever it moves a bar), so it can be undone.
+	-- Ranged bar on top (swingRangedOnTop<CLASS>, for your class): the ranged bar
+	-- takes the main hand's place, and the main hand and off-hand bars each move
+	-- down one (main hand, off hand, ranged becomes ranged, main hand, off hand).
+	-- Each bar takes the anchors of the place it moves to, and one anchored to
+	-- another bar is anchored to whichever bar is in that place now. The game's
+	-- own anchors are kept (and taken afresh whenever it moves a bar), so it
+	-- can be undone. Without an off-hand bar: main hand and ranged trade places.
 	local order = { swapped = false, game = {}, moving = false }
 
 	local function ReadPoints(frame)
@@ -4207,43 +4210,50 @@ do
 		return points
 	end
 
-	local function SetPoints(frame, points, from, to)
+	-- moved: bar -> the bar now in its place.
+	local function SetPoints(frame, points, moved)
 		order.moving = true
 		frame:ClearAllPoints()
 		for _, p in ipairs(points) do
-			frame:SetPoint(p[1], p[2] == from and to or p[2], p[3], p[4], p[5])
+			frame:SetPoint(p[1], moved and moved[p[2]] or p[2], p[3], p[4], p[5])
 		end
 		order.moving = false
 	end
 
 	local function Apply(swap)
 		local main, ranged = _G.SwingTimerMainHandFrame, _G.SwingTimerRangedFrame
-		if not (main and ranged) or InCombatLockdown() and (main:IsProtected() or ranged:IsProtected()) then
+		local off = _G.SwingTimerOffHandFrame
+		local bars = { main, ranged, off }
+		if not (main and ranged) then
 			return
 		end
-		local mainPoints = order.game[main] or ReadPoints(main)
-		local rangedPoints = order.game[ranged] or ReadPoints(ranged)
-		if not (mainPoints and rangedPoints and #mainPoints > 0 and #rangedPoints > 0) then
-			return
+		for _, bar in ipairs(bars) do
+			if InCombatLockdown() and bar:IsProtected() then return end
 		end
-		order.game[main], order.game[ranged] = mainPoints, rangedPoints
+		for _, bar in ipairs(bars) do
+			order.game[bar] = order.game[bar] or ReadPoints(bar)
+			if not (order.game[bar] and #order.game[bar] > 0) then
+				return
+			end
+		end
 		if not order.hooked then
 			order.hooked = true
-			-- The game moving a bar: its new anchors are the game's, and the swap is done again.
+			-- The game moving a bar: its new anchors are the game's, and the order is done again.
 			local function OnMoved(frame)
 				if order.moving then return end
 				order.game[frame] = nil
 				order.swapped = nil -- (looked at next tick)
 			end
-			hooksecurefunc(main, "SetPoint", OnMoved)
-			hooksecurefunc(ranged, "SetPoint", OnMoved)
+			for _, bar in ipairs(bars) do hooksecurefunc(bar, "SetPoint", OnMoved) end
 		end
 		if swap then
-			SetPoints(main, rangedPoints, main, ranged)
-			SetPoints(ranged, mainPoints, ranged, main)
+			-- (where each bar goes: the place of the bar named)
+			local place = off and { [ranged] = main, [main] = off, [off] = ranged } or { [ranged] = main, [main] = ranged }
+			local moved = {}
+			for bar, to in pairs(place) do moved[to] = bar end
+			for bar, to in pairs(place) do SetPoints(bar, order.game[to], moved) end
 		else
-			SetPoints(main, mainPoints)
-			SetPoints(ranged, rangedPoints)
+			for _, bar in ipairs(bars) do SetPoints(bar, order.game[bar]) end
 		end
 		order.swapped = swap
 	end
