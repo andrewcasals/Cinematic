@@ -153,6 +153,17 @@ local function CopyTable(source)
 	return result
 end
 
+-- A built-in's parts, with the dev build's Profile Builder changes
+-- (db.devRecipes[name][slot] = part name: this client's) on top.
+function ns.BuiltinParts(profile)
+	local changed = ns.isDev and ns.db and ns.db.devRecipes and ns.db.devRecipes[profile.name]
+	if not changed or not next(changed) then return profile.parts end
+	local parts = {}
+	for slot, part in pairs(profile.parts) do parts[slot] = part end
+	for slot, part in pairs(changed) do parts[slot] = part end
+	return parts
+end
+
 -- The values a profile starts from: the defaults, with a built-in's changes.
 local baseCache = {}
 function ns.ProfileBase(name)
@@ -161,9 +172,32 @@ function ns.ProfileBase(name)
 	local base = {}
 	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
 	local builtin = builtinByName[name]
-	if builtin then ns.ApplyParts(builtin.parts, base, ns.CLIENT) end
+	if builtin then ns.ApplyParts(ns.BuiltinParts(builtin), base, ns.CLIENT) end
 	baseCache[name] = base
 	return base
+end
+
+-- After a built-in's parts change (Profile Builder): worked out again when
+-- next wanted. The live settings stay as they are.
+function ns.ForgetProfileBases()
+	wipe(baseCache)
+end
+
+-- A profile's settings as they'd be live: the active one's are; another's,
+-- its base with its saved changes (for the Profile Builder's Compare).
+function ns.ProfileSettings(name)
+	local settings = {}
+	if name == ns.ActiveProfile() then
+		for k in pairs(ns.DEFAULTS) do settings[k] = ns.db[k] end
+		for _, k in ipairs(PROFILE_TABLES) do settings[k] = ns.db[k] end
+		return settings
+	end
+	local base, saved = ns.ProfileBase(name), ns.db.profiles[name] or {}
+	for k in pairs(ns.DEFAULTS) do
+		if saved[k] ~= nil then settings[k] = saved[k] else settings[k] = base[k] end
+	end
+	for _, k in ipairs(PROFILE_TABLES) do settings[k] = saved[k] or base[k] end
+	return settings
 end
 
 -- A new player has none until they pick one (Welcome.lua): Cinematic does
