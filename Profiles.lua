@@ -639,6 +639,7 @@ function ns.InitProfiles()
 	db.profileNotes = db.profileNotes or {}
 	db.profileIcons = db.profileIcons or {}
 	-- Built-ins called something else before: their settings and picks move over.
+	local liveRenamed = false
 	for _, profile in ipairs(ns.BUILTIN_PROFILES) do
 		for _, old in ipairs(profile.oldNames or {}) do
 			if db.profiles[old] and not db.profiles[profile.name] then
@@ -647,7 +648,10 @@ function ns.InitProfiles()
 			for _, holder in ipairs({ db, chardb }) do
 				if holder.profile == old then holder.profile = profile.name end
 			end
-			if db.liveProfile == old then db.liveProfile = profile.name end
+			if db.liveProfile == old then
+				db.liveProfile = profile.name
+				liveRenamed = true
+			end
 		end
 	end
 	-- Your own profiles made before they had icons get one each.
@@ -673,6 +677,10 @@ function ns.InitProfiles()
 	if wanted ~= db.liveProfile then
 		if ns.ProfileExists(db.liveProfile) then ns.SaveProfile() end
 		db.liveProfile = wanted
+		Load(wanted)
+	elseif liveRenamed then
+		-- (The one in use renamed: loaded again from its saved changes, so what
+		-- its new built-in adds, like retail's own action bar groups, comes in.)
 		Load(wanted)
 	end
 end
