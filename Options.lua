@@ -4227,7 +4227,7 @@ local function CreateCombatPanel()
 	end
 	local SECTIONS = {
 		{ "units", L["Unit frames"] }, { "combat", L["Combat"] }, { "bars", L["Action bars"] },
-		{ "interface", L["Interface"] }, { "party", L["Party frames (not raid-style)"] },
+		{ "interface", L["Interface"] }, { "minimap", L["Minimap"] }, { "party", L["Party frames (not raid-style)"] },
 		{ "raid", L["Raid frames"] }, { "bg", L["Battlegrounds"] },
 		{ false, L["Other"] }, -- (any row not given a section)
 	}
