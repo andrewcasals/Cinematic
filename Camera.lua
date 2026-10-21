@@ -1358,6 +1358,7 @@ local CALM_CENTER_RAMP = 0.8
 local CALM_CENTER_YAW = 70
 local CALM_CENTER_PITCH = 40
 local lastCombatAt = -math.huge
+ns.OnCalmEnd(function(cut) lastCombatAt = math.min(lastCombatAt, cut) end)
 -- Cameras ticked under Calm Timer (Camera Modes page, <cam>CalmWait) hold
 -- off until the Calm Timer (calmTime) has run out after a fight; the rest
 -- start straight away. Looked up by mode ("run"), orbit prefix ("runOrbit")

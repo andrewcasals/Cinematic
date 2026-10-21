@@ -63,8 +63,7 @@ local DEFAULTS = {
 	offWhileMoving = false,   -- while walking or riding about yourself (not auto-run, RP walking or flights)
 	movingBackAfter = 15,     -- ...until you've stood still, or kept moving, this many seconds
 	movingKeepVFX = true,     -- ...and the visual effects (letterbox, tint...) stay on meanwhile
-	fadeOutTime = 1.5,
-	combatFadeOutTime = 6,    -- ...for fades that start within the Calm Timer after a fight
+	fadeOutTime = 1.5,        -- every fade out, in fights and after them (once the Calm Timer is over) too
 	fadeInTime = 1.5,
 	combatFadeInTime = 0.2,   -- ...for fades in during a fight (the UI coming back as it starts)
 	letterbox = true,
@@ -77,6 +76,9 @@ local DEFAULTS = {
 	-- <effect>OnlyInCameras (only while a camera mode runs). Set below.
 	calmTime = 60,            -- Calm Timer: seconds after a fight before things settle back (nameplates
 	                          -- and names shown for fights go, the visual effects fade back in)
+	calmEndsAtFull = true,    -- the Calm Timer runs out early once health and power are back to full
+	calmEndsAtFullPet = true, -- ...and your pet's health too
+	calmFullAfter = 6,        -- ...this many seconds after they're full
 	tintPreset = "zonetime",   -- screen tint over the game world (see TINT_PRESETS)
 	tintStrength = 1,
 	tintCustomR = 1, tintCustomG = 0.8, tintCustomB = 0.6,
@@ -938,22 +940,25 @@ local function AnyRevealFrameShown()
 		or (ns.db.revealAtNPCs and AnyShown(REVEAL_AT_NPCS))
 end
 
--- How long things take to fade out: the Combat fade out time for fades that
--- start within the Calm Timer (calmTime) after a fight, the Fade out time for
--- the rest. The window runs on past the Calm Timer long enough for either
--- fade to finish, so one doesn't change speed halfway.
-local fightEndedAt = -math.huge
-local fightEndWatcher = CreateFrame("Frame")
-fightEndWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
-fightEndWatcher:SetScript("OnEvent", function() fightEndedAt = GetTime() end)
-
-function ns.FadeOutTime()
-	local db = ns.db
-	if InCombatLockdown() then
-		return db.combatFadeOutTime -- (hidden in fights: the combat speed too)
+-- Each file keeps its own "last fight" time for the Calm Timer. With
+-- calmEndsAtFull on, the timer runs out early once your health and power are
+-- back to full: ns.EndCalm moves them all back to just past the Calm Timer.
+-- Files register with ns.OnCalmEnd(function(cut) ... end), cut being that time.
+ns.calmEnders = {}
+function ns.OnCalmEnd(fn)
+	ns.calmEnders[#ns.calmEnders + 1] = fn
+end
+function ns.EndCalm(now)
+	local cut = now - (ns.db.calmTime or 0) - 0.01
+	for _, fn in ipairs(ns.calmEnders) do
+		fn(cut)
 	end
-	local window = (db.calmTime or 0) + math.max(db.fadeOutTime, db.combatFadeOutTime)
-	return GetTime() - fightEndedAt < window and db.combatFadeOutTime or db.fadeOutTime
+end
+
+-- How long things take to fade out: always the Fade out time. (After a fight,
+-- the Calm Timer keeps things up first; there's no slower fade on top.)
+function ns.FadeOutTime()
+	return ns.db.fadeOutTime
 end
 
 -- How long things take to fade in: the Combat fade in time during a fight
@@ -1631,6 +1636,9 @@ local snapRound = 0
 local GRID_EFFECTS = { "letterbox", "tint", "vignette", "weather" }
 local effectWanted = {}
 local lastFightAt = -math.huge
+ns.OnCalmEnd(function(cut) lastFightAt = math.min(lastFightAt, cut) end)
+local calmHealthySince -- (Exit Calm Timer when Healthy: when you were last back to full)
+local calmTrace = { fighting = false } -- (and for its log lines: a fight was on last tick)
 
 local function OnUpdate(_, elapsed)
 	-- Every frame (with EllesmereUI, or watching with /cine debug alpha): frames
@@ -1697,6 +1705,51 @@ local function OnUpdate(_, elapsed)
 	local inCombat = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
 	if inCombat then
 		lastFightAt = now
+	end
+	if inCombat ~= calmTrace.fighting then
+		calmTrace.fighting = inCombat
+		if not inCombat and ns.db.calmEndsAtFull then
+			ns.Log("calm", "fight ended")
+		end
+	end
+	-- Exit Calm Timer when Healthy: the Calm Timer ends calmFullAfter seconds
+	-- after your health and power (and your pet's, if ticked) are back to full.
+	if not inCombat and ns.db.calmEndsAtFull and now - lastFightAt < ns.db.calmTime then
+		local healthy = ns.IsPlayerRecovering and Step(ns.IsPlayerRecovering) == false
+			and not (ns.db.calmEndsAtFullPet and Step(ns.IsPetRecovering) ~= false)
+		if not healthy then
+			calmHealthySince = nil
+		else
+			if not calmHealthySince then
+				calmHealthySince = now
+				ns.Log("calm", ("healthy %.1f sec after the fight%s: %s"):format(now - lastFightAt,
+					ns.db.calmEndsAtFullPet and " (with pet)" or "", ns.VitalsReadout and Step(ns.VitalsReadout) or "?"))
+			end
+			if now - calmHealthySince >= (ns.db.calmFullAfter or 0) then
+				local sinceFight = now - lastFightAt
+				Step(ns.EndCalm, now)
+				ns.Log("calm", ("calm timer ended %.1f sec after the fight, %.1f sec after healthy; fading out over %.1f sec")
+					:format(sinceFight, now - calmHealthySince, ns.FadeOutTime()))
+				calmTrace.endedAt = now
+				calmTrace.checkAt = now + ns.FadeOutTime() + 1
+			end
+		end
+	else
+		calmHealthySince = nil
+	end
+	-- (For the log: how long after that the UI is all faded; a second past the
+	-- fade time, what's still up; given up after 30 sec.)
+	if calmTrace.endedAt and (inCombat or now - calmTrace.endedAt > 30) then
+		ns.Log("calm", (inCombat and "a fight started before the UI faded" or "the UI still isn't all faded after 30 sec")
+			.. "; still up: " .. (ns.NotFadedList and Step(ns.NotFadedList) or "?"))
+		calmTrace.endedAt = nil
+	elseif calmTrace.endedAt and ns.AllFaded and Step(ns.AllFaded) then
+		ns.Log("calm", ("all faded %.1f sec after the calm timer ended"):format(now - calmTrace.endedAt))
+		calmTrace.endedAt = nil
+	elseif calmTrace.endedAt and calmTrace.checkAt and now >= calmTrace.checkAt then
+		calmTrace.checkAt = nil
+		ns.Log("calm", ("%.1f sec after the calm timer ended, still up: %s"):format(now - calmTrace.endedAt,
+			ns.NotFadedList and Step(ns.NotFadedList) or "?"))
 	end
 	local fighting = inCombat or now - lastFightAt < ns.db.calmTime
 	local place = ns.EffectPlace()
@@ -1847,7 +1900,7 @@ function ns.RestartTimers()
 	switchedProfile = true
 	snapRound = snapRound + 1
 	if not (InCombatLockdown() or Flag(UnitAffectingCombat("player"))) then
-		fightEndedAt, lastFightAt = -math.huge, -math.huge
+		lastFightAt = -math.huge
 	end
 end
 
@@ -3437,7 +3490,8 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			"plateTargetFriendlyFadeOut", -- (the target's plate fades at the UI's fade times now)
 			"enemyFadeInTime", "enemyFadeOutTime",
 			"friendlyFadeInTime", "friendlyFadeOutTime", -- (combat frames likewise)
-			-- (combatFadeInTime and combatFadeOutTime were too: they're back, for fights.)
+			-- (combatFadeInTime was too: it's back, for fights.)
+			"combatFadeOutTime", -- (fades after fights: the Calm Timer, then the Fade out time)
 			"plateShowMobs", "plateShowNPCs", "plateShowOwn", "plateShowOther", "plateShowPets",
 			"plateShowTotems", -- (nameplates outside cinematic mode are the game's own now)
 			"nameIconMobs", "nameIconNPCs", "nameIconOwn", "nameIconOther", "nameIconPets", "nameIconTotems",

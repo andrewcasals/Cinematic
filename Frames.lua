@@ -1199,6 +1199,23 @@ function ns.AllFaded()
 	return true
 end
 
+-- For the log: the frames not faded right out, with their alpha. (Not the
+-- ones hidden anyway: a secret answer counts as shown.)
+function ns.NotFadedList()
+	local function Unseen(frame)
+		local ok, unseen = pcall(function() return frame:IsVisible() == false end)
+		return ok and unseen
+	end
+	local list = {}
+	for _, entry in ipairs(ns.managed) do
+		local alpha = entry.alpha or 1
+		if alpha > 0 and not (entry.frame and Unseen(entry.frame)) then
+			list[#list + 1] = ("%s %.2f"):format(entry.name or entry.group or "?", alpha)
+		end
+	end
+	return #list > 0 and table.concat(list, ", ") or "none"
+end
+
 -- Every shrunk frame back at full size in its place (still faded), for a
 -- moment: an Edit Mode layout switch then lays out the frames themselves,
 -- not their parked, shrunk copies (whose old size and place would come back
@@ -2206,6 +2223,7 @@ end
 
 -- When the player was last in combat (for "only after combat").
 local lastCombatAt = -math.huge
+ns.OnCalmEnd(function(cut) lastCombatAt = math.min(lastCombatAt, cut) end)
 
 -- Frame names to show right now, from the Standard Frames page's column that
 -- applies: In combat (while staying cinematic, and with combatShowCalm on
@@ -2287,9 +2305,11 @@ do
 end
 GetCombatShownFrames = ns.Profiled("GetCombatShownFrames", GetCombatShownFrames)
 
--- Power types that sit empty at rest (rage, runic power) don't count: leftover
--- rage draining after a fight isn't recovering, so only health matters.
-local EMPTY_AT_REST = { RAGE = true, RUNIC_POWER = true }
+-- Power types that sit empty at rest (rage, runic power, Insanity, Maelstrom,
+-- Astral Power, Fury, Pain) don't count: leftover rage draining after a fight
+-- isn't recovering, so only health matters.
+local EMPTY_AT_REST = { RAGE = true, RUNIC_POWER = true, INSANITY = true, MAELSTROM = true,
+	LUNAR_POWER = true, FURY = true, PAIN = true }
 
 local function IsSecretValue(value)
 	return issecretvalue and issecretvalue(value) or false
@@ -2612,6 +2632,41 @@ local function IsPlayerRecovering()
 end
 
 ns.IsPlayerRecovering = IsPlayerRecovering
+
+-- Is your pet's health not back to full? (No pet, or a dead one: no.) Secret
+-- health falls back on its health events, as for the player.
+do
+	local lastPetHealthChange = -math.huge
+	local petWatcher = CreateFrame("Frame")
+	petWatcher:RegisterUnitEvent("UNIT_HEALTH", "pet")
+	petWatcher:SetScript("OnEvent", function() lastPetHealthChange = GetTime() end)
+	function ns.IsPetRecovering()
+		if not ns.Flag(UnitExists("pet")) or ns.Flag(UnitIsDeadOrGhost("pet")) then
+			return false
+		end
+		local health, maxHealth = UnitHealth("pet"), UnitHealthMax("pet")
+		if IsSecretValue(health) or IsSecretValue(maxHealth) then
+			return GetTime() - lastPetHealthChange < TICK_WINDOW
+		end
+		return maxHealth > 0 and health < maxHealth
+	end
+end
+
+-- For the log (Exit Calm Timer when Healthy): which of your health, power and
+-- pet's health could be read, and which were secret (judged by their events).
+function ns.VitalsReadout()
+	local function Read(value, maxValue)
+		return (IsSecretValue(value) or IsSecretValue(maxValue)) and "secret" or "readable"
+	end
+	local _, powerToken = UnitPowerType("player")
+	local power = PowerCounts() and Read(UnitPower("player"), UnitPowerMax("player")) or "not counted"
+	local pet = "none"
+	if ns.Flag(UnitExists("pet")) then
+		pet = ns.Flag(UnitIsDeadOrGhost("pet")) and "dead" or Read(UnitHealth("pet"), UnitHealthMax("pet"))
+	end
+	return ("health %s, power %s (%s), pet health %s"):format(Read(UnitHealth("player"), UnitHealthMax("player")),
+		power, IsSecretValue(powerToken) and "secret" or tostring(powerToken), pet)
+end
 ns.GetSecondsSinceVitalsChange = function() return GetTime() - lastVitalsChange end
 
 local hoverHeldUntil = {} -- [row key] = when the mouse's hold on it ends (Mouseover groups)

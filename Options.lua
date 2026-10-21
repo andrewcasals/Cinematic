@@ -1302,32 +1302,70 @@ local function CreateRevealPanel()
 
 	local fadeIn = Slider(content, "fadeInTime", L["Fade in time"], 0, 10, 0.1, L["%.1f sec"])
 	fadeIn:SetPoint("TOPLEFT", fadingHeader, "BOTTOMLEFT", 2, -26)
+	Tooltip(fadeIn, L["How long things take to fade in out of combat: targeting something, a mouseover, " ..
+		"a window opening. In fights the Combat fade in time is used."])
 
 	local fadeOut = Slider(content, "fadeOutTime", L["Fade out time"], 0, 10, 0.1, L["%.1f sec"])
 	fadeOut:SetPoint("TOPLEFT", fadeIn, "BOTTOMLEFT", 0, -34)
-	Tooltip(fadeOut, L["How long the UI takes to fade out. The mouseover time (Mouseover groups page) includes it: " ..
-		"a time shorter than the fade just fades straight away."])
+	Tooltip(fadeOut, L["How long things take to fade out, in and out of fights: letting go of a target, after a " ..
+		"mouseover, and after a fight once the Calm Timer below is over. The mouseover time (Mouseover " ..
+		"groups page) includes it: a time shorter than the fade just fades straight away."])
 
 	local combatFadeIn = Slider(content, "combatFadeInTime", L["Combat fade in time"], 0, 10, 0.1, L["%.1f sec"])
 	combatFadeIn:SetPoint("TOPLEFT", fadeOut, "BOTTOMLEFT", 0, -34)
 	Tooltip(combatFadeIn, L["How long things take to fade in during a fight: the UI coming back as " ..
 		"one starts, and anything else that shows mid-fight. Other times use the Fade in time."])
 
-	local combatFadeOut = Slider(content, "combatFadeOutTime", L["Combat fade out time"], 0, 10, 0.1, L["%.1f sec"])
-	combatFadeOut:SetPoint("TOPLEFT", combatFadeIn, "BOTTOMLEFT", 0, -34)
-	Tooltip(combatFadeOut, L["How long things take to fade out after a fight: whatever starts fading " ..
-		"within the Calm Timer below (the UI going back to CineMode, nameplates and names letting " ..
-		"go). Other times use the Fade out time."])
-
 	local calm = Slider(content, "calmTime", L["Calm Timer"], 0, 120, 5, L["%d sec after a fight"])
-	calm:SetPoint("TOPLEFT", combatFadeOut, "BOTTOMLEFT", 0, -34)
+	calm:SetPoint("TOPLEFT", combatFadeIn, "BOTTOMLEFT", 0, -34)
 	Tooltip(calm, L["How long things take to settle back into CineMode after a fight. " ..
 		"Nameplates and names ticked In combat stay up this long (so they don't drop away " ..
 		"between pulls), and visual effects that step aside for fights wait this " ..
 		"long before fading back in. Your portrait and buffs, if they only show after combat, " ..
 		"count a fight as recent for this long too, the RP walk, auto-run and cozy cameras " ..
-		"wait this long before starting, and music muted for fights comes back after it. 0 " ..
-		"settles at once."])
+		"wait this long before starting, and music muted for fights comes back after it. Then " ..
+		"things fade out at the Fade out time. 0 settles at once. Exit Calm Timer when Healthy, " ..
+		"below, can end it early."])
+
+	-- Off at the left end; past it, how long after you're back to full the
+	-- Calm Timer ends (calmEndsAtFull and calmFullAfter).
+	RecordKey(content, "calmEndsAtFull")
+	RecordKey(content, "calmFullAfter")
+	local calmPet -- (below; greys out with this Off)
+	local calmFull = Slider(content, {
+		get = function()
+			local db = ns.GetDB()
+			return db.calmEndsAtFull and (db.calmFullAfter or 0) or -1
+		end,
+		set = function(value)
+			local db = ns.GetDB()
+			db.calmEndsAtFull = value >= 0
+			if value >= 0 then
+				db.calmFullAfter = value
+			end
+		end,
+	}, L["Exit Calm Timer when Healthy"], -1, 15, 1, function(value)
+		if value < 0 then
+			return L["Off"]
+		end
+		return value == 0 and L["as soon as you're healthy"] or L["%d sec after you're healthy"]:format(value)
+	end, nil, function()
+		-- (Just the checkbox below: a full Refresh on every step of a drag lags.)
+		if calmPet then calmPet:Refresh() end
+	end)
+	calmFull:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", 0, -34)
+	Tooltip(calmFull, L["The Calm Timer runs out early once your health and power are back to full " ..
+		"after a fight (mana, energy and focus refilled; rage, runic power, Insanity and the like " ..
+		"drained). The seconds: how long things stay up once you're full, before they fade out at the " ..
+		"Fade out time (a little wait keeps them up between pulls when you took no damage). Off: the " ..
+		"Calm Timer always runs its full length."])
+
+	-- (Indented under it, as its sub-option.)
+	calmPet = Check(content, "calmEndsAtFullPet", L["Include your pet"],
+		L["With a pet out, the Calm Timer only ends early once its health is back to full as well. " ..
+		"No pet, or a dead one: just yours counts."])
+	calmPet:SetPoint("TOPLEFT", calmFull, "BOTTOMLEFT", 20, -14)
+	GreyUnless(calmPet, function(db) return db.calmEndsAtFull end)
 
 	-- Set aside for now (hidden, their settings kept as they are): the Exit
 	-- CineMode section. (Mouseover has its own page.)
@@ -1376,8 +1414,8 @@ local function CreateRevealPanel()
 		control:Hide()
 	end
 
-	local combatTextHeader = Header(content, L["Combat text"], calm, -24)
-	combatTextHeader:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", -2, -24)
+	local combatTextHeader = Header(content, L["Combat text"], calmPet, -24)
+	combatTextHeader:SetPoint("TOPLEFT", calmPet, "BOTTOMLEFT", -22, -24)
 
 	local combatText = Check(content, "hideCombatText", L["Hide combat text out of combat"],
 		L["No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
@@ -6461,6 +6499,11 @@ local function CreateVisionPanel()
 			if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
 			Refresh() -- grey out / enable the rest
 		end
+		-- (The sliders: their values grey nothing out, and a full Refresh on
+		-- every step of a drag lags.)
+		local function ApplyFrames()
+			if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
+		end
 		local function IfAny(db) return ns.HealVisionAny(db) end
 
 		local healHeader = Header(content, L["Heal Vision"], duelCheck, -24)
@@ -6571,7 +6614,7 @@ local function CreateVisionPanel()
 			below = Slider(content, belowKey, L["Show below health"], 0, 100, 1, "%d%%", 100, function(value)
 				local floor = Percent(ns.GetDB()[alphaKey], 0.05)
 				if value < floor then below:SetValue(floor) return end
-				Apply()
+				ApplyFrames()
 			end)
 			below:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 4, -26)
 			Tooltip(below, belowTip)
@@ -6579,7 +6622,7 @@ local function CreateVisionPanel()
 			alpha = Slider(content, alphaKey, L["Opacity while hidden"], 0, 90, 1, "%d%%", 100, function(value)
 				local ceiling = Percent(ns.GetDB()[belowKey], 0.95)
 				if value > ceiling then alpha:SetValue(ceiling) return end
-				Apply()
+				ApplyFrames()
 			end)
 			alpha:SetPoint("LEFT", below, "RIGHT", 40, 0)
 			Tooltip(alpha, alphaTip)
