@@ -6129,10 +6129,24 @@ local function CreateMinimapPanel()
 		"The game stops updating the indoor map while the minimap is hidden, so after walking " ..
 		"around it can come back blank or out of date for a moment. Off, it's redrawn as it comes back."])
 	indoors:SetPoint("TOPLEFT", keepLabel, "BOTTOMLEFT", 12, -4)
+	local quest = Check(content, "minimapKeepQuest", L["Tracking a quest"],
+		L["While a quest is tracked in the quest tracker, the minimap stays up during CineMode, so you " ..
+		"can see where to go. Untrack your quests and it fades again."], function(value)
+			ns.GetDB().minimapKeepQuest = value
+			Refresh()
+		end)
+	quest:SetPoint("TOPLEFT", indoors, "BOTTOMLEFT", 0, -2)
+	-- (Under it: how long after picking up a quest or progress on one.)
+	local questFor = Slider(content, "minimapKeepQuestFor", L["Only after progress"], 0, 10, 1,
+		function(value) return value == 0 and L["Off"] or L["%d min"]:format(value) end)
+	questFor:SetPoint("TOPLEFT", quest, "BOTTOMLEFT", 24, -22)
+	Tooltip(questFor, L["The minimap stays up only this long after you pick up a quest or make progress " ..
+		"on a tracked one, then fades until you do again. Off: it stays up the whole time a quest is tracked."])
+	GreyUnless(questFor, function(db) return db.minimapKeepQuest end)
 	local creatures = Check(content, "minimapKeepCreatures", L["Tracking creatures or fish"],
 		L["While hunter, druid or warlock creature tracking, or Find Fish, is on, the minimap stays " ..
 		"up during CineMode."])
-	creatures:SetPoint("TOPLEFT", indoors, "BOTTOMLEFT", 0, -2)
+	creatures:SetPoint("TOPLEFT", questFor, "BOTTOMLEFT", -24, -10)
 	local gathering = Check(content, "minimapKeepGathering", L["Tracking herbs, minerals or treasure"],
 		L["While Find Herbs, Find Minerals or Find Treasure is on, the minimap stays up during CineMode, " ..
 		"except in the places below."], function(value)

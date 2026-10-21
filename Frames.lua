@@ -2707,8 +2707,22 @@ do
 			questRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
 		end
 	end
-	questWatcher:SetScript("OnEvent", function(_, event)
+	-- When a quest was last picked up, or a tracked one moved on (Keep open's
+	-- "Only after progress", Minimap page). QUEST_WATCH_UPDATE gives a quest
+	-- ID on retail and a quest log index on the older clients.
+	ns.questActivityAt = 0
+	local function IsTracked(quest)
+		if ns.isRetail then
+			local watchType = C_QuestLog and C_QuestLog.GetQuestWatchType and C_QuestLog.GetQuestWatchType(quest)
+			return watchType ~= nil
+		end
+		return not IsQuestWatched or ns.Flag(IsQuestWatched(quest))
+	end
+	questWatcher:SetScript("OnEvent", function(_, event, quest)
 		Reveal(QUEST_REVEAL_EVENTS[event])
+		if event == "QUEST_ACCEPTED" or type(quest) ~= "number" or IsTracked(quest) then
+			ns.questActivityAt = GetTime()
+		end
 	end)
 
 	-- Retail: QUEST_WATCH_UPDATE misses progress-bar objectives (a percentage
@@ -2752,6 +2766,9 @@ do
 					local before = progress[questID]
 					if before and sum > before then
 						advanced = true
+						if IsTracked(questID) then
+							ns.questActivityAt = GetTime()
+						end
 					end
 					progress[questID] = sum
 					seen[questID] = true
@@ -3100,6 +3117,18 @@ local function HasQuestTimer()
 	end
 	local frame = _G.QuestTimerFrame
 	return frame ~= nil and ns.Flag(frame:IsShown())
+end
+
+-- A quest tracked in the quest tracker (Keep open, Minimap page), or on
+-- retail one focused for its waypoint.
+function ns.HasTrackedQuest()
+	local count = C_QuestLog and C_QuestLog.GetNumQuestWatches and C_QuestLog.GetNumQuestWatches()
+		or GetNumQuestWatches and GetNumQuestWatches()
+	if type(count) == "number" and count > 0 then
+		return true
+	end
+	local superTracked = C_SuperTrack and C_SuperTrack.GetSuperTrackedQuestID and C_SuperTrack.GetSuperTrackedQuestID()
+	return type(superTracked) == "number" and superTracked > 0
 end
 
 -- A cooldown still recharging in the Cooldown Manager's spell bars (not its
@@ -4514,6 +4543,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local camHidesMinimap = ns.activeCam and ns.db[ns.activeCam .. "HideMinimap"]
 	-- Keep minimap open indoors (Minimap page): see RedrawMinimapWhenShown.
 	local keepIndoors = ns.db.minimapIndoors and IsIndoors and ns.Flag(IsIndoors())
+		or ns.db.minimapKeepQuest and ns.HasTrackedQuest()
+			-- (Only after progress: 0 is off.)
+			and ((ns.db.minimapKeepQuestFor or 0) <= 0 or now - ns.questActivityAt < ns.db.minimapKeepQuestFor * 60)
 
 	-- (Up unless their rows' frames are faded below: let go, they're up.)
 	personalPower.health, personalPower.level = 1, 1
