@@ -100,6 +100,7 @@ local DEFAULTS = {
 	durabilityHideInCam = true, -- ...except while a camera mode is running
 	petUnhappyShow = true,     -- keep the pet frame visible in cinematic mode while a hunter's pet isn't happy (not retail)
 	petUnhappyHideInCam = true, -- ...except while a camera mode is running
+	showRaidTargetOutline = true, -- the outline round your target's raid frame (off: gone, CineMode or not)
 	-- Swing timer page (not retail), in CineMode and out:
 	swingSmartShow = true,     -- melee and ranged bars only while that weapon is in use
 	swingHideAfter = 5,        -- ...seconds after its last swing or shot (and the bar running down) it fades

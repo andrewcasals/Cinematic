@@ -4120,7 +4120,9 @@ local function ShowTable(content, anchor, rows, ...)
 	local lastLabel = columnTop
 	for r, item in ipairs(rows) do
 		local y = -FRAME_HEADING_HEIGHT - 4 - (r - 1) * ROW_HEIGHT
-		RuleTarget(item.key, item.label, ...)
+		if not item.alwaysOnly then -- (no rule: there's nothing for one to decide)
+			RuleTarget(item.key, item.label, ...)
+		end
 		local rowLabel = Label(content, "GameFontHighlight", item.label)
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
 		rowLabel:SetWidth(LABEL_WIDTH - 4)
@@ -4144,13 +4146,13 @@ local function ShowTable(content, anchor, rows, ...)
 			RecordKey(content, ns.CINE_SHOW_SETTING[item.key]) -- (for the page's Reset)
 		end
 		-- The roles it shows for, after its last column.
-		local roles = RolesButton(content, content, item.key)
+		local roles = not item.alwaysOnly and RolesButton(content, content, item.key)
 		if roles then
 			roles:SetPoint("LEFT", rowLabel, "LEFT", LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0)
 		end
-		for c, column in ipairs(COLUMNS) do
+		for c, column in ipairs(item.alwaysOnly and { COLUMNS[1] } or COLUMNS) do
 			local isOn, tableKey, needsStay = column[2], column[3], column[4]
-			local alwaysTip = item.part
+			local alwaysTip = item.alwaysTip or item.part
 				and L["Show it whenever its frame shows. This overrides its Mouseover groups: untick it to " ..
 				"hide it in CineMode except when hovered or brought up by the other columns."]
 				or L["Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)"]
@@ -4161,6 +4163,7 @@ local function ShowTable(content, anchor, rows, ...)
 				else
 					ns.GetDB()[tableKey][item.key] = value
 				end
+				if item.apply then item.apply() end
 				if c == 1 then Refresh() end -- (greys the other columns)
 			end)
 			RecordRow(content, tableKey, item.key)

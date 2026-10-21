@@ -1467,6 +1467,16 @@ ns.COMBAT_SHOW = {
 		page = "raid", groups = { "raidthreat" }, part = true,
 		tip = L["The glow round a member with threat (aggro). To hide it all the time, CineMode or not, " ..
 			"turn off the game's own Display Aggro Highlight raid frame option."] },
+	-- The white outline round your target's frame: just an Always tick
+	-- (alwaysOnly: its other cells stay empty), and unlike the other rows it
+	-- isn't only for CineMode: unticked, it's gone CineMode or not (the game
+	-- has no option for it). Its setting: ns.CINE_SHOW_SETTING.
+	{ key = "raidtarget", label = L["Target highlight"], default = false, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", alwaysOnly = true, noHoverRow = true,
+		apply = function() if ns.ApplyRaidTargetOutline then ns.ApplyRaidTargetOutline() end end,
+		alwaysTip = L["Show the outline round your target's raid frame. Untick it to hide it all the time, " ..
+			"CineMode or not, in fights and out."],
+		tip = L["The white outline round your target's raid frame."] },
 	{ key = "raidnames", label = L["Player names"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidnames" }, part = true },
 	{ key = "raidpetnames", label = L["Pet names"], default = false, addon = "Blizzard_CompactRaidFrames",
@@ -1959,7 +1969,8 @@ end
 
 -- Standard Frames page's Always column (cineShow): ticked, a row's frames stay shown all through CineMode.
 -- Some rows' Always tick is an option elsewhere too (the same setting).
-ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWaypoint" }
+ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWaypoint",
+	raidtarget = "showRaidTargetOutline" }
 -- Rows ticked there until changed (no profile lists them, so none hides them).
 local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
@@ -2927,7 +2938,7 @@ ns.GAMEPAD_BUTTONS = {
 }
 -- The labels above were made before the language was known: translated again.
 ns.OnLanguage(function()
-	ns.TranslateFields(ns.COMBAT_SHOW, "label", "tip")
+	ns.TranslateFields(ns.COMBAT_SHOW, "label", "tip", "alwaysTip")
 	ns.TranslateFields(ns.HOVER_ROWS, "label", "tip")
 	ns.TranslateFields(ns.HOVER_TRIGGERS, "label", "tip")
 	ns.TranslateFields(ns.HOVER_GROUPS_DEFAULT, "name")
@@ -5029,9 +5040,42 @@ do
 		return group.title or (name and _G[name .. "Title"])
 	end
 
+	-- The white outline round your target's frame: gone for good with its
+	-- row's Always tick off (showRaidTargetOutline), CineMode or not.
+	-- The game shows it again as the target changes, so it's hidden after.
+	local outlined = setmetatable({}, { __mode = "k" }) -- frames whose outline was seen
+	-- (Raid and raid-style party frames only, by name: nameplates go through
+	-- the same function.)
+	local function HideTargetOutline(frame)
+		local outline = frame and frame.selectionHighlight
+		local name = outline and not IsForbidden(frame) and frame:GetName()
+		if name and name:find("^Compact") and not IsForbidden(outline) then
+			outlined[frame] = true
+			if ns.db and not ns.db.showRaidTargetOutline then
+				outline:Hide()
+			end
+		end
+	end
+	if _G.CompactUnitFrame_UpdateSelectionHighlight then
+		hooksecurefunc("CompactUnitFrame_UpdateSelectionHighlight", HideTargetOutline)
+	end
+	-- The setting changed: off, the game puts the outline back where it goes.
+	-- (Not on spare frames showing no unit: the game's update errors on those.)
+	function ns.ApplyRaidTargetOutline()
+		for frame in pairs(outlined) do
+			local unit = frame.displayedUnit
+			if not ns.db.showRaidTargetOutline or not _G.CompactUnitFrame_UpdateSelectionHighlight then
+				HideTargetOutline(frame)
+			elseif not Secret(unit) and type(unit) == "string" then
+				_G.CompactUnitFrame_UpdateSelectionHighlight(frame)
+			end
+		end
+	end
+
 	-- A member's or pet's frame (inGroup: inside a group's frame, which fades
 	-- for it), and its parts.
 	local function SortUnitFrame(frame, inGroup)
+		HideTargetOutline(frame)
 		local unit = frame.unit or frame.displayedUnit
 		if Secret(unit) or type(unit) ~= "string" then
 			return
