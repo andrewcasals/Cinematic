@@ -4199,8 +4199,21 @@ local function CreatePortraitsPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Unit Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = PageIntro(content, title,
-		L["Which parts of the player, target, focus and pet frames show. Keeping a frame up, always, " ..
+	-- (With the grids the page's own ? says what they do: no header of their
+	-- own under the title, which would only say Unit frame parts again.)
+	local hasParts = ns.HasUnitFrameParts and ns.HasUnitFrameParts()
+	local subtitle = PageIntro(content, title, hasParts
+		and L["Which parts of the unit frames show, CineMode or not: your own frame and your pet's, and " ..
+		"the target, focus and target of target frames by who they show. Click a frame's name to open " ..
+		"its grid: the focus and target of target go as the target's grid says until you untick Same " ..
+		"as target. Untick parts to keep just the bars. The frame art is the portrait ring, the name " ..
+		"box and the bars' borders: the game draws them as one picture. Icons are the rest Zzz, the " ..
+		"group leader's crown, role and quest icons. Auras are the buffs and debuffs on the target and " ..
+		"focus frames. Hit text is the damage and healing numbers on your and your pet's portraits. " ..
+		"Threat is the threat percentage and aggro glow on the target and focus frames, for NPCs you " ..
+		"can fight."] .. " " .. L["Cast bar is the bar under the target and focus frames as they cast."] ..
+		" " .. L["Keeping a frame up, always, in fights or while you recover, is on the Standard Frames page."]
+		or L["Which parts of the player, target, focus and pet frames show. Keeping a frame up, always, " ..
 		"in fights or while you recover, is on the Standard Frames page."])
 
 	-- The Unit frame parts grids (frames laid out as retail's: see
@@ -4211,18 +4224,8 @@ local function CreatePortraitsPanel()
 	-- grid greys and closes and the frame goes by the target's; unticked, it
 	-- opens with the target's choices to start from.
 	local OpenSections -- (opens You and Target, and the frames set apart from the target)
-	if ns.HasUnitFrameParts and ns.HasUnitFrameParts() then
-		local header = Header(content, L["Unit frame parts"], subtitle, -16)
-		local note = PageIntro(content, header,
-			L["Which parts of the unit frames show, CineMode or not: your own frame and your pet's, and " ..
-			"the target, focus and target of target frames by who they show. Click a frame's name to open " ..
-			"its grid: the focus and target of target go as the target's grid says until you untick Same " ..
-			"as target. Untick parts to keep just the bars. The frame art is the portrait ring, the name " ..
-			"box and the bars' borders: the game draws them as one picture. Icons are the rest Zzz, the " ..
-			"group leader's crown, role and quest icons. Auras are the buffs and debuffs on the target and " ..
-			"focus frames. Hit text is the damage and healing numbers on your and your pet's portraits. " ..
-			"Threat is the threat percentage and aggro glow on the target and focus frames, for NPCs you " ..
-			"can fight."] .. " " .. L["Cast bar is the bar under the target and focus frames as they cast."])
+	if hasParts then
+		local note = subtitle
 
 		-- (Nine columns must fit the page's width, no wider than eight were at
 		-- 128 + 8 * 58: wider, the last column and the Same as target tick were
