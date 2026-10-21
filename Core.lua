@@ -115,8 +115,8 @@ local DEFAULTS = {
 	                                 -- with Cooldown recharging ticked: the Cooldowns group by default)
 	cooldownAfterCombat = true,     -- ...only within the Calm Timer after a fight
 	minimapIndoors = false,    -- keep the minimap up indoors (hidden there, its map goes stale)
-	minimapKeepQuest = ns.isRetail, -- keep the minimap up while a quest is tracked (retail's profiles only)
-	minimapKeepQuestFor = 2,   -- ...only this many minutes after picking one up or progress on one (0 = off)
+	minimapKeepQuest = true,   -- keep the minimap up while a quest is tracked
+	minimapKeepQuestFor = 1,   -- ...only this many minutes after picking one up or progress on one (0 = off)
 	-- Reveal (Minimap page): the faded minimap comes up while one of these is on
 	-- it (NodeSweep.lua looks; with any ticked it's kept full size, icons hidden).
 	minimapRevealNodes = true,   -- ore, herbs and treasure (the tracking has to be on)
