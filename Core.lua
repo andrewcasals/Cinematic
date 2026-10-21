@@ -179,6 +179,7 @@ local DEFAULTS = {
 	nameKeepFriendlyMinions = false,
 	nameKeepEnemies = false,
 	nameKeepEnemyMinions = false,
+	nameKeepTarget = false,
 	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
 	-- In CineMode, out of combat, hide the tooltips of (world ones and unit frames')...
 	tooltipHideEnemy = false,   -- ...units you can attack
@@ -808,7 +809,7 @@ for _, part in ipairs(ns.PLATE_ICONS_ALWAYS) do
 	DEFAULTS["plateAlwaysPart" .. part] = true
 end
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
-for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
+for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions", "Target" }) do
 	DEFAULTS["nameCombat" .. key], DEFAULTS["nameCombatPvP" .. key] = false, false
 	for _, suffix in ipairs(ns.PLATE_PLACES) do
 		DEFAULTS["nameIn" .. suffix .. key] = false
@@ -825,7 +826,7 @@ for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateGroup" .. kind] = kind == "Friends" or kind == "FriendlyMinions"
 	DEFAULTS["plateAlways" .. kind] = false
 end
-for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions" }) do
+for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions", "Target" }) do
 	DEFAULTS["nameGroup" .. key] = false
 	DEFAULTS["nameAlways" .. key] = false
 end

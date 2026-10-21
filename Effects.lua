@@ -33,6 +33,9 @@ ns.NAME_GROUPS = {
 			"UnitNameEnemyMinionName", "UnitNameEnemyPetName", "UnitNameEnemyGuardianName",
 			"UnitNameEnemyTotemName",
 		} },
+	-- Not in the game's menu: whatever you've targeted shows its name
+	-- even with its kind's names off, unless this is off too.
+	{ key = "Target", label = L["Target"], cvars = { "UnitNameFocused" } },
 }
 ns.OnLanguage(function() ns.TranslateFields(ns.NAME_GROUPS, "label") end)
 
