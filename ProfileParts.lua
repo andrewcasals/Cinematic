@@ -99,8 +99,8 @@ end
 
 -- The mouseover groups as retail has them: the action bars group split into
 -- action bars 1-3 (with the pet, stance, totem and extra action bars stacked
--- on them) and the micro menu and bags, the XP bar on its own. (The other
--- groups as they are.)
+-- on them), the micro menu and bags, and the XP bars, each a group of its
+-- own. (The other groups as they are.)
 local function SplitBarGroups(set)
 	local L = ns.L
 	local function Copy(source)
@@ -118,6 +118,8 @@ local function SplitBarGroups(set)
 			groups[#groups + 1] = bars
 			groups[#groups + 1] = { icon = "Interface\\Icons\\INV_Misc_Bag_07", name = L["Micro menu and bags"],
 				members = { "micro", "bags" } }
+			groups[#groups + 1] = { icon = "Interface\\Icons\\INV_Misc_Book_09", name = L["XP bars"],
+				members = { "xp" } }
 		else
 			groups[#groups + 1] = Copy(group)
 		end
@@ -226,7 +228,7 @@ ns.PROFILE_PARTS = {
 		-- The action bars, micro menu, bags and XP bar coming up together
 		-- (Forever's, on retail).
 		grouped = { apply = function() end },
-		-- Action bars 1-3, the micro menu and bags, and the XP bar each coming
+		-- Action bars 1-3, the micro menu and bags, and the XP bars each coming
 		-- up on its own (retail's, on Forever); no micro menu, bags or XP bar
 		-- in fights or with an enemy targeted.
 		split = { apply = function(set)

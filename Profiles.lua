@@ -678,9 +678,11 @@ function ns.InitProfiles()
 		if ns.ProfileExists(db.liveProfile) then ns.SaveProfile() end
 		db.liveProfile = wanted
 		Load(wanted)
-	elseif liveRenamed then
+	elseif liveRenamed or ns.newInstall then
 		-- (The one in use renamed: loaded again from its saved changes, so what
-		-- its new built-in adds, like retail's own action bar groups, comes in.)
+		-- its new built-in adds, like retail's own action bar groups, comes in.
+		-- A fresh install or Reset addon too: the default profile's own lists,
+		-- like those groups, aren't in the defaults the live settings start from.)
 		Load(wanted)
 	end
 end
