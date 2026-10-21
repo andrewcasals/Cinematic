@@ -6619,7 +6619,7 @@ local function CreateVisionPanel()
 			below:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 4, -26)
 			Tooltip(below, belowTip)
 			GreyUnless(below, IfAny)
-			alpha = Slider(content, alphaKey, L["Opacity while hidden"], 0, 90, 1, "%d%%", 100, function(value)
+			alpha = Slider(content, alphaKey, L["Opacity while hidden"], 0, 100, 1, "%d%%", 100, function(value)
 				local ceiling = Percent(ns.GetDB()[belowKey], 0.95)
 				if value > ceiling then alpha:SetValue(ceiling) return end
 				ApplyFrames()
@@ -6647,6 +6647,32 @@ local function CreateVisionPanel()
 		Kind(PET_ICON, L["Pets"], "healVisionPetBelow",
 			L["A pet shows once its health drops below this. 100% shows it at any damage."],
 			"healVisionPetAlpha", L["How much of a hidden pet still shows. 0% hides them completely."])
+
+		-- The dead and offline: always hidden (nothing to heal), only how
+		-- faded, each beside the other. Under them, the far away (100%: off).
+		-- Only your target goes before them (HealVisionFrames.lua's Rule).
+		local SKULL_ICON = "|TInterface\\TargetingFrame\\UI-TargetingFrame-Skull:16:16|t"
+		local goneHeader = Label(content, "GameFontNormal", SKULL_ICON .. " " .. L["Dead, offline or far away"])
+		goneHeader:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", -4, -22)
+		local dead = Slider(content, "healVisionDeadAlpha", L["Dead opacity"], 0, 100, 1, "%d%%", 100, ApplyFrames)
+		dead:SetPoint("TOPLEFT", goneHeader, "BOTTOMLEFT", 4, -26)
+		Tooltip(dead, L["Dead members are hidden whatever their health, debuffs or role (unless one is your " ..
+			"target). How much of them still shows. 0% hides them completely."])
+		GreyUnless(dead, IfAny)
+		local offline = Slider(content, "healVisionOfflineAlpha", L["Offline opacity"], 0, 100, 1, "%d%%", 100,
+			ApplyFrames)
+		offline:SetPoint("LEFT", dead, "RIGHT", 40, 0)
+		Tooltip(offline, L["Offline members are hidden whatever their health, debuffs or role (unless one is " ..
+			"your target). How much of them still shows. 0% hides them completely."])
+		GreyUnless(offline, IfAny)
+		local far = Slider(content, "healVisionFarAlpha", L["Far away opacity"], 0, 100, 1, "%d%%", 100, ApplyFrames)
+		far:SetPoint("TOPLEFT", dead, "BOTTOMLEFT", 0, -36)
+		Tooltip(far, L["Members more than 100 yards away show this much, out of reach of your heals, whatever " ..
+			"their health, debuffs or role (unless one is your target). In a dungeon or raid, so does anyone not " ..
+			"in it with you. In battlegrounds, where WoW Forever won't say how far anyone is, members out of " ..
+			"range of your heals (about 40 yards) fade to this instead of the game's own dimming, on top of the " ..
+			"rest of the page. 100% leaves them be; 0% hides them completely."])
+		GreyUnless(far, IfAny)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

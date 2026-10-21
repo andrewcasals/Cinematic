@@ -51,6 +51,9 @@ local TANKS = { below = "healVisionTankBelow", alpha = "healVisionTankAlpha" }
 local HEALERS = { below = "healVisionHealerBelow", alpha = "healVisionHealerAlpha" }
 local OTHERS = { below = "healVisionShowBelow", alpha = "healVisionMinAlpha" }
 local PETS = { below = "healVisionPetBelow", alpha = "healVisionPetAlpha" }
+local DEAD = { alpha = "healVisionDeadAlpha" } -- (no health setting for these two)
+local OFFLINE = { alpha = "healVisionOfflineAlpha" }
+local FAR = { alpha = "healVisionFarAlpha" } -- (100%: off)
 
 -- The alpha a hidden member of this kind has at this step of the mouse's
 -- fade: its opacity setting at 0, full at STEPS.
@@ -131,12 +134,11 @@ local function Debuffed(unit, filters, oldFilter)
 	return false
 end
 
--- Shown whatever their health, as the Vision page's options say.
-local function AlwaysShown(unit)
+-- Shown whatever their health, as the Vision page's options say: tanks at
+-- 100%, and those with a debuff. (Your target goes before everything, in Rule.)
+local function ShownAnyway(unit)
 	local db = ns.db
-	-- (Your target too: hidden, only its selection outline would show.)
-	return (db.healVisionTarget and Plain(UnitIsUnit(unit, "target")) == true)
-		or ((tonumber(db.healVisionTankBelow) or 1) >= 1 and Tank(unit)) -- (100%: always)
+	return ((tonumber(db.healVisionTankBelow) or 1) >= 1 and Tank(unit)) -- (100%: always)
 		or (db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
 		or (db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
 end
@@ -302,17 +304,192 @@ local function InRange(unit)
 	return inRange
 end
 
+-- How far a member is from you in yards (math.huge: another instance), or
+-- nil when the game won't say (secret, or hidden in dungeons and raids).
+function ns.HealVisionDistance(unit)
+	if UnitDistanceSquared then
+		local ok, squared, checked = pcall(UnitDistanceSquared, unit)
+		if ok and Plain(checked) == true and type(Plain(squared)) == "number" then
+			return math.sqrt(squared)
+		end
+	end
+	local okYou, y, x, _, instance = pcall(UnitPosition, "player")
+	local okThem, theirY, theirX, _, theirInstance = pcall(UnitPosition, unit)
+	if not (okYou and okThem) then return nil end
+	y, x, theirY, theirX = Plain(y), Plain(x), Plain(theirY), Plain(theirX)
+	instance, theirInstance = Plain(instance), Plain(theirInstance)
+	if type(instance) == "number" and type(theirInstance) == "number" and instance ~= theirInstance then
+		return math.huge
+	end
+	if type(y) ~= "number" or type(x) ~= "number" or type(theirY) ~= "number" or type(theirX) ~= "number" then
+		return nil
+	end
+	return math.sqrt((y - theirY) ^ 2 + (x - theirX) ^ 2)
+end
+
+-- Where you are: "pvp" and "arena" (battlegrounds), "party", "raid" and
+-- "scenario" (instances), or "none" (the open world).
+local function PlaceType()
+	local ok, inside, kind = pcall(IsInInstance)
+	if not ok or Plain(inside) ~= true then return "none" end
+	return Plain(kind) or "none"
+end
+
+-- A map as a zone: up through the small maps inside it (caves, city
+-- districts) to the zone or dungeon map they're in.
+local function ZoneMap(map)
+	for _ = 1, 5 do
+		local ok, info = pcall(C_Map.GetMapInfo, map)
+		if not ok or type(Plain(info)) ~= "table" then return map end
+		local mapType, parent = Plain(info.mapType), Plain(info.parentMapID)
+		if type(mapType) ~= "number" or mapType <= Enum.UIMapType.Dungeon
+			or type(parent) ~= "number" or parent == 0 then
+			return map
+		end
+		map = parent
+	end
+	return map
+end
+
+local function UnitMap(unit)
+	if not (C_Map and C_Map.GetBestMapForUnit and C_Map.GetMapInfo and Enum and Enum.UIMapType) then return nil end
+	local ok, map = pcall(C_Map.GetBestMapForUnit, unit)
+	map = ok and Plain(map)
+	if type(map) ~= "number" then return nil end
+	return ZoneMap(map)
+end
+
+-- A raid member's zone by the raid list (pets: their owner's), or nil.
+local function RosterZone(unit)
+	local index = unit:match("^raid(%d+)$") or unit:match("^raidpet(%d+)$")
+	if not index or not GetRaidRosterInfo then return nil end
+	local ok, _, _, _, _, _, _, zone = pcall(GetRaidRosterInfo, tonumber(index))
+	zone = ok and Plain(zone)
+	if type(zone) ~= "string" or zone == "" then return nil end
+	return zone
+end
+
+-- Whether a member's in another zone than you: true, false, or nil (the game
+-- won't say). The raid list's zone names first, then the maps (the floors
+-- of one dungeon are one zone: the same map group).
+function ns.HealVisionOtherZone(unit)
+	local theirs = RosterZone(unit)
+	local ok, yours = pcall(GetRealZoneText)
+	yours = ok and Plain(yours)
+	if theirs and type(yours) == "string" and yours ~= "" then return theirs ~= yours end
+	local myMap, theirMap = UnitMap("player"), UnitMap(unit)
+	if not (myMap and theirMap) then return nil end
+	if myMap == theirMap then return false end
+	if C_Map.GetMapGroupID then
+		local okMine, myGroup = pcall(C_Map.GetMapGroupID, myMap)
+		local okTheirs, theirGroup = pcall(C_Map.GetMapGroupID, theirMap)
+		myGroup, theirGroup = okMine and Plain(myGroup), okTheirs and Plain(theirGroup)
+		if type(myGroup) == "number" and myGroup ~= 0 and myGroup == theirGroup then return false end
+	end
+	return true
+end
+
+-- Far away: in battlegrounds by distance only (more than 100 yards); in
+-- dungeons and raids, out of your zone (the instance), else by distance; in
+-- the open world by distance, else by zone. Unknown: not far.
+local FAR_YARDS = 100
+local function Far(unit)
+	local place = PlaceType()
+	if place == "pvp" or place == "arena" then
+		local yards = ns.HealVisionDistance(unit)
+		return yards ~= nil and yards > FAR_YARDS
+	end
+	if place ~= "none" and ns.HealVisionOtherZone(unit) == true then return true end
+	local yards = ns.HealVisionDistance(unit)
+	if yards ~= nil then return yards > FAR_YARDS end
+	return place == "none" and ns.HealVisionOtherZone(unit) == true
+end
+
+-- Which rule a member goes by, first that fits (unknown, secret: it doesn't):
+-- your target (shown), offline, dead (or a ghost), far away (its slider below
+-- 100%), shown anyway (tanks at 100%, debuffs), else their health. The second
+-- value: the opacity setting the hidden ones go by (DEAD...).
+local function Rule(unit)
+	local db = ns.db
+	if db.healVisionTarget and Plain(UnitIsUnit(unit, "target")) == true then return "target" end
+	if UnitIsConnected and Plain(UnitIsConnected(unit)) == false then return "offline", OFFLINE end
+	if UnitIsDeadOrGhost and Plain(UnitIsDeadOrGhost(unit)) == true then return "dead", DEAD end
+	if (tonumber(db.healVisionFarAlpha) or 1) < 1 and Far(unit) then return "far", FAR end
+	if ShownAnyway(unit) then return "shown" end
+	return "health"
+end
+
+-- In battlegrounds where the game won't say how far anyone is (WoW Forever),
+-- out of range of your heals stands in for far away: the game's own range
+-- dimming goes to the Far away opacity instead (raid-style frames). The
+-- addon never knows who's out of range (secret), so it's on top of the
+-- rules that show members (health, tanks, debuffs), not one of them.
+local function RangeFar(unit, rule)
+	if rule ~= "health" and rule ~= "shown" then return false end
+	if (tonumber(ns.db.healVisionFarAlpha) or 1) >= 1 then return false end
+	local place = PlaceType()
+	return (place == "pvp" or place == "arena") and ns.HealVisionDistance(unit) == nil
+end
+
+-- What Heal Vision makes of a member, for /cine debug health.
+function ns.HealVisionDebug(unit)
+	local db = ns.db
+	if not db then return "no settings" end
+	local frames = byUnit[unit] or {}
+	local alpha = frames[1] and members[frames[1]] and members[frames[1]].alpha
+	local otherZone = ns.HealVisionOtherZone(unit)
+	-- (Off: why, as ns.HealVisionHere goes.)
+	local on = Wanted("healVision") and "true"
+	if not on then
+		local role = ns.PlayerRole()
+		local list = role == "TANK" and "tankHide" or role == "HEALER" and "healerHide"
+			or role == "DAMAGER" and "damageHide"
+		on = ns.IsSuspended() and "false (stopped for this session)"
+			or (list and ns.RoleHidden(db, list, "healVision") and ("false (role button: off as " .. role .. ")"))
+			or (db.handleVision == false and "false (Vision page switched off)")
+			or "false (Show in grid: not ticked here)"
+	end
+	local rule = Rule(unit)
+	if RangeFar(unit, rule) then rule = rule .. " (out of range: far away opacity)" end
+	-- Each frame: its name, shown or not, faded whole (raid-style) or by
+	-- parts, held by CineMode (not free), and the opacity it really has.
+	local function Show(value)
+		if Secret(value) then return "secret" end
+		if type(value) == "number" then return ("%.2f"):format(value) end
+		return tostring(value)
+	end
+	local list = {}
+	for _, frame in ipairs(frames) do
+		local okShown, shown = pcall(frame.IsShown, frame)
+		local okAlpha, frameAlpha = pcall(frame.GetAlpha, frame)
+		local okEffective, effective = pcall(frame.GetEffectiveAlpha, frame)
+		list[#list + 1] = ("%s shown %s %s free %s alpha %s effective %s"):format(
+			tostring(frame:GetName()), okShown and Show(shown) or "?", members[frame].whole and "whole" or "parts",
+			tostring(Free(frame)), okAlpha and Show(frameAlpha) or "?", okEffective and Show(effective) or "?")
+	end
+	return ("on %s, %d frame(s), rule %s, place %s, other zone %s, far slider %s, hover step %d/%d, alpha %s [%s]"):format(
+		on, #frames, rule, PlaceType(),
+		tostring(otherZone), tostring(db.healVisionFarAlpha), revealStep, STEPS,
+		Secret(alpha) and "secret" or tostring(alpha), table.concat(list, "; "))
+end
+
 local function Update(frame)
 	local member = members[frame]
 	if not member then return end
 	local unit = member.unit
-	local fade = Curve(revealStep, KindOf(unit))
+	local kind = KindOf(unit)
+	local fade = Curve(revealStep, kind)
 	if not fade then return end
-	local alpha = 1
-	if revealStep < STEPS and UnitExists(unit) and not AlwaysShown(unit) then
-		-- (Health as it is, not with heals being cast. Secret: straight to the game.)
-		local ok, value = pcall(UnitHealthPercent, unit, false, fade)
-		if ok and type(value) ~= "nil" then alpha = value end
+	local alpha, gone, rule = 1, nil, nil
+	if revealStep < STEPS and UnitExists(unit) then
+		rule, gone = Rule(unit)
+		if gone then
+			alpha = Shown(revealStep, gone)
+		elseif rule == "health" then
+			-- (Health as it is, not with heals being cast. Secret: straight to the game.)
+			local ok, value = pcall(UnitHealthPercent, unit, false, fade)
+			if ok and type(value) ~= "nil" then alpha = value end
+		end
 	end
 	member.alpha = alpha
 	if member.whole then
@@ -320,11 +497,16 @@ local function Update(frame)
 			if not pcall(frame.SetAlpha, frame, alpha) then frame:SetAlpha(1) end
 			touched[frame] = true
 		end
-		local inRange = InRange(unit)
+		-- (The dead, offline and far count as out of range: no dimming on top
+		-- of their slider's opacity, it's theirs as set.)
+		-- (Battlegrounds: out of range dims to Far away, see RangeFar.)
+		local inRange = nil
+		if not gone then inRange = InRange(unit) end
+		local dim = RangeFar(unit, rule) and Shown(revealStep, FAR) or RANGE_DIM
 		for _, part in ipairs(member.parts) do
 			if Free(part) then
 				if type(inRange) == "nil" or not part.SetAlphaFromBoolean
-					or not pcall(part.SetAlphaFromBoolean, part, inRange, 1, RANGE_DIM) then
+					or not pcall(part.SetAlphaFromBoolean, part, inRange, 1, dim) then
 					part:SetAlpha(1)
 				end
 				touched[part] = true

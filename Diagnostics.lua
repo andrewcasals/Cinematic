@@ -565,11 +565,17 @@ do
 			if ok then usable = usable + 1 end
 			if Secret(health) or Secret(max) then secret = secret + 1 end
 			local line = ("%s (%s): health %s / %s, missing %s, percent %s, role %s, main tank %s,"
-				.. " dead %s, online %s, in range %s -> %s"):format(
+				.. " dead %s, online %s, in range %s, in sight %s, distance squared %s, position y %s, yards %s -> %s"):format(
 				unit, Show(Read(UnitName, unit)), Show(health), Show(max), Show(missing), Show(percent),
 				Show(role), Show(tank), Show(Read(UnitIsDeadOrGhost, unit)), Show(Read(UnitIsConnected, unit)),
-				Show(Read(UnitInRange, unit)), ok and "sortable" or "NOT sortable")
+				Show(Read(UnitInRange, unit)), Show(Read(UnitIsVisible, unit)), Show(Read(UnitDistanceSquared, unit)),
+				Show(Read(UnitPosition, unit)),
+				Show(ns.HealVisionDistance and ns.HealVisionDistance(unit)), ok and "sortable" or "NOT sortable")
 			-- (Printed lines go in the log already.)
+			if ns.HealVisionDebug then
+				local ok, verdict = pcall(ns.HealVisionDebug, unit)
+				line = line .. "; heal vision: " .. (ok and verdict or ("error " .. tostring(verdict)))
+			end
 			if i <= 10 then print("  " .. line) else ns.Log("health", line) end
 		end
 		if #units > 10 then print(("  ...and %d more in /cine log"):format(#units - 10)) end

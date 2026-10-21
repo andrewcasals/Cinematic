@@ -606,7 +606,7 @@ ns.VISION_WHERE = { "World", "Dungeons", "Raids", "BGs" }
 local VISION_PLACE = { dungeon = "Dungeons", raid = "Raids", pvp = "BGs" }
 DEFAULTS.healVision = false
 -- (Damage and the rest, tanks, healers and pets: each kind has its health and opacity.)
-DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-0.9)
+DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-1)
 DEFAULTS.healVisionShowBelow = 0.95 -- members show below this much health (0-1; 1: any damage)
 DEFAULTS.healVisionTankBelow = 1 -- tanks below this (1: always, full health too)
 DEFAULTS.healVisionTankAlpha = 0.05
@@ -614,6 +614,9 @@ DEFAULTS.healVisionHealerBelow = 0.95 -- healers below this
 DEFAULTS.healVisionHealerAlpha = 0.05
 DEFAULTS.healVisionPetBelow = 0.35 -- and pets below this
 DEFAULTS.healVisionPetAlpha = 0.05
+DEFAULTS.healVisionDeadAlpha = 0.05 -- the dead: always hidden, this much shows
+DEFAULTS.healVisionOfflineAlpha = 0.05 -- and the offline
+DEFAULTS.healVisionFarAlpha = 1 -- those more than 100 yards away (another zone...), whatever else: 1, off
 DEFAULTS.healVisionTarget = true -- your target always shows
 DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
 DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
