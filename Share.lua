@@ -424,7 +424,7 @@ function ns.ShowExport(name)
 	-- (Everyone has the built-in ones: a copy made with New profile can go.)
 	if ns.IsBuiltinProfile(name) then
 		ns.Print(L["%s is a built-in profile, which everyone has already. To share your changes to it, " ..
-			"make a New profile from it on the Profiles page and export that."]:format(name))
+			"make a New profile from it on the Profiles page and export that."]:format(ns.ProfileLabel(name)))
 		return
 	end
 	if not window then CreateWindow() end

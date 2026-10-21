@@ -6,7 +6,8 @@
 -- own slot's settings (/cine debug slots checks), and in a list only its own
 -- rows: a Standard Frames column's action bar rows are the Action bars
 -- slot's, so Rows() splits a column between the two parts. "standard" is a
--- slot's part for a profile that names none.
+-- slot's part for a profile that names none. A part with client =
+-- "forever" or "retail" is only for a profile on that client.
 
 local _, ns = ...
 
@@ -275,10 +276,17 @@ ns.PROFILE_PARTS = {
 	},
 }
 
--- A built-in profile's settings: its parts (profile.parts: slot -> part
--- name; a slot not named: its "standard" part, if any), in slot order, on
--- top of base. A list's rows from two parts go together.
-function ns.ApplyParts(parts, base)
+-- The part a profile's slot uses on a client (nil: none), and its name.
+function ns.ProfilePart(parts, slot, client)
+	local name = parts[slot]
+	if type(name) == "table" then name = name[client] end
+	name = name or "standard"
+	return ns.PROFILE_PARTS[slot][name], name
+end
+
+-- A built-in profile's settings on a client: its parts (profile.parts), in
+-- slot order, on top of base. A list's rows from two parts go together.
+function ns.ApplyParts(parts, base, client)
 	local written = {}
 	local function Set(key, value)
 		if type(value) == "table" then
@@ -292,13 +300,8 @@ function ns.ApplyParts(parts, base)
 		end
 	end
 	for _, slot in ipairs(ns.PROFILE_SLOTS) do
-		local name = parts[slot.key] or "standard"
-		local part = ns.PROFILE_PARTS[slot.key][name]
-		if part then
-			part.apply(Set)
-		elseif parts[slot.key] then
-			ns.Print(("profile part %s.%s missing"):format(slot.key, name))
-		end
+		local part = ns.ProfilePart(parts, slot.key, client)
+		if part then part.apply(Set) end
 	end
 	return base
 end

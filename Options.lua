@@ -991,7 +991,7 @@ local function CreatePanel()
 			profileLabel:SetText(L["Profile: |cffff8000none yet|r (pick one on the Profiles page)"])
 			return
 		end
-		profileLabel:SetText(L["Profile: %s"]:format("|cffffd100" .. ns.ActiveProfile() .. "|r") ..
+		profileLabel:SetText(L["Profile: %s"]:format("|cffffd100" .. ns.ProfileLabel(ns.ActiveProfile()) .. "|r") ..
 			(ns.IsCharacterProfile() and L[" (this character)"] or ""))
 	end }
 
@@ -7313,7 +7313,7 @@ local function NameFree(name, old)
 	if name == "" then
 		why = L["A profile needs a name."]
 	elseif taken and taken ~= old then
-		why = L["There's already a profile called %s."]:format(taken)
+		why = L["There's already a profile called %s."]:format(ns.ProfileLabel(taken))
 	end
 	if why then
 		UIErrorsFrame:AddMessage(why, 1, 0.1, 0.1)
@@ -7467,7 +7467,7 @@ local function CreateProfilesPanel()
 		local text = self.Text or self.text
 		if text and ns.GetDB() then
 			text:SetText((L["Use a profile just for this character |cff808080(other characters use %s)|r"])
-				:format(ns.GetDB().profile or ns.ActiveProfile()))
+				:format(ns.ProfileLabel(ns.GetDB().profile or ns.ActiveProfile())))
 		end
 	end
 	perChar:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
@@ -7563,14 +7563,14 @@ local function CreateProfilesPanel()
 	end)
 	note:SetPoint("LEFT", rename, "RIGHT", 8, 0)
 	local delete = Button(L["Delete"], 100, L["Delete the active profile (your own ones only), switching to %s."]:format(
-		ns.BUILTIN_PROFILES[1].name), function()
+		ns.ProfileLabel(ns.BUILTIN_PROFILES[1].name)), function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
 	end)
 	delete:SetPoint("LEFT", note, "RIGHT", 8, 0)
 	local reset = Button(L["Reset profile"], 120, L["Put the active built-in profile back to its own values (your own " ..
 		"profiles keep your changes as you go)."], function()
-		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ActiveProfile())
+		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ProfileLabel(ns.ActiveProfile()))
 	end)
 	reset:SetPoint("LEFT", delete, "RIGHT", 8, 0)
 
@@ -7605,7 +7605,7 @@ local function CreateProfilesPanel()
 			for _, profile in ipairs(ns.BUILTIN_PROFILES) do
 				if profile.name == name then builtin = profile end
 			end
-			local text = name
+			local text = ns.ProfileLabel(name)
 			-- (Only a built-in's: one of yours saves as you go, so there's nothing to go back to.)
 			if name == active and builtin and ns.ProfileChanged() then
 				text = text .. " |cff808080(changed)|r"

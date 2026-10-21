@@ -91,7 +91,7 @@ local function CreateWindow()
 		local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
 		button:SetSize(150, 26)
 		button:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-		button:SetText(profile.name)
+		button:SetText(profile.label or profile.name)
 		button:SetScript("OnClick", function() Pick(profile.name) end)
 		-- A tick on the one being tried.
 		local check = button:CreateTexture(nil, "OVERLAY")
@@ -134,7 +134,7 @@ local function CreateWindow()
 			ns.Print(L["off until you pick a profile. This window comes back next login, or now with /cine welcome."])
 		else
 			ns.Print(L["profile: %s. Change it any time on the Profiles settings page, or with /cine profile."]
-				:format(ns.ActiveProfile()))
+				:format(ns.ProfileLabel(ns.ActiveProfile())))
 		end
 	end)
 	-- Not for them: switched off, and not asked again (/cine brings this back).

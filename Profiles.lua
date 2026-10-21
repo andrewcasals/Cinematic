@@ -33,13 +33,19 @@ local PROFILE_TABLES = {
 }
 ns.PROFILE_TABLES = PROFILE_TABLES
 
-local DEFAULT_PROFILE = "Immersive"
+local DEFAULT_PROFILE -- (this client's first built-in: set after the list)
 
 -- The built-in profiles, in the order they're listed. parts: the part each
--- slot uses (ProfileParts.lua; a slot not named: its "standard" part).
+-- slot uses (ProfileParts.lua; a slot not named: its "standard" part), or
+-- { forever = part, retail = part } for one that differs by client.
+-- client: only on that one ("forever" or "retail"). label: the name shown,
+-- when it isn't the saved name (two clients' profiles can't share a name in
+-- this list). oldNames: what it was called before: settings and picks saved
+-- under those move to it at login.
 ns.BUILTIN_PROFILES = {
 	{
-		name = DEFAULT_PROFILE,
+		name = "Immersive",
+		oldNames = { "Cinematic Strong" }, -- (test builds)
 		icon = "Interface\\Icons\\Spell_Holy_MindVision",
 		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
 			"and how the developer plays every day."],
@@ -91,9 +97,36 @@ ns.BUILTIN_PROFILES = {
 		parts = { frames = "pure", bars = "pure", camera = "pure", vfx = "pure", misc = "pure" },
 	},
 }
-ns.OnLanguage(function() ns.TranslateFields(ns.BUILTIN_PROFILES, "tip") end)
+-- Each client's order, by name, where it isn't the list's (those not in it
+-- come after, in the list's order).
+-- (e.g. retail = { "Immersive (CDM)", "Immersive" }: those two first on retail)
+local BUILTIN_ORDER = {}
+
+-- Every client's (ALL_BUILTIN_PROFILES, for the dev build), and this one's
+-- in its order (BUILTIN_PROFILES). The first is this client's default.
+ns.ALL_BUILTIN_PROFILES = ns.BUILTIN_PROFILES
+do
+	local order, list = {}, {}
+	for i, name in ipairs(BUILTIN_ORDER[ns.CLIENT] or {}) do order[name] = i end
+	for i, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do
+		if not profile.client or profile.client == ns.CLIENT then
+			list[#list + 1] = { profile = profile, rank = order[profile.name] or 1000 + i }
+		end
+	end
+	table.sort(list, function(a, b) return a.rank < b.rank end)
+	ns.BUILTIN_PROFILES = {}
+	for i, entry in ipairs(list) do ns.BUILTIN_PROFILES[i] = entry.profile end
+end
+DEFAULT_PROFILE = ns.BUILTIN_PROFILES[1].name
+ns.OnLanguage(function() ns.TranslateFields(ns.ALL_BUILTIN_PROFILES, "tip") end)
 local builtinByName = {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
+
+-- The name a profile is shown by: a built-in's label, or its name.
+function ns.ProfileLabel(name)
+	local builtin = builtinByName[name]
+	return builtin and builtin.label or name
+end
 
 function ns.IsBuiltinProfile(name)
 	return builtinByName[name] ~= nil
@@ -120,7 +153,7 @@ function ns.ProfileBase(name)
 	local base = {}
 	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
 	local builtin = builtinByName[name]
-	if builtin then ns.ApplyParts(builtin.parts, base) end
+	if builtin then ns.ApplyParts(builtin.parts, base, ns.CLIENT) end
 	baseCache[name] = base
 	return base
 end
@@ -219,11 +252,11 @@ function ns.ProfileNames()
 	return names
 end
 
--- Finds a profile ignoring case (for /cine profile).
+-- Finds a profile by its name or label, ignoring case (for /cine profile).
 function ns.FindProfile(text)
 	text = text:lower()
 	for _, name in ipairs(ns.ProfileNames()) do
-		if name:lower() == text then return name end
+		if name:lower() == text or ns.ProfileLabel(name):lower() == text then return name end
 	end
 end
 
@@ -292,7 +325,7 @@ function ns.NewProfile(name)
 	end
 	ns.SaveProfile()
 	ns.db.profiles[name] = saved
-	ns.db.profileNotes[name] = L["Started from %s."]:format(ns.ActiveProfile())
+	ns.db.profileNotes[name] = L["Started from %s."]:format(ns.ProfileLabel(ns.ActiveProfile()))
 	ns.db.profileIcons[name] = ns.UnusedProfileIcon()
 	Choose(name)
 	ns.db.profileChosen = true
@@ -419,15 +452,18 @@ function ns.InitProfiles()
 	db.profiles = db.profiles or {}
 	db.profileNotes = db.profileNotes or {}
 	db.profileIcons = db.profileIcons or {}
-	-- The default profile was first called Cinematic Strong (test builds).
-	local old = "Cinematic Strong"
-	if db.profiles[old] and not db.profiles[DEFAULT_PROFILE] then
-		db.profiles[DEFAULT_PROFILE], db.profiles[old] = db.profiles[old], nil
+	-- Built-ins called something else before: their settings and picks move over.
+	for _, profile in ipairs(ns.BUILTIN_PROFILES) do
+		for _, old in ipairs(profile.oldNames or {}) do
+			if db.profiles[old] and not db.profiles[profile.name] then
+				db.profiles[profile.name], db.profiles[old] = db.profiles[old], nil
+			end
+			for _, holder in ipairs({ db, chardb }) do
+				if holder.profile == old then holder.profile = profile.name end
+			end
+			if db.liveProfile == old then db.liveProfile = profile.name end
+		end
 	end
-	for _, holder in ipairs({ db, chardb }) do
-		if holder.profile == old then holder.profile = DEFAULT_PROFILE end
-	end
-	if db.liveProfile == old then db.liveProfile = DEFAULT_PROFILE end
 	-- Your own profiles made before they had icons get one each.
 	for _, name in ipairs(ns.ProfileNames()) do
 		if not builtinByName[name] and not db.profileIcons[name] then

@@ -103,7 +103,7 @@ local function PrintDebugHelp()
 	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
-	print("  /cine debug slots - profile slots: settings with no slot, or on pages of different slots (in the log)")
+	print("  /cine debug slots [all] - profile slots and parts: anything with no slot or in the wrong one (in the log; all: also how each shared list is split)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
@@ -757,8 +757,8 @@ local function HandleSlash(msg)
 		if ns.PrintTalentLinkDebug then ns.PrintTalentLinkDebug() else ns.Print("talents link not loaded (retail, or TalentLink.lua missing)") end
 	elseif cmd == "debug" and arg == "panels" then
 		ns.PrintPanelsDebug()
-	elseif cmd == "debug" and arg == "slots" then
-		ns.SlotsDebug()
+	elseif cmd == "debug" and (arg == "slots" or arg == "slots all") then
+		ns.SlotsDebug(arg == "slots all")
 	elseif cmd == "debug" and arg == "cvars" then
 		ns.CVarsDebug()
 	elseif cmd == "debug" and arg:find("^cvars%s") then
@@ -1042,7 +1042,7 @@ local function HandleSlash(msg)
 		ns.ListExtras()
 	elseif cmd == "reset" then
 		ns.ResetSettings()
-		ns.Print(L["profile %s reset"]:format(ns.ActiveProfile()))
+		ns.Print(L["profile %s reset"]:format(ns.ProfileLabel(ns.ActiveProfile())))
 	elseif cmd == "export" then
 		ns.ShowExport()
 	elseif cmd == "import" then
@@ -1056,13 +1056,14 @@ local function HandleSlash(msg)
 		local name = arg ~= "" and ns.FindProfile(arg)
 		if name then
 			ns.SetProfile(name)
-			ns.Print(L["profile: %s"]:format(name))
+			ns.Print(L["profile: %s"]:format(ns.ProfileLabel(name)))
 		else
 			if arg ~= "" then ns.Print(L["no profile called %s"]:format(arg)) end
 			ns.Print(L["profiles (the active one in yellow):"])
 			for _, each in ipairs(ns.ProfileNames()) do
 				local active = ns.ProfileChosen() and each == ns.ActiveProfile()
-				print("  " .. (active and "|cffffd100" .. each .. "|r" or each))
+				local shown = ns.ProfileLabel(each)
+				print("  " .. (active and "|cffffd100" .. shown .. "|r" or shown))
 			end
 		end
 	else

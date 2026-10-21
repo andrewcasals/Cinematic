@@ -11,6 +11,9 @@
 
 local _, ns = ...
 
+-- This client, as parts and profiles name it.
+ns.CLIENT = ns.isRetail and "retail" or "forever"
+
 -- In the order a profile's parts are put together.
 ns.PROFILE_SLOTS = {
 	{ key = "layout", name = "Edit Mode layout" },
@@ -167,9 +170,10 @@ function ns.SettingSlot(key, row)
 end
 
 -- /cine debug slots: how many settings each slot has, and (in the log) the
--- profile settings with no slot, settings on pages of different slots, and
--- pages that aren't given one.
-function ns.SlotsDebug()
+-- profile settings with no slot, settings on pages of different slots,
+-- pages that aren't given one, parts setting another slot's, and built-ins'
+-- parts that aren't there. all: also how each shared list is split.
+function ns.SlotsDebug(all)
 	map = BuildMap()
 	local function Sorted(set)
 		local list = {}
@@ -194,7 +198,7 @@ function ns.SlotsDebug()
 	for _, slot in ipairs(ns.PROFILE_SLOTS) do
 		ns.Log("slots", ("%s: %d settings"):format(slot.name, counts[slot.key] or 0))
 	end
-	for key, list in pairs(map.rows) do
+	for key, list in pairs(all and map.rows or {}) do
 		local bySlot = {}
 		for row, slot in pairs(list) do
 			bySlot[slot] = bySlot[slot] or {}
@@ -236,7 +240,37 @@ function ns.SlotsDebug()
 			end)
 		end
 	end
+	-- Each built-in's parts there on each client it's on, and no two of a
+	-- client's built-ins with the same name or label.
+	local recipes = 0
+	for _, client in ipairs({ "forever", "retail" }) do
+		local seen = {}
+		for _, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do
+			if not profile.client or profile.client == client then
+				for _, shown in ipairs({ profile.name, profile.label ~= profile.name and profile.label or nil }) do
+					if seen[shown:lower()] then
+						recipes = recipes + 1
+						ns.Log("slots", ("%s: two profiles called %s"):format(client, shown))
+					end
+					seen[shown:lower()] = true
+				end
+				for _, slot in ipairs(ns.PROFILE_SLOTS) do
+					local part, name = ns.ProfilePart(profile.parts, slot.key, client)
+					local problem
+					if not part and name ~= "standard" then
+						problem = "no such part"
+					elseif part and part.client and part.client ~= client then
+						problem = "that part is " .. part.client .. "'s only"
+					end
+					if problem then
+						recipes = recipes + 1
+						ns.Log("slots", ("%s on %s: %s.%s: %s"):format(profile.name, client, slot.key, name, problem))
+					end
+				end
+			end
+		end
+	end
 	ns.Print(("slots: %d settings with no slot, %d on pages of different slots, %d pages with no slot,"
-		.. " %d settings parts set in another slot (details in /cine log)"):format(#missingList, #clashList,
-		#pageList, strays))
+		.. " %d settings parts set in another slot, %d problems with built-in profiles' parts (details in"
+		.. " /cine log)"):format(#missingList, #clashList, #pageList, strays, recipes))
 end
