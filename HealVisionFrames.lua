@@ -140,9 +140,11 @@ end
 -- 100%, and those with a debuff. (Your target goes before everything, in Rule.)
 local function ShownAnyway(unit)
 	local db = ns.db
+	-- (The debuff ones are retail only for now, hidden on WoW Forever: it
+	-- won't let addons see members' debuffs in fights and battlegrounds.)
 	return ((tonumber(db.healVisionTankBelow) or 1) >= 1 and Tank(unit)) -- (100%: always)
-		or (db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
-		or (db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
+		or (ns.isRetail and db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
+		or (ns.isRetail and db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
 end
 
 -- (kind: its setting, as the Vision grid's row has it: on here, see ns.HealVisionHere.)
