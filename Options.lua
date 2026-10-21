@@ -4681,7 +4681,7 @@ local function CreateQualityPanel()
 	-- (Quality of life's first page: "General" there.)
 	RegisterSubpage(canvas, "General")
 
-	-- (Not on retail, where right-click already shoots. Shown on every class; Hunter.lua
+	-- (Not on retail, which has no ammo. Shown on every class; HunterAmmo.lua
 	-- only runs on hunters.)
 	if not ns.isRetail then
 		canvas, content = CreateScrollPage()
@@ -4689,16 +4689,8 @@ local function CreateQualityPanel()
 		title:SetPoint("TOPLEFT", 16, -16)
 		switch = PageSwitch(content, "handleHunter", L["Enable page"],
 			L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
-			"when you turn this back on."], title, function()
-			if ns.ApplyHunter then ns.ApplyHunter() end
-		end)
+			"when you turn this back on."], title)
 		stack = Stack(switch, "check")
-		stack:Add(Check(content, "hunterRightClickShot", L["Right click attack also uses Auto-shot"],
-			L["Right-clicking an enemy targets it and attacks: Auto Shot when it's far enough away to shoot, " ..
-			"a melee swing when it's too close, in a fight or out of one. In a fight the game only checks what's " ..
-			"under the mouse a few times a second, so a very quick right-click on a new enemy can still be a " ..
-			"melee one.\n\nThere's also a key that starts Auto Shot on your target: set it under Key Bindings > " ..
-			"Cinematic (Hunter smart attack)."]), "check")
 		-- (HunterAmmo.lua.)
 		stack:Add(Check(content, "hunterAmmoSort", L["Smallest ammo stack first after Clean Up Bags"],
 			L["Clean Up Bags leaves the part stack of arrows or bullets last, but you shoot from the first stack, " ..

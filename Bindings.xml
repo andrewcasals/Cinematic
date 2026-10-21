@@ -34,6 +34,4 @@
 	<Binding name="CINEMATIC_TOGGLETOOLTIPS" category="ADDONS">
 		Cinematic_ToggleTooltips()
 	</Binding>
-	<Binding name="CLICK CinematicHunterAttackButton:LeftButton" category="ADDONS">
-	</Binding>
 </Bindings>

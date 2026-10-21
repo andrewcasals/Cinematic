@@ -61,7 +61,7 @@ Each situation has its own camera, and they hand over seamlessly:
 * **Campfire button:** hover a campfire and click the icon at your cursor to sit, kneel or lie down by the fire (your pick, or at random between the ones you tick), no emote to type. It has its own camera trigger.
 * **Stand up with Camp Benefits:** once the buff arrives, you stand up again, ready to go.
 * **Fishing:** cast with right-click or a gamepad button, in CineMode or not.
-* **Hunters** (Classic clients): right-click an enemy to start Auto Shot, or swing in melee when it's too close, in a fight or out of one. A smart attack key starts Auto Shot on your target.
+* **Hunters** (Classic clients): the smallest ammo stack goes first after Clean Up Bags, and a Fill quiver button at vendors buys enough ammo to fill your quiver.
 
 ## Easy to tweak
 

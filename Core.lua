@@ -241,7 +241,6 @@ local DEFAULTS = {
 	campfireKneel = true,
 	campfireLie = true,
 	campfireStandUp = true,   -- ...and stand up again once Camp Benefits arrives
-	hunterRightClickShot = true, -- hunters: right-click on an enemy starts Auto Shot, in combat too (Hunter.lua)
 	hunterAmmoSort = true,    -- hunters: after Clean Up Bags, the smallest ammo stack goes first, to be shot first (HunterAmmo.lua)
 	hunterQuiverFill = true,  -- hunters: a Fill button on arrows and bullets at vendors fills the quiver (HunterAmmo.lua)
 	-- Dragging something you can wear out of the bags opens the character window (DragEquip.lua). Off by
@@ -761,7 +760,7 @@ local PAGE_SWITCH = {}
 for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
 		"centerPanels", "dragPanels" },
-	handleHunter = { "hunterRightClickShot", "hunterAmmoSort", "hunterQuiverFill" },
+	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
 	handleVision = { "duelPlates" },
 }) do
 	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end

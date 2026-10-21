@@ -1250,6 +1250,3 @@ L["Put this camera's settings back to the profile's own?"] = "이 카메라의 �
 L["Put this camera's settings back to the active profile's own values (the defaults, or a built-in profile's)."] = "이 카메라의 설정을 현재 프로필의 값(기본값 또는 기본 제공 프로필의 값)으로 되돌립니다."
 L["While the death camera runs, a song picked at random from the list below plays in place of the zone music. With CineMode music off, only if your game music is on. It stops when you release or come back."] = "죽음 카메라가 실행되는 동안 아래 목록에서 무작위로 고른 곡이 지역 음악 대신 재생됩니다. CineMode 음악이 꺼져 있으면 게임 음악이 켜져 있을 때만 재생됩니다. 영혼을 놓아주거나 되살아나면 멈춥니다."
 L["Hunter"] = "사냥꾼"
-L["Hunter smart attack"] = "사냥꾼 스마트 공격"
-L["Right click attack also uses Auto-shot"] = "우클릭 공격에 자동 사격도 사용"
-L["Right-clicking an enemy targets it and attacks: Auto Shot when it's far enough away to shoot, a melee swing when it's too close, in a fight or out of one. In a fight the game only checks what's under the mouse a few times a second, so a very quick right-click on a new enemy can still be a melee one.\n\nThere's also a key that starts Auto Shot on your target: set it under Key Bindings > Cinematic (Hunter smart attack)."] = "적을 우클릭하면 대상으로 지정하고 공격합니다: 쏠 수 있을 만큼 멀면 자동 사격, 너무 가까우면 근접 공격이며, 전투 중이든 아니든 같습니다. 전투 중에는 게임이 마우스 아래를 1초에 몇 번만 확인하므로, 새 적을 아주 빠르게 우클릭하면 근접 공격이 될 수 있습니다.\n\n대상에게 자동 사격을 시작하는 키도 있습니다: 단축키 설정 > Cinematic (사냥꾼 스마트 공격)에서 지정하세요."

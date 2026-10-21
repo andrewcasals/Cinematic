@@ -40,7 +40,6 @@ HealVisionFrames.lua
 Chat.lua
 Bubbles.lua
 Campfire.lua
-Hunter.lua
 HunterAmmo.lua
 DragEquip.lua
 TalentLink.lua

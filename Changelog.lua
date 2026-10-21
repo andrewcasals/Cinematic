@@ -69,8 +69,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-15", page = "General", title = "Drag to equip",
 		text = "Picking up a piece of gear opens the character window, ready to drop it on." },
 	{ date = "2026-10-15", page = "Hunter", client = "forever", title = "Hunter helpers",
-		text = "Right-click pulls with Auto Shot, a smart attack key, smallest ammo stack first, and a " ..
-		"Fill quiver button at vendors." },
+		text = "Smallest ammo stack first after Clean Up Bags, and a Fill quiver button at vendors." },
 	{ date = "2026-10-15", page = "Keybinds", title = "Camera wheel",
 		text = "Hold a key to pick a camera from a ring of icons." },
 	{ date = "2026-10-14", page = "General", title = "Campfire Sit button",
