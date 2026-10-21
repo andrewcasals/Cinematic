@@ -36,13 +36,14 @@
 -- nudges showed as small snaps.)
 -- Moving off (walking away from the quest giver) ends it: everything goes
 -- back, and it doesn't start again until the next conversation.
--- The zoom back out goes at its own speed (questCamZoomOutSpeed) while you stand
--- still, or walk to someone else nearby; get HURRY_DISTANCE yards from where you
--- talked and it's quicker (ZOOM_HURRY).
--- It starts at once, not queued behind the turn back (walking, the RP walk
--- and auto-run cameras' own swing behind you held the queue up, and it never
--- came), and turning the camera yourself as you go doesn't stop it: only
--- zooming yourself does.
+-- The zoom back out waits until you're ZOOM_OUT_DISTANCE yards from where you
+-- started talking (quest givers often stand together: talk to another and
+-- that's the new spot, the zoom back out still to come). Then it goes at its
+-- own speed (questCamZoomOutSpeed), but takes ZOOM_HURRY at most.
+-- It isn't queued behind the turn back (walking, the RP walk and auto-run
+-- cameras' own swing behind you held the queue up, and it never came), and
+-- turning the camera yourself as you go doesn't stop it: only zooming
+-- yourself does.
 -- Moving the camera yourself while talking hands it over: nothing is undone.
 local _, ns = ...
 
@@ -53,10 +54,12 @@ local CLOSE_GRACE = 3 -- seconds held after the window closes (going from gossip
 local SWING_YAW = 45    -- degrees per second, at most (no pitch: the tilt has that)
 local SWING_RAMP = 1.5  -- seconds for it to build up speed from a crawl
 local SWING_SETTLE = 1  -- seconds held on past questCamTime
+local QUICK_SWING = 1.5 -- seconds the swing takes, at most, with no zoom in to run alongside (close already:
+                        -- the turn to the side waited the zoom's full time with nothing else moving)
 local ZOOM_MARGIN = 0.5 -- yards: already about this close, so no zoom
 local ZOOM_YOURS = 1.5  -- yards from where it zoomed to: you've zoomed yourself, so it stays
-local BACK_SHARE = 1    -- the turn back takes this share of the turn's time (0.5 was rushed)...
-local BACK_MIN = 3      -- ...but at least this many seconds
+local BACK_SHARE = 4 / 3 -- the turn back takes this share of the turn's time (0.5 was rushed, 1 a bit quick)...
+local BACK_MIN = 4      -- ...but at least this many seconds
 local BACK_EASE = 0.5   -- ...one long, smooth swell, like the tilt
 local MOVE_MIN_TIME = 1.5 -- seconds: the shortest turn or tilt
 local MOVE_EASE = 0.35   -- share of a move spent speeding up (and again slowing down)
@@ -71,8 +74,8 @@ local ZOOM_DONE = 0.05     -- yards: arrived
 local ZOOM_GIVE_UP = 4     -- extra seconds to settle before a zoom that can't get there stops
 local ZOOM_HURRY = 3       -- seconds the zoom back out takes once you've walked off (at most; 1.5 was jarring)
 local ZOOM_HURRY_RAMP = 1.5 -- seconds it takes to speed up to that (all at once, it lurched)
-local HURRY_DISTANCE = 10  -- yards from where you talked before it hurries (quest givers often stand together)
-local HURRY_WALK_TIME = 1.5 -- ...or, where the game won't say where you are, seconds of walking
+local ZOOM_OUT_DISTANCE = 10 -- yards from where you started talking before it zooms back out
+local ZOOM_OUT_WALK_TIME = 1.5 -- ...or, where the game won't say where you are, seconds of walking
 local FOLLOW_GAP = 0.5 -- seconds between the swing handing camera follow back and the turn starting
 local STEP_GAP = 0.6   -- seconds between one move stopping and the next starting (on neighbouring frames, it
                        -- snapped; and clear of the speed setting coming back, SPEED_RESTORE_DELAY after)
@@ -186,7 +189,7 @@ local function StopMove(m)
 	if m.sent then
 		Send(Command(m) .. "Stop")
 	end
-	m.moving, m.sent, m.stoppedAt, m.carry = false, nil, GetTime(), nil
+	m.moving, m.sent, m.stoppedAt = false, nil, GetTime()
 	-- (Put back a moment later, so the end of the move can't run at full speed.
 	-- Not between the drift's legs: your setting coming back just as the
 	-- camera came to rest jumped it.)
@@ -203,9 +206,7 @@ end
 -- only to `speed` (degrees per second) and carries on `extra` degrees further
 -- the same way, easing to a stop over R seconds at the end (the side turn
 -- flowing into the drift's first leg).
--- top: degrees per second it may need to reach later on without being sent
--- again (CarryBack), if more than its own speed.
-local function MoveTo(m, target, T, ease, tail, top)
+local function MoveTo(m, target, T, ease, tail)
 	StopMove(m)
 	local final = target
 	if tail then
@@ -224,7 +225,7 @@ local function MoveTo(m, target, T, ease, tail, top)
 	m.ease = ease or MOVE_EASE
 	m.cruise = math.abs(target - m.amount) / (m.T * (1 - m.ease))
 	m.limit = m.T + 1 + (tail and (math.abs(final - target) / tail.speed + tail.R) or 0)
-	m.share = math.max(m.cruise, m.tail and m.tail.speed or 0, top or 0) / yours
+	m.share = math.max(m.cruise, m.tail and m.tail.speed or 0) / yours
 	-- The setting goes to its lowest a moment before the move starts.
 	SetCVar(m.cvar, ("%.2f"):format(MOVE_MIN_SETTING))
 	m.primedUntil = GetTime() + MOVE_PRIME_TIME
@@ -259,12 +260,12 @@ end
 -- Leaving: a move under way slows to a stop from where it is, rather than
 -- halting dead (the drift cut off mid-swing showed once the hold after the
 -- window closed was long enough to watch it). False: just stop it (barely
--- moving yet).
+-- moving yet). (Even the drift heading back behind you stops first: sent
+-- with room to carry straight on into the turn back, its speed setting ran
+-- over too few steps and it jumped, most as it turned round.)
 local function EaseToStop(m)
 	if not m.moving or GetTime() < m.primedUntil or not m.sent then
 		return false
-	elseif m.carry then
-		return true -- already on its way back
 	end
 	local sign = m.growing and 1 or -1
 	if m.tail then
@@ -289,49 +290,6 @@ local function EaseToStop(m)
 	return true
 end
 
--- A move carried on into the way back: from its speed now, up to its cruise
--- over carry.up seconds, on at that, and eased to a stop over carry.down.
-local function CarrySpeed(m)
-	local carry, t = m.carry, m.t
-	if t < carry.up then
-		return carry.from + (m.cruise - carry.from) * (1 - math.cos(math.pi * t / carry.up)) / 2
-	elseif t > m.T - carry.down then
-		return m.cruise * (1 - math.cos(math.pi * math.max(0, m.T - t) / carry.down)) / 2
-	end
-	return m.cruise
-end
-
--- Leaving while the drift is already heading back behind you: it carries on
--- the same way into the turn back over about T seconds, rather than slowing
--- to a stop and setting off again (a hitch as the hold after the window
--- closed ended). No new command: only the speed setting changes, so the
--- drift was sent with room for this speed (MoveTo's top). False: heading
--- away, or not moving.
-local function CarryBack(m, T, ease)
-	if not m.moving or m.tail or m.carry or GetTime() < m.primedUntil or not m.sent
-		or m.growing ~= (m.amount < 0) or math.abs(m.amount) < 0.5 then
-		return false
-	end
-	local from, D = m.sent * m.share, math.abs(m.amount)
-	local R = ease * T
-	local cruise = (D - R * from / 2) / (T - R)
-	local up, down = R, R
-	if cruise <= from then
-		-- So near it's just slowing down from here.
-		cruise, up, down = from, 0, 2 * D / from
-		T = down
-	else
-		local most = m.share * (tonumber(ns.db.savedCVars[m.cvar]) or m.default)
-		if cruise > most then
-			cruise = most
-			T = (D - R * from / 2) / cruise + R
-		end
-	end
-	m.carry = { from = from, up = up, down = down }
-	m.from, m.target, m.t, m.T, m.cruise, m.limit = m.amount, 0, 0, T, cruise, T + 1
-	return true
-end
-
 local function StepMove(m, elapsed)
 	if not m.moving or GetTime() < m.primedUntil then
 		return
@@ -340,7 +298,7 @@ local function StepMove(m, elapsed)
 	-- Done when its curve has eased right down, not when it's counted as far
 	-- as asked: the speed sent lags a little behind the curve as it slows (see
 	-- MOVE_CHANGE), so it got there early and stopped still moving, a small jump.
-	local speed = m.tail and TailSpeed(m) or m.carry and CarrySpeed(m) or m.cruise * EaseShape(m.t, m.T, m.ease)
+	local speed = m.tail and TailSpeed(m) or m.cruise * EaseShape(m.t, m.T, m.ease)
 	if m.t >= m.limit or (m.tail and m.tail.stopAt and speed == 0) or (not m.tail and m.t >= m.T) then
 		m.amount = m.target
 		StopMove(m)
@@ -571,9 +529,7 @@ local function StepSequence(now)
 			end
 			local target = math.max(0, ns.db.questCamAngle) + (cam.driftOut and half or -half)
 			local T = DRIFT_TIME * math.abs(target - movers.yaw.amount) / ns.db.questCamDrift
-			-- (Sent with room for the turn back from the far side: CarryBack.)
-			local back = (math.max(0, ns.db.questCamAngle) + half) / (TurnBackTime() * (1 - BACK_EASE))
-			step = { "yaw", target, T, false, DRIFT_EASE, nil, back }
+			step = { "yaw", target, T, false, DRIFT_EASE }
 			cam.steps[1] = step
 		end
 		if not step then
@@ -600,7 +556,7 @@ local function StepSequence(now)
 				-- leg heads back.)
 				cam.driftOut = step[2] >= movers.yaw.amount
 			end
-			MoveTo(movers[step[1]], step[2], step[3], step[5], step[6], step[7])
+			MoveTo(movers[step[1]], step[2], step[3], step[5], step[6])
 		end
 	end
 end
@@ -639,6 +595,15 @@ local function Log(now)
 	cam.others, cam.notes = nil, nil
 end
 
+-- Where you are, in yards; nil where the game won't say (some instances).
+local function PlayerPosition()
+	local ok, y, x = pcall(UnitPosition, "player")
+	if ok and type(y) == "number" and type(x) == "number"
+		and not (issecretvalue and (issecretvalue(y) or issecretvalue(x))) then
+		return x, y
+	end
+end
+
 local function Start()
 	local db = ns.db
 	cam.active, cam.closingAt, cam.handedOver = true, nil, false
@@ -648,10 +613,15 @@ local function Start()
 		db.questCamLog = {}
 		cam.log = db.questCamLog
 	end
+	cam.talkX, cam.talkY = PlayerPosition()
 	-- Your own distance (the AFK camera's slow zoom, if it was going, lets go
-	-- where it is: this zoom takes over).
-	cam.zoom, cam.zoomedTo = ns.PlayerZoom and ns.PlayerZoom(), nil
+	-- where it is: this zoom takes over). Still to go back out to from the
+	-- last quest giver: that one.
+	local back = zoomer.pending and zoomer.pending.to or (zoomer.leaving and zoomer.moving and zoomer.goal) or nil
+	zoomer.pending = nil
+	cam.zoom, cam.zoomedTo = back or (ns.PlayerZoom and ns.PlayerZoom()), nil
 	ns.TakeOverZoom()
+	local swing = math.min(db.questCamTime, QUICK_SWING)
 	-- (Not while your own zoom's still going: you've just picked a distance.)
 	if ns.PlayerZoomedSince(cam.startedAt - ns.PLAYER_ZOOM_WAIT) then
 		Note("you're zooming: no zoom in")
@@ -659,11 +629,28 @@ local function Start()
 	elseif cam.zoom and GetCameraZoom and GetCameraZoom() > db.questCamDistance + ZOOM_MARGIN then
 		cam.zoomedTo = db.questCamDistance
 		ZoomTo(db.questCamDistance, (GetCameraZoom() - db.questCamDistance) / db.questCamZoomSpeed)
+		swing = db.questCamTime
 	else
 		ns.RestoreZoomLimit() -- (close already: inside it)
+		if back then
+			-- (Still ours: it goes back out after this one too.)
+			if zoomer.leaving then
+				StopZoom()
+			end
+			cam.zoomedTo = GetCameraZoom()
+		end
+	end
+	if swing < db.questCamTime then
+		-- No zoom in: a turn or tilt still going back from the last quest giver
+		-- slows to a stop now, rather than holding up this one's turn.
+		for _, m in pairs(movers) do
+			if not EaseToStop(m) then
+				StopMove(m)
+			end
+		end
 	end
 	-- (Held on a little past its time so it settles fully behind you.)
-	ns.CenterCamera(db.questCamTime + SWING_SETTLE, SWING_YAW, 0, SWING_RAMP)
+	ns.CenterCamera(swing + SWING_SETTLE, SWING_YAW, 0, math.min(SWING_RAMP, swing))
 	-- Then round to the side as the zoom carries on, and down after that.
 	-- (A move still undoing a past conversation's carries on from where it is.)
 	-- Which side: there's no knowing where the quest giver stands (only your
@@ -682,7 +669,7 @@ local function Start()
 		end
 		Note("side " .. (movers.yaw.left and "left" or "right") .. (cam.clickSide and " (clicked)" or ""))
 	end
-	cam.steps, cam.stepsAt = {}, cam.startedAt + db.questCamTime + SWING_SETTLE
+	cam.steps, cam.stepsAt = {}, cam.startedAt + swing + SWING_SETTLE
 	cam.driftOut, movers.yaw.lastGrowing = nil, nil
 	local turnTime = db.questCamAngle > 0 and db.questCamTurnTime or 0
 	if db.questCamAngle > 0 then
@@ -707,15 +694,6 @@ local function Start()
 	end
 end
 
--- Where you are, in yards; nil where the game won't say (some instances).
-local function PlayerPosition()
-	local ok, y, x = pcall(UnitPosition, "player")
-	if ok and type(y) == "number" and type(x) == "number"
-		and not (issecretvalue and (issecretvalue(y) or issecretvalue(x))) then
-		return x, y
-	end
-end
-
 local function Stop()
 	cam.active, cam.closingAt = false, nil
 	ns.ApplyCVarSet(SHOULDER_CVARS, false)
@@ -726,7 +704,7 @@ local function Stop()
 	if not cam.handedOver then
 		for _, m in pairs(movers) do
 			-- (Cut short if still on the way in: undone from where it got to.)
-			if not (m == movers.yaw and CarryBack(m, TurnBackTime(), BACK_EASE)) and not EaseToStop(m) then
+			if not EaseToStop(m) then
 				StopMove(m)
 			end
 		end
@@ -736,15 +714,13 @@ local function Stop()
 	if cam.zoomedTo and cam.zoom and GetCameraZoom and ns.db.questCamZoomOutSpeed > 0
 		and not ns.PlayerZoomedSince(cam.startedAt)
 		and (zoomer.moving or math.abs(GetCameraZoom() - cam.zoomedTo) < ZOOM_YOURS) then
-		local T = math.abs(cam.zoom - GetCameraZoom()) / ns.db.questCamZoomOutSpeed
-		ZoomTo(cam.zoom, T)
-		zoomer.leaving = true
-		zoomer.leftX, zoomer.leftY = PlayerPosition() -- (walking off hurries it from HURRY_DISTANCE away)
-		zoomer.walked = 0
+		-- (Held until you've walked off: see OnUpdate.)
+		zoomer.pending = { to = cam.zoom, x = cam.talkX, y = cam.talkY, since = GetTime(), walked = 0 }
+		Note("zoom out held")
 	end
 	if not cam.handedOver then
 		local turnBack = TurnBackTime()
-		if movers.yaw.amount ~= 0 and not movers.yaw.carry then -- (carrying on back already)
+		if movers.yaw.amount ~= 0 then
 			table.insert(cam.steps, { "yaw", 0, turnBack, nil, BACK_EASE })
 		end
 		if movers.pitch.amount ~= 0 then
@@ -819,6 +795,7 @@ local function OnEvent(_, event)
 		if cam.since then
 			cam.closingAt = 0 -- a fight: ends now
 		end
+		zoomer.pending = nil
 		-- (And the zoom stops where it is, your zoom speed back, so it's yours
 		-- for the fight: the zoom back out is slow.)
 		if zoomer.moving or zoomer.release then
@@ -853,18 +830,26 @@ local function OnUpdate(_, elapsed)
 		StopZoom(true)
 		ns.RestoreZoomLimit()
 	end
-	-- Walked off as it zooms back out: hurry it along. (Not just a few steps
-	-- to the next quest giver.)
-	if zoomer.leaving and ns.playerMoving then
+	-- The zoom back out, held: it goes once you've walked off from where you
+	-- started talking (not just a few steps to the next quest giver). Zoomed
+	-- yourself meanwhile: it's yours, it stays.
+	local pending = zoomer.pending
+	if pending and ns.PlayerZoomedSince(pending.since) then
+		Note("you zoomed: no zoom out")
+		zoomer.pending = nil
+	elseif pending and ns.playerMoving then
 		local x, y = PlayerPosition()
 		local far
-		if x and zoomer.leftX then
-			far = (x - zoomer.leftX) ^ 2 + (y - zoomer.leftY) ^ 2 >= HURRY_DISTANCE ^ 2
+		if x and pending.x then
+			far = (x - pending.x) ^ 2 + (y - pending.y) ^ 2 >= ZOOM_OUT_DISTANCE ^ 2
 		else
-			zoomer.walked = (zoomer.walked or 0) + elapsed
-			far = zoomer.walked >= HURRY_WALK_TIME
+			pending.walked = pending.walked + elapsed
+			far = pending.walked >= ZOOM_OUT_WALK_TIME
 		end
 		if far then
+			zoomer.pending = nil
+			ZoomTo(pending.to, math.abs(pending.to - GetCameraZoom()) / ns.db.questCamZoomOutSpeed)
+			zoomer.leaving = true
 			HurryZoom(ZOOM_HURRY)
 		end
 	end
@@ -921,7 +906,7 @@ frame:SetScript("OnUpdate", ns.Profiled("Quest cam", OnUpdate))
 -- Whether the quest cam is zooming back out to your distance (the RP walk
 -- and auto-run cameras' own zoom waits for it, rather than starting from close in).
 function ns.QuestCamZoomingBack()
-	return zoomer.leaving and zoomer.moving
+	return (zoomer.leaving and zoomer.moving) or zoomer.pending ~= nil
 end
 
 -- Whether the quest cam is running now.
