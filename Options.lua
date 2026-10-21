@@ -5363,7 +5363,7 @@ local function CreatePlatesPanel()
 		"plates. The Raid Marker row of Plate Parts hides them on the plates that are up."]
 	UNIT_ROW_TIPS.PartMarkerFriendly = L[" Friendly units."] .. markerTip .. L[" Unticked, friendly players " ..
 		"get invisible nameplates you click through, or the game would draw their markers over their heads " ..
-		"itself."]
+		"itself. Not in dungeons and raids, where Friendly Plates in Dungeons and Raids decides their plates."]
 	UNIT_ROW_TIPS.PartMarkerEnemy = L[" Enemy and neutral units."] .. markerTip
 	AddPlateRow(markersTop, 2, { "PartMarkerFriendly", L["Friendly"], rulePath = "Raid markers" })
 	AddPlateRow(markersTop, 3, { "PartMarkerEnemy", L["Enemy"], rulePath = "Raid markers" })

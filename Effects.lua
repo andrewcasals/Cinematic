@@ -909,17 +909,29 @@ end
 -- the game's marker's alpha, so the Plate Parts row still hides it. WoW
 -- Forever won't say which marker a unit has (GetRaidTargetIndex is secret),
 -- so ours copies the game's icon: its texture and its part of the sheet.
+-- Retail hides the marker on some plates itself (a friendly NPC's in an
+-- instance): ours stands in for it there, with the plate up too. Which marker
+-- is secret, but whether there's one isn't (nil without), and the hidden icon
+-- still holds it. Returns the icon, its frame, and true for a stand-in.
 local function GameMarkerIcon(frame)
 	local marker = frame.RaidTargetFrame
-	if not (type(marker) == "table" and marker.GetRegions) or (marker.IsForbidden and marker:IsForbidden())
-		or not ns.Flag(marker:IsShown()) then
+	if not (type(marker) == "table" and marker.GetRegions) or (marker.IsForbidden and marker:IsForbidden()) then
 		return nil
 	end
 	local icon = marker.RaidTargetIcon or marker.icon or marker.Icon or marker:GetRegions()
-	if not (type(icon) == "table" and icon.GetTexCoord) or not ns.Flag(icon:IsShown()) then
+	if not (type(icon) == "table" and icon.GetTexCoord) then
 		return nil
 	end
-	return icon, marker
+	if ns.Flag(marker:IsShown()) and ns.Flag(icon:IsShown()) then
+		return icon, marker, false
+	end
+	if ns.isRetail then
+		local ok, index = pcall(GetRaidTargetIndex, frame.unit)
+		if ok and index ~= nil then
+			return icon, marker, true
+		end
+	end
+	return nil
 end
 
 -- Where ours sits from the middle of the health bar, and its size: lined up
@@ -948,13 +960,19 @@ local function KeptMarker(frame)
 end
 
 local function KeepRaidMarker(frame, alpha)
-	local icon, marker
-	if alpha < 1 and ns.db and ns.db.handlePlates then
-		-- (Unknown sides, secret on WoW Forever, go by the enemy row.)
-		local ok, friend = pcall(UnitIsFriend, "player", frame.unit)
-		friend = ok and not (issecretvalue and issecretvalue(friend)) and friend
-		if ns.PlateRowWanted(friend and "PartMarkerFriendly" or "PartMarkerEnemy") then
-			icon, marker = GameMarkerIcon(frame)
+	local icon, marker, standIn, kept
+	if ns.db and ns.db.handlePlates then
+		icon, marker, standIn = GameMarkerIcon(frame)
+		if icon then
+			-- (Unknown sides, secret on WoW Forever, go by the enemy row.)
+			local ok, friend = pcall(UnitIsFriend, "player", frame.unit)
+			friend = ok and not (issecretvalue and issecretvalue(friend)) and friend
+			kept = ns.PlateRowWanted(friend and "PartMarkerFriendly" or "PartMarkerEnemy")
+			-- (The game's own shows on a plate that's up. A stand-in only while
+			-- its row is ticked: unticked, it's as the game has it, none.)
+			if not kept or (not standIn and alpha >= 1) then
+				icon = nil
+			end
 		end
 	end
 	local ours = frame.cinematicMarker
@@ -978,7 +996,9 @@ local function KeepRaidMarker(frame, alpha)
 	if issecretvalue and issecretvalue(partAlpha) then
 		partAlpha = 1
 	end
-	ours:SetAlpha((1 - alpha) * partAlpha)
+	-- (A stand-in shows with its plate up as well, the game's own being hidden.)
+	local level = standIn and 1 or (1 - alpha)
+	ours:SetAlpha(level * partAlpha)
 	ours:Show()
 end
 
@@ -1012,10 +1032,13 @@ function ns.KeptMarkerSpot(x, y, size)
 end
 local markerWatcher = CreateFrame("Frame")
 markerWatcher:RegisterEvent("RAID_TARGET_UPDATE")
-markerWatcher:SetScript("OnEvent", function()
+-- (And plates given a unit: a stand-in shows on plates that are up, which
+-- otherwise aren't looked at.)
+markerWatcher:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+markerWatcher:SetScript("OnEvent", function(_, event)
 	C_Timer.After(0, RefreshKeptMarkers)
 	-- (Markers of your own, out of a group: see MarkersHiddenOverFriends.)
-	if not ns.InGroup() then
+	if event == "RAID_TARGET_UPDATE" and not ns.InGroup() then
 		markerWatcher.solo = true
 	end
 end)
@@ -1807,9 +1830,11 @@ end
 -- game draw its marker over their head itself, and nothing hides that one
 -- (tested on WoW Forever; nor the one over your own head). Only where
 -- markers are seen: in a group, or once you've marked something yourself.
--- (In dungeons and raids too: untested whether the game lets them fade there.)
+-- Not in dungeons and raids: there the Friendly Plates in Dungeons and Raids
+-- choices switch the same settings, and the two put back each other's
+-- saved values (tested: a delve companion's plate stayed up).
 local function MarkersHiddenOverFriends()
-	if not platesActive then
+	if not platesActive or placeSuffix == "Instances" then
 		return false
 	end
 	if UnitRowWanted("PartMarkerFriendly") and UnitRowWanted("PartRaidMarker") then
@@ -2124,7 +2149,16 @@ function ns.PrintPlatesDebug()
 			local ok, text = pcall(function()
 				local list = {}
 				for _, region in ipairs({ game:GetRegions() }) do
+					-- (And its part of the sheet: whether a hidden one still holds the marker.)
+					local coords = {}
+					if region.GetTexCoord then
+						for _, value in ipairs({ region:GetTexCoord() }) do
+							coords[#coords + 1] = (issecretvalue and issecretvalue(value)) and "secret"
+								or ("%.3f"):format(value)
+						end
+					end
 					list[#list + 1] = tostring(region:GetTexture()) .. (ns.Flag(region:IsShown()) and "" or "(hidden)")
+						.. (#coords > 0 and ("[" .. table.concat(coords, ",") .. "]") or "")
 				end
 				return (ns.Flag(game:IsShown()) and "shown" or "hidden") .. ("@%.2f "):format(game:GetAlpha())
 					.. table.concat(list, "+")
