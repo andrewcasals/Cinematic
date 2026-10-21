@@ -1285,31 +1285,32 @@ end
 local BUFF_HOVER_DEPTH = 3
 
 local IsNearIcon
-
-local function IsIconNear(child, depth, padX, padY)
-	-- (Any of these can come back secret on Forever: ns.Flag reads that as false.)
-	if not IsForbidden(child) and ns.Flag(child:IsVisible()) then
-		if ns.Flag(child:IsMouseEnabled()) and ns.Flag(child:IsMouseOver(padY, -padY, -padX, padX)) then
-			return true
+do
+	local function IsIconNear(child, depth, padX, padY)
+		-- (Any of these can come back secret on Forever: ns.Flag reads that as false.)
+		if not IsForbidden(child) and ns.Flag(child:IsVisible()) then
+			if ns.Flag(child:IsMouseEnabled()) and ns.Flag(child:IsMouseOver(padY, -padY, -padX, padX)) then
+				return true
+			end
+			if depth > 1 and IsNearIcon(depth - 1, padX, padY, child:GetChildren()) then
+				return true
+			end
 		end
-		if depth > 1 and IsNearIcon(depth - 1, padX, padY, child:GetChildren()) then
-			return true
-		end
+		return false
 	end
-	return false
-end
 
-function IsNearIcon(depth, padX, padY, ...)
-	for i = 1, select("#", ...) do
-		-- Forever locks some aura icons after a fight without marking them
-		-- forbidden ("Attempt to access forbidden object" on IsVisible), so
-		-- an icon that errors just doesn't count.
-		local ok, near = pcall(IsIconNear, select(i, ...), depth, padX, padY)
-		if ok and near then
-			return true
+	function IsNearIcon(depth, padX, padY, ...)
+		for i = 1, select("#", ...) do
+			-- Forever locks some aura icons after a fight without marking them
+			-- forbidden ("Attempt to access forbidden object" on IsVisible), so
+			-- an icon that errors just doesn't count.
+			local ok, near = pcall(IsIconNear, select(i, ...), depth, padX, padY)
+			if ok and near then
+				return true
+			end
 		end
+		return false
 	end
-	return false
 end
 
 function ns.IsEntryHovered(entry)
