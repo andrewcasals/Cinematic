@@ -2864,7 +2864,7 @@ local function CreateQuestPanel()
 	local zoomOutSpeed = right:Add(Slider(content, "questCamZoomOutSpeed", L["Zoom back out speed"], 0, 10, 0.25, L["%.2f yards/sec"]), "slider")
 	Tooltip(zoomOutSpeed, L["Leaving the quest giver, the camera zooms back out to your own distance " ..
 		"at this speed while you stand still (turning back behind you and tilting back up as it goes), " ..
-		"so further out takes longer. Walk off and it speeds up, back out in a moment."])
+		"so further out takes longer. Walk more than 10 yards away and it speeds up, back out in a few seconds."])
 	GreyUnless(zoomOutSpeed, IfOn)
 end
 

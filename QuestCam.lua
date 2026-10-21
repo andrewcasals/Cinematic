@@ -37,7 +37,8 @@
 -- Moving off (walking away from the quest giver) ends it: everything goes
 -- back, and it doesn't start again until the next conversation.
 -- The zoom back out goes at its own speed (questCamZoomOutSpeed) while you stand
--- still; walk off, or start walking as it goes, and it's quick (ZOOM_HURRY).
+-- still, or walk to someone else nearby; get HURRY_DISTANCE yards from where you
+-- talked and it's quicker (ZOOM_HURRY).
 -- It starts at once, not queued behind the turn back (walking, the RP walk
 -- and auto-run cameras' own swing behind you held the queue up, and it never
 -- came), and turning the camera yourself as you go doesn't stop it: only
@@ -54,8 +55,9 @@ local SWING_RAMP = 1.5  -- seconds for it to build up speed from a crawl
 local SWING_SETTLE = 1  -- seconds held on past questCamTime
 local ZOOM_MARGIN = 0.5 -- yards: already about this close, so no zoom
 local ZOOM_YOURS = 1.5  -- yards from where it zoomed to: you've zoomed yourself, so it stays
-local BACK_SHARE = 0.5  -- the turn back takes this share of the turn's time...
-local BACK_MIN = 1.5    -- ...but at least this many seconds
+local BACK_SHARE = 1    -- the turn back takes this share of the turn's time (0.5 was rushed)...
+local BACK_MIN = 3      -- ...but at least this many seconds
+local BACK_EASE = 0.5   -- ...one long, smooth swell, like the tilt
 local MOVE_MIN_TIME = 1.5 -- seconds: the shortest turn or tilt
 local MOVE_EASE = 0.35   -- share of a move spent speeding up (and again slowing down)
 local MOVE_MIN_SPEED = 1 -- degrees per second: the slowest step sent (lower, the game uses its full speed)
@@ -67,14 +69,16 @@ local ZOOM_CVAR = "cameraZoomSpeed"
 local ZOOM_MIN_SPEED = 0.3 -- yards per second: the slowest step sent
 local ZOOM_DONE = 0.05     -- yards: arrived
 local ZOOM_GIVE_UP = 4     -- extra seconds to settle before a zoom that can't get there stops
-local ZOOM_HURRY = 1.5     -- seconds the zoom back out takes once you're walking (at most)
-local ZOOM_HURRY_RAMP = 0.5 -- seconds it takes to speed up to that (all at once, it lurched)
+local ZOOM_HURRY = 3       -- seconds the zoom back out takes once you've walked off (at most; 1.5 was jarring)
+local ZOOM_HURRY_RAMP = 1.5 -- seconds it takes to speed up to that (all at once, it lurched)
+local HURRY_DISTANCE = 10  -- yards from where you talked before it hurries (quest givers often stand together)
+local HURRY_WALK_TIME = 1.5 -- ...or, where the game won't say where you are, seconds of walking
 local FOLLOW_GAP = 0.5 -- seconds between the swing handing camera follow back and the turn starting
 local STEP_GAP = 0.6   -- seconds between one move stopping and the next starting (on neighbouring frames, it
                        -- snapped; and clear of the speed setting coming back, SPEED_RESTORE_DELAY after)
 local TILT_TIME = 4    -- seconds the tilt down takes (squeezed into what was left of the zoom, it was rushed)
 local TILT_EASE = 0.5  -- ...one long, smooth swell: speeding up over its first half
-local TILT_BACK_TIME = 2 -- ...and back up
+local TILT_BACK_TIME = 4 -- ...and back up (2 was rushed)
 local DRIFT_TIME = 7   -- seconds each leg of the drift takes, once settled (questCamDrift)
 local DRIFT_EASE = 0.3 -- ...ramps at either end (all easing, it crawled so long it seemed to stop at each
                        -- side; much shorter, it turned round with a jump)
@@ -614,8 +618,16 @@ local function Start()
 	end
 end
 
--- walkedOff: the zoom back out is quick.
-local function Stop(walkedOff)
+-- Where you are, in yards; nil where the game won't say (some instances).
+local function PlayerPosition()
+	local ok, y, x = pcall(UnitPosition, "player")
+	if ok and type(y) == "number" and type(x) == "number"
+		and not (issecretvalue and (issecretvalue(y) or issecretvalue(x))) then
+		return x, y
+	end
+end
+
+local function Stop()
 	cam.active, cam.closingAt = false, nil
 	ns.ApplyCVarSet(SHOULDER_CVARS, false)
 	ns.ApplyCVarSet(CENTERED_CVARS, false)
@@ -632,16 +644,18 @@ local function Stop(walkedOff)
 	if cam.zoomedTo and cam.zoom and GetCameraZoom and ns.db.questCamZoomOutSpeed > 0
 		and (zoomer.moving or math.abs(GetCameraZoom() - cam.zoomedTo) < ZOOM_YOURS) then
 		local T = math.abs(cam.zoom - GetCameraZoom()) / ns.db.questCamZoomOutSpeed
-		ZoomTo(cam.zoom, walkedOff and math.min(T, ZOOM_HURRY) or T)
+		ZoomTo(cam.zoom, T)
 		zoomer.leaving = true
+		zoomer.leftX, zoomer.leftY = PlayerPosition() -- (walking off hurries it from HURRY_DISTANCE away)
+		zoomer.walked = 0
 	end
 	if not cam.handedOver then
 		local turnBack = math.max(BACK_MIN, ns.db.questCamTurnTime * BACK_SHARE)
 		if movers.yaw.amount ~= 0 then
-			table.insert(cam.steps, { "yaw", 0, turnBack })
+			table.insert(cam.steps, { "yaw", 0, turnBack, nil, BACK_EASE })
 		end
 		if movers.pitch.amount ~= 0 then
-			table.insert(cam.steps, { "pitch", 0, TILT_BACK_TIME })
+			table.insert(cam.steps, { "pitch", 0, TILT_BACK_TIME, false, TILT_EASE })
 		end
 	end
 	cam.zoom, cam.zoomedTo = nil, nil
@@ -746,9 +760,20 @@ local function OnUpdate(_, elapsed)
 		StopZoom(true)
 		ns.RestoreZoomLimit()
 	end
-	-- Walking off as it zooms back out: hurry it along.
+	-- Walked off as it zooms back out: hurry it along. (Not just a few steps
+	-- to the next quest giver.)
 	if zoomer.leaving and ns.playerMoving then
-		HurryZoom(ZOOM_HURRY)
+		local x, y = PlayerPosition()
+		local far
+		if x and zoomer.leftX then
+			far = (x - zoomer.leftX) ^ 2 + (y - zoomer.leftY) ^ 2 >= HURRY_DISTANCE ^ 2
+		else
+			zoomer.walked = (zoomer.walked or 0) + elapsed
+			far = zoomer.walked >= HURRY_WALK_TIME
+		end
+		if far then
+			HurryZoom(ZOOM_HURRY)
+		end
 	end
 	StepSequence(now)
 	if busy or Zooming() or zoomer.release then
@@ -766,7 +791,7 @@ local function OnUpdate(_, elapsed)
 		Stop() -- turned off (or set to no camera) mid-conversation
 		cam.since = nil
 	elseif cam.active and ns.playerMoving then
-		Stop(true) -- walked off: back to normal, and no more until the next conversation
+		Stop() -- walked off: back to normal, and no more until the next conversation
 		cam.cancelled = true
 	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving and Wanted() then
 		Start()
