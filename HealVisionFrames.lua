@@ -113,15 +113,17 @@ local function KindOf(unit)
 end
 
 -- A debuff on them that the game's filters find: ones you can dispel
--- (newer filter first), or any. Unsure (secret, or no such filter here): no,
--- so they go by their health.
+-- (newer filter first), or any. A secret answer is yes: only a debuff comes
+-- back secret (nothing is nil). No answer, or an error (WoW Forever won't let
+-- addons see members' auras while they're secret: in fights, battlegrounds):
+-- no, they go by their health.
 local DISPEL_FILTERS = { "HARMFUL|RAID_PLAYER_DISPELLABLE", "HARMFUL|RAID" }
 local ANY_FILTERS = { "HARMFUL" }
 local function Debuffed(unit, filters, oldFilter)
 	if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
 		for _, filter in ipairs(filters) do
 			local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, unit, 1, filter)
-			if ok and not Secret(data) and type(data) == "table" then
+			if ok and (Secret(data) or type(data) == "table") then
 				return true
 			end
 		end
@@ -129,7 +131,7 @@ local function Debuffed(unit, filters, oldFilter)
 	end
 	if UnitDebuff then
 		local ok, name = pcall(UnitDebuff, unit, 1, oldFilter)
-		return ok and not Secret(name) and type(name) == "string"
+		return ok and (Secret(name) or type(name) == "string")
 	end
 	return false
 end
