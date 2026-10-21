@@ -652,7 +652,11 @@ local function Start()
 	-- where it is: this zoom takes over).
 	cam.zoom, cam.zoomedTo = ns.PlayerZoom and ns.PlayerZoom(), nil
 	ns.TakeOverZoom()
-	if cam.zoom and GetCameraZoom and GetCameraZoom() > db.questCamDistance + ZOOM_MARGIN then
+	-- (Not while your own zoom's still going: you've just picked a distance.)
+	if ns.PlayerZoomedSince(cam.startedAt - ns.PLAYER_ZOOM_WAIT) then
+		Note("you're zooming: no zoom in")
+		ns.RestoreZoomLimit()
+	elseif cam.zoom and GetCameraZoom and GetCameraZoom() > db.questCamDistance + ZOOM_MARGIN then
 		cam.zoomedTo = db.questCamDistance
 		ZoomTo(db.questCamDistance, (GetCameraZoom() - db.questCamDistance) / db.questCamZoomSpeed)
 	else
@@ -730,6 +734,7 @@ local function Stop()
 	-- Back out to your distance, unless you zoomed yourself while talking.
 	-- (Still on its way in counts as ours.) At speed 0 it stays where it is.
 	if cam.zoomedTo and cam.zoom and GetCameraZoom and ns.db.questCamZoomOutSpeed > 0
+		and not ns.PlayerZoomedSince(cam.startedAt)
 		and (zoomer.moving or math.abs(GetCameraZoom() - cam.zoomedTo) < ZOOM_YOURS) then
 		local T = math.abs(cam.zoom - GetCameraZoom()) / ns.db.questCamZoomOutSpeed
 		ZoomTo(cam.zoom, T)
@@ -841,9 +846,9 @@ local function OnUpdate(_, elapsed)
 		and ns.GetLastCameraInput() > cam.startedAt + INPUT_GRACE then
 		HandOver()
 	end
-	-- Zoomed yourself after the hand-over (you turned the camera first, so the
-	-- zoom back out carried on): it stops, and the wheel goes at your speed.
-	if zoomer.moving and ns.lastCameraInputWhat == "zoom" and ns.GetLastCameraInput() > zoomer.startedAt then
+	-- Zoomed yourself while it zooms (in, or back out): it stops, and the
+	-- wheel goes at your speed (also while the speed's still easing back).
+	if (zoomer.moving or zoomer.release) and ns.PlayerZoomedSince(zoomer.startedAt) then
 		Note("you zoomed: zoom stopped")
 		StopZoom(true)
 		ns.RestoreZoomLimit()

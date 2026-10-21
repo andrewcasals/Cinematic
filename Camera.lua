@@ -708,7 +708,15 @@ local function OnPlayerZoom()
 		if ns.CancelDeathZoom then ns.CancelDeathZoom() end
 		lastCameraInput = GetTime()
 		ns.lastCameraInputWhat = "zoom"
+		ns.lastPlayerZoomAt = lastCameraInput -- (kept apart: other input overwrites the "what")
 	end
+end
+
+-- Whether you've zoomed yourself since `t`. (The game's zoom from a scroll
+-- carries on a moment after it: a zoom of ours starting then went with it.)
+ns.PLAYER_ZOOM_WAIT = 1 -- seconds after your own zoom before one of ours may start
+function ns.PlayerZoomedSince(t)
+	return (ns.lastPlayerZoomAt or -math.huge) > t
 end
 
 function ns.HookCameraInput()
@@ -2521,7 +2529,8 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 	if idleZoom.doneContext and idleZoom.doneContext ~= context then
 		idleZoom.done = false
 	end
-	if want and not idleZoom.active and not idleZoom.done then
+	-- (Not while your own zoom is still under way: it waits for it to finish.)
+	if want and not idleZoom.active and not idleZoom.done and not ns.PlayerZoomedSince(now - ns.PLAYER_ZOOM_WAIT) then
 		idleZoom.context = context -- picks the settings profile before starting
 		StartIdleZoom()
 		idleZoom.done, idleZoom.doneContext = true, context
