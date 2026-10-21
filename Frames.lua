@@ -1284,17 +1284,29 @@ end
 -- (BuffButtonN on Classic, the aura frames in each AuraContainer on retail).
 local BUFF_HOVER_DEPTH = 3
 
-local function IsNearIcon(depth, padX, padY, ...)
+local IsNearIcon
+
+local function IsIconNear(child, depth, padX, padY)
+	-- (Any of these can come back secret on Forever: ns.Flag reads that as false.)
+	if not IsForbidden(child) and ns.Flag(child:IsVisible()) then
+		if ns.Flag(child:IsMouseEnabled()) and ns.Flag(child:IsMouseOver(padY, -padY, -padX, padX)) then
+			return true
+		end
+		if depth > 1 and IsNearIcon(depth - 1, padX, padY, child:GetChildren()) then
+			return true
+		end
+	end
+	return false
+end
+
+function IsNearIcon(depth, padX, padY, ...)
 	for i = 1, select("#", ...) do
-		local child = select(i, ...)
-		-- (Any of these can come back secret on Forever: ns.Flag reads that as false.)
-		if not IsForbidden(child) and ns.Flag(child:IsVisible()) then
-			if ns.Flag(child:IsMouseEnabled()) and ns.Flag(child:IsMouseOver(padY, -padY, -padX, padX)) then
-				return true
-			end
-			if depth > 1 and IsNearIcon(depth - 1, padX, padY, child:GetChildren()) then
-				return true
-			end
+		-- Forever locks some aura icons after a fight without marking them
+		-- forbidden ("Attempt to access forbidden object" on IsVisible), so
+		-- an icon that errors just doesn't count.
+		local ok, near = pcall(IsIconNear, select(i, ...), depth, padX, padY)
+		if ok and near then
+			return true
 		end
 	end
 	return false
