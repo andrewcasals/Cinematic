@@ -228,10 +228,11 @@ ns.PROFILE_PARTS = {
 		grouped = { apply = function() end },
 		-- Action bars 1-3, the micro menu and bags, and the XP bar each coming
 		-- up on its own (retail's, on Forever); no micro menu, bags or XP bar
-		-- in fights.
+		-- in fights or with an enemy targeted.
 		split = { apply = function(set)
 			SplitBarGroups(set)
 			set("combatShow", { micro = false, bags = false, xp = false })
+			set("enemyShow", { micro = false, bags = false, xp = false })
 		end },
 		-- The Cooldown Manager in place of action bars 1 to 3, the micro menu
 		-- and bags and the XP bar in fights and with an enemy targeted; after
