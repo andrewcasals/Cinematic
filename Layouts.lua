@@ -45,27 +45,69 @@ local function IndexOf(info, name)
 	end
 end
 
--- Switches Edit Mode's layout, with the faded frames at full size for it
--- (Frames.lua: shrunk, they'd keep their old size and place).
-local function SetActive(index)
-	if ns.UnshrinkForLayout then ns.UnshrinkForLayout() end
-	C_EditMode.SetActiveLayout(index)
-end
-
--- The active layout's name (a preset's too).
-local function ActiveName(info)
-	local presets = Presets()
-	local index = info.activeLayout
+-- A layout's name by its SetActiveLayout number (a preset's too).
+local function NameAt(info, index)
 	if not index then return nil end
+	local presets = Presets()
 	if index <= #presets then return presets[index].layoutName end
 	local layout = info.layouts[index - #presets]
 	return layout and layout.layoutName
 end
 
+-- The active layout's name.
+local function ActiveName(info)
+	return NameAt(info, info.activeLayout)
+end
+
+-- The action bars one of ours lays out (def.bars: 2 = MultiBarBottomLeft, 3 =
+-- MultiBarBottomRight...), switched on when it's switched to: they're the
+-- game's Action Bars options, not part of a layout. The ones Cinematic
+-- switched on (chardb.layoutBarsOn) go back off on any other layout.
+local function SyncBars(name)
+	if not (GetActionBarToggles and SetActionBarToggles) or not ns.chardb then return end
+	local def = name and ns.EDIT_MODE_LAYOUTS[name]
+	local toggles = { GetActionBarToggles() }
+	local on = ns.chardb.layoutBarsOn or {}
+	local changed = false
+	if def and def.bars then
+		for _, bar in ipairs(def.bars) do
+			if toggles[bar - 1] == false then
+				toggles[bar - 1], on[bar] = true, true
+				changed = true
+			end
+		end
+	else
+		for bar in pairs(on) do
+			if toggles[bar - 1] then
+				toggles[bar - 1] = false
+				changed = true
+			end
+		end
+		on = {}
+	end
+	ns.chardb.layoutBarsOn = next(on) and on or nil
+	if not changed then return end
+	SetActionBarToggles(unpack(toggles))
+	if MultiActionBar_Update then MultiActionBar_Update() end
+	ns.Log("state", "edit mode layout action bars: " .. (def and "on" or "back off"))
+end
+
+-- Switches Edit Mode's layout, with the faded frames at full size for it
+-- (Frames.lua: shrunk, they'd keep their old size and place).
+local function SetActive(index)
+	if ns.UnshrinkForLayout then ns.UnshrinkForLayout() end
+	C_EditMode.SetActiveLayout(index)
+	SyncBars(NameAt(C_EditMode.GetLayouts(), index))
+end
+
 -- Without an export string: the Modern preset with the dev's changes to it
 -- (the layout as it was at 17:30 on 2026-10-20, read from the game's own
 -- Edit Mode save). Each: Enum.EditModeSystem, its index (nil: none), where
--- it's anchored, and the settings that differ from Modern (setting = value).
+-- it's anchored (none: where Modern has it), and the settings that differ
+-- from Modern (setting = value).
+local UNIT_FRAME = Enum.EditModeSystem and Enum.EditModeSystem.UnitFrame or 3
+local PARTY = Enum.EditModeUnitFrameSystemIndices and Enum.EditModeUnitFrameSystemIndices.Party or 4
+local RAID_STYLE_PARTY = Enum.EditModeUnitFrameSetting and Enum.EditModeUnitFrameSetting.UseRaidStylePartyFrames or 4
 local DESIGN = {
 	-- (Bar 3's two rows beside bars 1 and 2: its bottom row on bar 1's, and bar 2
 	-- level with its top row, so the gap between 1 and 2 is its own rows' gap.)
@@ -95,13 +137,16 @@ local DESIGN = {
 	{ 29, 1, "BOTTOMRIGHT", "SwingTimerOffHandFrame", "TOPRIGHT", 0, 4 },   -- swing timers
 	{ 29, 2, "BOTTOM", "UIParent", "BOTTOM", 0, 272 },
 	{ 29, 3, "TOPLEFT", "SwingTimerOffHandFrame", "BOTTOMLEFT", 0, -4 },
+	-- (No anchor: where Modern has it.)
+	{ UNIT_FRAME, PARTY, nil, nil, nil, nil, nil, { [RAID_STYLE_PARTY] = 1 } }, -- party frames: raid-style
 }
 
 -- Cinematic's own layouts, by the name Edit Mode lists them under. export:
 -- an Edit Mode export string (Share > Copy to Clipboard); without one, design:
--- changes to the Modern preset (as DESIGN).
+-- changes to the Modern preset (as DESIGN). bars: the action bars it lays
+-- out, switched on with it (SyncBars).
 ns.EDIT_MODE_LAYOUTS = {
-	[ns.LAYOUT_NAME] = { export = nil, design = DESIGN },
+	[ns.LAYOUT_NAME] = { export = nil, design = DESIGN, bars = { 2, 3 } },
 	-- Retail laid out like WoW Forever's default (the retail profile "Forever").
 	-- Not designed yet: a copy of Modern until its export string's in.
 	CINE_RETAIL_FOREVER_LAYOUT = { export = nil, design = {} },
@@ -111,9 +156,11 @@ local function ApplyDesign(layout, design)
 	for _, system in ipairs(layout.systems or {}) do
 		for _, saved in ipairs(design) do
 			if system.system == saved[1] and system.systemIndex == saved[2] then
-				system.isInDefaultPosition = false
-				system.anchorInfo = { point = saved[3], relativeTo = saved[4], relativePoint = saved[5],
-					offsetX = saved[6], offsetY = saved[7] }
+				if saved[3] then
+					system.isInDefaultPosition = false
+					system.anchorInfo = { point = saved[3], relativeTo = saved[4], relativePoint = saved[5],
+						offsetX = saved[6], offsetY = saved[7] }
+				end
 				for _, setting in ipairs(system.settings or {}) do
 					local value = saved[8] and saved[8][setting.setting]
 					if value then setting.value = value end
@@ -255,6 +302,8 @@ function ns.ApplyProfileLayout()
 	if info.activeLayout ~= index then
 		SetActive(index)
 		ns.Log("state", "edit mode layout: " .. name)
+	else
+		SyncBars(name) -- (on it already: its bars may still be off)
 	end
 end
 
@@ -291,6 +340,7 @@ function ns.ResetLayouts()
 	end
 	local index = active and IndexOf(C_EditMode.GetLayouts(), active)
 	if index and C_EditMode.GetLayouts().activeLayout ~= index then SetActive(index) end
+	SyncBars(active)
 	return true
 end
 
