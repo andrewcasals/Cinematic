@@ -901,8 +901,9 @@ local function KeepInteractPrompt(frame)
 	end
 end
 
--- The raid marker on a plate (skull, moon...) likewise, with keepRaidMarkers
--- (Nameplates page): the rest of the plate fades, and a marker of our own
+-- The raid marker on a plate (skull, moon...) likewise, as the Nameplates
+-- page's Raid Markers grid says for the unit's side: the rest of the plate
+-- fades, and a marker of our own
 -- fades in over the middle of the plate, above the unit's head. (The game's
 -- sits left of the health bar, which looks off with no bar there.) It goes by
 -- the game's marker's alpha, so the Plate Parts row still hides it. WoW
@@ -948,8 +949,13 @@ end
 
 local function KeepRaidMarker(frame, alpha)
 	local icon, marker
-	if alpha < 1 and ns.db and ns.db.keepRaidMarkers and ns.db.handlePlates then
-		icon, marker = GameMarkerIcon(frame)
+	if alpha < 1 and ns.db and ns.db.handlePlates then
+		-- (Unknown sides, secret on WoW Forever, go by the enemy row.)
+		local ok, friend = pcall(UnitIsFriend, "player", frame.unit)
+		friend = ok and not (issecretvalue and issecretvalue(friend)) and friend
+		if ns.PlateRowWanted(friend and "PartMarkerFriendly" or "PartMarkerEnemy") then
+			icon, marker = GameMarkerIcon(frame)
+		end
 	end
 	local ours = frame.cinematicMarker
 	if not icon then
@@ -1008,6 +1014,10 @@ local markerWatcher = CreateFrame("Frame")
 markerWatcher:RegisterEvent("RAID_TARGET_UPDATE")
 markerWatcher:SetScript("OnEvent", function()
 	C_Timer.After(0, RefreshKeptMarkers)
+	-- (Markers of your own, out of a group: see MarkersHiddenOverFriends.)
+	if not ns.InGroup() then
+		markerWatcher.solo = true
+	end
 end)
 
 -- A nameplate addon drawing plates of its own sets this (see Support/Plater.lua):
@@ -1776,7 +1786,7 @@ end
 -- Kept raid markers (see KeepRaidMarker) need their plates switched on: in a
 -- group, where markers are used, or while your target has one.
 local function MarkersKeptUp()
-	if not ns.db.keepRaidMarkers then
+	if not (UnitRowWanted("PartMarkerFriendly") or UnitRowWanted("PartMarkerEnemy")) then
 		return false
 	end
 	if ns.InGroup() then
@@ -1789,6 +1799,23 @@ local function MarkersKeptUp()
 	-- (Secret on WoW Forever: the target's plate's marker says.)
 	local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("target")
 	return plate ~= nil and plate.UnitFrame ~= nil and GameMarkerIcon(plate.UnitFrame) ~= nil
+end
+
+-- Friendly units' markers that fade with the plates (the Raid Markers grid's
+-- Friendly row, or the Plate Parts Raid Marker row, hiding them) need
+-- friendly players' plates switched on, kept invisible like the duel watch's: a friendly player with no plate has the
+-- game draw its marker over their head itself, and nothing hides that one
+-- (tested on WoW Forever; nor the one over your own head). Only where
+-- markers are seen: in a group, or once you've marked something yourself.
+-- (In dungeons and raids too: untested whether the game lets them fade there.)
+local function MarkersHiddenOverFriends()
+	if not platesActive then
+		return false
+	end
+	if UnitRowWanted("PartMarkerFriendly") and UnitRowWanted("PartRaidMarker") then
+		return false
+	end
+	return ns.InGroup() or markerWatcher.solo or false
 end
 
 -- The always-shown target's plate fades in (at the UI's fade-in time) rather
@@ -2207,8 +2234,9 @@ end
 -- friendly player in combat with a plate, against the others.
 function ns.PrintDuelsDebug()
 	local why = duels.NotWatchingWhy()
-	ns.Print(("duel plates: on=%s, watching=%s%s, friendly plates=%s/%s, click-through=%s"):format(
+	ns.Print(("duel plates: on=%s, watching=%s%s, for markers=%s, friendly plates=%s/%s, click-through=%s"):format(
 		tostring(duels.on), tostring(duels.watching), why and (" (" .. why .. ")") or "",
+		tostring(MarkersHiddenOverFriends()),
 		tostring(GetCVar("nameplateShowFriends")), tostring(GetCVar("nameplateShowFriendlyPlayers")),
 		tostring(C_NamePlate and C_NamePlate.GetNamePlateFriendlyClickThrough
 			and C_NamePlate.GetNamePlateFriendlyClickThrough())))
@@ -2467,7 +2495,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 	platesReleased = false
 	platesActive = cinematic and true or false
 	placeSuffix = ns.PlateSuffix()
-	duels.Sync(duels.NotWatchingWhy() == nil)
+	duels.Sync(duels.NotWatchingWhy() == nil or MarkersHiddenOverFriends())
 	UpdateLockedPlates()
 	-- Plates show for every fight (bar kinds cinematic mode hides in fights)
 	-- and hide again afterwards. Just after a fight, kinds ticked for fights

@@ -4313,7 +4313,8 @@ local function CreatePortraitsPanel()
 		"its grid: the focus and target of target go as the target's grid says until you untick Same " ..
 		"as target. Untick parts to keep just the bars. The frame art is the portrait ring, the name " ..
 		"box and the bars' borders: the game draws them as one picture. Icons are the rest Zzz, the " ..
-		"group leader's crown, role and quest icons. Auras are the buffs and debuffs on the target and " ..
+		"group leader's crown, role and quest icons, and the raid marker (skull, moon...) on the target " ..
+		"and focus frames. Auras are the buffs and debuffs on the target and " ..
 		"focus frames. Hit text is the damage and healing numbers on your and your pet's portraits. " ..
 		"Threat is the threat percentage and aggro glow on the target and focus frames, for NPCs you " ..
 		"can fight."] .. " " .. L["Cast bar is the bar under the target and focus frames as they cast."] ..
@@ -5029,12 +5030,6 @@ local function CreatePlatesPanel()
 		end)
 	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
 	RegisterPageSwitch(content, "handlePlates", handleCheck)
-	-- The marker on its own, over the unit, once the rest of its plate has gone.
-	local markerCheck = Check(content, "keepRaidMarkers", L["Keep raid markers up as nameplates fade"],
-		L["Raid markers (skull, moon...) stay over their units in CineMode while the rest of the " ..
-		"nameplate fades, so your group can still see what's marked. The Raid Marker row of Plate " ..
-		"Parts, below, still hides them. Unticked, they fade with the plates."])
-	markerCheck:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -2)
 
 	-- Nameplates and names each get a table: a row per kind of unit, a column
 	-- per situation. A narrower table can set its first column apart (gap).
@@ -5229,7 +5224,7 @@ local function CreatePlatesPanel()
 		-- (And while a rule decides the row: Rules section, Advanced Frames page.)
 		local ruleKey = "plate:" .. kind[1]
 		RuleTarget(ruleKey, kind[2], "Nameplates",
-			part and "Plate parts" or kind[1]:find("Target$") and "Your target" or "Plates")
+			kind.rulePath or part and "Plate parts" or kind[1]:find("Target$") and "Your target" or "Plates")
 		for c, check in ipairs(checks) do
 			if not emptyColumns[c] then
 				GreyUnless(check, function(db)
@@ -5337,6 +5332,42 @@ local function CreatePlatesPanel()
 	end
 	local lastPartRow = lastLabel
 
+	-- Raid markers (skull, moon...) kept up over their units as the rest of
+	-- their plates fade (see KeepRaidMarker), friendly and enemy apart, at the
+	-- bottom of the page (laid out there below, columns as the Names grid's).
+	-- Yours can't be hidden: a row of crossed-out boxes says so.
+	local markersHeader = Header(content, L["Raid Markers"], handleCheck, -14)
+	local markersTop = TableTop(markersHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local selfTip = L["The game draws the raid marker over your own head itself, not on a nameplate, " ..
+		"and doesn't let addons hide it."]
+	local selfCells = {}
+	for c = 1, #headings do
+		local cell = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+		cell:SetSize(26, 26)
+		cell:Disable()
+		if cell.SetMotionScriptsWhileDisabled then
+			cell:SetMotionScriptsWhileDisabled(true) -- (the tip still shows)
+		end
+		local cross = cell:CreateTexture(nil, "OVERLAY")
+		cross:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
+		cross:SetDesaturated(true)
+		cross:SetSize(16, 16)
+		cross:SetPoint("CENTER")
+		Tooltip(cell, selfTip)
+		selfCells[c] = cell
+	end
+	local selfLabel = PlaceRow(markersTop, 1, L["You"], nil, unpack(selfCells))
+	SetLabelFont(selfLabel, "GameFontDisable")
+	local markerTip = L[" Ticked, their raid markers (skull, moon...) stay over them in CineMode as the rest " ..
+		"of their nameplates fades, so your group can still see what's marked. Unticked, they fade with the " ..
+		"plates. The Raid Marker row of Plate Parts hides them on the plates that are up."]
+	UNIT_ROW_TIPS.PartMarkerFriendly = L[" Friendly units."] .. markerTip .. L[" Unticked, friendly players " ..
+		"get invisible nameplates you click through, or the game would draw their markers over their heads " ..
+		"itself."]
+	UNIT_ROW_TIPS.PartMarkerEnemy = L[" Enemy and neutral units."] .. markerTip
+	AddPlateRow(markersTop, 2, { "PartMarkerFriendly", L["Friendly"], rulePath = "Raid markers" })
+	AddPlateRow(markersTop, 3, { "PartMarkerEnemy", L["Enemy"], rulePath = "Raid markers" })
+
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
 	local namesHeader = Header(content, L["Names"], lastLabel, -24)
@@ -5381,13 +5412,14 @@ local function CreatePlatesPanel()
 				return ns.HasNameSettings(group) and (c == 1 or not db[alwaysKey])
 			end)
 		end
-		PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
+		lastLabel = PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
 	end
+	local lastNameRow = lastLabel
 
 	-- Laid out top to bottom: the master switch, then the grids (friendly
 	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
-	-- your target's, their parts, then names).
-	showHeader:SetPoint("TOPLEFT", markerCheck, "BOTTOMLEFT", 2, -14)
+	-- your target's, their parts, names, then raid markers).
+	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
 	-- (Lined up with the nameplate grid, so the grids' columns match.)
 	local function Below(header, row)
 		header:SetPoint("TOPLEFT", row, "BOTTOMLEFT", -(row.indentX or 0), -24)
@@ -5397,6 +5429,8 @@ local function CreatePlatesPanel()
 	Below(targetHeader, lastEnemyRow)
 	Below(partsHeader, lastTargetRow)
 	Below(namesHeader, lastPartRow)
+	-- (Last: the Names header sat below the markers grid until just now.)
+	Below(markersHeader, lastNameRow)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()

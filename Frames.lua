@@ -5325,8 +5325,10 @@ do
 			"TargetFrameContent.TargetFrameContentContextual.PvpBackgroundIcon",
 			"TargetFrameContent.TargetFrameContentContextual.PrestigePortrait",
 			"TargetFrameContent.TargetFrameContentContextual.PrestigeBadge" },
-		-- (The group leader's crown, and the quest and pet battle icons.)
+		-- (The group leader's crown, the quest and pet battle icons, and the
+		-- raid target marker: skull, moon...)
 		Icons = { "TargetFrameContent.TargetFrameContentContextual.LeaderIcon",
+			"TargetFrameContent.TargetFrameContentContextual.RaidTargetIcon",
 			"TargetFrameContent.TargetFrameContentContextual.GuideIcon",
 			"TargetFrameContent.TargetFrameContentContextual.QuestIcon",
 			"TargetFrameContent.TargetFrameContentContextual.PetBattleIcon" },

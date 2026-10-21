@@ -389,7 +389,6 @@ DEFAULTS.gamepadPressHold = 3       -- ...for this long after the last press (co
 DEFAULTS.gamepadBarsFadeIn = 0.2    -- gamepad mode's action bars fade quicker than the rest of the UI
 DEFAULTS.gamepadBarsFadeOut = 0.5
 DEFAULTS.showInteractPrompt = true -- the interact prompt on a plate (gamepad's X) stays as plates fade
-DEFAULTS.keepRaidMarkers = true -- raid markers (skull, moon...) stay over units as their plates fade (Nameplates page)
 DEFAULTS.forceReloadOnSettingsExit = true -- WoW Forever: closing Settings reloads (gets past its gamepad freeze)
 DEFAULTS.hideMinimapButtonGamepad = true -- no minimap button in gamepad mode (clicking it there tends to freeze)
 for _, key in ipairs({ "Mode", "Right", "Step", "Speed", "MinChange", "PitchUp", "PitchDown", "BackArc",
@@ -726,12 +725,19 @@ DEFAULTS.plateAlwaysGroupMinions = true
 -- everywhere to start with, as the game has them.
 ns.PLATE_PARTS = { "Health", "Name", "CastBar", "Buffs", "Debuffs", "RaidMarker", "Classification", "Level",
 	"Threat", "Highlight", "Widgets" }
-for _, part in ipairs(ns.PLATE_PARTS) do
-	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
-		DEFAULTS[prefix .. "Part" .. part] = prefix == "plateAlways"
-	end
-	for _, suffix in ipairs(ns.PLATE_PLACES) do
-		DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
+-- The Raid Markers grid's rows (see KeepRaidMarker in Effects), the same
+-- columns: friendly and enemy units' raid markers (skull, moon...) kept up
+-- as their plates fade (keys plate<column>PartMarker<side>). Kept everywhere
+-- to start with.
+ns.PLATE_MARKER_PARTS = { "MarkerFriendly", "MarkerEnemy" }
+for _, list in ipairs({ ns.PLATE_PARTS, ns.PLATE_MARKER_PARTS }) do
+	for _, part in ipairs(list) do
+		for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
+			DEFAULTS[prefix .. "Part" .. part] = prefix == "plateAlways"
+		end
+		for _, suffix in ipairs(ns.PLATE_PLACES) do
+			DEFAULTS["plateIn" .. suffix .. "Part" .. part] = false
+		end
 	end
 end
 -- The Unit Frames page's Unit frame parts grids (see Frames), a column per
@@ -3502,9 +3508,26 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			if (ns.db.liveProfile or ns.db.profile) == "Immersive (CDM)" then BarsOff(ns.db) end
 			ns.db.cdmBarsV1 = true
 		end
+		-- "Keep raid markers up as nameplates fade" (keepRaidMarkers) is now the
+		-- Raid Markers grid: unticked, neither side's markers are kept.
+		local function MarkersOff(t)
+			if type(t) == "table" and t.keepRaidMarkers == false then
+				for _, part in ipairs(ns.PLATE_MARKER_PARTS) do
+					t["plateAlwaysPart" .. part] = false
+				end
+			end
+		end
+		MarkersOff(ns.db)
+		for _, profile in pairs(ns.db.profiles or {}) do
+			MarkersOff(profile)
+			if type(profile) == "table" then
+				profile.keepRaidMarkers = nil
+			end
+		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
 		for _, key in ipairs({
+			"keepRaidMarkers", -- (now the Raid Markers grid)
 			"cozyInstant", "cozyBuffsOn", "cozySit", "cozySleep", "cozyDance", "cozyKneel", "cozyChair",
 			"cozyWeapon", "vistaInstant", "vistaStare", "eventsV2", "eventDelay",
 			"taxiShotHold", "taxiShotBlendTime",
