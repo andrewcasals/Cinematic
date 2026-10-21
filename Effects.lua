@@ -898,6 +898,115 @@ local function KeepInteractPrompt(frame)
 	end
 end
 
+-- The raid marker on a plate (skull, moon...) likewise, with keepRaidMarkers
+-- (Nameplates page): the rest of the plate fades, and a marker of our own
+-- fades in over the middle of the plate, above the unit's head. (The game's
+-- sits left of the health bar, which looks off with no bar there.) It goes by
+-- the game's marker's alpha, so the Plate Parts row still hides it. WoW
+-- Forever won't say which marker a unit has (GetRaidTargetIndex is secret),
+-- so ours copies the game's icon: its texture and its part of the sheet.
+local function GameMarkerIcon(frame)
+	local marker = frame.RaidTargetFrame
+	if not (type(marker) == "table" and marker.GetRegions) or (marker.IsForbidden and marker:IsForbidden())
+		or not ns.Flag(marker:IsShown()) then
+		return nil
+	end
+	local icon = marker.RaidTargetIcon or marker.icon or marker.Icon or marker:GetRegions()
+	if not (type(icon) == "table" and icon.GetTexCoord) or not ns.Flag(icon:IsShown()) then
+		return nil
+	end
+	return icon, marker
+end
+
+-- Where ours sits from the middle of the health bar, and its size: lined up
+-- with the marker the game draws over units beyond nameplate range, so going
+-- in and out of range doesn't move it. (/cine debug marker tries others.)
+local markerSpot = { x = 0, y = -15, size = 28 } -- (tested on WoW Forever)
+
+local function PlaceKeptMarker(ours)
+	ours:ClearAllPoints()
+	ours:SetPoint("CENTER", ours.bar, "CENTER", markerSpot.x, markerSpot.y)
+	ours:SetSize(markerSpot.size, markerSpot.size)
+end
+
+local function KeptMarker(frame)
+	local ours = frame.cinematicMarker
+	if not ours then
+		ours = CreateFrame("Frame", nil, frame)
+		ours.bar = frame.HealthBarsContainer or frame.healthBar or frame
+		PlaceKeptMarker(ours)
+		ours:SetIgnoreParentAlpha(true)
+		ours.texture = ours:CreateTexture(nil, "OVERLAY")
+		ours.texture:SetAllPoints()
+		frame.cinematicMarker = ours
+	end
+	return ours
+end
+
+local function KeepRaidMarker(frame, alpha)
+	local icon, marker
+	if alpha < 1 and ns.db and ns.db.keepRaidMarkers and ns.db.handlePlates then
+		icon, marker = GameMarkerIcon(frame)
+	end
+	local ours = frame.cinematicMarker
+	if not icon then
+		if ours then
+			ours:Hide()
+		end
+		return
+	end
+	ours = KeptMarker(frame)
+	-- (Secret values can be handed on as they are.)
+	local ok = pcall(function()
+		ours.texture:SetTexture(icon:GetTexture())
+		ours.texture:SetTexCoord(icon:GetTexCoord())
+	end)
+	if not ok then
+		ours:Hide()
+		return
+	end
+	local partAlpha = marker:GetAlpha()
+	if issecretvalue and issecretvalue(partAlpha) then
+		partAlpha = 1
+	end
+	ours:SetAlpha((1 - alpha) * partAlpha)
+	ours:Show()
+end
+
+-- Markers put on or taken off while plates are faded (a moment later: the
+-- game's markers change on the same event).
+local function RefreshKeptMarkers()
+	if not (C_NamePlate and C_NamePlate.GetNamePlates) then
+		return
+	end
+	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+		local frame = plate.UnitFrame
+		if frame and not (plate.IsForbidden and plate:IsForbidden()) then
+			KeepRaidMarker(frame, frame.cinematicAlpha or 1)
+		end
+	end
+end
+-- For /cine debug marker: moves (and sizes) the kept markers, to line them up.
+function ns.KeptMarkerSpot(x, y, size)
+	if x then
+		markerSpot.x, markerSpot.y, markerSpot.size = x, y or markerSpot.y, size or markerSpot.size
+		if C_NamePlate and C_NamePlate.GetNamePlates then
+			for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+				local ours = plate.UnitFrame and plate.UnitFrame.cinematicMarker
+				if ours then
+					PlaceKeptMarker(ours)
+				end
+			end
+		end
+	end
+	return markerSpot.x, markerSpot.y, markerSpot.size
+end
+local markerWatcher = CreateFrame("Frame")
+markerWatcher:RegisterEvent("RAID_TARGET_UPDATE")
+markerWatcher:SetScript("OnEvent", function()
+	C_Timer.After(0, RefreshKeptMarkers)
+end)
+
 -- A nameplate addon drawing plates of its own sets this (see Support/Plater.lua):
 -- fn(plate, alpha), alpha nil to let go of the plate.
 ns.addonPlateAlpha = nil
@@ -915,6 +1024,7 @@ function ns.SetPlateAlpha(plate, alpha)
 			plateKeeper:Show()
 		end
 		frame:SetAlpha(alpha)
+		KeepRaidMarker(frame, alpha)
 	end
 end
 
@@ -1660,6 +1770,24 @@ local function TargetKeptUp()
 	return ns.HasTarget() and AlwaysShownTarget("target") -- (not one dropped at takeoff)
 end
 
+-- Kept raid markers (see KeepRaidMarker) need their plates switched on: in a
+-- group, where markers are used, or while your target has one.
+local function MarkersKeptUp()
+	if not ns.db.keepRaidMarkers then
+		return false
+	end
+	if ns.InGroup() then
+		return true
+	end
+	local ok, index = pcall(GetRaidTargetIndex, "target")
+	if ok and Known(index) then
+		return index ~= nil
+	end
+	-- (Secret on WoW Forever: the target's plate's marker says.)
+	local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("target")
+	return plate ~= nil and plate.UnitFrame ~= nil and GameMarkerIcon(plate.UnitFrame) ~= nil
+end
+
 -- The always-shown target's plate fades in (at the UI's fade-in time) rather
 -- than popping up, and
 -- once it's no longer your target fades back down to where the other plates
@@ -1868,6 +1996,9 @@ end
 local function LetGoOfPlate(plate)
 	if plate.UnitFrame then
 		plate.UnitFrame.cinematicAlpha = nil
+		if plate.UnitFrame.cinematicMarker then
+			plate.UnitFrame.cinematicMarker:Hide() -- (its last unit's)
+		end
 	end
 	if ns.addonPlateAlpha and not (plate.IsForbidden and plate:IsForbidden()) then
 		ns.addonPlateAlpha(plate, nil)
@@ -1947,11 +2078,31 @@ function ns.PrintPlatesDebug()
 	local function describe(unit)
 		local name = UnitName(unit)
 		local isPlayer, faction = UnitIsPlayer(unit), UnitFactionGroup(unit)
-		return ("%s: kind=%s, alpha=%.2f, can attack=%s, player=%s, faction=%s"):format(
-			Known(name) and tostring(name) or "?", tostring(PlateKind(unit)),
-			PlateAlpha(unit, C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(unit)),
+		local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(unit)
+		-- (A raid marker: its index, and our kept one over the faded plate.)
+		-- (And the game's: shown or not, and its textures, for a client that names it otherwise.)
+		local okMark, mark = pcall(GetRaidTargetIndex, unit)
+		mark = not okMark and "error" or (Known(mark) and tostring(mark) or "secret")
+		local ours = plate and plate.UnitFrame and plate.UnitFrame.cinematicMarker
+		local game = plate and plate.UnitFrame and plate.UnitFrame.RaidTargetFrame
+		local gameText = "none"
+		if type(game) == "table" and game.GetRegions then
+			local ok, text = pcall(function()
+				local list = {}
+				for _, region in ipairs({ game:GetRegions() }) do
+					list[#list + 1] = tostring(region:GetTexture()) .. (ns.Flag(region:IsShown()) and "" or "(hidden)")
+				end
+				return (ns.Flag(game:IsShown()) and "shown" or "hidden") .. ("@%.2f "):format(game:GetAlpha())
+					.. table.concat(list, "+")
+			end)
+			gameText = ok and text or "?"
+		end
+		local marker = (" marker=%s game=%s kept=%s"):format(mark, gameText,
+			ours and (ours:IsShown() and ("%.2f"):format(ours:GetAlpha()) or "hidden") or "none")
+		return ("%s: kind=%s, alpha=%.2f, can attack=%s, player=%s, faction=%s%s"):format(
+			Known(name) and tostring(name) or "?", tostring(PlateKind(unit)), PlateAlpha(unit, plate),
 			tostring(UnitCanAttack("player", unit)),
-			Known(isPlayer) and tostring(isPlayer) or "secret", Known(faction) and tostring(faction) or "secret")
+			Known(isPlayer) and tostring(isPlayer) or "secret", Known(faction) and tostring(faction) or "secret", marker)
 	end
 	local plates = C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}
 	-- Plates the game has locked away from addons aren't in the usual list.
@@ -2318,7 +2469,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 	local lingering = FightLingering()
 	local holding = platesActive and lingering and AnyFightKinds()
 	local hide = platesActive and not inCombat and not holding
-	local keep = AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil
+	local keep = AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil or MarkersKeptUp()
 	if not hide or keep then
 		ns.ShowPlatesNow()
 	end

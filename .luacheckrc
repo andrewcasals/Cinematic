@@ -81,6 +81,7 @@ read_globals = {
 	"GetBindingText",
 	"GetBuildInfo",
 	"GetCVar",
+	"GetRaidTargetIndex",
 	"GetCVarDefault",
 	"ConsoleGetAllCommands",
 	"GetCVarBool",

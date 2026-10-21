@@ -4970,6 +4970,12 @@ local function CreatePlatesPanel()
 		end)
 	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
 	RegisterPageSwitch(content, "handlePlates", handleCheck)
+	-- The marker on its own, over the unit, once the rest of its plate has gone.
+	local markerCheck = Check(content, "keepRaidMarkers", L["Keep raid markers up as nameplates fade"],
+		L["Raid markers (skull, moon...) stay over their units in CineMode while the rest of the " ..
+		"nameplate fades, so your group can still see what's marked. The Raid Marker row of Plate " ..
+		"Parts, below, still hides them. Unticked, they fade with the plates."])
+	markerCheck:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -2)
 
 	-- Nameplates and names each get a table: a row per kind of unit, a column
 	-- per situation. A narrower table can set its first column apart (gap).
@@ -5322,7 +5328,7 @@ local function CreatePlatesPanel()
 	-- Laid out top to bottom: the master switch, then the grids (friendly
 	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
 	-- your target's, their parts, then names).
-	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
+	showHeader:SetPoint("TOPLEFT", markerCheck, "BOTTOMLEFT", 2, -14)
 	-- (Lined up with the nameplate grid, so the grids' columns match.)
 	local function Below(header, row)
 		header:SetPoint("TOPLEFT", row, "BOTTOMLEFT", -(row.indentX or 0), -24)

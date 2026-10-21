@@ -2972,6 +2972,23 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.minimapHeaderPartsHoverV1 = true
 		end
+		-- And the day and night dial, later still.
+		if not ns.db.minimapDialHoverV1 then
+			local function AddDialRow(groups)
+				for _, group in ipairs(groups or {}) do
+					local has = {}
+					for _, key in ipairs(group.members or {}) do has[key] = true end
+					if has.minimap and not has.minimapdial then
+						table.insert(group.members, "minimapdial")
+					end
+				end
+			end
+			AddDialRow(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then AddDialRow(saved.hoverGroups) end
+			end
+			ns.db.minimapDialHoverV1 = true
+		end
 		-- The vignette and weather went with the tint's row of the Visual
 		-- Effects grid: rows of their own now, starting as the tint's was. Once.
 		if not ns.db.effectGridV2 then

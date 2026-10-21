@@ -90,6 +90,9 @@ local FRAME_GROUPS = {
 	minimaptracking = {},
 	minimapcalendar = { "GameTimeFrame" },
 	minimapclock = { "TimeManagerClockButton" },
+	-- WoW Forever's day and night dial by the minimap (MinimapCluster.DielFrame:
+	-- found by FindMinimapHeader).
+	minimapdial = {},
 	chat = {
 		"GeneralDockManager", "ChatFrameMenuButton", "ChatFrameChannelButton",
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
@@ -480,7 +483,8 @@ end
 -- top. The Advanced Frames page's covers other addons' and added frames.
 local GROUP_SWITCH = {
 	minimap = "handleMinimap", minimapheader = "handleMinimap", minimaptracking = "handleMinimap",
-	minimapcalendar = "handleMinimap", minimapzone = "handleMinimap", minimapclock = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
+	minimapcalendar = "handleMinimap", minimapzone = "handleMinimap", minimapclock = "handleMinimap",
+	minimapdial = "handleMinimap", quests = "handleQuests", questtimer = "handleQuests", waypoint = "handleQuests",
 	buffs = "handleBuffs", cooldowns = "handleCooldowns", chat = "handleChat", swing = "handleSwing",
 	gamepadbars = "handleGamepad", gamepadlegend = "handleGamepad", gamepadreticle = "handleGamepad",
 }
@@ -1019,6 +1023,7 @@ do
 		end
 		-- The zone's name: its button, whose bar art ignores its fade (above).
 		AddFrame((cluster and cluster.ZoneTextButton) or _G.MinimapZoneTextButton, "minimapzone")
+		AddFrame(cluster and cluster.DielFrame, "minimapdial")
 		local calendar = _G.GameTimeFrame
 		if type(calendar) == "table" and calendar.GetRegions and not IsForbidden(calendar) then
 			for _, region in ipairs({ calendar:GetRegions() }) do
@@ -1468,6 +1473,10 @@ ns.COMBAT_SHOW = {
 		handledBy = "handleMinimap",
 		tip = L["The clock on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
 			"Hovering the minimap brings it up with the map."] },
+	{ key = "minimapdial", label = L["Day/night dial"], default = true, groups = { "minimapdial" },
+		handledBy = "handleMinimap", retail = false,
+		tip = L["The day and night dial by the minimap. Untick it to hide it in CineMode even while the minimap is up. " ..
+			"Hovering the minimap brings it up with the map."] },
 	-- (groups too: an addon's unnamed tracker parts, found by its scanner.)
 	{ key = "quests", label = L["Quest tracker"], default = false, frames = FRAME_GROUPS.quests, groups = { "quests" },
 		morePage = "Quest tracker", handledBy = "handleQuests" },
@@ -1554,8 +1563,8 @@ local ROW_SECTIONS = {
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
-	minimap = "interface", minimapheader = "interface", minimaptracking = "interface", minimapcalendar = "interface",
-	minimapzone = "interface", minimapclock = "interface",
+	minimap = "minimap", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
+	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap",
 	quests = "interface", waypoint = "interface", micro = "interface", bags = "interface", xp = "interface",
 }
 for _, item in ipairs(ns.COMBAT_SHOW) do
@@ -1666,7 +1675,8 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "raidmanager", icon = "Interface\\Icons\\Ability_Warrior_RallyingCry", name = L["Raid Frame Manager"],
 		members = { "raidmanager", "raidplayers", "raidpets", "party" }, triggers = { roster = true }, when = "calm" },
 	{ preset = "minimap", icon = "Interface\\Icons\\INV_Misc_Map_01", name = L["Minimap"],
-		members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock" },
+		members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock",
+			"minimapdial" },
 		triggers = { ping = true, tracking = true } },
 	{ preset = "buffs", icon = "Interface\\Icons\\Spell_Holy_WordFortitude", name = L["Buffs"],
 		members = { "buffs" }, triggers = { aura = true } },
@@ -1877,7 +1887,7 @@ end
 -- from before it was a row (the Cooldown Manager profile's: no action bars) still hold.
 local ROW_FALLBACK = {
 	art = "mainbar", petframe = "player", prdpower = "prd", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
-	minimapzone = "minimap", minimapclock = "minimap", bags = "micro",
+	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap", bags = "micro",
 }
 
 function ns.IsCombatShowOn(key)
