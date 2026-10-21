@@ -42,6 +42,7 @@ local DEFAULT_PROFILE -- (this client's first built-in: set after the list)
 -- when it isn't the saved name (two clients' profiles can't share a name in
 -- this list). oldNames: what it was called before: settings and picks saved
 -- under those move to it at login. dev: only in the dev build (one being made).
+-- hidden: in no list, the dev build's too (only the Profile Builder shows it).
 -- preview: the mouseover group (its preset) shown for a moment when it's
 -- picked on the Profiles page, the rest faded (ns.PreviewProfile).
 ns.BUILTIN_PROFILES = {
@@ -107,11 +108,11 @@ ns.BUILTIN_PROFILES = {
 		preview = "cooldowns",
 	},
 	{
-		-- (dev only until its layout's designed: Layouts.lua)
+		-- (hidden until its layout's designed: Layouts.lua)
 		name = "Retail Forever",
 		label = "Forever",
 		client = "retail",
-		dev = true,
+		hidden = true,
 		icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
 		tip = "Default, looking like WoW Forever: its layout (CINE_RETAIL_FOREVER_LAYOUT, not designed yet: " ..
 			"a copy of Modern), with the action bars, micro menu, bags and XP bar coming up together.",
@@ -170,7 +171,8 @@ do
 	local order, list = {}, {}
 	for i, name in ipairs(BUILTIN_ORDER[ns.CLIENT] or {}) do order[name] = i end
 	for i, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do
-		if (not profile.client or profile.client == ns.CLIENT) and (not profile.dev or ns.isDev) then
+		if (not profile.client or profile.client == ns.CLIENT) and (not profile.dev or ns.isDev)
+			and not profile.hidden then
 			list[#list + 1] = { profile = profile, rank = order[profile.name] or 1000 + i }
 		end
 	end
@@ -180,8 +182,9 @@ do
 end
 DEFAULT_PROFILE = ns.BUILTIN_PROFILES[1].name
 ns.OnLanguage(function() ns.TranslateFields(ns.ALL_BUILTIN_PROFILES, "tip") end)
-local builtinByName = {}
+local builtinByName, allBuiltinNames = {}, {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
+for _, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do allBuiltinNames[profile.name] = true end
 
 -- Just switched to a profile (Profiles page, welcome window): a built-in
 -- with a preview shows its mouseover group of that preset for a few
@@ -419,7 +422,9 @@ function ns.ProfileNames()
 	local names, own = {}, {}
 	for _, profile in ipairs(ns.BUILTIN_PROFILES) do names[#names + 1] = profile.name end
 	for name in pairs(ns.db.profiles) do
-		if not builtinByName[name] then own[#own + 1] = name end
+		-- (Not one of the other built-ins: another client's, or hidden. Their
+		-- settings stay saved for when they're listed again.)
+		if not builtinByName[name] and not allBuiltinNames[name] then own[#own + 1] = name end
 	end
 	table.sort(own, function(a, b) return a:lower() < b:lower() end)
 	for _, name in ipairs(own) do names[#names + 1] = name end

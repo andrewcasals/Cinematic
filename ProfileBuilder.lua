@@ -216,6 +216,7 @@ function ns.CreateProfileBuilder(kit)
 		local tags = {}
 		if profile.client then tags[#tags + 1] = profile.client == "forever" and "F" or "R" end
 		if profile.dev then tags[#tags + 1] = "dev" end
+		if profile.hidden then tags[#tags + 1] = "hidden" end
 		local shown = (profile.label or profile.name) .. (#tags > 0 and " |cff808080(" .. table.concat(tags, ",")
 			.. ")|r" or "")
 		local name = kit.Label(row, "GameFontHighlightSmall", shown)

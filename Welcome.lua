@@ -30,7 +30,7 @@ local function Update()
 		end
 	end
 	if chosen then
-		status:SetText(L["Trying %s. Pick another to compare."]:format("|cffffd100" .. active .. "|r"))
+		status:SetText(L["Trying %s. Pick another to compare."]:format("|cffffd100" .. ns.ProfileLabel(active) .. "|r"))
 		later:SetText(L["Done"])
 	else
 		status:SetText(L["Nothing runs until you pick one."])
