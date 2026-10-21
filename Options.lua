@@ -6488,8 +6488,6 @@ local function CreateVisionPanel()
 		end
 		Option("healVisionTarget", L["Always show your target"],
 			L["The member you've targeted always shows, at full health too."])
-		Option("healVisionTanks", L["Always show tanks"],
-			L["Your group's tanks (by role, or main tanks in a raid) always show, at full health too."])
 		-- (Any debuff takes in the ones you can dispel: that box greys while it's ticked.)
 		Option("healVisionDispel", L["Show members with a debuff you can dispel"],
 			L["A member with a debuff you can dispel shows, at full health too."],
@@ -6497,30 +6495,54 @@ local function CreateVisionPanel()
 		Option("healVisionAnyDebuff", L["Show members with any debuff"],
 			L["A member with any debuff at all shows, at full health too."])
 
-		-- How faded the members it hides are (0: gone), and the health they
-		-- show below (100%: any damage). Neither slider goes past the other.
-		local healMin, healBelow
-		healMin = Slider(content, "healVisionMinAlpha", L["Hidden members' opacity"], 0, 90, 1, "%d%%", 100,
-			function(value)
-				local below = math.floor((ns.GetDB().healVisionShowBelow or 0.95) * 100 + 0.5)
-				if value > below then healMin:SetValue(below) return end
+		-- Tanks, healers and damage, then pets: each kind's health they show
+		-- below (100%: any damage; tanks: always), and how faded they are while
+		-- hidden (0: gone). Neither slider goes past the other.
+		local ROLE_ICON = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:16:16:0:0:64:64:%s|t"
+		local PET_ICON = "|TInterface\\Icons\\Ability_Hunter_BeastCall:16:16:0:0:64:64:5:59:5:59|t"
+		local function Percent(value, default)
+			return math.floor((value or default) * 100 + 0.5)
+		end
+		local function Kind(icon, heading, belowKey, belowTip, alphaKey, alphaTip)
+			local header = Label(content, "GameFontNormal", icon .. " " .. heading)
+			header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous.isKindSlider and -4 or 2, -22)
+			local below, alpha
+			below = Slider(content, belowKey, L["Show below health"], 0, 100, 1, "%d%%", 100, function(value)
+				local floor = Percent(ns.GetDB()[alphaKey], 0.05)
+				if value < floor then below:SetValue(floor) return end
 				Apply()
 			end)
-		healMin:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 4, -26)
-		Tooltip(healMin, L["How much of the members Heal Vision hides still shows, and of the group titles. " ..
+			below:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 4, -26)
+			Tooltip(below, belowTip)
+			GreyUnless(below, IfAny)
+			alpha = Slider(content, alphaKey, L["Opacity while hidden"], 0, 90, 1, "%d%%", 100, function(value)
+				local ceiling = Percent(ns.GetDB()[belowKey], 0.95)
+				if value > ceiling then alpha:SetValue(ceiling) return end
+				Apply()
+			end)
+			alpha:SetPoint("LEFT", below, "RIGHT", 40, 0)
+			Tooltip(alpha, alphaTip)
+			GreyUnless(alpha, IfAny)
+			below.isKindSlider = true
+			previous = below
+		end
+		Kind(ROLE_ICON:format("0:19:22:41"), L["Tanks"], "healVisionTankBelow",
+			L["A tank (by role, or main tank in a raid) shows once their health drops below this. " ..
+			"100% shows tanks always, at full health too."],
+			"healVisionTankAlpha", L["How much of a hidden tank still shows. 0% hides them completely."])
+		Kind(ROLE_ICON:format("20:39:1:20"), L["Healers"], "healVisionHealerBelow",
+			L["A healer shows once their health drops below this. 100% shows them at any damage; lower " ..
+			"keeps them hidden through small hits."],
+			"healVisionHealerAlpha", L["How much of a hidden healer still shows. 0% hides them completely."])
+		-- (Anyone without a tank's or healer's role goes by these, and the group titles' opacity.)
+		Kind(ROLE_ICON:format("20:39:22:41"), L["Damage"], "healVisionShowBelow",
+			L["A damage dealer (or anyone without a role) shows once their health drops below this. 100% " ..
+			"shows them at any damage; lower keeps them hidden through small hits."],
+			"healVisionMinAlpha", L["How much of a hidden damage dealer still shows, and of the group titles. " ..
 			"0% hides them completely."])
-		GreyUnless(healMin, IfAny)
-
-		healBelow = Slider(content, "healVisionShowBelow", L["Show members below health"], 0, 100, 1, "%d%%",
-			100, function(value)
-				local floor = math.floor((ns.GetDB().healVisionMinAlpha or 0) * 100 + 0.5)
-				if value < floor then healBelow:SetValue(floor) return end
-				Apply()
-			end)
-		healBelow:SetPoint("TOPLEFT", healMin, "BOTTOMLEFT", 0, -30)
-		Tooltip(healBelow, L["A member shows once their health drops below this. 100% shows them at any damage; " ..
-			"lower keeps them hidden through small hits."])
-		GreyUnless(healBelow, IfAny)
+		Kind(PET_ICON, L["Pets"], "healVisionPetBelow",
+			L["A pet shows once its health drops below this. 100% shows it at any damage."],
+			"healVisionPetAlpha", L["How much of a hidden pet still shows. 0% hides them completely."])
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

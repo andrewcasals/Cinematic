@@ -32,8 +32,7 @@ local managed = {}  -- frame -> its CineMode entry (Frames.lua's ns.managed)
 local titles = {}   -- group titles hidden now
 local touched = {}  -- frame or part -> true: its alpha was set here (put back to 1 once let go)
 local hooked = {}   -- member frames whose scripts are followed
-local curves = {}   -- step -> the curve for it (false: none on this client)
-local curvesFloor, curvesBelow -- the opacity and health settings those curves were made for
+local curves = {}   -- kind (TANKS...) -> { below, floor, [step] = its curve (false: none on this client) }
 local hovered = false
 local reveal, revealStep = 0, 0 -- the mouse's fade: how far in (0-1), and as a step
 local sinceScan, sinceUpdate = RESCAN_EVERY, 0
@@ -46,42 +45,49 @@ local function Forbidden(frame)
 	return frame.IsForbidden and frame:IsForbidden()
 end
 
--- The alpha a hidden member has at this step of the mouse's fade: the
--- opacity setting (Vision section) at 0, full at STEPS.
-local function Shown(step)
-	local floor = ns.db and tonumber(ns.db.healVisionMinAlpha) or 0
+-- Each kind of member's health and opacity settings (Vision section).
+-- (Damage, and anyone without a role: the group titles go by their opacity too.)
+local TANKS = { below = "healVisionTankBelow", alpha = "healVisionTankAlpha" }
+local HEALERS = { below = "healVisionHealerBelow", alpha = "healVisionHealerAlpha" }
+local OTHERS = { below = "healVisionShowBelow", alpha = "healVisionMinAlpha" }
+local PETS = { below = "healVisionPetBelow", alpha = "healVisionPetAlpha" }
+
+-- The alpha a hidden member of this kind has at this step of the mouse's
+-- fade: its opacity setting at 0, full at STEPS.
+local function Shown(step, kind)
+	local floor = ns.db and tonumber(ns.db[kind.alpha]) or 0
 	floor = math.max(0, math.min(floor, 1))
 	return floor + (1 - floor) * step / STEPS
 end
 
--- Health percent to alpha: 1 below the health setting (Vision section);
--- at or above it, Shown(step). 100% there means any damage (full is 1),
--- 0% never.
-local function Curve(step)
-	local floor = ns.db and ns.db.healVisionMinAlpha
-	local below = ns.db and ns.db.healVisionShowBelow
-	if floor ~= curvesFloor or below ~= curvesBelow then
-		wipe(curves)
-		curvesFloor, curvesBelow = floor, below
+-- Health percent to alpha: 1 below the kind's health setting; at or above
+-- it, Shown(step). 100% there means any damage (full is 1), 0% never.
+local function Curve(step, kind)
+	local floor = ns.db and ns.db[kind.alpha]
+	local below = ns.db and ns.db[kind.below]
+	local made = curves[kind]
+	if not made or made.floor ~= floor or made.below ~= below then
+		made = { floor = floor, below = below }
+		curves[kind] = made
 	end
-	if curves[step] ~= nil then return curves[step] end
-	curves[step] = false
+	if made[step] ~= nil then return made[step] end
+	made[step] = false
 	if not (C_CurveUtil and C_CurveUtil.CreateCurve and Enum.LuaCurveType and UnitHealthPercent) then
 		return false
 	end
-	local ok, made = pcall(C_CurveUtil.CreateCurve)
-	if ok and made then
-		made:SetType(Enum.LuaCurveType.Step)
+	local ok, curve = pcall(C_CurveUtil.CreateCurve)
+	if ok and curve then
+		curve:SetType(Enum.LuaCurveType.Step)
 		below = math.min(tonumber(below) or 0.95, 0.9995)
 		if below > 0 then
-			made:AddPoint(0, 1)
-			made:AddPoint(below, Shown(step))
+			curve:AddPoint(0, 1)
+			curve:AddPoint(below, Shown(step, kind))
 		else
-			made:AddPoint(0, Shown(step)) -- (0%: never by health)
+			curve:AddPoint(0, Shown(step, kind)) -- (0%: never by health)
 		end
-		curves[step] = made
+		made[step] = curve
 	end
-	return curves[step]
+	return made[step]
 end
 
 local function Plain(value)
@@ -89,10 +95,18 @@ local function Plain(value)
 	return value
 end
 
--- The group's tanks (by role, or main tank in a raid): always shown.
+-- The group's tanks (by role, or main tank in a raid): their own health setting.
 local function Tank(unit)
 	if Plain(UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) == "TANK" then return true end
 	return IsInRaid() and GetPartyAssignment and Plain(GetPartyAssignment("MAINTANK", unit)) == true
+end
+
+-- The settings a member goes by: pets', tanks', healers' or everyone else's.
+local function KindOf(unit)
+	if unit:find("pet") then return PETS end
+	if Tank(unit) then return TANKS end
+	if Plain(UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) == "HEALER" then return HEALERS end
+	return OTHERS
 end
 
 -- A debuff on them that the game's filters find: ones you can dispel
@@ -122,7 +136,7 @@ local function AlwaysShown(unit)
 	local db = ns.db
 	-- (Your target too: hidden, only its selection outline would show.)
 	return (db.healVisionTarget and Plain(UnitIsUnit(unit, "target")) == true)
-		or (db.healVisionTanks and Tank(unit))
+		or ((tonumber(db.healVisionTankBelow) or 1) >= 1 and Tank(unit)) -- (100%: always)
 		or (db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
 		or (db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
 end
@@ -290,9 +304,10 @@ end
 
 local function Update(frame)
 	local member = members[frame]
-	local fade = Curve(revealStep)
-	if not member or not fade then return end
+	if not member then return end
 	local unit = member.unit
+	local fade = Curve(revealStep, KindOf(unit))
+	if not fade then return end
 	local alpha = 1
 	if revealStep < STEPS and UnitExists(unit) and not AlwaysShown(unit) then
 		-- (Health as it is, not with heals being cast. Secret: straight to the game.)
@@ -329,7 +344,7 @@ local function UpdateAll()
 	for frame in pairs(members) do Update(frame) end
 	for _, title in ipairs(titles) do
 		if Free(title) then
-			title:SetAlpha(Shown(revealStep))
+			title:SetAlpha(Shown(revealStep, OTHERS))
 			touched[title] = true
 		end
 	end

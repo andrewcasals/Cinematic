@@ -597,10 +597,16 @@ ns.isDev = ADDON_NAME == "CinematicDev"
 ns.VISION_WHERE = { "World", "Dungeons", "Raids", "BGs" }
 local VISION_PLACE = { dungeon = "Dungeons", raid = "Raids", pvp = "BGs" }
 DEFAULTS.healVision = false
+-- (Damage and the rest, tanks, healers and pets: each kind has its health and opacity.)
 DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-0.9)
 DEFAULTS.healVisionShowBelow = 0.95 -- members show below this much health (0-1; 1: any damage)
+DEFAULTS.healVisionTankBelow = 1 -- tanks below this (1: always, full health too)
+DEFAULTS.healVisionTankAlpha = 0.05
+DEFAULTS.healVisionHealerBelow = 0.95 -- healers below this
+DEFAULTS.healVisionHealerAlpha = 0.05
+DEFAULTS.healVisionPetBelow = 0.35 -- and pets below this
+DEFAULTS.healVisionPetAlpha = 0.05
 DEFAULTS.healVisionTarget = true -- your target always shows
-DEFAULTS.healVisionTanks = true -- tanks always show
 DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
 DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
 do
@@ -3045,6 +3051,45 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 			ns.db.healVisionDefaultsV1 = true
+		end
+		-- Always show tanks (healVisionTanks) is now the tank slider at 100%:
+		-- unticked, tanks went by the members' health, so they still do. Once,
+		-- in every profile.
+		if not ns.db.healVisionTankBelowV1 then
+			local function TanksSlider(t)
+				if type(t) ~= "table" then return end
+				if t.healVisionTanks == false then
+					t.healVisionTankBelow = t.healVisionShowBelow or DEFAULTS.healVisionShowBelow
+				end
+				t.healVisionTanks = nil
+			end
+			TanksSlider(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do TanksSlider(saved) end
+			ns.db.healVisionTankBelowV1 = true
+		end
+		-- Tanks and pets have an opacity of their own now: each starts as the
+		-- one opacity was. Once, in every profile.
+		if not ns.db.healVisionKindAlphaV1 then
+			local function KindAlpha(t)
+				if type(t) ~= "table" or t.healVisionMinAlpha == nil then return end
+				t.healVisionTankAlpha = t.healVisionTankAlpha or t.healVisionMinAlpha
+				t.healVisionPetAlpha = t.healVisionPetAlpha or t.healVisionMinAlpha
+			end
+			KindAlpha(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do KindAlpha(saved) end
+			ns.db.healVisionKindAlphaV1 = true
+		end
+		-- Healers have settings of their own now, apart from damage: they
+		-- start as those were. Once, in every profile.
+		if not ns.db.healVisionHealersV1 then
+			local function Healers(t)
+				if type(t) ~= "table" then return end
+				t.healVisionHealerBelow = t.healVisionHealerBelow or t.healVisionShowBelow
+				t.healVisionHealerAlpha = t.healVisionHealerAlpha or t.healVisionMinAlpha
+			end
+			Healers(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do Healers(saved) end
+			ns.db.healVisionHealersV1 = true
 		end
 		-- The Plate Parts' Buffs/debuffs row (Part Auras) was split into Buffs
 		-- and Debuffs rows: each takes its boxes, in every profile.
