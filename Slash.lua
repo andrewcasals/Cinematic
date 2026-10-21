@@ -104,6 +104,7 @@ local function PrintDebugHelp()
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
+	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
 	print("  /cine debug flight - the flight route, its known time and when the camera settles")
 	print("  /cine debug orbit - the camera rotation's state")
@@ -757,6 +758,8 @@ local function HandleSlash(msg)
 		ns.PrintPanelsDebug()
 	elseif cmd == "debug" and arg == "cvars" then
 		ns.CVarsDebug()
+	elseif cmd == "debug" and arg:find("^cvars%s") then
+		ns.CVarsFind(arg:match("^cvars%s+(.+)"))
 	elseif cmd == "debug" and arg == "raidparts" then
 		ns.LogRaidFrames()
 	elseif cmd == "debug" and arg == "health" then

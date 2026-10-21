@@ -139,6 +139,14 @@ local COMBAT_TEXT_CVARS = {
 	},
 }
 
+-- The selection circle the game draws on the ground under your target (a box
+-- on WoW Forever): off in cinematic mode out of combat, so a target kept
+-- lazily doesn't show; back for fights.
+local TARGET_CIRCLE_CVARS = {
+	playerWins = true,
+	values = { ObjectSelectionCircle = "0" },
+}
+
 -- Whether you were PvP flagged as the fight now under way started: names
 -- can't change mid-fight, so In PvP combat names go by that.
 local pvpNamesFight = false
@@ -173,6 +181,7 @@ function ns.UpdateCVars(cinematic, fightStarting)
 	-- (Kept through the Calm Timer after a fight, like the plates.)
 	local fighting = inCombat or (ns.FightLingering and ns.FightLingering())
 	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not fighting) or false)
+	ns.ApplyCVarSet(TARGET_CIRCLE_CVARS, (cinematic and ns.db.hideTargetCircle and not fighting) or false)
 	-- The red error text ("Target not in line of sight"): its own In combat
 	-- and Out of combat boxes, CineMode or not (the addon off: always shown).
 	if UIErrorsFrame then

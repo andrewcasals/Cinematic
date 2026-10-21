@@ -466,6 +466,29 @@ do
 		ns.Print(("cvars: %d changed since the first run (in /cine log). Run it again to start over")
 			:format(changed))
 	end
+
+	-- /cine debug cvars <words>: every CVar whose name has any of the words in
+	-- it (any case), for finding a setting by what it's likely called.
+	function ns.CVarsFind(words)
+		local get = (C_CVar and C_CVar.GetCVar) or GetCVar
+		local getDefault = (C_CVar and C_CVar.GetCVarDefault) or GetCVarDefault
+		local found = {}
+		for _, name in ipairs(AllNames()) do
+			local lower = name:lower()
+			for word in words:gmatch("%S+") do
+				if lower:find(word, 1, true) then
+					found[#found + 1] = name
+					break
+				end
+			end
+		end
+		table.sort(found)
+		for _, name in ipairs(found) do
+			ns.Log("cvars", ("%s = %s (default %s)"):format(name, tostring((Value(get, name))),
+				tostring(getDefault and Value(getDefault, name))))
+		end
+		ns.Print(("cvars: %d named like \"%s\" (in /cine log)"):format(#found, words))
+	end
 end
 
 -- Group health (/cine debug health) -------------------------------------------

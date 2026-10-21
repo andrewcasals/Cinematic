@@ -4141,6 +4141,13 @@ local function CreateCombatPanel()
 		prd:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -2)
 		lastCheck = prd
 	end
+	-- The game's circle on the ground under your target (not a frame: a setting).
+	local targetCircle = Check(content, "hideTargetCircle", L["Hide the circle under your target out of combat"],
+		L["No selection circle on the ground under your target in CineMode while you're out of combat, so " ..
+		"you can keep someone targeted without seeing it. It comes back the moment a fight starts and stays " ..
+		"for the Calm Timer after it, and your setting is put back when the UI returns."])
+	targetCircle:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 0, -2)
+	lastCheck = targetCircle
 
 	-- Pet happiness: classic hunters only.
 	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
