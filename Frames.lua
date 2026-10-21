@@ -1221,8 +1221,10 @@ function ns.SetEntryAlpha(entry, alpha)
 		end
 	end
 	if entry.frame == Minimap then
-		-- (Its arrow and icons ignore alpha: hidden while it's faded full size.)
-		ns.SetMinimapIconsHidden(alpha <= 0 and not entry.shrunk and ns.KeepMinimapFullSize())
+		-- (Its arrow and icons ignore alpha: hidden whenever it's faded. Shrunk,
+		-- the arrow is still a pixel wherever the map is: an addon that lays the
+		-- map out again can keep it on the screen. And in combat it's faded full size.)
+		ns.SetMinimapIconsHidden(alpha <= 0)
 		-- (Its blue quest areas too, whenever it's faded full size.)
 		ns.SetMinimapBlobsHidden(alpha <= 0 and not entry.shrunk)
 	end
@@ -3726,6 +3728,7 @@ function ns.ReportMinimap()
 		Value(entry.alpha), Value(entry.applied), tostring(entry.shrunk or false), Value(SHRUNK_SCALE),
 		tostring(ns.IsParked(entry)), tostring(alphaHooked[frame] == entry)))
 	ns.Print(("  size to grow back to %s"):format(Value(entry.savedScale)))
+	ns.Print("  " .. ns.MinimapIconState())
 	if entry.savedPoints then
 		ns.Print(("  anchors to put back (%d):"):format(#entry.savedPoints))
 		for _, p in ipairs(entry.savedPoints) do

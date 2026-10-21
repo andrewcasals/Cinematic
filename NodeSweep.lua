@@ -272,8 +272,10 @@ end
 -- full size in its place at alpha 0, with its icons shrunk to nothing
 -- (Minimap:SetIconScale), which hides its player arrow and dots too. They get
 -- their size back as soon as it fades in. (Frames.lua, ns.SetEntryAlpha.)
-local ICON_TINY = 0.01
-local iconScale, iconsHidden, settingIcons = 1, false, false
+-- (0.01 still left the arrow as one pixel in the middle: 0, or as near it as
+-- the client takes.)
+local ICON_TINY = { 0, 0.0001 }
+local iconScale, iconsHidden, settingIcons, tinyUsed = 1, false, false, nil
 if Minimap.SetIconScale then
 	-- (Another addon's own icon scale is what's put back.)
 	hooksecurefunc(Minimap, "SetIconScale", function(_, scale)
@@ -296,8 +298,24 @@ function ns.SetMinimapIconsHidden(hidden)
 	if hidden == iconsHidden or not Minimap.SetIconScale then return end
 	iconsHidden = hidden
 	settingIcons = true
-	pcall(Minimap.SetIconScale, Minimap, hidden and ICON_TINY or iconScale)
+	if hidden then
+		tinyUsed = nil
+		for _, scale in ipairs(ICON_TINY) do
+			if pcall(Minimap.SetIconScale, Minimap, scale) then
+				tinyUsed = scale
+				break
+			end
+		end
+	else
+		pcall(Minimap.SetIconScale, Minimap, iconScale)
+	end
 	settingIcons = false
+end
+
+-- For /cine debug minimap.
+function ns.MinimapIconState()
+	return ("icons hidden %s (scale %s, put back to %s), kept full size %s"):format(tostring(iconsHidden),
+		tostring(iconsHidden and tinyUsed or iconScale), tostring(iconScale), tostring(ns.KeepMinimapFullSize()))
 end
 
 -- The quest, task and dig site areas (the blue shapes) ignore the minimap's

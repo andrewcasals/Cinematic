@@ -221,6 +221,21 @@ end)
 
 -- The report ----------------------------------------------------------------
 
+-- The other addons loaded now, sorted.
+local function OtherAddons()
+	local addons = {}
+	if NumAddOns and AddOnInfo and IsLoaded then
+		for i = 1, NumAddOns() do
+			local name = AddOnInfo(i)
+			if name and name ~= ADDON_NAME and IsLoaded(i) then
+				addons[#addons + 1] = name
+			end
+		end
+	end
+	table.sort(addons)
+	return addons
+end
+
 local function Summary()
 	local lines = {}
 	local function add(text) lines[#lines + 1] = text end
@@ -251,15 +266,7 @@ local function Summary()
 	table.sort(changed)
 	add(("changed settings (%d): %s"):format(#changed, #changed > 0 and table.concat(changed, ", ") or "none"))
 
-	local addons, overlapping = {}, {}
-	if NumAddOns and AddOnInfo and IsLoaded then
-		for i = 1, NumAddOns() do
-			local name = AddOnInfo(i)
-			if name and name ~= ADDON_NAME and IsLoaded(i) then
-				addons[#addons + 1] = name
-			end
-		end
-	end
+	local addons, overlapping = OtherAddons(), {}
 	for _, name in ipairs(OVERLAPPING) do
 		if IsLoaded and IsLoaded(name) then
 			overlapping[#overlapping + 1] = name
@@ -268,7 +275,6 @@ local function Summary()
 	if #overlapping > 0 then
 		add("may overlap: " .. table.concat(overlapping, ", "))
 	end
-	table.sort(addons)
 	add(("other addons (%d): %s"):format(#addons, table.concat(addons, ", ")))
 
 	local counts = ErrorCounts()
@@ -372,8 +378,13 @@ function ns.CaptureDebug(command, run)
 	local lines = captured
 	captured = nil
 	if #lines >= 3 and shownCount == before then
+		-- (With the version, game and other addons, for when a player sends it.)
+		local _, build, _, interface = GetBuildInfo()
+		local addons = OtherAddons()
 		ShowText(("%s: press Ctrl+C to copy"):format(command),
-			("%s (Cinematic %s)\n%s"):format(command, Version(), table.concat(lines, "\n")))
+			("%s (%s %s, game %s (%s), %s)\nother addons (%d): %s\n%s"):format(command, ADDON_NAME, Version(),
+				tostring(interface), tostring(build), GetLocale(), #addons, table.concat(addons, ", "),
+				table.concat(lines, "\n")))
 	end
 	if not ok then error(err, 0) end
 end
