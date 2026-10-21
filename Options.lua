@@ -7364,7 +7364,8 @@ StaticPopupDialogs.CINEMATIC_PROFILE_RESET = {
 	timeout = 0, whileDead = true, hideOnEscape = true,
 }
 StaticPopupDialogs.CINEMATIC_ADDON_RESET = {
-	text = L["Reset Cinematic? Every profile and setting goes, your own profiles too, and the UI reloads."],
+	text = L["Reset Cinematic? Every profile and setting goes, your own profiles too, and the UI reloads. " ..
+		"Cinematic's Edit Mode layouts are removed too, and your own layout comes back."],
 	button1 = YES, button2 = NO,
 	OnAccept = function() ns.ResetAddon() end,
 	timeout = 0, whileDead = true, hideOnEscape = true,

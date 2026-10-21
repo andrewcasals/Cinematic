@@ -542,6 +542,13 @@ end
 -- UI reloads so it starts over (the welcome window too). Other characters'
 -- own profile picks fall back to the account's next login.
 function ns.ResetAddon()
+	-- (Not in a fight: Edit Mode's layouts can't change then.)
+	if ns.ResetLayouts and not ns.ResetLayouts() then
+		ns.Print(L["can't reset Cinematic in a fight: try again once it's over"])
+		return
+	end
+	-- The Cooldown Manager off again if a CDM profile turned it on.
+	if ns.db.cdmTurnedOn and GetCVar(CDM_CVAR) == "1" then SetCVar(CDM_CVAR, "0") end
 	CinematicDB, CinematicCharDB = nil, nil
 	ns.db.profiles = {} -- (so logout's ns.SaveProfile writes into nothing kept)
 	ReloadUI()

@@ -258,6 +258,42 @@ function ns.ApplyProfileLayout()
 	end
 end
 
+-- Resetting Cinematic (ns.ResetAddon): back on the player's own layout (the
+-- one before a profile switched it; on one of ours with none saved, the
+-- first preset), and Cinematic's own layouts deleted from Edit Mode. Not in
+-- combat: false then (and done nothing).
+function ns.ResetLayouts()
+	if not (C_EditMode and C_EditMode.GetLayouts) or not ns.chardb then return true end
+	if InCombatLockdown() then return false end
+	local info = C_EditMode.GetLayouts()
+	local own = ns.chardb.layoutOwn
+	local active = ActiveName(info)
+	if own and IndexOf(info, own) then
+		active = own
+	elseif active and ns.EDIT_MODE_LAYOUTS[active] then
+		active = Presets()[1] and Presets()[1].layoutName
+	end
+	ns.chardb.layoutOwn = nil
+	local kept, removed = {}, 0
+	for _, layout in ipairs(info.layouts) do
+		if ns.EDIT_MODE_LAYOUTS[layout.layoutName] then
+			removed = removed + 1
+		else
+			kept[#kept + 1] = layout
+		end
+	end
+	if removed > 0 then
+		info.layouts = kept
+		info.activeLayout = (active and IndexOf(info, active)) or 1
+		if ns.UnshrinkForLayout then ns.UnshrinkForLayout() end
+		C_EditMode.SaveLayouts(info)
+		ns.Log("state", ("reset: %d edit mode layout(s) deleted, on %s"):format(removed, tostring(active)))
+	end
+	local index = active and IndexOf(C_EditMode.GetLayouts(), active)
+	if index and C_EditMode.GetLayouts().activeLayout ~= index then SetActive(index) end
+	return true
+end
+
 -- Whether ns.ApplyProfileLayout would switch Edit Mode's layout now (one of
 -- ours not made yet counts: it's made and switched to).
 function ns.LayoutWouldChange()

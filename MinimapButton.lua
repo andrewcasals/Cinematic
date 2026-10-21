@@ -181,6 +181,16 @@ local function OnEnter(self)
 	GameTooltip:SetText("Cinematic")
 	local db = ns.GetDB()
 	local left = ns.GetSnoozeLeft()
+	-- (No profile picked yet: Cinematic does nothing, and a click opens the welcome window.)
+	if not ns.ProfileChosen() then
+		GameTooltip:AddLine(L["No profile yet"], 1, 0.5, 0)
+		GameTooltip:AddLine(L["Click: pick a profile"], 1, 1, 1)
+		if not onMinimap then
+			GameTooltip:AddLine(L["Drag: move"], 1, 1, 1)
+		end
+		GameTooltip:Show()
+		return
+	end
 	if not db.enabled then
 		GameTooltip:AddLine(L["Off"], 1, 0.3, 0.3)
 	elseif left then
@@ -239,7 +249,10 @@ local function Create()
 	border:SetPoint("TOPLEFT")
 
 	button:SetScript("OnClick", function(self, mouseButton)
-		if mouseButton == "RightButton" then
+		GameTooltip:Hide()
+		if not ns.ProfileChosen() then
+			ns.ShowWelcome()
+		elseif mouseButton == "RightButton" then
 			ns.OpenOptions()
 		else
 			ShowMenu(self)
