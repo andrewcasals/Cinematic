@@ -22,7 +22,8 @@ end
 
 -- What a name on the minimap is (ns.NodeKind): "group" (you, someone in
 -- your group, or a pet), "turnin" (a quest of yours that's done), "objective" (one of yours
--- that isn't), "herb", "ore", "treasure", or "other" (quest givers among
+-- that isn't: its area), "line" (one of that area's objectives), "herb", "ore",
+-- "treasure", or "other" (quest givers among
 -- them: their mark's name is just the NPC's, tested). A herb's dot has the name of
 -- the herb it gives, so the client names them (item IDs, Classic's herbs); a
 -- vein's or chest's name has a word for vein, deposit or chest in the client's
@@ -126,6 +127,8 @@ function ns.NodeKind(name)
 	if listsChanged then ReadLists() end
 	if herbsMissing then LoadHerbNames() end
 	if groupNames[name] then return "group" end
+	-- (Under a quest area's title, its objectives: "- 0/12 Kobold Laborer slain", tested.)
+	if name:sub(1, 2) == "- " then return "line" end
 	local done = questTitles[name]
 	if done ~= nil then return done and "turnin" or "objective" end
 	if herbNames[name] then return "herb" end
@@ -254,13 +257,13 @@ function ns.SweepMinimap(step, grow, stop, refresh)
 	return found, probes, putBack ~= nil and not parked
 end
 
--- Reveal (Minimap page): which kinds of name bring the minimap up. (A
--- quest of yours that isn't done counts as "other", and group members as
--- nothing: they're on the minimap all the time.)
+-- Reveal (Minimap page): which kinds of name bring the minimap up. (Group
+-- members and a quest area's objective lines count as nothing: the first are
+-- on the minimap all the time, the second come with their quest's title.)
 local REVEAL = {
 	herb = "minimapRevealNodes", ore = "minimapRevealNodes", treasure = "minimapRevealNodes",
 	turnin = "minimapRevealTurnIns",
-	objective = "minimapRevealIcons", other = "minimapRevealIcons",
+	objective = "minimapRevealAreas", other = "minimapRevealIcons",
 }
 local function Wanted(name)
 	local option = REVEAL[ns.NodeKind(name)]
@@ -270,7 +273,7 @@ end
 local function AnyReveal()
 	local db = ns.db
 	return db and db.handleMinimap ~= false and ns.CanSweepMinimap() and (db.minimapRevealNodes
-		or db.minimapRevealTurnIns or db.minimapRevealIcons) or false
+		or db.minimapRevealTurnIns or db.minimapRevealAreas or db.minimapRevealIcons) or false
 end
 
 -- While a reveal is ticked, the faded minimap isn't shrunk and moved off the

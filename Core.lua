@@ -122,7 +122,8 @@ local DEFAULTS = {
 	minimapRevealNodes = true,   -- ore, herbs and treasure (the tracking has to be on)
 	minimapNodePing = true,      -- ...with a minimap ping where one shows up (your group sees it too)
 	minimapRevealTurnIns = true, -- quests of yours that are done
-	minimapRevealIcons = true,   -- anything else (quest givers, flight masters, your quests' areas...)
+	minimapRevealAreas = true,   -- the areas of quests of yours that aren't
+	minimapRevealIcons = true,   -- anything else (quest givers, flight masters...)
 	minimapHideOnTaxi = true,    -- none of these, pings or Keep open's tracking bring it up on a flight path
 	-- Keep open (Minimap page): the minimap stays up the whole time this tracking is on.
 	minimapKeepCreatures = false, -- creatures (hunter, druid, warlock) or fish

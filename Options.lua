@@ -6091,10 +6091,13 @@ local function CreateMinimapPanel()
 			"herb or chest shows on it."] },
 		{ "minimapRevealTurnIns", L["Quest turn-ins"],
 			L["The minimap comes up while a quest of yours that's done shows on it, where you hand it in."] },
+		{ "minimapRevealAreas", L["Quest areas"],
+			L["The minimap comes up while the area of a quest of yours that isn't done shows on it, " ..
+			"the shaded part where its objectives are."] },
 		{ "minimapRevealIcons", L["Other icons"],
 			L["The minimap comes up while anything else with a name shows on it: quest givers with a " ..
-			"quest for you, flight masters and innkeepers you track, your quests' areas and the like. " ..
-			"Your group and pets don't count."] },
+			"quest for you, flight masters and innkeepers you track and the like. Your group and pets " ..
+			"don't count."] },
 	}) do
 		local check = Check(content, kind[1], kind[2], kind[3] .. " " .. SWEEP_NOTE,
 			kind[1] == "minimapRevealNodes" and function(value)
