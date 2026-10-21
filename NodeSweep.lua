@@ -141,13 +141,16 @@ local function MinimapEntry()
 end
 
 -- The faded minimap's size and place back (see the top). Returns what puts it
--- back as it was, or nil when it isn't shrunk.
+-- back as it was, or nil when it isn't shrunk or moved off the screen.
+-- (Kept full size, it's moved off the screen while faded, Frames.lua
+-- ns.ParkFullSize: the sweep hears nothing out there, tested, so it's put
+-- back in its place for the sweep too.)
 local function Grow()
 	local entry = MinimapEntry()
-	if not (entry and entry.shrunk) then return nil end
+	if not (entry and (entry.shrunk or entry.parkedFullSize)) then return nil end
 	local scale, points = Minimap:GetScale(), {}
 	for i = 1, Minimap:GetNumPoints() do points[i] = { Minimap:GetPoint(i) } end
-	Minimap:SetScale(entry.savedScale or 1)
+	if entry.shrunk then Minimap:SetScale(entry.savedScale or 1) end
 	if entry.savedPoints then
 		Minimap:ClearAllPoints()
 		for _, p in ipairs(entry.savedPoints) do Minimap:SetPoint(p[1], p[2], p[3], p[4], p[5]) end
@@ -233,8 +236,11 @@ function ns.SweepMinimap(step, grow, stop, refresh)
 	-- (Not in combat; nor with your own mouse there, whose tooltip it would change.)
 	if InCombatLockdown() then return nil, "in combat" end
 	if ns.Flag(Minimap:IsMouseOver()) then return nil, "your mouse is over the minimap" end
+	local entry = MinimapEntry()
+	local parked = entry and entry.parkedFullSize
+	if parked and ns.IsEntryHovered(entry) then return nil, "your mouse is over the minimap" end
 	local putBack
-	if grow then
+	if grow or parked then
 		local ok, result = pcall(Grow)
 		if not ok then return nil, "couldn't grow the minimap: " .. tostring(result) end
 		putBack = result
@@ -245,7 +251,7 @@ function ns.SweepMinimap(step, grow, stop, refresh)
 		local ok, err = pcall(putBack)
 		if not ok then ns.Log("nodes", "couldn't put the minimap back: " .. tostring(err)) end
 	end
-	return found, probes, putBack ~= nil
+	return found, probes, putBack ~= nil and not parked
 end
 
 -- Reveal (Minimap page): which kinds of name bring the minimap up. (A
@@ -314,8 +320,13 @@ end
 
 -- For /cine debug minimap.
 function ns.MinimapIconState()
-	return ("icons hidden %s (scale %s, put back to %s), kept full size %s"):format(tostring(iconsHidden),
-		tostring(iconsHidden and tinyUsed or iconScale), tostring(iconScale), tostring(ns.KeepMinimapFullSize()))
+	local methods = {}
+	for method in pairs(ns.BLOB_ALPHAS) do methods[#methods + 1] = method:gsub("^Set", ""):gsub("Alpha$", "") end
+	table.sort(methods)
+	return ("icons hidden %s (scale %s, put back to %s), kept full size %s; quest areas hidden %s (%s)"):format(
+		tostring(iconsHidden), tostring(iconsHidden and tinyUsed or iconScale), tostring(iconScale),
+		tostring(ns.KeepMinimapFullSize()), tostring(ns.minimapBlobsHidden or false),
+		#methods > 0 and table.concat(methods, ", ") or "none on this client")
 end
 
 -- The quest, task and dig site areas (the blue shapes) ignore the minimap's
@@ -323,6 +334,7 @@ end
 -- game can't say what they were, and Blizzard's UI never sets them (so 1),
 -- unless another addon did: its value is what's put back.
 local BLOB_ALPHAS = {}
+ns.BLOB_ALPHAS = BLOB_ALPHAS -- (for /cine debug minimap)
 for _, kind in ipairs({ "Quest", "Task", "Arch" }) do
 	for _, part in ipairs({ "Inside", "Outside", "Ring" }) do
 		local method = "Set" .. kind .. "Blob" .. part .. "Alpha"
@@ -346,6 +358,7 @@ end
 function ns.SetMinimapBlobsHidden(hidden)
 	if hidden == blobsHidden then return end
 	blobsHidden = hidden
+	ns.minimapBlobsHidden = hidden
 	settingBlobs = true
 	for method, alpha in pairs(BLOB_ALPHAS) do
 		pcall(Minimap[method], Minimap, hidden and 0 or alpha)

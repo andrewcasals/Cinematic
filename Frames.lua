@@ -700,6 +700,28 @@ function ns.UnparkShrunk(entry)
 		frame:SetPoint(p[1], p[2], p[3], p[4], p[5])
 	end
 end
+
+-- Kept full size while faded (a Reveal tick, Minimap page: NodeSweep.lua
+-- sweeps it), the minimap is moved off the screen the same way, unshrunk:
+-- its quest areas (the blue shapes) ignore its alpha, and on WoW Forever
+-- nothing else hides them (tested). The sweep still reads it out there
+-- (tested). Its rect is saved first, so hover still works over the empty spot.
+function ns.ParkFullSize(entry)
+	if not entry.parkedFullSize then
+		entry.savedRect = { entry.frame:GetRect() }
+		entry.savedEffectiveScale = entry.frame:GetEffectiveScale()
+		entry.parkedFullSize = true
+	elseif not ns.ParkUndone(entry) then
+		return
+	end
+	-- (Again if laid out again or clamped again meanwhile.)
+	ns.ParkShrunk(entry)
+end
+
+function ns.UnparkFullSize(entry)
+	entry.parkedFullSize = nil
+	ns.UnparkShrunk(entry)
+end
 end
 
 local function RemoveFrame(frame)
@@ -725,6 +747,8 @@ local function RemoveFrame(frame)
 			elseif entry.shrunk then
 				frame:SetScale(entry.savedScale or 1)
 				ns.UnparkShrunk(entry)
+			elseif entry.parkedFullSize and not ns.ScaleBlocked(frame) then
+				ns.UnparkFullSize(entry)
 			end
 			table.remove(ns.managed, i)
 			entry.removed = true -- (for script hooks still holding it: see HookPartyScripts)
@@ -1144,6 +1168,7 @@ local function ShrinkEntry(entry)
 	if not parked then
 		ns.ParkShrunk(entry)
 	end
+	entry.parkedFullSize = nil -- (parked full size before: now shrunk there)
 	entry.shrunk = true
 	entry.shrunkAt = GetTime()
 end
@@ -1235,6 +1260,8 @@ function ns.SetEntryAlpha(entry, alpha)
 			-- (Blocked in combat: it stays shrunk, and grows back once the fight ends.)
 			if entry.shrunk and GetTime() - entry.shrunkAt >= MIN_SHRUNK_TIME and not ns.ScaleBlocked(entry.frame) then
 				UnshrinkEntry(entry)
+			elseif entry.parkedFullSize and not ns.ScaleBlocked(entry.frame) then
+				ns.UnparkFullSize(entry)
 			end
 		elseif ns.ScaleBlocked(entry.frame) or (entry.frame == Minimap and ns.KeepMinimapFullSize()) then
 			-- Can't shrink in combat: it sits at alpha 0 full size until the
@@ -1247,6 +1274,12 @@ function ns.SetEntryAlpha(entry, alpha)
 			if not entry.shrunk and entry.frame == Minimap and Minimap.GetZoomLevels and IsIndoors
 				and ns.Flag(IsIndoors()) then
 				minimapNeedsRedraw = true
+			end
+			-- (Kept full size for the sweep: off the screen. Not for /cine
+			-- debug nodes stay, which tests it in its place.)
+			if not entry.shrunk and entry.frame == Minimap and not ns.ScaleBlocked(entry.frame)
+				and not ns.minimapStayFullSize then
+				ns.ParkFullSize(entry)
 			end
 		elseif not entry.shrunk then
 			-- Shrink in the same step it reaches 0, so it's never at alpha 0
@@ -1361,7 +1394,7 @@ function ns.IsEntryHovered(entry)
 	if PART_GROUPS[entry.group] then
 		return false
 	end
-	if entry.shrunk then
+	if entry.shrunk or entry.parkedFullSize then
 		-- (Its spot is a bare rect test: a window dragged over it, like
 		-- Settings, has the mouse instead.)
 		local focus = MouseFocus()
