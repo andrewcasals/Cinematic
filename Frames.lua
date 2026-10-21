@@ -33,7 +33,7 @@ local FRAME_GROUPS = {
 		"MultiCastSlotButton3", "MultiCastSlotButton4",
 		"MultiCastActionPage1", "MultiCastActionPage2", "MultiCastActionPage3",
 	},
-	target = { "TargetFrame", "TargetFrameToT", "FocusFrame" },
+	target = { "TargetFrame", "TargetFrameToT", "FocusFrame", "FocusFrameToT" },
 	-- The party frames when they aren't raid-style (portraits down the left,
 	-- their pets' with them): Classic's by name; retail's are found in
 	-- PartyFrame (see ScanPartyFrames).
@@ -576,7 +576,7 @@ end
 -- The quest timer can sit inside the quest tracker: it ignores the tracker's
 -- fade (see AddFrame) so it can stay up while the tracker is faded.
 -- The cast bars too (retail's can be locked to the player frame).
-local NEVER_NESTED = { TargetFrameToT = true, QuestTimerFrame = true }
+local NEVER_NESTED = { TargetFrameToT = true, FocusFrameToT = true, QuestTimerFrame = true }
 for _, name in ipairs(FRAME_GROUPS.castbar) do
 	NEVER_NESTED[name] = true
 end
@@ -1440,6 +1440,10 @@ ns.COMBAT_SHOW = {
 	{ key = "target", label = L["Target"], default = true, frames = { "TargetFrame" } },
 	{ key = "tot", label = L["Target of target"], default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = L["Focus"], default = true, frames = { "FocusFrame" } },
+	-- Follows the focus's ticks until set (see ROW_FALLBACK), as it did inside
+	-- the focus frame. (noHoverRow: hovering it is hovering the target's group.)
+	{ key = "focustot", label = L["Focus target of target"], default = true, frames = { "FocusFrameToT" },
+		noHoverRow = true },
 	-- The Standard Frames page's Party frames section (page = "party"); the
 	-- raid-style ones are the Raid frames section's.
 	{ key = "party", label = L["Party frames"], default = true, page = "party", groups = { "party" } },
@@ -1606,7 +1610,7 @@ ns.COMBAT_SHOW = {
 -- The Standard Frames page's sections (page) for the rows not given one
 -- above. (Kept in the order above within each.)
 local ROW_SECTIONS = {
-	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units",
+	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units", focustot = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
 	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
@@ -1929,11 +1933,11 @@ local function IsExtraKey(key)
 end
 
 -- Rows that take another row's tick in a column until given their own: the
--- bar art follows action bar 1, the pet portrait yours, the bags the micro menu
+-- bar art follows action bar 1, the pet portrait yours, the focus's target of target the focus, the bags the micro menu
 -- and the minimap header and its buttons the minimap, so profiles and lists
 -- from before it was a row (the Cooldown Manager profile's: no action bars) still hold.
 local ROW_FALLBACK = {
-	art = "mainbar", petframe = "player", prdpower = "prd", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
+	art = "mainbar", petframe = "player", prdpower = "prd", focustot = "focus", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap", bags = "micro",
 }
 
@@ -5375,7 +5379,7 @@ do
 		{ "TargetFrame", TARGET, "target" },
 		{ "FocusFrame", TARGET, "focus", nil, "unitPartsFocusSame", "Focus" },
 		{ "TargetFrameToT", ns.UNIT_PARTS_TOT, "targettarget", nil, "unitPartsToTSame", "ToT" },
-		{ "FocusFrameToT", ns.UNIT_PARTS_TOT, "focustarget", nil, "unitPartsToTSame", "ToT" },
+		{ "FocusFrameToT", ns.UNIT_PARTS_TOT, "focustarget", nil, "unitPartsFocusToTSame", "FocusToT" },
 		{ "PetFrame", PET, "pet", "Pet" },
 	}
 	-- The setting for a frame's part, for the unit it shows (nil: none shown).
@@ -5539,6 +5543,26 @@ do
 				end
 			end
 		end
+		-- The focus's target of target as a whole (Standard Frames page): held at
+		-- no alpha, and not clickable either. (Its mouse only out of combat:
+		-- the game guards it in one; set after the fight.)
+		local tot = _G.FocusFrameToT
+		if tot then
+			local hide = ns.db.handleFrames ~= false and ns.db.unitPartsFocusToT == false
+			want[tot] = hide
+			-- (Shown again at the alpha its Standard Frames row fades it to now,
+			-- not the one it had when hidden.)
+			for _, entry in ipairs(hidden[tot] and not hide and ns.managed or NO_DEFAULTS) do
+				if entry.frame == tot and entry.applied then
+					hidden[tot] = entry.applied
+				end
+			end
+			-- (Left alone unless we turned it off: FRAMES.totMouseOff.)
+			if hide ~= (FRAMES.totMouseOff or false) and not InCombatLockdown() then
+				tot:EnableMouse(not hide)
+				FRAMES.totMouseOff = hide
+			end
+		end
 		for region, hide in pairs(want) do
 			SetHidden(region, hide)
 		end
@@ -5681,6 +5705,8 @@ do
 	watcher:RegisterUnitEvent("UNIT_FACTION", "target", "focus")
 	-- (The target or focus picking someone else: their target of target frames.)
 	watcher:RegisterUnitEvent("UNIT_TARGET", "target", "focus")
+	-- (After a fight: the focus's target of target's mouse, if left waiting.)
+	watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
 	watcher:SetScript("OnEvent", function(_, event)
 		ns.ApplyUnitFrameParts()
 		if event == "PLAYER_ENTERING_WORLD" then

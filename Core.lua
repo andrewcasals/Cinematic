@@ -738,8 +738,8 @@ end
 -- part: your own frame and your pet's (keys unitPartPlayer<part>,
 -- unitPartPet<part>), then the target, focus and target of target frames, a
 -- row per kind of unit they show (keys unitPart<kind><part> for the target,
--- unitPartFocus<kind><part> and unitPartToT<kind><part>). The focus and
--- target of target go as the target's grid says until their "Same as target"
+-- unitPartFocus<kind><part>, unitPartToT<kind><part> and unitPartFocusToT<kind><part>).
+-- The focus and the targets of target go as the target's grid says until their "Same as target"
 -- is unticked. All shown to start with, as the game has them. Some parts
 -- only on some rows (UNIT_PART_ONLY): the hit text on your and your pet's
 -- portraits, and threat on NPCs you can fight. (The cast bar: the target's
@@ -760,7 +760,7 @@ for _, part in ipairs(ns.UNIT_PARTS) do
 	end
 	for _, kind in ipairs(ns.UNIT_PART_KINDS) do
 		if not only or only[kind] then
-			for _, prefix in ipairs({ "", "Focus", "ToT" }) do
+			for _, prefix in ipairs({ "", "Focus", "ToT", "FocusToT" }) do
 				DEFAULTS["unitPart" .. prefix .. kind .. part] = true
 			end
 		end
@@ -789,6 +789,8 @@ function ns.Setting(key)
 end
 DEFAULTS.unitPartsFocusSame = true
 DEFAULTS.unitPartsToTSame = true
+DEFAULTS.unitPartsFocusToTSame = true
+DEFAULTS.unitPartsFocusToT = true -- the focus's target of target frame shows at all
 -- And rows of our own: a class icon by friendly and by enemy players' health
 -- bars (as Duel Vision shows), and a role icon by group members' (tank,
 -- healer, damage). Off everywhere to start with, except enemy class icons and

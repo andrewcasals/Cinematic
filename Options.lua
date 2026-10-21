@@ -4202,7 +4202,9 @@ local function CreateCombatPanel()
 	local switch = PageSwitch(content, "handleFrames", L["Enable page"],
 		L["On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
 		"alone, the minimap, quest tracker, buffs and Cooldown Manager included (their pages' " ..
-		"switches only count while this is on)."], subtitle)
+		"switches only count while this is on)."], subtitle, function()
+		if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
+	end)
 	local calm = Check(content, "combatShowCalm", L["In combat rows stay for the Calm Timer"],
 		L["Frames ticked In combat (here and on the Advanced Frames page) stay up after a fight " ..
 		"until the Calm Timer (CineMode page) has run out, then fade. Off: they fade as soon as the fight ends."])
@@ -4232,6 +4234,18 @@ local function CreateCombatPanel()
 		"for the Calm Timer after it, and your setting is put back when the UI returns."])
 	targetCircle:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 0, -2)
 	lastCheck = targetCircle
+	-- The focus's target of target frame shown at all, CineMode or not (its
+	-- parts: the Unit Frames page).
+	if _G.FocusFrame and _G.FocusFrameToT then
+		local focusToT = Check(content, "unitPartsFocusToT", L["Show the focus's target of target"],
+			L["Unticked: the small frame by the focus frame, showing who your focus is targeting, doesn't " ..
+			"show at all, CineMode or not. Which of its parts show is on the Unit Frames page."], function(value)
+			ns.GetDB().unitPartsFocusToT = value
+			if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
+		end)
+		focusToT:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 0, -2)
+		lastCheck = focusToT
+	end
 
 	-- Pet happiness: classic hunters only.
 	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
@@ -4367,6 +4381,10 @@ local function CreatePortraitsPanel()
 		if _G.FocusFrame then
 			SECTIONS[#SECTIONS + 1] = { title = L["Focus"], prefix = "Focus", same = "unitPartsFocusSame",
 				rows = KindRows(ns.UNIT_PARTS_TARGET) }
+		end
+		if _G.FocusFrame and _G.FocusFrameToT then
+			SECTIONS[#SECTIONS + 1] = { title = L["Focus target of target"], prefix = "FocusToT",
+				same = "unitPartsFocusToTSame", rows = KindRows(ns.UNIT_PARTS_TOT) }
 		end
 
 		local top = CreateFrame("Frame", nil, content)
