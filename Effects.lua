@@ -2803,8 +2803,9 @@ end
 -- Whether the tooltip should be hidden now, and why. Only in CineMode, with
 -- the key not held, and never a minimap blip's. In a camera mode ticked
 -- (tooltipHideIn*), every world and unit frame tooltip; in combat, enemies
--- (tooltipHideCombatEnemy) or everything else, the UI's too
--- (tooltipHideCombatElse); otherwise the world and unit frame kinds ticked.
+-- (tooltipHideCombatEnemy), friendlies (tooltipHideCombatFriendly) or
+-- everything else, the UI's too (tooltipHideCombatElse); otherwise the world
+-- and unit frame kinds ticked.
 local function Hides(tooltip)
 	if not Handling() or not ns.lastCinematic or ShowKeyDown() then
 		return false
@@ -2819,8 +2820,11 @@ local function Hides(tooltip)
 		return true, mode
 	end
 	if InCombat() then
-		if TooltipUnitIsEnemy(tooltip) == true then
+		local enemy = TooltipUnitIsEnemy(tooltip)
+		if enemy == true then
 			return ns.db.tooltipHideCombatEnemy and true or false, "combat enemy"
+		elseif enemy == false then
+			return ns.db.tooltipHideCombatFriendly and true or false, "combat friendly"
 		end
 		return ns.db.tooltipHideCombatElse and true or false, "combat else"
 	end

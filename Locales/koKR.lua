@@ -760,7 +760,7 @@ L["Only in CineMode. Hold your Show hidden tooltips key (set it on the Keybinds 
 L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."] = "공격할 수 있는 플레이어와 NPC(중립 몹 포함), 그리고 그들의 소환수, 하수인, 토템."
 L["Herbs, ore and creatures you can skin."] = "약초, 광석, 무두질할 수 있는 생물."
 L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\"). Something that's more than one kind (a quest mob is an enemy too) hides only with each of its kinds ticked."] = "퀘스트 목표 중 하나가 표시된 툴팁(예: \"엉겅퀴 멧돼지 5/7 처치\"). 여러 종류에 해당하는 것(퀘스트 몹은 적이기도 함)은 해당 종류를 모두 체크했을 때만 숨깁니다."
-L["Friendlies, objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus and the rest."] = "우호 대상, 월드의 오브젝트, UI 툴팁: 행동 단축바, 강화 및 약화 효과, 가방, 메뉴 등."
+L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus and the rest."] = "월드의 오브젝트, UI 툴팁: 행동 단축바, 강화 및 약화 효과, 가방, 메뉴 등."
 L["Every tooltip in the world and on unit frames is hidden while this camera mode is running."] = "이 카메라 모드가 도는 동안 월드와 유닛 프레임의 모든 툴팁을 숨깁니다."
 L["On flights"] = "비행 중"
 L["AFK camera (standing still or AFK)"] = "자리 비움 카메라 (가만히 서 있기 또는 자리 비움)"

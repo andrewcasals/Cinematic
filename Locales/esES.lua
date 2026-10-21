@@ -876,7 +876,7 @@ L["Only in CineMode. Hold your Show hidden tooltips key (set it on the Keybinds 
 L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."] = "Jugadores y PNJ a los que puedes atacar (también los neutrales), y sus mascotas, esbirros y tótems."
 L["Herbs, ore and creatures you can skin."] = "Hierbas, mineral y criaturas que puedes desollar."
 L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\"). Something that's more than one kind (a quest mob is an enemy too) hides only with each of its kinds ticked."] = "Tooltips que muestran uno de tus objetivos de misión (como \"5/7 Jabalí de Cardos asesinado\"). Lo que es de más de un tipo (un bicho de misión también es enemigo) solo se oculta con todos sus tipos marcados."
-L["Friendlies, objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus and the rest."] = "Aliados, objetos del mundo y los tooltips de la interfaz: barras de acción, beneficios y perjuicios, bolsas, menús y lo demás."
+L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus and the rest."] = "Objetos del mundo y los tooltips de la interfaz: barras de acción, beneficios y perjuicios, bolsas, menús y lo demás."
 L["Every tooltip in the world and on unit frames is hidden while this camera mode is running."] = "Todos los tooltips del mundo y de los marcos de unidad se ocultan mientras funciona este modo de cámara."
 L["On flights"] = "En vuelos"
 L["AFK camera (standing still or AFK)"] = "Cámara AFK (quieto o ausente)"

@@ -760,7 +760,7 @@ L["Only in CineMode. Hold your Show hidden tooltips key (set it on the Keybinds 
 L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."] = "你可以攻击的玩家和NPC（包括中立怪物），以及他们的宠物、仆从和图腾。"
 L["Herbs, ore and creatures you can skin."] = "草药、矿石和可剥皮的生物。"
 L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\"). Something that's more than one kind (a quest mob is an enemy too) hides only with each of its kinds ticked."] = "列出你某个任务目标的鼠标提示（如\"已杀死蓟皮野猪 5/7\"）。同时属于多种类型的（任务怪也是敌人），只有其所有类型都勾选时才隐藏。"
-L["Friendlies, objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus and the rest."] = "友方、世界中的物体，以及界面的鼠标提示：动作条、增益和减益效果、背包、菜单等。"
+L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus and the rest."] = "世界中的物体，以及界面的鼠标提示：动作条、增益和减益效果、背包、菜单等。"
 L["Every tooltip in the world and on unit frames is hidden while this camera mode is running."] = "此镜头模式运行期间，隐藏世界中和单位框体上的所有鼠标提示。"
 L["On flights"] = "飞行中"
 L["AFK camera (standing still or AFK)"] = "暂离镜头（站着不动或暂离）"

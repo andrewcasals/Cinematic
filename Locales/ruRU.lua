@@ -758,7 +758,7 @@ L["Only in CineMode. Hold your Show hidden tooltips key (set it on the Keybinds 
 L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."] = "Игроки и NPC, которых можно атаковать (и нейтральные), а также их питомцы, прислужники и тотемы."
 L["Herbs, ore and creatures you can skin."] = "Травы, руда и существа, с которых можно снять шкуру."
 L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\"). Something that's more than one kind (a quest mob is an enemy too) hides only with each of its kinds ticked."] = "Подсказки с одной из ваших целей задания (например, \"Убито чертополоховых вепрей: 5/7\"). То, что относится к нескольким видам (монстр задания — еще и враг), скрывается, только если отмечены все его виды."
-L["Friendlies, objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus and the rest."] = "Союзники, объекты в мире и подсказки интерфейса: панели команд, положительные и отрицательные эффекты, сумки, меню и остальное."
+L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, menus and the rest."] = "Объекты в мире и подсказки интерфейса: панели команд, положительные и отрицательные эффекты, сумки, меню и остальное."
 L["Every tooltip in the world and on unit frames is hidden while this camera mode is running."] = "Пока работает этот режим камеры, скрыты все подсказки в мире и на рамках юнитов."
 L["On flights"] = "В полете"
 L["AFK camera (standing still or AFK)"] = "АФК-камера (на месте или АФК)"

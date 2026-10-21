@@ -6655,7 +6655,7 @@ local function CreateVisionPanel()
 end
 
 -- Sub-page: tooltips. In CineMode, world tooltips and unit frames' hide by
--- kind out of combat, enemies or everything else (the UI's too) in combat,
+-- kind out of combat, enemies, friendlies or everything else (the UI's too) in combat,
 -- and all of them in the camera modes ticked.
 local function CreateTooltipPanel()
 	local canvas, content = CreateScrollPage()
@@ -6697,8 +6697,10 @@ local function CreateTooltipPanel()
 	Section(L["Hide in combat"])
 	Row("tooltipHideCombatEnemy", L["Enemies"],
 		L["Players and NPCs you can attack, and their pets, minions and totems."], true)
+	Row("tooltipHideCombatFriendly", L["Friendlies"],
+		L["Players and NPCs you can't attack, and their pets, minions and totems."])
 	Row("tooltipHideCombatElse", L["Everything else"],
-		L["Friendlies, objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, " ..
+		L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, " ..
 		"menus and the rest."])
 
 	-- The camera modes, in two columns of five, down the first then the second.

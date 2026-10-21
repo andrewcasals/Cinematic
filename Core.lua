@@ -185,8 +185,9 @@ local DEFAULTS = {
 	tooltipHideGather = false,  -- ...something gatherable (herb, ore, skinnable)
 	tooltipHideQuest = false,   -- ...one showing a quest objective
 	-- In CineMode, in combat, hide...
-	tooltipHideCombatEnemy = false, -- ...units you can attack
-	tooltipHideCombatElse = true,   -- ...everything else: friends, objects, action bars, bags, menus
+	tooltipHideCombatEnemy = false,   -- ...units you can attack
+	tooltipHideCombatFriendly = true, -- ...units you can't
+	tooltipHideCombatElse = true,     -- ...everything else: objects, action bars, bags, menus
 	musicFadeTime = 3,        -- seconds for music to fade in or out
 	musicFatigue = 0,         -- minutes: don't start music again within this long of the last start
 	-- Which cameras can start music as they start (when music fatigue allows).
@@ -2806,6 +2807,17 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		TooltipKindsToHide(ns.db)
 		for _, saved in pairs(type(ns.db.profiles) == "table" and ns.db.profiles or {}) do
 			if type(saved) == "table" then TooltipKindsToHide(saved) end
+		end
+		-- Friendlies in combat were part of Everything else; they're a line of
+		-- their own now, starting as Everything else was. Saved profiles too.
+		local function CombatFriendlyFromElse(t)
+			if t.tooltipHideCombatFriendly == nil and t.tooltipHideCombatElse ~= nil then
+				t.tooltipHideCombatFriendly = t.tooltipHideCombatElse
+			end
+		end
+		CombatFriendlyFromElse(ns.db)
+		for _, saved in pairs(type(ns.db.profiles) == "table" and ns.db.profiles or {}) do
+			if type(saved) == "table" then CombatFriendlyFromElse(saved) end
 		end
 		-- The cozy and vista triggers used to be switches on those cameras' pages;
 		-- they're events now, each picking its camera. A switched-off trigger
