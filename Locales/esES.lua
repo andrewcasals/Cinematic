@@ -1491,6 +1491,16 @@ L["(WIP)"] = "(en desarrollo)"
 L["Look"] = "Aspecto"
 L["Bar height"] = "Alto de las barras"
 
+-- Layouts.lua: profiles' Edit Mode layouts
+L["this game has no Edit Mode"] = "este juego no tiene Modo Edición"
+L["close Edit Mode first"] = "cierra antes el Modo Edición"
+L["couldn't read the layout"] = "no se pudo leer la disposición"
+L["you already have %d account layouts in Edit Mode; delete one there first"] = "ya tienes %d disposiciones de cuenta en el Modo Edición; borra una allí primero"
+L["the game didn't keep the layout"] = "el juego no guardó la disposición"
+L["couldn't add this profile's Edit Mode layout: %s"] = "no se pudo añadir la disposición del Modo Edición de este perfil: %s"
+L["this profile's Edit Mode layout, %s, isn't there; your layout stays as it is"] = "la disposición del Modo Edición de este perfil, %s, no está; tu disposición se queda como está"
+L["Edit Mode keeps its old list of layouts until you reload, and saving there before then would undo this. Reload now?"] = "El Modo Edición conserva su lista anterior de disposiciones hasta que recargues, y guardar allí antes lo desharía. ¿Recargar ahora?"
+
 -- What's new (WhatsNew.lua, Changelog.lua)
 L["What's new"] = "Novedades"
 L["New features"] = "Funciones nuevas"

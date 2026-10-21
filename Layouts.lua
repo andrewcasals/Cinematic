@@ -1,43 +1,58 @@
--- The dev build's Edit Mode layout page (for now: profiles may get a layout
--- part of their own later). One button makes CINE_FOREVER_RETAIL_LAYOUT, an
--- account layout listed in Edit Mode beside the player's, or brings it up to
--- date if it's there, and switches to it. Deleting it is left to Edit Mode.
--- Edit Mode keeps its own copy of every layout until a reload (and would save
--- that copy over ours), so it ends by offering one.
+-- Edit Mode layouts: Cinematic's own (EDIT_MODE_LAYOUTS), and the profile
+-- layout slot's switching (ns.ApplyProfileLayout). A built-in profile whose
+-- layout part names one (db.editModeLayout) switches Edit Mode to it when
+-- it's picked, making it first if it isn't there; a profile without one
+-- puts back the layout the player was on before. The dev build's Dev page
+-- has a button per layout to make it or bring it up to date.
 --
--- LAYOUT is an Edit Mode export string (Share > Copy to Clipboard); nil uses
--- a copy of the Modern preset with DESIGN's changes. Options.lua calls
--- ns.CreateLayoutPanel with the page helpers it shares (dev build only).
+-- Each is the game's own: an account layout listed in Edit Mode beside the
+-- player's, which they can change there like any other. Making one never
+-- touches their layouts. Edit Mode keeps its own copy of every layout until
+-- a reload (and would save that copy over ours), so making one ends by
+-- offering one.
 
 local _, ns = ...
+local L = ns.L
 
 ns.LAYOUT_NAME = "CINE_FOREVER_RETAIL_LAYOUT"
-
-local LAYOUT = nil
 
 local function AccountType()
 	return Enum.EditModeLayoutType and Enum.EditModeLayoutType.Account or 1
 end
 
--- The saved layouts (not the presets), and our layout's place among them (nil: none).
-local function FindLayout()
+local function Presets()
+	local manager = _G.EditModePresetLayoutManager
+	return manager and manager:GetCopyOfPresetLayouts() or {}
+end
+
+-- The saved layouts (not the presets), and a layout's place among them (nil: none).
+local function FindLayout(name)
 	local info = C_EditMode.GetLayouts()
 	for i, layout in ipairs(info.layouts) do
-		if layout.layoutName == ns.LAYOUT_NAME then return info, i end
+		if layout.layoutName == name then return info, i end
 	end
 	return info, nil
 end
 
 -- A layout's number for SetActiveLayout by name (a preset's too); nil if gone.
 local function IndexOf(info, name)
-	local manager = _G.EditModePresetLayoutManager
-	local presets = manager and manager:GetCopyOfPresetLayouts() or {}
+	local presets = Presets()
 	for i, preset in ipairs(presets) do
 		if preset.layoutName == name then return i end
 	end
 	for i, layout in ipairs(info.layouts) do
 		if layout.layoutName == name then return #presets + i end
 	end
+end
+
+-- The active layout's name (a preset's too).
+local function ActiveName(info)
+	local presets = Presets()
+	local index = info.activeLayout
+	if not index then return nil end
+	if index <= #presets then return presets[index].layoutName end
+	local layout = info.layouts[index - #presets]
+	return layout and layout.layoutName
 end
 
 -- Without an export string: the Modern preset with the dev's changes to it
@@ -75,9 +90,16 @@ local DESIGN = {
 	{ 29, 3, "TOPLEFT", "SwingTimerOffHandFrame", "BOTTOMLEFT", 0, -4 },
 }
 
-local function ApplyDesign(layout)
+-- Cinematic's own layouts, by the name Edit Mode lists them under. export:
+-- an Edit Mode export string (Share > Copy to Clipboard); without one, design:
+-- changes to the Modern preset (as DESIGN).
+ns.EDIT_MODE_LAYOUTS = {
+	[ns.LAYOUT_NAME] = { export = nil, design = DESIGN },
+}
+
+local function ApplyDesign(layout, design)
 	for _, system in ipairs(layout.systems or {}) do
-		for _, saved in ipairs(DESIGN) do
+		for _, saved in ipairs(design) do
 			if system.system == saved[1] and system.systemIndex == saved[2] then
 				system.isInDefaultPosition = false
 				system.anchorInfo = { point = saved[3], relativeTo = saved[4], relativePoint = saved[5],
@@ -91,36 +113,37 @@ local function ApplyDesign(layout)
 	end
 end
 
-local function BuildLayout()
+local function BuildLayout(name)
+	local def = ns.EDIT_MODE_LAYOUTS[name]
+	if not def then return nil end
 	local layout
-	if LAYOUT then
-		layout = C_EditMode.ConvertStringToLayoutInfo(LAYOUT)
+	if def.export then
+		layout = C_EditMode.ConvertStringToLayoutInfo(def.export)
 	else
-		local manager = _G.EditModePresetLayoutManager
-		layout = manager and manager:GetCopyOfPresetLayouts()[1] -- (Modern)
-		if layout then ApplyDesign(layout) end
+		layout = Presets()[1] -- (Modern)
+		if layout then ApplyDesign(layout, def.design or {}) end
 	end
 	if not layout then return nil end
-	layout.layoutName, layout.layoutType = ns.LAYOUT_NAME, AccountType()
+	layout.layoutName, layout.layoutType = name, AccountType()
 	return layout
 end
 
--- Why it can't be changed now (nil: it can).
+-- Why layouts can't be changed now (nil: they can).
 local function Blocked()
-	if not (C_EditMode and C_EditMode.GetLayouts) then return "this game has no Edit Mode" end
-	if InCombatLockdown() then return "not in combat" end
+	if not (C_EditMode and C_EditMode.GetLayouts) then return L["this game has no Edit Mode"] end
+	if InCombatLockdown() then return L["not in combat"] end
 	local manager = _G.EditModeManagerFrame
-	if manager and manager:IsShown() then return "close Edit Mode first" end
+	if manager and manager:IsShown() then return L["close Edit Mode first"] end
 end
 
--- Made, or brought up to date, and switched to. true: done (a reload applies
--- it everywhere); false, reason: not.
-local function MakeLayout()
+-- One of ours made, or brought up to date, and switched to. true: done (a
+-- reload applies it everywhere); false, reason: not.
+function ns.MakeLayout(name)
 	local blocked = Blocked()
 	if blocked then return false, blocked end
-	local info, index = FindLayout()
-	local layout = BuildLayout()
-	if not layout then return false, "couldn't read the layout" end
+	local info, index = FindLayout(name)
+	local layout = BuildLayout(name)
+	if not layout then return false, L["couldn't read the layout"] end
 	if index then
 		info.layouts[index] = layout
 	else
@@ -130,19 +153,28 @@ local function MakeLayout()
 		end
 		local max = Constants.EditModeConsts and Constants.EditModeConsts.EditModeMaxLayoutsPerType or 5
 		if count >= max then
-			return false, ("you already have %d account layouts; delete one in Edit Mode first"):format(max)
+			return false, L["you already have %d account layouts in Edit Mode; delete one there first"]:format(max)
 		end
 		info.layouts[#info.layouts + 1] = layout
 	end
 	C_EditMode.SaveLayouts(info)
-	local active = IndexOf(C_EditMode.GetLayouts(), ns.LAYOUT_NAME)
+	local active = IndexOf(C_EditMode.GetLayouts(), name)
 	-- (whether the game took it: it can refuse a layout without saying)
-	ns.Log("state", ("edit mode layout %s: %s"):format(index and "updated" or "made", active and "there" or "NOT there"))
-	if not active then return false, "the game didn't keep it" end
+	ns.Log("state", ("edit mode layout %s %s: %s"):format(name, index and "updated" or "made",
+		active and "there" or "NOT there"))
+	if not active then return false, L["the game didn't keep the layout"] end
 	C_EditMode.SetActiveLayout(active)
 	-- (the reload it asks for puts Edit Mode back on the layout it had: switched again after it)
-	ns.chardb.layoutPending = ns.LAYOUT_NAME
+	ns.chardb.layoutPending = name
 	return true
+end
+
+-- Whether one of ours is there: nil: no; "active" or "made" (another in use).
+function ns.LayoutState(name)
+	if not (C_EditMode and C_EditMode.GetLayouts) then return nil end
+	local info, index = FindLayout(name)
+	if not index then return nil end
+	return ActiveName(info) == name and "active" or "made"
 end
 
 -- After a reload, the layout just made, switched to again (once).
@@ -163,45 +195,119 @@ pending:SetScript("OnEvent", function(self)
 	end)
 end)
 
--- The page: whether it's there, and the one button.
-function ns.CreateLayoutPanel(kit)
+-- The profile's Edit Mode layout (db.editModeLayout, from its layout part):
+-- on switching profile (Profiles.lua), Edit Mode goes to it, after the fight
+-- if in one; one of ours is made if it isn't there. "": the player's own,
+-- the one they were on before a profile switched it (chardb.layoutOwn), back.
+-- Logging in never changes the layout.
+local afterCombat = CreateFrame("Frame")
+afterCombat:SetScript("OnEvent", function(self)
+	self:UnregisterAllEvents()
+	ns.ApplyProfileLayout()
+end)
+local missingSaid = {}
+
+function ns.ApplyProfileLayout()
+	if not (C_EditMode and C_EditMode.GetLayouts) or not ns.db or not ns.chardb then return end
+	if InCombatLockdown() then
+		afterCombat:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return
+	end
+	local manager = _G.EditModeManagerFrame
+	if manager and manager:IsShown() then return end -- (the player's choosing there)
+	local name = ns.db.editModeLayout or ""
+	local info = C_EditMode.GetLayouts()
+	if name == "" then
+		local own = ns.chardb.layoutOwn
+		if not own then return end
+		ns.chardb.layoutOwn = nil -- (back on it: or, gone, nothing to go back to)
+		local index = IndexOf(info, own)
+		if index and info.activeLayout ~= index then
+			C_EditMode.SetActiveLayout(index)
+			ns.Log("state", "edit mode layout back to: " .. own)
+		end
+		return
+	end
+	-- (the one to go back to: what's on now, unless a profile's switched it already)
+	local current = ActiveName(info)
+	if not ns.chardb.layoutOwn and current ~= name then ns.chardb.layoutOwn = current end
+	local index = IndexOf(info, name)
+	if not index then
+		if ns.EDIT_MODE_LAYOUTS[name] then
+			local ok, reason = ns.MakeLayout(name)
+			if ok then
+				StaticPopup_Show("CINEMATIC_LAYOUT_RELOAD")
+			else
+				ns.Print(L["couldn't add this profile's Edit Mode layout: %s"]:format(reason))
+			end
+		elseif not missingSaid[name] then
+			missingSaid[name] = true
+			ns.Print(L["this profile's Edit Mode layout, %s, isn't there; your layout stays as it is"]:format(name))
+		end
+		return
+	end
+	if info.activeLayout ~= index then
+		C_EditMode.SetActiveLayout(index)
+		ns.Log("state", "edit mode layout: " .. name)
+	end
+end
+
+ns.OnLanguage(function()
 	StaticPopupDialogs.CINEMATIC_LAYOUT_RELOAD = {
-		text = "Edit Mode keeps its old list of layouts until you reload, and saving there before then " ..
-			"would undo this. Reload now?",
-		button1 = RELOADUI or "Reload", button2 = "Later",
+		text = L["Edit Mode keeps its old list of layouts until you reload, and saving there before then " ..
+			"would undo this. Reload now?"],
+		button1 = RELOADUI or L["Reload"], button2 = L["Later"],
 		OnAccept = ReloadUI,
 		timeout = 0, whileDead = true, hideOnEscape = true,
 	}
+end)
 
+-- The Dev page (dev build): each of our layouts, whether it's there, and a
+-- button to make it or bring it up to date from the code.
+function ns.CreateLayoutPanel(kit)
 	local canvas, content = kit.CreateScrollPage(true)
-	local title = kit.Label(content, "GameFontNormalLarge", "|cffff4040DEV ONLY|r Edit Mode layout")
+	local title = kit.Label(content, "GameFontNormalLarge", "|cffff4040DEV ONLY|r Edit Mode layouts")
 	title:SetPoint("TOPLEFT", 16, -16)
-	local intro = kit.Label(content, "GameFontHighlight", "Makes " .. ns.LAYOUT_NAME .. " in Edit Mode, or " ..
-		"brings it up to date from the code if it's there, and switches to it. Delete it in Edit Mode.")
+	local intro = kit.Label(content, "GameFontHighlight", "Makes each layout in Edit Mode, or brings it up " ..
+		"to date from the code if it's there, and switches to it. Delete them in Edit Mode. A profile whose " ..
+		"layout part names one makes it when picked, too.")
 	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
 	intro:SetWidth(560)
 	intro:SetJustifyH("LEFT")
 
-	local status = kit.Label(content, "GameFontHighlight")
-	status:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -14)
-	local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-	button:SetSize(200, 24)
-	button:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -2, -12)
+	local names = {}
+	for name in pairs(ns.EDIT_MODE_LAYOUTS) do names[#names + 1] = name end
+	table.sort(names)
+	local rows, anchor = {}, intro
+	for _, name in ipairs(names) do
+		local status = kit.Label(content, "GameFontHighlight")
+		status:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
+		local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+		button:SetSize(200, 24)
+		button:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -2, -8)
+		rows[#rows + 1] = { name = name, status = status, button = button }
+		anchor = button
+	end
 
 	local function Refresh()
-		local there = C_EditMode and C_EditMode.GetLayouts and select(2, FindLayout())
-		status:SetText(ns.LAYOUT_NAME .. ": " .. (there and "|cff40ff40there|r" or "|cff808080not made yet|r"))
-		button:SetText(there and "Update the layout" or "Create the layout")
-	end
-	button:SetScript("OnClick", function()
-		local ok, reason = MakeLayout()
-		if ok then
-			StaticPopup_Show("CINEMATIC_LAYOUT_RELOAD")
-		else
-			ns.Print(reason)
+		for _, row in ipairs(rows) do
+			local state = ns.LayoutState(row.name)
+			row.status:SetText(row.name .. ": " .. (state == "active" and "|cff40ff40there, in use|r"
+				or state and "|cffffd100there, not in use|r" or "|cff808080not made yet|r"))
+			row.button:SetText(state and "Update the layout" or "Create the layout")
 		end
-		Refresh()
-	end)
+	end
+	for _, row in ipairs(rows) do
+		row.button:SetScript("OnClick", function()
+			local ok, reason = ns.MakeLayout(row.name)
+			if ok then
+				StaticPopup_Show("CINEMATIC_LAYOUT_RELOAD")
+			else
+				ns.Print(reason)
+			end
+			Refresh()
+		end)
+	end
 
 	-- (made or deleted in Edit Mode itself, too)
 	canvas:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")

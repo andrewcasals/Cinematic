@@ -249,6 +249,7 @@ local DEFAULTS = {
 	talentLink = true,         -- Forever: inspecting someone, a button to their talents, and one back on the talents window (TalentLink.lua)
 	talentCalc = true,         -- Forever: a Talent calculator button on the talents window (TalentCalc.lua)
 	talentCalcTalented = false, -- ...counting the Legacy Tree's Talented (points from level 5) for the level a build needs
+	editModeLayout = "",       -- the profile's Edit Mode layout, switched to when it's picked ("": the player's own; Layouts.lua)
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
@@ -382,6 +383,7 @@ DEFAULTS.gamepadPressHold = 3       -- ...for this long after the last press (co
 DEFAULTS.gamepadBarsFadeIn = 0.2    -- gamepad mode's action bars fade quicker than the rest of the UI
 DEFAULTS.gamepadBarsFadeOut = 0.5
 DEFAULTS.showInteractPrompt = true -- the interact prompt on a plate (gamepad's X) stays as plates fade
+DEFAULTS.keepRaidMarkers = true -- raid markers (skull, moon...) stay over units as their plates fade (Nameplates page)
 DEFAULTS.forceReloadOnSettingsExit = true -- WoW Forever: closing Settings reloads (gets past its gamepad freeze)
 DEFAULTS.hideMinimapButtonGamepad = true -- no minimap button in gamepad mode (clicking it there tends to freeze)
 for _, key in ipairs({ "Mode", "Right", "Step", "Speed", "MinChange", "PitchUp", "PitchDown", "BackArc",

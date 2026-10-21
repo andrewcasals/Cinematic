@@ -41,7 +41,7 @@ local DEFAULT_PROFILE -- (this client's first built-in: set after the list)
 -- client: only on that one ("forever" or "retail"). label: the name shown,
 -- when it isn't the saved name (two clients' profiles can't share a name in
 -- this list). oldNames: what it was called before: settings and picks saved
--- under those move to it at login.
+-- under those move to it at login. dev: only in the dev build (one being made).
 ns.BUILTIN_PROFILES = {
 	{
 		name = "Immersive",
@@ -96,6 +96,14 @@ ns.BUILTIN_PROFILES = {
 			"your target and your cast bar (hidden otherwise), and every camera can start music."],
 		parts = { frames = "pure", bars = "pure", camera = "pure", vfx = "pure", misc = "pure" },
 	},
+	{
+		name = "Layout test",
+		icon = "Interface\\Icons\\INV_Misc_Wrench_01",
+		tip = "DEV: Immersive on Cinematic's retail-style Edit Mode layout (CINE_FOREVER_RETAIL_LAYOUT).",
+		client = "forever",
+		dev = true,
+		parts = { layout = "retail", frames = "immersive", camera = "immersive", misc = "immersive" },
+	},
 }
 -- Each client's order, by name, where it isn't the list's (those not in it
 -- come after, in the list's order).
@@ -109,7 +117,7 @@ do
 	local order, list = {}, {}
 	for i, name in ipairs(BUILTIN_ORDER[ns.CLIENT] or {}) do order[name] = i end
 	for i, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do
-		if not profile.client or profile.client == ns.CLIENT then
+		if (not profile.client or profile.client == ns.CLIENT) and (not profile.dev or ns.isDev) then
 			list[#list + 1] = { profile = profile, rank = order[profile.name] or 1000 + i }
 		end
 	end
@@ -226,6 +234,7 @@ local function SettingsChanged()
 	if ns.BuildManagedList then ns.BuildManagedList() end
 	if ns.ApplyBubbles then ns.ApplyBubbles() end
 	if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
+	if ns.ApplyProfileLayout then ns.ApplyProfileLayout() end
 	if ns.RefreshOptions then ns.RefreshOptions() end
 end
 

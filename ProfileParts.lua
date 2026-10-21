@@ -117,8 +117,21 @@ local function NoNpcChat(set)
 	set("chatPeekTypes", { npc = false })
 end
 
+-- A layout part: Edit Mode switches to the layout called name when the
+-- profile's picked (Layouts.lua: one of Cinematic's own is made first if it
+-- isn't there). No layout part: the player's own layout.
+local function LayoutPart(name, client)
+	return { client = client, editMode = name, apply = function(set)
+		set("editModeLayout", name)
+	end }
+end
+
 ns.PROFILE_PARTS = {
-	layout = {},
+	layout = {
+		-- Action bars centred along the bottom, the micro menu and bags in the
+		-- corner, the XP bars under them, as on retail.
+		retail = LayoutPart("CINE_FOREVER_RETAIL_LAYOUT", "forever"),
+	},
 	frames = {
 		standard = { apply = FramesBase },
 		-- No minimap in fights (its header, buttons, zone name and clock

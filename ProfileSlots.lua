@@ -261,6 +261,8 @@ function ns.SlotsDebug(all)
 						problem = "no such part"
 					elseif part and part.client and part.client ~= client then
 						problem = "that part is " .. part.client .. "'s only"
+					elseif part and part.editMode and not ns.EDIT_MODE_LAYOUTS[part.editMode] then
+						problem = "layout " .. part.editMode .. " isn't one of Cinematic's (Layouts.lua)"
 					end
 					if problem then
 						recipes = recipes + 1
