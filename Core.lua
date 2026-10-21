@@ -250,6 +250,7 @@ local DEFAULTS = {
 	talentCalc = true,         -- Forever: a Talent calculator button on the talents window (TalentCalc.lua)
 	talentCalcTalented = false, -- ...counting the Legacy Tree's Talented (points from level 5) for the level a build needs
 	editModeLayout = "",       -- the profile's Edit Mode layout, switched to when it's picked ("": the player's own; Layouts.lua)
+	cooldownManagerOn = false, -- the profile turns the game's Cooldown Manager on if it's off (the CDM part; Profiles.lua)
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
@@ -867,6 +868,10 @@ local lastBusy = 0
 -- After a fight, login, /reload or turning it on, cinematic mode starts at
 -- once instead of waiting the fade delay (until something else brings the UI back).
 local quickStart = false
+-- Switched profile: the next time CineMode comes in (after closing the
+-- settings, say), it's straight in and the UI hidden at once, as at login,
+-- rather than the old profile's frames fading out. A fight first drops it.
+local switchedProfile = false
 
 function ns.Print(msg)
 	print("|cffe0b050Cinematic:|r " .. msg)
@@ -1347,8 +1352,9 @@ local function ShouldBeCinematic(now)
 		lastBusy = now
 		-- Only the fight itself counts: anything else (a cast, a window) still
 		-- busy as it ends waits the full fade delay.
-		quickStart = not ns.db.stayInCombat
-			and (InCombatLockdown() or Flag(UnitAffectingCombat("player"))) and true or false
+		local fight = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
+		if fight then switchedProfile = false end
+		quickStart = switchedProfile or (not ns.db.stayInCombat and fight) and true or false
 		ns.cineOffWhy = "busy (combat, cast, window or cursor)"
 		return false
 	end
@@ -1660,7 +1666,8 @@ local function OnUpdate(_, elapsed)
 	Step(UpdateDroppedTarget)
 	offForMoving = false
 	local cinematic = Step(ShouldBeCinematic, GetTime()) or false -- (an error: the normal UI)
-	if cinematic and starting then
+	if cinematic and (starting or switchedProfile) then
+		switchedProfile = false
 		-- Start in cinematic mode: hide the UI at once instead of fading. The
 		-- letterbox bars still slide in at their usual pace.
 		for _, entry in ipairs(ns.managed) do
@@ -1673,7 +1680,17 @@ local function OnUpdate(_, elapsed)
 	if cinematic ~= ns.lastCinematic then
 		ns.Log("state", cinematic and "cinematic" or ("normal UI: " .. tostring(ns.cineOffWhy)))
 	end
-	Step(ns.UpdateFrames, cinematic, elapsed)
+	-- Just picked a profile on the Profiles page or in the welcome window: the
+	-- frames fade as in CineMode for a moment, its preview group up
+	-- (ns.PreviewProfile). Not the letterbox or the other effects.
+	if ns.previewRows and GetTime() >= ns.previewUntil then
+		ns.previewRows = nil
+	end
+	-- (A profile's layout change waiting for the UI to fade out: Layouts.lua.)
+	if ns.layoutFadeUntil and (GetTime() >= ns.layoutFadeUntil or ns.AllFaded() or InCombatLockdown()) then
+		Step(ns.FinishLayoutFade)
+	end
+	Step(ns.UpdateFrames, cinematic or ns.previewRows ~= nil or ns.layoutFadeUntil ~= nil, elapsed)
 	-- The letterbox, tint, vignette and weather each show except where their grid row says. One
 	-- kept out of fights waits out the Calm Timer after one before fading back in.
 	local now = GetTime()
@@ -1821,12 +1838,14 @@ function ns.SetEnabled(enabled)
 	end
 end
 
--- Switching profiles starts afresh: CineMode comes in now (fading as usual)
--- rather than after the fade delay, and a Calm Timer running from the last
--- fight is dropped (not mid-fight).
+-- Switching profiles starts afresh: CineMode comes in now rather than after
+-- the fade delay (or as soon as the settings close), hiding the UI at once,
+-- and a Calm Timer running from the last fight is dropped (not mid-fight).
 function ns.RestartTimers()
 	lastBusy = GetTime()
 	quickStart = true
+	switchedProfile = true
+	snapRound = snapRound + 1
 	if not (InCombatLockdown() or Flag(UnitAffectingCombat("player"))) then
 		fightEndedAt, lastFightAt = -math.huge, -math.huge
 	end

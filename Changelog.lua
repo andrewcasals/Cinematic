@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-21", page = "Profiles", client = "forever", title = "Retail profile",
+		text = "A new Retail profile gives WoW Forever retail's look: Cinematic's own Edit Mode layout, with " ..
+		"action bars 1 to 3, the micro menu and bags, and the XP bar each coming up on its own. Switch back " ..
+		"to Default and your own layout returns." },
 	{ date = "2026-10-20", page = "General", client = "forever", title = "Talent calculator",
 		text = "A calculator button on your talents window opens a talent planner that looks just like it, " ..
 		"starting from your talents. Plan a build, see the level it needs, then copy it over to your talents " ..

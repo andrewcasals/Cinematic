@@ -42,22 +42,83 @@ local DEFAULT_PROFILE -- (this client's first built-in: set after the list)
 -- when it isn't the saved name (two clients' profiles can't share a name in
 -- this list). oldNames: what it was called before: settings and picks saved
 -- under those move to it at login. dev: only in the dev build (one being made).
+-- preview: the mouseover group (its preset) shown for a moment when it's
+-- picked on the Profiles page, the rest faded (ns.PreviewProfile).
 ns.BUILTIN_PROFILES = {
+	-- Forever's own three: its default, with the Cooldown Manager, and on a
+	-- layout like retail's.
 	{
-		name = "Immersive",
-		oldNames = { "Cinematic Strong" }, -- (test builds)
+		name = "Forever Default",
+		label = "Default",
+		client = "forever",
+		oldNames = { "Immersive", "Cinematic Strong" }, -- (Cinematic Strong: test builds)
 		icon = "Interface\\Icons\\Spell_Holy_MindVision",
-		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
+		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with the action " ..
+			"bars, micro menu, bags and XP bar coming up together when you point at one. WoW Forever's default, " ..
 			"and how the developer plays every day."],
 		parts = { frames = "immersive", camera = "immersive", misc = "immersive" },
+		preview = "bars",
 	},
 	{
-		name = "Immersive (CDM)",
+		name = "Forever CDM",
+		label = "CDM",
+		client = "forever",
+		oldNames = { "Immersive (CDM)" },
 		icon = "Interface\\Icons\\Spell_Shadow_AntiShadow", -- (Preparation)
-		tip = L["Immersive, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
+		tip = L["Default, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
 			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
 		parts = { frames = "cdm", bars = "cdm", camera = "immersive", misc = "immersive" },
+		preview = "cooldowns",
 	},
+	{
+		name = "Forever Retail",
+		label = "Retail",
+		client = "forever",
+		icon = "Interface\\Icons\\INV_Misc_Wrench_01",
+		tip = L["Default, looking like retail: Cinematic's own Edit Mode layout (the action bars centred along " ..
+			"the bottom, the micro menu and bags in the corner, the XP bar under them), with action bars 1 to 3, " ..
+			"the micro menu and bags, and the XP bar each coming up on its own when you point at it. Picking it " ..
+			"adds the layout to Edit Mode if you haven't got it; other profiles put your own layout back."],
+		parts = { layout = "retail", frames = "immersive", bars = "split", camera = "immersive", misc = "immersive" },
+		preview = "bars",
+	},
+	-- Retail's own three, the same way round.
+	{
+		name = "Retail Default",
+		label = "Default",
+		client = "retail",
+		oldNames = { "Immersive" },
+		icon = "Interface\\Icons\\Spell_Holy_PowerInfusion",
+		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with action bars " ..
+			"1 to 3, the micro menu and bags, and the XP bar each coming up on its own when you point at it. " ..
+			"Retail's default."],
+		parts = { frames = "immersive", camera = "immersive", misc = "immersive" },
+		preview = "bars",
+	},
+	{
+		name = "Retail CDM",
+		label = "CDM",
+		client = "retail",
+		oldNames = { "Immersive (CDM)" },
+		icon = "Interface\\Icons\\Ability_Rogue_Preparation",
+		tip = L["Default, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
+			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
+		parts = { frames = "cdm", bars = "cdm", camera = "immersive", misc = "immersive" },
+		preview = "cooldowns",
+	},
+	{
+		-- (dev only until its layout's designed: Layouts.lua)
+		name = "Retail Forever",
+		label = "Forever",
+		client = "retail",
+		dev = true,
+		icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
+		tip = "Default, looking like WoW Forever: its layout (CINE_RETAIL_FOREVER_LAYOUT, not designed yet: " ..
+			"a copy of Modern), with the action bars, micro menu, bags and XP bar coming up together.",
+		parts = { layout = "forever", frames = "immersive", bars = "grouped", camera = "immersive", misc = "immersive" },
+		preview = "bars",
+	},
+	-- Both clients'.
 	{
 		name = "Lite",
 		icon = "Interface\\Icons\\Spell_Holy_HolyBolt",
@@ -96,14 +157,6 @@ ns.BUILTIN_PROFILES = {
 			"your target and your cast bar (hidden otherwise), and every camera can start music."],
 		parts = { frames = "pure", bars = "pure", camera = "pure", vfx = "pure", misc = "pure" },
 	},
-	{
-		name = "Layout test",
-		icon = "Interface\\Icons\\INV_Misc_Wrench_01",
-		tip = "DEV: Immersive on Cinematic's retail-style Edit Mode layout (CINE_FOREVER_RETAIL_LAYOUT).",
-		client = "forever",
-		dev = true,
-		parts = { layout = "retail", frames = "immersive", camera = "immersive", misc = "immersive" },
-	},
 }
 -- Each client's order, by name, where it isn't the list's (those not in it
 -- come after, in the list's order).
@@ -129,6 +182,29 @@ DEFAULT_PROFILE = ns.BUILTIN_PROFILES[1].name
 ns.OnLanguage(function() ns.TranslateFields(ns.ALL_BUILTIN_PROFILES, "tip") end)
 local builtinByName = {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
+
+-- Just switched to a profile (Profiles page, welcome window): a built-in
+-- with a preview shows its mouseover group of that preset for a few
+-- seconds, as its settings and layout have it now, with the rest of the UI
+-- faded (Core.lua, Frames.lua). Another profile: none.
+local PREVIEW_TIME = 3
+function ns.PreviewProfile(name)
+	local builtin = builtinByName[name]
+	ns.previewRows = nil
+	if not (builtin and builtin.preview) then return end
+	-- (The UI fading out for a layout change first: once it's switched, Layouts.lua.)
+	if ns.layoutFadeUntil then
+		ns.pendingPreview = name
+		return
+	end
+	local rows = {}
+	for _, group in ipairs(ns.GetHoverGroups()) do
+		if group.preset == builtin.preview then
+			for _, member in ipairs(group.members or {}) do rows[member] = true end
+		end
+	end
+	ns.previewRows, ns.previewUntil = rows, GetTime() + PREVIEW_TIME
+end
 
 -- The name a profile is shown by: a built-in's label, or its name.
 function ns.ProfileLabel(name)
@@ -260,6 +336,60 @@ local function Load(name)
 	ns.EnsureTables()
 end
 
+-- The game's Cooldown Manager for profiles that use it (db.cooldownManagerOn,
+-- the CDM part): its switch (cooldownViewerEnabled, the same on both
+-- clients) turned on if it's off, and back off on switching to a profile
+-- without it, if Cinematic turned it on (db.cdmTurnedOn). The player's own
+-- choice stands: switched by them meanwhile, it's left as they put it
+-- (db.cdmLeftAlone) until they're on a profile without it again. Not in
+-- fights: once one ends.
+local CDM_CVAR = "cooldownViewerEnabled"
+local cdmFrame = CreateFrame("Frame")
+local cdmWritten -- (the value just written: its CVAR_UPDATE isn't the player's)
+local function ApplyCooldownManager()
+	local db = ns.db
+	if not db or GetCVar(CDM_CVAR) == nil then return end
+	if InCombatLockdown() then
+		cdmFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return
+	end
+	local on = GetCVar(CDM_CVAR) == "1"
+	local want
+	if db.cooldownManagerOn and db.enabled then
+		if not on and not db.cdmTurnedOn and not db.cdmLeftAlone then want = "1" end
+	else
+		db.cdmLeftAlone = nil
+		if db.cdmTurnedOn then
+			db.cdmTurnedOn = nil
+			if on then want = "0" end
+		end
+	end
+	if want then
+		cdmWritten = want
+		SetCVar(CDM_CVAR, want)
+		db.cdmTurnedOn = want == "1" or nil
+		ns.Log("state", "cooldown manager " .. (want == "1" and "turned on for the profile" or "back off"))
+	end
+end
+cdmFrame:RegisterEvent("PLAYER_LOGIN")
+cdmFrame:RegisterEvent("CVAR_UPDATE")
+cdmFrame:SetScript("OnEvent", function(self, event, name)
+	if event == "CVAR_UPDATE" then
+		if type(name) ~= "string" or name:lower() ~= CDM_CVAR:lower() or not ns.db then return end
+		if cdmWritten and GetCVar(CDM_CVAR) == cdmWritten then
+			cdmWritten = nil -- (ours)
+			return
+		end
+		-- (the player switching it themselves: theirs from now on)
+		cdmWritten = nil
+		ns.db.cdmTurnedOn = nil
+		if ns.db.cooldownManagerOn then ns.db.cdmLeftAlone = true end
+		return
+	end
+	if event == "PLAYER_REGEN_ENABLED" then self:UnregisterEvent(event) end
+	ApplyCooldownManager()
+end)
+
 -- Everything that reads settings once picks up the new ones.
 local function SettingsChanged()
 	ns.letterboxDirty = true
@@ -268,7 +398,8 @@ local function SettingsChanged()
 	if ns.BuildManagedList then ns.BuildManagedList() end
 	if ns.ApplyBubbles then ns.ApplyBubbles() end
 	if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
-	if ns.ApplyProfileLayout then ns.ApplyProfileLayout() end
+	if ns.SwitchProfileLayout then ns.SwitchProfileLayout() end
+	ApplyCooldownManager()
 	if ns.RefreshOptions then ns.RefreshOptions() end
 end
 

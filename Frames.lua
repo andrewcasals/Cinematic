@@ -1191,6 +1191,26 @@ local function UnshrinkEntry(entry)
 	end
 end
 
+-- Every faded frame all the way out (for a layout change to wait for).
+function ns.AllFaded()
+	for _, entry in ipairs(ns.managed) do
+		if (entry.alpha or 1) > 0 then return false end
+	end
+	return true
+end
+
+-- Every shrunk frame back at full size in its place (still faded), for a
+-- moment: an Edit Mode layout switch then lays out the frames themselves,
+-- not their parked, shrunk copies (whose old size and place would come back
+-- when shown: an XP bar keeping its old width). The faded ones shrink again
+-- a second later, from where the layout put them.
+function ns.UnshrinkForLayout()
+	ns.noShrinkUntil = GetTime() + 1
+	for _, entry in ipairs(ns.managed) do
+		if entry.shrunk and not ns.ScaleBlocked(entry.frame) then UnshrinkEntry(entry) end
+	end
+end
+
 function ns.SetEntryAlpha(entry, alpha)
 	entry.alpha = alpha
 	if entry.shrinkWhenFaded then
@@ -1213,8 +1233,8 @@ function ns.SetEntryAlpha(entry, alpha)
 			end
 		elseif not entry.shrunk then
 			-- Shrink in the same step it reaches 0, so it's never at alpha 0
-			-- while full size.
-			ShrinkEntry(entry)
+			-- while full size. (Not just after a layout switch: see above.)
+			if GetTime() >= (ns.noShrinkUntil or 0) then ShrinkEntry(entry) end
 		elseif not (ns.parkMinimapFullSize and entry.frame == Minimap)
 			and math.abs(entry.frame:GetScale() - SHRUNK_SCALE) > SHRUNK_SCALE / 2 then
 			-- Something put its size back (EllesmereUI does when it lays the
@@ -4482,6 +4502,13 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if camHidesMinimap and GROUP_SWITCH[entry.group] == "handleMinimap"
 			and not hovered[entry.row] and not pinged[entry.row] then
 			target = 0
+		end
+		-- (Fading out for a profile's layout change, Layouts.lua; then a
+		-- profile's preview: just its group up, ns.PreviewProfile.)
+		if ns.layoutFadeUntil then
+			target = 0
+		elseif ns.previewRows then
+			target = ns.previewRows[entry.row] and 1 or 0
 		end
 		if entry.frame == Minimap then
 			RedrawMinimapWhenShown()

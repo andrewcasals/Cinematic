@@ -7523,6 +7523,7 @@ local function CreateProfilesPanel()
 			if self.name ~= active then
 				picker:Hide()
 				ns.SetProfile(self.name)
+				ns.PreviewProfile(self.name)
 				Refresh()
 			elseif not ns.IsBuiltinProfile(self.name) then
 				picker:Open(self, self.name, ns.ProfileIcon(self.name))
@@ -7530,7 +7531,7 @@ local function CreateProfilesPanel()
 		end)
 		cell:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self.square, "ANCHOR_RIGHT")
-			GameTooltip:SetText(self.name, 1, 0.82, 0)
+			GameTooltip:SetText(ns.ProfileLabel(self.name), 1, 0.82, 0)
 			GameTooltip:AddLine(self.tip, 1, 1, 1, true)
 			local hint = self.name ~= active and L["Click to switch to it."]
 				or not ns.IsBuiltinProfile(self.name) and L["Click to pick its icon."]

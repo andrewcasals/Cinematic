@@ -7,9 +7,9 @@
 --
 -- Each is the game's own: an account layout listed in Edit Mode beside the
 -- player's, which they can change there like any other. Making one never
--- touches their layouts. Edit Mode keeps its own copy of every layout until
--- a reload (and would save that copy over ours), so making one ends by
--- offering one.
+-- touches their layouts. A new one works at once, no reload needed; one
+-- brought up to date (the Dev page's Update) shows its old copy in Edit Mode
+-- until a reload (and saving there would put that back), so that offers one.
 
 local _, ns = ...
 local L = ns.L
@@ -43,6 +43,13 @@ local function IndexOf(info, name)
 	for i, layout in ipairs(info.layouts) do
 		if layout.layoutName == name then return #presets + i end
 	end
+end
+
+-- Switches Edit Mode's layout, with the faded frames at full size for it
+-- (Frames.lua: shrunk, they'd keep their old size and place).
+local function SetActive(index)
+	if ns.UnshrinkForLayout then ns.UnshrinkForLayout() end
+	C_EditMode.SetActiveLayout(index)
 end
 
 -- The active layout's name (a preset's too).
@@ -95,6 +102,9 @@ local DESIGN = {
 -- changes to the Modern preset (as DESIGN).
 ns.EDIT_MODE_LAYOUTS = {
 	[ns.LAYOUT_NAME] = { export = nil, design = DESIGN },
+	-- Retail laid out like WoW Forever's default (the retail profile "Forever").
+	-- Not designed yet: a copy of Modern until its export string's in.
+	CINE_RETAIL_FOREVER_LAYOUT = { export = nil, design = {} },
 }
 
 local function ApplyDesign(layout, design)
@@ -163,9 +173,7 @@ function ns.MakeLayout(name)
 	ns.Log("state", ("edit mode layout %s %s: %s"):format(name, index and "updated" or "made",
 		active and "there" or "NOT there"))
 	if not active then return false, L["the game didn't keep the layout"] end
-	C_EditMode.SetActiveLayout(active)
-	-- (the reload it asks for puts Edit Mode back on the layout it had: switched again after it)
-	ns.chardb.layoutPending = name
+	SetActive(active)
 	return true
 end
 
@@ -190,7 +198,7 @@ pending:SetScript("OnEvent", function(self)
 		local info = C_EditMode.GetLayouts()
 		local index = IndexOf(info, name)
 		if index and info.activeLayout ~= index then
-			C_EditMode.SetActiveLayout(index)
+			SetActive(index)
 		end
 	end)
 end)
@@ -223,7 +231,7 @@ function ns.ApplyProfileLayout()
 		ns.chardb.layoutOwn = nil -- (back on it: or, gone, nothing to go back to)
 		local index = IndexOf(info, own)
 		if index and info.activeLayout ~= index then
-			C_EditMode.SetActiveLayout(index)
+			SetActive(index)
 			ns.Log("state", "edit mode layout back to: " .. own)
 		end
 		return
@@ -235,9 +243,7 @@ function ns.ApplyProfileLayout()
 	if not index then
 		if ns.EDIT_MODE_LAYOUTS[name] then
 			local ok, reason = ns.MakeLayout(name)
-			if ok then
-				StaticPopup_Show("CINEMATIC_LAYOUT_RELOAD")
-			else
+			if not ok then
 				ns.Print(L["couldn't add this profile's Edit Mode layout: %s"]:format(reason))
 			end
 		elseif not missingSaid[name] then
@@ -247,9 +253,51 @@ function ns.ApplyProfileLayout()
 		return
 	end
 	if info.activeLayout ~= index then
-		C_EditMode.SetActiveLayout(index)
+		SetActive(index)
 		ns.Log("state", "edit mode layout: " .. name)
 	end
+end
+
+-- Whether ns.ApplyProfileLayout would switch Edit Mode's layout now (one of
+-- ours not made yet counts: it's made and switched to).
+function ns.LayoutWouldChange()
+	if not (C_EditMode and C_EditMode.GetLayouts) or not ns.db or not ns.chardb or InCombatLockdown() then
+		return false
+	end
+	local manager = _G.EditModeManagerFrame
+	if manager and manager:IsShown() then return false end
+	local name = ns.db.editModeLayout or ""
+	if name == "" then
+		name = ns.chardb.layoutOwn
+		if not name then return false end
+	end
+	local info = C_EditMode.GetLayouts()
+	local index = IndexOf(info, name)
+	if not index then return ns.EDIT_MODE_LAYOUTS[name] ~= nil end
+	return info.activeLayout ~= index
+end
+
+-- On switching profile: a layout change waits for the UI to fade out first
+-- (Core.lua: up to LAYOUT_FADE_MAX), so the frames aren't seen moving; then
+-- the profile's preview, if it has one (ns.PreviewProfile). Mid-fight, or
+-- no change: as it is.
+local LAYOUT_FADE_MAX = 2.5
+function ns.SwitchProfileLayout()
+	if ns.LayoutWouldChange() then
+		ns.layoutFadeUntil = GetTime() + LAYOUT_FADE_MAX
+	else
+		ns.ApplyProfileLayout()
+	end
+end
+
+-- (Core.lua, each tick while fading for it: once everything's faded, out of
+-- time, or a fight starts.)
+function ns.FinishLayoutFade()
+	ns.layoutFadeUntil = nil
+	ns.ApplyProfileLayout()
+	local pending = ns.pendingPreview
+	ns.pendingPreview = nil
+	if pending then ns.PreviewProfile(pending) end
 end
 
 ns.OnLanguage(function()
@@ -299,10 +347,13 @@ function ns.CreateLayoutPanel(kit)
 	end
 	for _, row in ipairs(rows) do
 		row.button:SetScript("OnClick", function()
+			local updating = ns.LayoutState(row.name) ~= nil
 			local ok, reason = ns.MakeLayout(row.name)
-			if ok then
+			if ok and updating then
+				-- (the reload puts Edit Mode back on the layout it had: switched again after it)
+				ns.chardb.layoutPending = row.name
 				StaticPopup_Show("CINEMATIC_LAYOUT_RELOAD")
-			else
+			elseif not ok then
 				ns.Print(reason)
 			end
 			Refresh()

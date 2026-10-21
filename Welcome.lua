@@ -42,6 +42,7 @@ local function Pick(name)
 	if not ns.db.enabled then ns.SetEnabled(true) end -- (turned off from here before)
 	ns.SetProfile(name)
 	if ns.RestartTimers then ns.RestartTimers() end -- (straight in, whichever was on)
+	ns.PreviewProfile(name) -- (its main group up a moment, the rest faded)
 	Update()
 end
 

@@ -76,6 +76,7 @@ end
 -- Settings whose slot isn't their page's, or that are on no page.
 local KEY_SLOTS = {
 	editModeLayout = "layout",
+	cooldownManagerOn = "bars",
 	-- (on no page)
 	addonFrames = "frames", -- (Advanced Frames' added frames)
 	targetShow = "frames",
@@ -221,23 +222,30 @@ function ns.SlotsDebug(all)
 	for _, page in ipairs(pageList) do ns.Log("slots", "page with no slot: " .. page) end
 	-- Each part changing only its own slot's settings (and its own rows of a list).
 	local strays = 0
+	local said = {}
 	for _, slot in ipairs(ns.PROFILE_SLOTS) do
 		for name, part in pairs(ns.PROFILE_PARTS[slot.key] or {}) do
-			part.apply(function(key, value)
-				local wrong = {}
-				if type(value) == "table" then
-					for row in pairs(value) do
-						local rowSlot = ns.SettingSlot(key, row)
-						if rowSlot ~= slot.key then wrong[#wrong + 1] = ("%s.%s (%s)"):format(key, tostring(row), tostring(rowSlot)) end
+			for _, client in ipairs({ "forever", "retail" }) do
+				part.apply(function(key, value)
+					local wrong = {}
+					if type(value) == "table" then
+						for row in pairs(value) do
+							local rowSlot = ns.SettingSlot(key, row)
+							if rowSlot ~= slot.key then wrong[#wrong + 1] = ("%s.%s (%s)"):format(key, tostring(row), tostring(rowSlot)) end
+						end
+					elseif ns.SettingSlot(key) ~= slot.key then
+						wrong[1] = ("%s (%s)"):format(key, tostring(ns.SettingSlot(key)))
 					end
-				elseif ns.SettingSlot(key) ~= slot.key then
-					wrong[1] = ("%s (%s)"):format(key, tostring(ns.SettingSlot(key)))
-				end
-				for _, text in ipairs(wrong) do
-					strays = strays + 1
-					ns.Log("slots", ("part %s.%s sets another slot's: %s"):format(slot.key, name, text))
-				end
-			end)
+					for _, text in ipairs(wrong) do
+						local line = ("part %s.%s sets another slot's: %s"):format(slot.key, name, text)
+						if not said[line] then
+							said[line] = true
+							strays = strays + 1
+							ns.Log("slots", line)
+						end
+					end
+				end, client)
+			end
 		end
 	end
 	-- Each built-in's parts there on each client it's on, and no two of a

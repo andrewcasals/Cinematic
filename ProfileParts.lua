@@ -1,12 +1,14 @@
 -- Profile parts: each slot's templates (ProfileSlots.lua), that the built-in
 -- profiles (Profiles.lua) are put together from. ns.PROFILE_PARTS[slot][name]
--- = { apply = function(set) }: set(key, value) changes the defaults, and a
+-- = { apply = function(set, client) }: set(key, value) changes the defaults
+-- (client: the one the profile's on, "forever" or "retail"), and a
 -- list (a Standard Frames column...) is given just the rows it changes, so
 -- two parts can each change their own rows of one. A part changes only its
 -- own slot's settings (/cine debug slots checks), and in a list only its own
 -- rows: a Standard Frames column's action bar rows are the Action bars
 -- slot's, so Rows() splits a column between the two parts. "standard" is a
--- slot's part for a profile that names none. A part with client =
+-- slot's part for a profile that names none: this client's normal (so
+-- retail's has its own action bar groups). A part with client =
 -- "forever" or "retail" is only for a profile on that client.
 
 local _, ns = ...
@@ -95,6 +97,40 @@ local function PureInstances()
 	return list
 end
 
+-- The mouseover groups as retail has them: the action bars group split into
+-- action bars 1-3 (with the pet, stance, totem and extra action bars stacked
+-- on them) and the micro menu and bags, the XP bar on its own. (The other
+-- groups as they are.)
+local function SplitBarGroups(set)
+	local L = ns.L
+	local function Copy(source)
+		if type(source) ~= "table" then return source end
+		local result = {}
+		for k, v in pairs(source) do result[k] = Copy(v) end
+		return result
+	end
+	local groups = {}
+	for _, group in ipairs(ns.HOVER_GROUPS_DEFAULT) do
+		if group.preset == "bars" then
+			local bars = Copy(group)
+			bars.name = L["Action bars 1-3"]
+			bars.members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "extra" }
+			groups[#groups + 1] = bars
+			groups[#groups + 1] = { icon = "Interface\\Icons\\INV_Misc_Bag_07", name = L["Micro menu and bags"],
+				members = { "micro", "bags" } }
+		else
+			groups[#groups + 1] = Copy(group)
+		end
+	end
+	set("hoverGroups", groups)
+end
+
+-- The Action bars slot's normal: Forever's groups as they are (the action
+-- bars, micro menu, bags and XP bar coming up together), retail's split.
+local function BarsStandard(set, client)
+	if client == "retail" then SplitBarGroups(set) end
+end
+
 -- Every UI manager part: In combat rows stay for the Calm Timer, and the
 -- player frame and personal resource display stay up until full (both
 -- already on by default).
@@ -131,6 +167,8 @@ ns.PROFILE_PARTS = {
 		-- Action bars centred along the bottom, the micro menu and bags in the
 		-- corner, the XP bars under them, as on retail.
 		retail = LayoutPart("CINE_FOREVER_RETAIL_LAYOUT", "forever"),
+		-- Retail laid out like WoW Forever's default.
+		forever = LayoutPart("CINE_RETAIL_FOREVER_LAYOUT", "retail"),
 	},
 	frames = {
 		standard = { apply = FramesBase },
@@ -184,17 +222,28 @@ ns.PROFILE_PARTS = {
 		end },
 	},
 	bars = {
+		standard = { apply = BarsStandard },
+		-- The action bars, micro menu, bags and XP bar coming up together
+		-- (Forever's, on retail).
+		grouped = { apply = function() end },
+		-- Action bars 1-3, the micro menu and bags, and the XP bar each coming
+		-- up on its own (retail's, on Forever).
+		split = { apply = SplitBarGroups },
 		-- The Cooldown Manager in place of action bars 1 to 3, the micro menu
 		-- and bags and the XP bar in fights and with an enemy targeted; after
 		-- a fight it stays up until its cooldowns are ready (within the Calm Timer).
-		cdm = { apply = function(set)
+		cdm = { apply = function(set, client)
+			BarsStandard(set, client)
+			-- (the game's Cooldown Manager on, if the player has it off)
+			set("cooldownManagerOn", true)
 			set("combatShow", Rows(Column(CDM_COMBAT), true))
 			set("enemyShow", Rows(Column(CDM_ENEMY), true))
 			set("cooldownWhileRecharging", true)
 		end },
 		-- No action bars, micro menu, bags or XP bar in fights, with an enemy
 		-- targeted or in instances.
-		pure = { apply = function(set)
+		pure = { apply = function(set, client)
+			BarsStandard(set, client)
 			set("combatShow", Rows(PURE_COMBAT, true))
 			set("enemyShow", Rows(PURE_ENEMY, true))
 			set("instanceShow", Rows(PureInstances(), true))
@@ -314,7 +363,7 @@ function ns.ApplyParts(parts, base, client)
 	end
 	for _, slot in ipairs(ns.PROFILE_SLOTS) do
 		local part = ns.ProfilePart(parts, slot.key, client)
-		if part then part.apply(Set) end
+		if part then part.apply(Set, client) end
 	end
 	return base
 end
