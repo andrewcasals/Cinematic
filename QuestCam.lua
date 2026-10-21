@@ -398,7 +398,7 @@ local function ZoomTo(distance, T)
 	zoomer.cruise = math.abs(distance - now) / (zoomer.T * (1 - MOVE_EASE))
 	zoomer.last, zoomer.sentAt, zoomer.stillSince, zoomer.sent = now, 0, nil, nil
 	zoomer.rate, zoomer.rateGoal, zoomer.leaving = 1, 1, false
-	zoomer.moving = true
+	zoomer.moving, zoomer.startedAt = true, GetTime()
 end
 
 -- Hurries the zoom along so what's left of it takes about T seconds. It runs
@@ -712,6 +712,13 @@ local function OnEvent(_, event)
 		if cam.since then
 			cam.closingAt = 0 -- a fight: ends now
 		end
+		-- (And the zoom stops where it is, your zoom speed back, so it's yours
+		-- for the fight: the zoom back out is slow.)
+		if zoomer.moving or zoomer.release then
+			Note("fight: zoom stopped")
+			StopZoom(true)
+			ns.RestoreZoomLimit()
+		end
 	elseif cam.since then
 		cam.closingAt = cam.closingAt or GetTime()
 	end
@@ -731,6 +738,13 @@ local function OnUpdate(_, elapsed)
 	if not cam.handedOver and cam.startedAt and busy
 		and ns.GetLastCameraInput() > cam.startedAt + INPUT_GRACE then
 		HandOver()
+	end
+	-- Zoomed yourself after the hand-over (you turned the camera first, so the
+	-- zoom back out carried on): it stops, and the wheel goes at your speed.
+	if zoomer.moving and ns.lastCameraInputWhat == "zoom" and ns.GetLastCameraInput() > zoomer.startedAt then
+		Note("you zoomed: zoom stopped")
+		StopZoom(true)
+		ns.RestoreZoomLimit()
 	end
 	-- Walking off as it zooms back out: hurry it along.
 	if zoomer.leaving and ns.playerMoving then
