@@ -46,7 +46,7 @@
 -- Moving the camera yourself while talking hands it over: nothing is undone.
 local _, ns = ...
 
-local CLOSE_GRACE = 0.4 -- seconds: going from gossip to a quest closes one window before opening the next
+local CLOSE_GRACE = 3 -- seconds held after the window closes (going from gossip to a quest closes one window before opening the next)
 -- The swing behind you: the takeoff swing's gentle speeds (a quicker one
 -- showed as a snap), then a moment for it to settle before camera follow is
 -- handed back (switched off while still easing the view, it jolts).
@@ -186,7 +186,7 @@ local function StopMove(m)
 	if m.sent then
 		Send(Command(m) .. "Stop")
 	end
-	m.moving, m.sent, m.stoppedAt = false, nil, GetTime()
+	m.moving, m.sent, m.stoppedAt, m.carry = false, nil, GetTime(), nil
 	-- (Put back a moment later, so the end of the move can't run at full speed.
 	-- Not between the drift's legs: your setting coming back just as the
 	-- camera came to rest jumped it.)
@@ -203,7 +203,9 @@ end
 -- only to `speed` (degrees per second) and carries on `extra` degrees further
 -- the same way, easing to a stop over R seconds at the end (the side turn
 -- flowing into the drift's first leg).
-local function MoveTo(m, target, T, ease, tail)
+-- top: degrees per second it may need to reach later on without being sent
+-- again (CarryBack), if more than its own speed.
+local function MoveTo(m, target, T, ease, tail, top)
 	StopMove(m)
 	local final = target
 	if tail then
@@ -222,7 +224,7 @@ local function MoveTo(m, target, T, ease, tail)
 	m.ease = ease or MOVE_EASE
 	m.cruise = math.abs(target - m.amount) / (m.T * (1 - m.ease))
 	m.limit = m.T + 1 + (tail and (math.abs(final - target) / tail.speed + tail.R) or 0)
-	m.share = math.max(m.cruise, m.tail and m.tail.speed or 0) / yours
+	m.share = math.max(m.cruise, m.tail and m.tail.speed or 0, top or 0) / yours
 	-- The setting goes to its lowest a moment before the move starts.
 	SetCVar(m.cvar, ("%.2f"):format(MOVE_MIN_SETTING))
 	m.primedUntil = GetTime() + MOVE_PRIME_TIME
@@ -254,6 +256,82 @@ local function TailSpeed(m)
 	return speed
 end
 
+-- Leaving: a move under way slows to a stop from where it is, rather than
+-- halting dead (the drift cut off mid-swing showed once the hold after the
+-- window closed was long enough to watch it). False: just stop it (barely
+-- moving yet).
+local function EaseToStop(m)
+	if not m.moving or GetTime() < m.primedUntil or not m.sent then
+		return false
+	elseif m.carry then
+		return true -- already on its way back
+	end
+	local sign = m.growing and 1 or -1
+	if m.tail then
+		-- Already easing to a stop, or slowed now over the tail's own R.
+		if not m.tail.stopAt then
+			local speed = TailSpeed(m)
+			m.tail.stopAt, m.tail.from = m.t, speed
+			m.target = m.amount + sign * speed * m.tail.R / 2
+		end
+		return true
+	end
+	local R = m.ease * m.T
+	if m.t >= m.T - R then
+		return true -- already slowing down at its end
+	elseif m.t <= R then
+		return false
+	end
+	-- Mid-way at full speed: the curve cut short so its slowing down starts now.
+	local T = m.t / (1 - m.ease)
+	m.T, m.limit = T, T + 1
+	m.target = m.amount + sign * m.cruise * m.ease * T / 2
+	return true
+end
+
+-- A move carried on into the way back: from its speed now, up to its cruise
+-- over carry.up seconds, on at that, and eased to a stop over carry.down.
+local function CarrySpeed(m)
+	local carry, t = m.carry, m.t
+	if t < carry.up then
+		return carry.from + (m.cruise - carry.from) * (1 - math.cos(math.pi * t / carry.up)) / 2
+	elseif t > m.T - carry.down then
+		return m.cruise * (1 - math.cos(math.pi * math.max(0, m.T - t) / carry.down)) / 2
+	end
+	return m.cruise
+end
+
+-- Leaving while the drift is already heading back behind you: it carries on
+-- the same way into the turn back over about T seconds, rather than slowing
+-- to a stop and setting off again (a hitch as the hold after the window
+-- closed ended). No new command: only the speed setting changes, so the
+-- drift was sent with room for this speed (MoveTo's top). False: heading
+-- away, or not moving.
+local function CarryBack(m, T, ease)
+	if not m.moving or m.tail or m.carry or GetTime() < m.primedUntil or not m.sent
+		or m.growing ~= (m.amount < 0) or math.abs(m.amount) < 0.5 then
+		return false
+	end
+	local from, D = m.sent * m.share, math.abs(m.amount)
+	local R = ease * T
+	local cruise = (D - R * from / 2) / (T - R)
+	local up, down = R, R
+	if cruise <= from then
+		-- So near it's just slowing down from here.
+		cruise, up, down = from, 0, 2 * D / from
+		T = down
+	else
+		local most = m.share * (tonumber(ns.db.savedCVars[m.cvar]) or m.default)
+		if cruise > most then
+			cruise = most
+			T = (D - R * from / 2) / cruise + R
+		end
+	end
+	m.carry = { from = from, up = up, down = down }
+	m.from, m.target, m.t, m.T, m.cruise, m.limit = m.amount, 0, 0, T, cruise, T + 1
+	return true
+end
+
 local function StepMove(m, elapsed)
 	if not m.moving or GetTime() < m.primedUntil then
 		return
@@ -262,7 +340,7 @@ local function StepMove(m, elapsed)
 	-- Done when its curve has eased right down, not when it's counted as far
 	-- as asked: the speed sent lags a little behind the curve as it slows (see
 	-- MOVE_CHANGE), so it got there early and stopped still moving, a small jump.
-	local speed = m.tail and TailSpeed(m) or m.cruise * EaseShape(m.t, m.T, m.ease)
+	local speed = m.tail and TailSpeed(m) or m.carry and CarrySpeed(m) or m.cruise * EaseShape(m.t, m.T, m.ease)
 	if m.t >= m.limit or (m.tail and m.tail.stopAt and speed == 0) or (not m.tail and m.t >= m.T) then
 		m.amount = m.target
 		StopMove(m)
@@ -461,6 +539,11 @@ local function StepZoom(elapsed)
 	end
 end
 
+-- Seconds the turn back behind you takes, leaving.
+local function TurnBackTime()
+	return math.max(BACK_MIN, ns.db.questCamTurnTime * BACK_SHARE)
+end
+
 -- Runs the queued steps in order (cam.steps: { kind, target, T, waitZoom, ease, tail }),
 -- once the swing behind you has handed camera follow back. "yaw" and "pitch"
 -- moves run one at a time; a "zoom" starts and the next step follows at once
@@ -488,7 +571,9 @@ local function StepSequence(now)
 			end
 			local target = math.max(0, ns.db.questCamAngle) + (cam.driftOut and half or -half)
 			local T = DRIFT_TIME * math.abs(target - movers.yaw.amount) / ns.db.questCamDrift
-			step = { "yaw", target, T, false, DRIFT_EASE }
+			-- (Sent with room for the turn back from the far side: CarryBack.)
+			local back = (math.max(0, ns.db.questCamAngle) + half) / (TurnBackTime() * (1 - BACK_EASE))
+			step = { "yaw", target, T, false, DRIFT_EASE, nil, back }
 			cam.steps[1] = step
 		end
 		if not step then
@@ -515,7 +600,7 @@ local function StepSequence(now)
 				-- leg heads back.)
 				cam.driftOut = step[2] >= movers.yaw.amount
 			end
-			MoveTo(movers[step[1]], step[2], step[3], step[5], step[6])
+			MoveTo(movers[step[1]], step[2], step[3], step[5], step[6], step[7])
 		end
 	end
 end
@@ -636,7 +721,10 @@ local function Stop()
 	zoomer.leaving = false
 	if not cam.handedOver then
 		for _, m in pairs(movers) do
-			StopMove(m) -- (cut short if still on the way in: undone from where it got to)
+			-- (Cut short if still on the way in: undone from where it got to.)
+			if not (m == movers.yaw and CarryBack(m, TurnBackTime(), BACK_EASE)) and not EaseToStop(m) then
+				StopMove(m)
+			end
 		end
 	end
 	-- Back out to your distance, unless you zoomed yourself while talking.
@@ -650,8 +738,8 @@ local function Stop()
 		zoomer.walked = 0
 	end
 	if not cam.handedOver then
-		local turnBack = math.max(BACK_MIN, ns.db.questCamTurnTime * BACK_SHARE)
-		if movers.yaw.amount ~= 0 then
+		local turnBack = TurnBackTime()
+		if movers.yaw.amount ~= 0 and not movers.yaw.carry then -- (carrying on back already)
 			table.insert(cam.steps, { "yaw", 0, turnBack, nil, BACK_EASE })
 		end
 		if movers.pitch.amount ~= 0 then
