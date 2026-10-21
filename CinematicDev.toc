@@ -56,6 +56,8 @@ Focus.lua
 Tracking.lua
 NodeSweep.lua
 Slash.lua
+ProfileSlots.lua
+ProfileParts.lua
 Profiles.lua
 Share.lua
 Welcome.lua

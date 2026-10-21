@@ -103,6 +103,7 @@ local function PrintDebugHelp()
 	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
+	print("  /cine debug slots - profile slots: settings with no slot, or on pages of different slots (in the log)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
@@ -756,6 +757,8 @@ local function HandleSlash(msg)
 		if ns.PrintTalentLinkDebug then ns.PrintTalentLinkDebug() else ns.Print("talents link not loaded (retail, or TalentLink.lua missing)") end
 	elseif cmd == "debug" and arg == "panels" then
 		ns.PrintPanelsDebug()
+	elseif cmd == "debug" and arg == "slots" then
+		ns.SlotsDebug()
 	elseif cmd == "debug" and arg == "cvars" then
 		ns.CVarsDebug()
 	elseif cmd == "debug" and arg:find("^cvars%s") then

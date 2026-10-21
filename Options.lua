@@ -25,6 +25,31 @@ local function RecordRow(parent, key, row)
 	pageRows[parent][key] = pageRows[parent][key] or {}
 	pageRows[parent][key][row] = true
 end
+-- Every page's settings by the page's name (as registered): { keys = key ->
+-- true, rows = list -> row -> true }, a page's sections and panels counted in
+-- it. For the profile slots (ProfileSlots.lua). Unnamed: under "?".
+function ns.PageSettings()
+	local pages = {}
+	local function Page(content)
+		local frame = content
+		while frame and not frame.pageName do frame = frame:GetParent() end
+		local name = frame and frame.pageName or "?"
+		pages[name] = pages[name] or { keys = {}, rows = {} }
+		return pages[name]
+	end
+	for content, keys in pairs(pageKeys) do
+		local page = Page(content)
+		for key in pairs(keys) do page.keys[key] = true end
+	end
+	for content, lists in pairs(pageRows) do
+		local page = Page(content)
+		for key, rows in pairs(lists) do
+			page.rows[key] = page.rows[key] or {}
+			for row in pairs(rows) do page.rows[key][row] = true end
+		end
+	end
+	return pages
+end
 local extraRows = {}
 local sliderCount = 0
 
@@ -773,6 +798,7 @@ end
 local function CreatePanel()
 	mainCanvas, panel = CreateScrollPage(true)
 	mainCanvas.name = "Cinematic"
+	mainCanvas.pageName = "Cinematic" -- (ns.PageSettings)
 
 	local title = Label(panel, "GameFontNormalLarge", "Cinematic")
 	title:SetPoint("TOPLEFT", 16, -16)
@@ -1231,6 +1257,7 @@ end
 -- or as shown if given.)
 local function RegisterSubpage(subpanel, name, shown)
 	subpanel.name = shown or L[name]
+	subpanel.pageName = name -- (ns.PageSettings)
 	subpanel.parent = "Cinematic"
 	subpages[name] = subpanel
 	local page = { name = shown or L[name], key = name, canvas = subpanel }
@@ -4435,8 +4462,8 @@ local function CreatePortraitsPanel()
 				rowLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y - 5)
 				section.widgets[#section.widgets + 1] = rowLabel
 				for c, column in ipairs(columns) do
-					-- (Your frame has no auras, the pet's no level, PvP, icons or
-					-- auras; threat is for NPCs you can fight.)
+					-- (Your frame has no auras, the pet's no level, PvP or auras
+					-- (its icons: the happiness face); threat is for NPCs you can fight.)
 					if Has(row, column[1]) then
 						local key = "unitPart" .. section.prefix .. row[1] .. column[1]
 						RuleTarget(key, column[2], "Unit frame parts", section.title, row[2])

@@ -31,136 +31,40 @@ local PROFILE_TABLES = {
 	"frameRules", -- (none in any built-in profile: each starts with no Custom Visibility Rules)
 	"tankHide", "healerHide", "damageHide",
 }
+ns.PROFILE_TABLES = PROFILE_TABLES
 
 local DEFAULT_PROFILE = "Immersive"
 
--- Switches cameras off: an event's camera to none, or (for the ones no
--- event starts) its row of the Camera Modes page's "Turn off in" grid.
-local EVENT_CAMS = { flight = true, idle = true, cozy = true, tele = true, vista = true, fish = true,
-	quest = true }
-local function CamsOff(set, cams)
-	local off = {}
-	for _, cam in ipairs(cams) do off[cam] = true end
-	for _, event in ipairs(ns.EVENTS or {}) do
-		local cam = event.camera == "afk" and "idle" or event.camera
-		if off[cam] then
-			set("event" .. event.key .. "Camera", "none")
-		end
-	end
-	for _, cam in ipairs(cams) do
-		if not EVENT_CAMS[cam] then
-			for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
-				if not (ns.CAMERA_OFF_NEVER[cam] or {})[where] then
-					set(cam .. "OffIn" .. where, true)
-				end
-			end
-		end
-	end
-end
-
--- A Standard Frames column as a list: every row given true (in on) or false.
-local STANDARD_ROWS = {
-	"player", "prd", "prdpower", "target", "tot", "focus", "party", "raidplayers", "raidpets", "raidmanager", "minimap", "quests",
-	"buffs", "swing", "cooldowns", "mainbar", "art",
-	"bottomleft", "bottomright", "right1", "right2", "bar6", "bar7", "bar8", "pet", "stance", "totems",
-	"micro", "bags", "xp",
-}
-local function Column(on)
-	local list = {}
-	for _, key in ipairs(STANDARD_ROWS) do list[key] = false end
-	for _, key in ipairs(on) do list[key] = true end
-	return list
-end
-
--- The Standard Frames page's Interface rows in the Immersive profile: the
--- minimap (its header, buttons, zone name and clock) doesn't come up in
--- fights; the micro menu, bags and XP bar do, and with an enemy targeted.
-local MINIMAP_ROWS = { "minimap", "minimapheader", "minimaptracking", "minimapcalendar", "minimapzone", "minimapclock" }
-local function Except(rows)
-	local list = {}
-	for _, key in ipairs(rows) do list[key] = false end
-	return list
-end
-
--- The built-in profiles, in the order they're listed. apply(set) makes its
--- changes to the defaults; a list (PROFILE_TABLES) is set whole.
+-- The built-in profiles, in the order they're listed. parts: the part each
+-- slot uses (ProfileParts.lua; a slot not named: its "standard" part).
 ns.BUILTIN_PROFILES = {
 	{
 		name = DEFAULT_PROFILE,
 		icon = "Interface\\Icons\\Spell_Holy_MindVision",
 		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode. The defaults, " ..
 			"and how the developer plays every day."],
-		apply = function(set)
-			-- Auto-walking and auto-running can start music, but no camera starts
-			-- it again within half a minute of the last start.
-			set("musicCamWalk", true)
-			set("musicCamRun", true)
-			set("musicFatigue", 0.5)
-			-- Nameplates: group members' pets, and the Grouped column for
-			-- friendly players and minions, don't stay up.
-			set("plateAlwaysGroupMinions", false)
-			set("plateGroupFriends", false)
-			set("plateGroupFriendlyMinions", false)
-			-- Chat doesn't peek for NPC speech (guards, vendors, ambient chatter).
-			set("chatPeekTypes", { npc = false })
-			-- Interface rows (Standard Frames page): no minimap in fights.
-			set("combatShow", Except(MINIMAP_ROWS))
-		end,
+		parts = { frames = "immersive", camera = "immersive", misc = "immersive" },
 	},
 	{
 		name = "Immersive (CDM)",
 		icon = "Interface\\Icons\\Spell_Shadow_AntiShadow", -- (Preparation)
 		tip = L["Immersive, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
 			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
-		apply = function(set)
-			-- The Standard Frames page's In combat and Tar Enemy columns as in
-			-- Immersive (no minimap in fights either), but with the Cooldown
-			-- Manager in place of action bars 1 to 3, the micro menu and bags and the XP bar.
-			set("combatShow", Column({ "player", "prd", "prdpower", "target", "tot", "focus", "party", "raidplayers", "raidpets",
-				"buffs", "swing", "cooldowns", "pet", "stance", "totems" }))
-			set("enemyShow", Column({ "player", "prd", "prdpower", "target", "tot", "focus", "buffs", "cooldowns", "pet",
-				"stance", "totems" }))
-			-- ...and after a fight, until its cooldowns are ready (within the Calm Timer).
-			set("cooldownWhileRecharging", true)
-			-- Auto-walking and auto-running can start music, with the same
-			-- half-minute fatigue, as in Immersive.
-			set("musicCamWalk", true)
-			set("musicCamRun", true)
-			set("musicFatigue", 0.5)
-			-- Nameplates: group members' pets, and the Grouped column for
-			-- friendly players and minions, don't stay up, as in Immersive.
-			set("plateAlwaysGroupMinions", false)
-			set("plateGroupFriends", false)
-			set("plateGroupFriendlyMinions", false)
-			-- Chat doesn't peek for NPC speech (guards, vendors, ambient chatter).
-			set("chatPeekTypes", { npc = false })
-		end,
+		parts = { frames = "cdm", bars = "cdm", camera = "immersive", misc = "immersive" },
 	},
 	{
 		name = "Lite",
 		icon = "Interface\\Icons\\Spell_Holy_HolyBolt",
 		tip = L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
-		apply = function(set)
-			CamsOff(set, { "cozy", "vista", "fish", "walk", "run", "death", "quest" })
-			-- Chat shows for General and Trade (others joined later stay off; LocalDefense
-			-- attacks show on the screen instead).
-			set("chatPeekChannelList", { General = true, Trade = true, LocalDefense = false,
-				Services = false, TradeLocal = false })
-			-- ...and not for NPC speech (guards, vendors, ambient chatter).
-			set("chatPeekTypes", { npc = false })
-		end,
+		parts = { camera = "lite", misc = "lite" },
 	},
 	{
 		name = "VFX Only",
 		icon = "Interface\\Icons\\Spell_Nature_Lightning",
 		tip = L["Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no " ..
 			"letterbox, and the camera's left to you."],
-		apply = function(set)
-			set("fadeUI", false) -- (the effects then show over the normal UI)
-			set("letterbox", false)
-			set("musicInCinematic", false)
-		end,
+		parts = { frames = "nofade", vfx = "noletterbox", misc = "nomusic" },
 	},
 	{
 		name = "Camera Only",
@@ -168,49 +72,14 @@ ns.BUILTIN_PROFILES = {
 		tip = L["The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), " ..
 			"then CineMode until it ends. The letterbox, tint, vignette and weather show only while a " ..
 			"camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music."],
-		apply = function(set)
-			-- The visual effects just for the camera modes (Visual Effects
-			-- page's "Outside camera modes" column).
-			for _, effect in ipairs(ns.EFFECT_GRID) do
-				set(effect .. "OnlyInCameras", true)
-			end
-			set("depthOfField", false)
-			set("deathScreen", false)
-			-- The normal UI until a camera starts: every camera brings CineMode
-			-- on (Camera Triggers page's CineMode column).
-			set("fadeUI", false)
-			for _, event in ipairs(ns.EVENTS or {}) do
-				if ns.DEFAULTS["event" .. event.key .. "Cine"] ~= nil then
-					set("event" .. event.key .. "Cine", true)
-				end
-			end
-			set("walkCine", true)
-			set("runCine", true)
-			set("deathCine", true)
-			-- Standing still starts the AFK camera, and every camera can start music.
-			set("eventStillCamera", "afk")
-			for _, event in ipairs({ "AFK", "Still", "Chair", "Kneel", "Sleep", "Dance", "Weapon", "Campfire",
-				"SitButton", "Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
-				set("event" .. event .. "Music", true)
-			end
-			set("musicCamWalk", true)
-			set("musicCamRun", true)
-			-- NPCs talking nearby don't bring chat up over a camera shot.
-			set("chatPeekTypes", { npc = false })
-		end,
+		parts = { frames = "nofade", camera = "cinemode", vfx = "cameras", misc = "quietnpcs" },
 	},
 	{
 		name = "Solo Explorer",
 		icon = "Interface\\Icons\\Ability_Mount_RidingHorse",
 		tip = L["Everything on while you're out in the world on your own; the normal UI in a group, " ..
 			"in dungeons, raids and PvP."],
-		apply = function(set)
-			set("offInDungeons", true)
-			set("offInRaids", true)
-			set("offInPvP", true)
-			set("offInParty", true)
-			set("offInRaidGroup", true)
-		end,
+		parts = { frames = "solo" },
 	},
 	{
 		name = "Pure Cinema",
@@ -219,72 +88,9 @@ ns.BUILTIN_PROFILES = {
 			"don't pop up on their own (hovering still shows them), group members' " ..
 			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
 			"your target and your cast bar (hidden otherwise), and every camera can start music."],
-		apply = function(set)
-			set("chatPeek", false)
-			set("buffPeek", false)
-			set("debuffPeek", false)
-			set("questRevealOnAccept", false)
-			set("questRevealOnProgress", false)
-			set("letterboxOffInCombat", false)
-			set("timeOfDayMessage", false)
-			set("plateAlwaysGroupMembers", false)
-			set("plateAlwaysGroupMinions", false)
-			-- No cast bar out of fights (it's up in them).
-			set("cineShow", { castbar = false })
-			-- Fights bring up only your target and its target (and the cast
-			-- bar): no portrait, bars, buffs, minimap or swing timer. (Rows not
-			-- listed keep the defaults.)
-			set("combatShow", { tot = true, castbar = true, prd = false, prdpower = false, party = false, raidplayers = false, raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false,
-				art = false, bottomleft = false, bottomright = false, pet = false, stance = false, totems = false,
-				micro = false, bags = false, xp = false, focus = false })
-			set("enemyShow", { target = true, tot = true, player = false, prd = false, prdpower = false, party = false, raidplayers = false,
-				raidpets = false, focus = false, buffs = false,
-				mainbar = false, art = false, bottomleft = false, bottomright = false, pet = false, stance = false,
-				totems = false, micro = false, bags = false, xp = false })
-			set("friendlyShow", { target = true, tot = true })
-			-- Nor in dungeons, scenarios and raids (the Instances column starts
-			-- with the party and raid frames ticked): every row off there too.
-			local instances = {}
-			for _, row in ipairs(ns.COMBAT_SHOW) do instances[row.key] = false end
-			set("instanceShow", instances)
-			-- Standing still starts the AFK camera, and every event's camera can
-			-- start music.
-			set("eventStillCamera", "afk")
-			for _, event in ipairs({ "AFK", "Still", "Chair", "Kneel", "Sleep", "Dance", "Weapon", "Campfire",
-				"SitButton", "Fishing", "Hearth", "Teleport", "Logout", "Quest" }) do
-				set("event" .. event .. "Music", true)
-			end
-			-- The cameras don't wait for things to calm down after a fight, and
-			-- auto-run carries on in cities and instances (as RP walk always does).
-			for _, cam in ipairs({ "walk", "run", "tele", "quest" }) do
-				set(cam .. "CalmWait", false)
-			end
-			set("runOffInCities", false)
-			set("runOffInInstances", false)
-			-- The death camera runs in instances too.
-			set("deathOffInInstances", false)
-			-- No quest timer box. (The minimap's Reveal and Keep open stay as
-			-- they are by default, as in every profile.)
-			set("questTimerShow", false)
-			-- Chat doesn't peek for General or LocalDefense.
-			set("chatPeekChannelList", { General = false, LocalDefense = false })
-			-- Nor for NPC speech, should chat peeking be switched back on.
-			set("chatPeekTypes", { npc = false })
-		end,
+		parts = { frames = "pure", bars = "pure", camera = "pure", vfx = "pure", misc = "pure" },
 	},
 }
--- Every built-in: In combat rows stay for the Calm Timer, and the player
--- frame and personal resource display stay up until full (both already on
--- by default).
-for _, profile in ipairs(ns.BUILTIN_PROFILES) do
-	local apply = profile.apply
-	profile.apply = function(set)
-		set("combatShowCalm", true)
-		set("portraitWhenNotFull", true)
-		set("prdWhenNotFull", true)
-		apply(set)
-	end
-end
 ns.OnLanguage(function() ns.TranslateFields(ns.BUILTIN_PROFILES, "tip") end)
 local builtinByName = {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
@@ -297,6 +103,7 @@ local function IsProfileKey(key)
 	-- (Graphics+ is the machine's: a shared or switched profile leaves it as it is.)
 	return not GLOBAL_KEYS[key] and not key:find("^debug") and not key:find("^graphicsPlus")
 end
+ns.IsProfileKey = IsProfileKey
 
 local function CopyTable(source)
 	if type(source) ~= "table" then return source end
@@ -313,9 +120,7 @@ function ns.ProfileBase(name)
 	local base = {}
 	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
 	local builtin = builtinByName[name]
-	if builtin then
-		builtin.apply(function(key, value) base[key] = value end)
-	end
+	if builtin then ns.ApplyParts(builtin.parts, base) end
 	baseCache[name] = base
 	return base
 end
