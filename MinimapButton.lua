@@ -111,7 +111,7 @@ end
 local function AddAudioMenu(root, db)
 	root:CreateDivider()
 	root:CreateTitle(L["Audio"])
-	root:CreateCheckbox(L["Allow CineMode to queue Music"], function() return db.musicInCinematic end,
+	root:CreateCheckbox(L["Enable page"], function() return db.musicInCinematic end,
 		function() db.musicInCinematic = not db.musicInCinematic end)
 end
 

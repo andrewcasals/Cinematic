@@ -72,7 +72,7 @@ local dropped = {} -- frame -> { point, relativePoint, x, y } for windows withou
 
 -- Where the window was last dropped, or nil.
 local function Spot(frame)
-	if not (ns.db and ns.db.dragPanels) then
+	if not ns.Setting("dragPanels") then
 		return nil
 	end
 	local name = frame:GetName()
@@ -195,7 +195,7 @@ end)
 
 local function DragStart(frame)
 	Log(frame, "drag start")
-	if ns.db and ns.db.dragPanels and not Locked(frame) then
+	if ns.Setting("dragPanels") and not Locked(frame) then
 		local left, top = Number(frame:GetLeft()), Number(frame:GetTop())
 		if not left or not top then
 			return
@@ -389,11 +389,11 @@ local function Arrange()
 	if not ns.db then
 		return
 	end
-	if ns.db.dragPanels then
+	if ns.Setting("dragPanels") then
 		HookOpen()
 	end
 	for _, handle in pairs(handles) do
-		handle:SetShown(ns.db.dragPanels and true or false)
+		handle:SetShown(ns.Setting("dragPanels") and true or false)
 	end
 	if not OpenPanels() then
 		return
@@ -411,7 +411,7 @@ local function Arrange()
 			frame:SetPoint(spot[1], UIParent, spot[2], spot[3], spot[4])
 		end
 	end
-	if ns.db.centerPanels then
+	if ns.Setting("centerPanels") then
 		CenterRow()
 	end
 end
@@ -429,11 +429,11 @@ local function PlaceBag()
 	if not (ns.db and bag and bag.GetPoint) then
 		return
 	end
-	if ns.db.dragPanels then
+	if ns.Setting("dragPanels") then
 		MakeDraggable(bag, BAG_LEFT)
 	end
 	if handles[bag] then
-		handles[bag]:SetShown(ns.db.dragPanels and true or false)
+		handles[bag]:SetShown(ns.Setting("dragPanels") and true or false)
 	end
 	local spot = Spot(bag)
 	if spot and not Held(bag) and ns.Flag(bag:IsShown()) and not Locked(bag) then
@@ -451,7 +451,7 @@ local function ArrangeAgain()
 end
 
 function Placed()
-	if not (ns.db and (ns.db.centerPanels or ns.db.dragPanels or next(handles))) then
+	if not (ns.db and (ns.Setting("centerPanels") or ns.Setting("dragPanels") or next(handles))) then
 		return
 	end
 	Arrange()

@@ -113,7 +113,7 @@ watcher:SetScript("OnEvent", function()
 end)
 
 local function Sorted()
-	if ns.isRetail or not ns.IsHunter() or not (ns.db and ns.db.hunterAmmoSort) or not GetInfoInstant then
+	if ns.isRetail or not ns.IsHunter() or not ns.Setting("hunterAmmoSort") or not GetInfoInstant then
 		return
 	end
 	local now = GetTime()
@@ -253,7 +253,7 @@ local function FillButton(i)
 end
 
 local function UpdateFillButtons()
-	local on = not ns.isRetail and ns.IsHunter() and ns.db and ns.db.hunterQuiverFill
+	local on = not ns.isRetail and ns.IsHunter() and ns.Setting("hunterQuiverFill")
 		and MerchantFrame and MerchantFrame.selectedTab == 1
 	for i = 1, MERCHANT_ITEMS_PER_PAGE or 10 do
 		local itemButton = _G["MerchantItem" .. i .. "ItemButton"]

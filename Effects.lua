@@ -1259,7 +1259,7 @@ do
 
 	-- Why duels aren't watched now (nil: they are).
 	local function NotWatchingWhy()
-		if not ns.db.duelPlates then
+		if not ns.Setting("duelPlates") then
 			return "option off"
 		elseif not platesActive then
 			return "not in CineMode"

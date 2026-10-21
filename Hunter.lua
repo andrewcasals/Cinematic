@@ -64,8 +64,7 @@ end
 
 -- The mouse on a living enemy you could shoot, and nothing in the way.
 local function WantPull()
-	local db = ns.db
-	if not (db and db.hunterRightClickShot) or ns.Flag(UnitAffectingCombat("player")) then
+	if not ns.Setting("hunterRightClickShot") or ns.Flag(UnitAffectingCombat("player")) then
 		return false
 	end
 	if IsMouseButtonDown("LeftButton") or GetTime() - leftDownAt < BOTH_BUTTONS_WINDOW then
@@ -103,7 +102,7 @@ function ns.ApplyHunter()
 	if ns.isRetail or not isHunter then
 		return
 	end
-	local want = ns.db and ns.db.hunterRightClickShot and true or false
+	local want = ns.Setting("hunterRightClickShot") and true or false
 	if want == driverOn then
 		return
 	end

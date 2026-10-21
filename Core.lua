@@ -463,6 +463,9 @@ DEFAULTS.weatherOffInCombat = false
 -- ones you'd walk or run off into after one (RP walking, auto-running), the
 -- tele camera and the quest camera; the rest start straight away. Not the death camera: you die in a fight.
 ns.CALM_WAIT_NEVER = { death = true }
+-- The Camera Modes and Camera Triggers pages' Enable page switch: off, no
+-- camera mode starts (ns.IsCameraOffHere).
+DEFAULTS.cameraModes = true
 local CALM_WAIT_DEFAULT = { walk = true, run = true, tele = true, quest = true }
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 	if not ns.CALM_WAIT_NEVER[cam[1]] then
@@ -577,10 +580,10 @@ DEFAULTS.bubblesTextOnly = true -- no background or border, just the text
 DEFAULTS.bubblesTextOutline = true -- with text only: a black outline round the letters
 DEFAULTS.bubblesTextOutlineSize = 2 -- 1 thin, 2 thick, 3 thick with a drop shadow
 DEFAULTS.bubblesTextScale = 1
--- Graphics+ page (Graphics.lua): off, each setting ticked (so switching it on
--- uses them all). Each slider's value (graphicsPlus<name>) has no default: nil
--- until it's moved, it changes nothing. Not in profiles.
-DEFAULTS.graphicsPlus = false
+-- Graphics+ page (Graphics.lua): on, each setting ticked. Each slider's value
+-- (graphicsPlus<name>) has no default: nil until it's moved, it changes
+-- nothing, so on changes nothing either till then. Not in profiles.
+DEFAULTS.graphicsPlus = true
 for _, setting in ipairs(ns.GRAPHICS_PLUS) do
 	DEFAULTS[setting.key .. "On"] = true
 end
@@ -652,6 +655,7 @@ do
 		local list = role == "TANK" and "tankHide" or role == "HEALER" and "healerHide"
 			or role == "DAMAGER" and "damageHide"
 		if list and ns.RoleHidden(db, list, "healVision") then return false end
+		if db.handleVision == false then return false end -- (the Vision page's switch)
 		if db.healVision or db["healVisionIn" .. (VISION_PLACE[ns.GetPlaceType()] or "World")] then return true end
 		if IsInRaid() then return db.healVisionInRaid end
 		return IsInGroup() and db.healVisionInParty
@@ -745,6 +749,27 @@ for _, part in ipairs(ns.UNIT_PARTS) do
 			end
 		end
 	end
+end
+DEFAULTS.handleUnitFrames = true -- the Unit Frames page's switch
+-- Pages of helpers, each ticked on its own, with an Enable page switch
+-- (handle<page>): off, none of the page's helpers work. ns.Setting reads one
+-- of them as its page's switch leaves it.
+DEFAULTS.handleQuality = true -- Quality of life > General
+DEFAULTS.handleHunter = true
+DEFAULTS.handleVision = true
+local PAGE_SWITCH = {}
+for page, keys in pairs({
+	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
+		"centerPanels", "dragPanels" },
+	handleHunter = { "hunterRightClickShot", "hunterAmmoSort", "hunterQuiverFill" },
+	handleVision = { "duelPlates" },
+}) do
+	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end
+end
+function ns.Setting(key)
+	local db = ns.db
+	if not db or db[PAGE_SWITCH[key] or ""] == false then return false end
+	return db[key]
 end
 DEFAULTS.unitPartsFocusSame = true
 DEFAULTS.unitPartsToTSame = true
@@ -1202,6 +1227,9 @@ end
 function ns.IsCameraOffHere(cam)
 	local db = ns.db
 	if not db then return false end
+	if db.cameraModes == false then
+		return true
+	end
 	if SWITCHED_CAMS[cam] and db[SWITCHED_CAMS[cam]] == "none" then
 		return true
 	end

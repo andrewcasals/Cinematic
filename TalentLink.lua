@@ -28,7 +28,7 @@ local function TalentFrame()
 end
 
 local function Enabled()
-	return ns.db and ns.db.talentLink
+	return ns.Setting("talentLink")
 end
 
 local inspected -- the unit whose talents we opened, for the way back

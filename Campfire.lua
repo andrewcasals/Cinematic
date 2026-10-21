@@ -102,8 +102,7 @@ end
 
 -- Times you can't (or wouldn't) sit down by a fire.
 local function CanSit()
-	local db = ns.db
-	if ns.isRetail or not (db and db.campfireSitButton) then
+	if ns.isRetail or not ns.Setting("campfireSitButton") then
 		return false
 	end
 	if (ns.IsSitting and ns.IsSitting()) or InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) or ns.Flag(UnitIsDeadOrGhost("player"))
@@ -335,7 +334,7 @@ local function OnUpdate(_, elapsed)
 		ForgetTentIfAway()
 		local onFire = CanSit() and OnCampfire()
 		if not CanSit() then
-			if alpha == 0 and not blockedLogged and ns.db and ns.db.campfireSitButton and TooltipIsCampfire() then
+			if alpha == 0 and not blockedLogged and ns.Setting("campfireSitButton") and TooltipIsCampfire() then
 				blockedLogged = true
 				ns.Log("campfire", ("on a campfire, but no button: sitting %s, combat %s, mounted %s"):format(
 					tostring(ns.IsSitting and ns.IsSitting()), tostring(InCombatLockdown()),
@@ -541,7 +540,7 @@ campWatcher:SetScript("OnEvent", ns.Profiled("UNIT_AURA (camp benefits)", functi
 	had, hadEnds = has, ends
 	local db = ns.db
 	-- (It only comes while you sit, so no need to ask whether you are.)
-	if gained and db and db.campfireSitButton and db.campfireStandUp then
+	if gained and ns.Setting("campfireSitButton") and db.campfireStandUp then
 		StandUp()
 	end
 end))

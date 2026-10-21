@@ -259,11 +259,6 @@ local function GreyUnless(control, test)
 	end
 end
 
--- Music options only do anything while the addon handles music.
-local function DependsOnMusic(control)
-	GreyUnless(control, function(db) return db.musicInCinematic end)
-end
-
 -- The pages' master switches (handle<...>; see PageSwitch): page content ->
 -- { key, check }. While one is off, every other control on its page greys
 -- out, keeping its value; switched on, each is back as its own settings say.
@@ -1031,6 +1026,9 @@ do
 			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02" },
 			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04" },
 		} },
+		{ name = "Audio", pages = {
+			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01" },
+		} },
 		{ name = "Quality of life", pages = {
 			{ "General", "Interface\\Icons\\INV_Misc_Bag_07" },
 			{ "Fishing", "Interface\\Icons\\Trade_Fishing" },
@@ -1240,7 +1238,8 @@ local function RegisterSubpage(subpanel, name, shown)
 	-- (a hub's page: shown in its place there, not listed on its own; the hub
 	-- has the search box and Reset page)
 	if HubAdd(subpanel, name, page) then
-		subpages[name] = nil
+		-- (unless the hub has the page's name, and is listed under it)
+		if subpages[name] == subpanel then subpages[name] = nil end
 		return
 	end
 	-- Its own search box, for just its settings, left of Reset page.
@@ -1403,7 +1402,7 @@ local function CreateBuffsPanel()
 	local buffPeek = Check(content, "buffPeek", L["Show buffs when you gain or refresh one"],
 		L["Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on flights."])
 	buffPeek:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -48)
-	PageSwitch(content, "handleBuffs", L["CineMode Buffs/debuffs"],
+	PageSwitch(content, "handleBuffs", L["Enable page"],
 		L["On: CineMode fades your buffs and debuffs as this page and their Standard Frames row say. " ..
 		"Off: it leaves them alone, with no peeks."], note)
 	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
@@ -1618,6 +1617,16 @@ local function BuildZoomControls(parent, prefix, anchor)
 end
 
 -- Sub-page: the camera modes, and the settings they share.
+-- The camera modes' switch, on both the Camera Modes and Camera Triggers
+-- pages (one setting): off, no camera mode starts, and both pages and the
+-- Camera Settings page grey out.
+local function CameraModesSwitch(content, anchor)
+	return PageSwitch(content, "cameraModes", L["Enable page"],
+		L["On: the camera modes start as the Camera Modes and Camera Triggers pages say. Off: none of " ..
+		"them ever starts, and the camera is left to you; CineMode still fades the UI. The same switch " ..
+		"is on both pages."], anchor)
+end
+
 local function CreateCameraPanel()
 	local cameraCanvas
 	cameraCanvas, cameraPanel = CreateScrollPage()
@@ -1637,7 +1646,9 @@ local function CreateCameraPanel()
 		"peeks use their short default times, so they clear the view quickly."])
 
 	-- Turn off in: a grid of each camera (rows) by place or group (columns).
-	local offHeader = Header(cameraPanel, L["Turn off in"], subtitle, -18)
+	local switch = CameraModesSwitch(cameraPanel, subtitle)
+	local offHeader = Header(cameraPanel, L["Turn off in"], switch, -18)
+	offHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -18)
 	local offNote = PageIntro(cameraPanel, offHeader,
 		L["Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
 		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back " ..
@@ -2214,14 +2225,16 @@ local function CreateEventsPanel()
 		"dying their own."])
 
 	local CAMERA_X, MUSIC_X, CINE_X = 250, 425, 490
-	local header = Header(content, L["Event"], subtitle, -20)
+	local switch = CameraModesSwitch(content, subtitle)
+	local header = Header(content, L["Event"], switch, -20)
+	header:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -20)
 	local cameraHeader = Label(content, "GameFontNormal", L["Camera"])
 	cameraHeader:SetPoint("LEFT", header, "LEFT", CAMERA_X, 0)
 	local musicHeader = Label(content, "GameFontNormal", L["Music"])
 	musicHeader:SetPoint("LEFT", header, "LEFT", MUSIC_X, 0)
 	local MUSIC_TIP = L["Music starts as this event's camera starts, unless the addon started music " ..
 		"within the fatigue time (Audio page). Music already playing just carries on. Off: this " ..
-		"camera never starts music. Needs \"Allow CineMode to queue Music\" on the Audio page."]
+		"camera never starts music. Needs the Audio page enabled."]
 	local cineHeader = Label(content, "GameFontNormal", "CineMode")
 	cineHeader:SetPoint("LEFT", header, "LEFT", CINE_X, 0)
 	local CINE_TIP = L["With \"Start in CineMode\" off (Cinematic's main page), this event's camera " ..
@@ -2878,6 +2891,8 @@ local function CreateCameraSettingsPanel()
 		"settings they share, and Camera Triggers what starts each one."])
 	cameraSettingsTop = subtitle
 	subtitle.title = title
+	-- (Greyed with the camera modes' switch, which is on Camera Modes and Triggers.)
+	RegisterPageSwitch(content, "cameraModes")
 
 	CreateFlightPanel()
 	CreateStandingPanel()
@@ -2957,8 +2972,24 @@ ns.OpenColorPicker = OpenColorPicker
 
 -- Sub-page: the visual effects' General tab (the Visual Effects hub's first):
 -- the master switch, the Turn off in grid, the letterbox, vignette, inns,
--- weather and depth of field. Returns the master switch, which greys the
--- Tint tab too.
+-- weather and depth of field.
+-- The master switch, on both tabs: off, none of the effects show (each keeps
+-- its own setting), and the tab's other controls grey out.
+local function VisualEffectsSwitch(content, anchor)
+	local master = Check(content, "visualEffects", L["Enable page"],
+		L["Turns every visual effect on or off at once, these and the Tint tab's: the letterbox, tint, time " ..
+		"of day, zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for " ..
+		"when you turn this back on."], function(value)
+			ns.GetDB().visualEffects = value
+			ns.letterboxDirty = true
+			if ns.RefreshTint then ns.RefreshTint() end
+			Refresh()
+		end)
+	master:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -2, -14)
+	RegisterPageSwitch(content, "visualEffects", master)
+	return master
+end
+
 local function CreateEffectsPanel()
 	local canvas, content = CreateScrollPage()
 
@@ -2970,19 +3001,7 @@ local function CreateEffectsPanel()
 		"main page): letterbox bars, vignette, inn glow, weather and depth of field. The colour grading is " ..
 		"on the Tint tab. The UI isn't tinted. Names and nameplates are on the Nameplates page."])
 
-	-- The master switch: off, none of this page's effects show (each keeps its
-	-- own setting), and its other controls grey out.
-	local master = Check(content, "visualEffects", L["CineMode Visual Effects"],
-		L["Turns every visual effect on or off at once, these and the Tint tab's: the letterbox, tint, time " ..
-		"of day, zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for " ..
-		"when you turn this back on."], function(value)
-			ns.GetDB().visualEffects = value
-			ns.letterboxDirty = true
-			if ns.RefreshTint then ns.RefreshTint() end
-			Refresh()
-		end)
-	master:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
-	RegisterPageSwitch(content, "visualEffects", master)
+	local master = VisualEffectsSwitch(content, subtitle)
 
 	-- Turn off in: a grid of the letterbox, tint, vignette and weather (rows) by place, fights
 	-- and camera modes (columns), like the Camera Modes page's.
@@ -3143,13 +3162,12 @@ local function CreateEffectsPanel()
 	-- (Its own name, not "General": Quality of life has a General page. Shown as
 	-- Visual Effects in search, and General on its icon.)
 	RegisterSubpage(canvas, "Effects", L["Visual Effects"])
-	return master
 end
 
 -- Sub-page: the visual effects' Tint tab: the colour grading (a preset, its
--- strength and drift), time of day and zone tints. Greyed with the General
--- tab's CineMode Visual Effects switch (master).
-local function CreateTintPanel(master)
+-- strength and drift), time of day and zone tints. Its Enable page switch is
+-- the General tab's too.
+local function CreateTintPanel()
 	local canvas, content = CreateScrollPage()
 
 	local title = Label(content, "GameFontNormalLarge", L["Tint"])
@@ -3157,11 +3175,12 @@ local function CreateTintPanel(master)
 
 	local subtitle = PageIntro(content, title,
 		L["The colour grading over the game world: a preset, the time of day and each zone's mood. The " ..
-		"General tab's CineMode Visual Effects switch turns it off with the rest, and its Turn off in grid " ..
-		"says where it doesn't show. The UI isn't tinted."])
-	RegisterPageSwitch(content, "visualEffects", master)
+		"Enable page switch (the General tab's too) turns it off with the rest, and the General tab's " ..
+		"Turn off in grid says where it doesn't show. The UI isn't tinted."])
+	local master = VisualEffectsSwitch(content, subtitle)
 
-	local lookHeader = Header(content, L["Preset"], subtitle, -20)
+	local lookHeader = Header(content, L["Preset"], master, -18)
+	lookHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
 
 	local choices = {}
 	for _, preset in ipairs(ns.TINT_PRESETS) do
@@ -3707,7 +3726,7 @@ local function CreateGraphicsPanel()
 		"over its new settings."])
 
 	local function Changed() ns.ApplyGraphicsPlus() end
-	local switch = PageSwitch(content, "graphicsPlus", L["Graphics+"],
+	local switch = PageSwitch(content, "graphicsPlus", L["Enable page"],
 		L["On: the settings below, as you've set them. Off: the game's own settings, put back as they were."],
 		subtitle, Changed)
 	local stack = Stack(switch, "check")
@@ -3840,19 +3859,19 @@ local function CreateAudioPanel()
 		L["Sound during CineMode. Your own sound settings are saved first and put " ..
 		"back afterwards, even after a crash. Pick which cameras play music as they start."])
 
-	-- Left column: music, fatigue
-	local musicHeader = Header(content, L["Music"], subtitle, -20)
-
-	local music = Check(content, "musicInCinematic", L["CineMode Music"],
-		L["With your game music off, a camera starting (the ones ticked under Music on the Camera " ..
+	-- The page's switch: off, CineMode leaves music alone (nothing below applies).
+	local music = PageSwitch(content, "musicInCinematic", L["Enable page"],
+		L["On: with your game music off, a camera starting (the ones ticked under Music on the Camera " ..
 		"Triggers page) switches it on and fades it in, at your music volume; it fades out when " ..
 		"the UI returns and your music is switched off again (logging out too). With your game " ..
-		"music on, it's left alone. Unticked, music is never switched on."])
-	music:SetPoint("TOPLEFT", musicHeader, "BOTTOMLEFT", -2, -6)
-	music:HookScript("OnClick", Refresh) -- grey out / enable the options that depend on it
+		"music on, it's left alone, bar the stops below. Off: CineMode leaves your music alone."], subtitle)
+
+	-- Left column: music, fatigue
+	local musicHeader = Header(content, L["Music"], music, -18)
+	musicHeader:SetPoint("TOPLEFT", music, "BOTTOMLEFT", 2, -18)
 
 	local musicFade = Slider(content, "musicFadeTime", L["Music fade time"], 0.5, 10, 0.5, L["%.1f sec"])
-	musicFade:SetPoint("TOPLEFT", music, "BOTTOMLEFT", 4, -26)
+	musicFade:SetPoint("TOPLEFT", musicHeader, "BOTTOMLEFT", 2, -26)
 	Tooltip(musicFade, L["How long music takes to fade in or out with CineMode."])
 
 	local fatigueHeader = Header(content, L["Fatigue"], musicFade, -24)
@@ -3872,7 +3891,6 @@ local function CreateAudioPanel()
 	Tooltip(fatigue, L["Once a camera has started music, no camera starts it again for this long, " ..
 		"counted from when it started. The first camera after a login or /reload always can. " ..
 		"Music coming back after a mute doesn't count. 0 turns this off."])
-	DependsOnMusic(fatigue)
 
 	-- Right column: muting, all in one list ("In combat", "In cities"...)
 	local muteHeader = Label(content, "GameFontNormal", L["Stop Music"])
@@ -3883,7 +3901,6 @@ local function CreateAudioPanel()
 		"in once the Calm Timer (on the CineMode page) has passed with no new fight. Works on " ..
 		"your own game music too; your volume is put back afterwards."])
 	combatMusic:SetPoint("TOPLEFT", muteHeader, "BOTTOMLEFT", -2, -6)
-	DependsOnMusic(combatMusic)
 
 	local movingMusic = Check(content, "musicPauseWhenMoving", L["Leaving a camera mode"],
 		L["Music fades out once you leave the camera modes and move on: walking off from the cozy " ..
@@ -3892,15 +3909,14 @@ local function CreateAudioPanel()
 		"still counts once the AFK camera starts, with Go AFK's music on, Camera Triggers page). " ..
 		"Fades at the music fade time."])
 	movingMusic:SetPoint("TOPLEFT", combatMusic, "BOTTOMLEFT", 0, -2)
-	DependsOnMusic(movingMusic)
 
 	local muteStack = Stack(movingMusic, "check")
 	-- (Each its own text: languages differ in how they'd join "In" and the place.)
 	local MUTE_LABELS = { Cities = L["In cities"], Dungeons = L["In dungeons"], Raids = L["In raids"], PvP = L["In PvP"] }
 	for _, place in ipairs(PLACES) do
-		DependsOnMusic(muteStack:Add(Check(content, "musicOffIn" .. place[1], MUTE_LABELS[place[1]],
+		muteStack:Add(Check(content, "musicOffIn" .. place[1], MUTE_LABELS[place[1]],
 			(place[1] == "PvP" and (PVP_TIP .. " ") or "") ..
-			L["Music fades out here (your own game music too) and back in when you leave."]), "check"))
+			L["Music fades out here (your own game music too) and back in when you leave."]), "check")
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
@@ -4115,7 +4131,7 @@ local function CreateCombatPanel()
 	-- The game's frames this client has, in sections (their page: see
 	-- ROW_SECTIONS), each a table of its own; the gamepad's are on the
 	-- Gamepad page, other addons' frames on the Advanced Frames page.
-	local switch = PageSwitch(content, "handleFrames", L["CineMode Standard Frames"],
+	local switch = PageSwitch(content, "handleFrames", L["Enable page"],
 		L["On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
 		"alone, the minimap, quest tracker, buffs and Cooldown Manager included (their pages' " ..
 		"switches only count while this is on)."], subtitle)
@@ -4232,7 +4248,9 @@ local function CreatePortraitsPanel()
 	-- opens with the target's choices to start from.
 	local OpenSections -- (opens You and Target, and the frames set apart from the target)
 	if hasParts then
-		local note = subtitle
+		local note = PageSwitch(content, "handleUnitFrames", L["Enable page"],
+			L["On: the unit frames show the parts the grids below say. Off: CineMode leaves them alone, " ..
+			"every part showing as the game has it."], subtitle, function() ns.ApplyUnitFrameParts() end)
 
 		-- (Nine columns must fit the page's width, no wider than eight were at
 		-- 128 + 8 * 58: wider, the last column and the Same as target tick were
@@ -4285,7 +4303,7 @@ local function CreatePortraitsPanel()
 
 		local top = CreateFrame("Frame", nil, content)
 		top:SetSize(1, 1)
-		top:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -10)
+		top:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 2, -10)
 
 		-- Stacks the sections, each its name row and, open, its grid.
 		local function Layout()
@@ -4468,7 +4486,7 @@ local function CreateBubblesPanel()
 		end)
 	end
 
-	local switch = PageSwitch(content, "handleBubbles", L["CineMode Chat bubbles"],
+	local switch = PageSwitch(content, "handleBubbles", L["Enable page"],
 		L["On: chat bubbles show where this page says, and look as it says. Off: the game's own " ..
 		"chat bubble settings, as you had them."], subtitle, Changed)
 	-- Hide in: a grid of the kinds of bubble (rows) by place (columns), like
@@ -4570,8 +4588,14 @@ local function CreateQualityPanel()
 
 	local subtitle = PageIntro(content, title, L["Small helpers for getting about the world. Ideas for more in the spirit of this page are " ..
 		"welcome: please send them to the developer."])
+	local switch = PageSwitch(content, "handleQuality", L["Enable page"],
+		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
+		"when you turn this back on."], subtitle, function()
+		if ns.RefreshTalentLink then ns.RefreshTalentLink() end
+		if ns.RefreshTalentCalc then ns.RefreshTalentCalc() end
+	end)
 
-	local stack = Stack(subtitle, "label")
+	local stack = Stack(switch, "check")
 	-- (WoW Forever only: Campfire.lua.)
 	if not ns.isRetail then
 		local sit = stack:Add(Check(content, "campfireSitButton", L["Campfire button"],
@@ -4663,7 +4687,12 @@ local function CreateQualityPanel()
 		canvas, content = CreateScrollPage()
 		title = Label(content, "GameFontNormalLarge", L["Hunter"])
 		title:SetPoint("TOPLEFT", 16, -16)
-		stack = Stack(title, "label")
+		switch = PageSwitch(content, "handleHunter", L["Enable page"],
+			L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
+			"when you turn this back on."], title, function()
+			if ns.ApplyHunter then ns.ApplyHunter() end
+		end)
+		stack = Stack(switch, "check")
 		stack:Add(Check(content, "hunterRightClickShot", L["Right click attack also uses Auto-shot"],
 			L["Right-clicking an enemy targets it and attacks: Auto Shot when it's far enough away to shoot, " ..
 			"a melee swing when it's too close, in a fight or out of one. In a fight the game only checks what's " ..
@@ -4695,7 +4724,7 @@ local function CreateFishingPanel()
 	local subtitle = PageIntro(content, title,
 		L["Casting and catching, with the mouse or a gamepad, CineMode or not."])
 
-	local switch = PageSwitch(content, "handleFishing", L["CineMode Fishing"],
+	local switch = PageSwitch(content, "handleFishing", L["Enable page"],
 		L["On: right-click (or a gamepad button) casts again, and the Fishing cast bar hides, as this " ..
 		"page says. Off: fishing is left to the game. (The fish camera is on the Camera Modes and " ..
 		"Camera Triggers pages.)"], subtitle)
@@ -4788,7 +4817,7 @@ local function CreateGamepadPanel()
 			rows[#rows + 1] = item
 		end
 	end
-	local switch = PageSwitch(content, "handleGamepad", L["CineMode Gamepad"],
+	local switch = PageSwitch(content, "handleGamepad", L["Enable page"],
 		L["On: CineMode fades the gamepad's bars, button hints and reticle as this page says. Off: it " ..
 		"leaves them alone."], subtitle)
 	local lastRow = ShowTable(content, switch, rows, "Gamepad")
@@ -4910,7 +4939,7 @@ local function CreatePlatesPanel()
 
 	-- The page's master switch: off, CineMode leaves nameplates and names to
 	-- the game's own options (everything below greys out).
-	local handleCheck = Check(content, "handlePlates", L["CineMode Nameplates"],
+	local handleCheck = Check(content, "handlePlates", L["Enable page"],
 		L["On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, " ..
 		"and the game's own options decide, in CineMode and out."],
 		function(value)
@@ -5340,7 +5369,7 @@ local function CreateChatPanel()
 		"always shows it."])
 
 	-- Left column: the chat window, message types
-	local switch = PageSwitch(chatPanel, "handleChat", L["CineMode Chat"],
+	local switch = PageSwitch(chatPanel, "handleChat", L["Enable page"],
 		L["On: CineMode fades the chat windows and tabs as this page says. Off: it leaves them alone."],
 		subtitle)
 	local windowHeader = Header(chatPanel, L["Chat window"], switch, -20)
@@ -5935,7 +5964,7 @@ local function CreateMinimapPanel()
 		L["When the minimap (and on retail the quest waypoint) stays up in CineMode. " ..
 		"Hovering the minimap always shows it. To keep it up all the time, or in fights, " ..
 		"see the Standard Frames page."])
-	local switch = PageSwitch(content, "handleMinimap", L["CineMode Minimap"],
+	local switch = PageSwitch(content, "handleMinimap", L["Enable page"],
 		L["On: CineMode fades and shrinks the minimap as this page and its Standard Frames row say. " ..
 		"Off: it leaves it alone."], subtitle)
 
@@ -6080,7 +6109,7 @@ local function CreateQuestTrackerPanel()
 		"Mouseover groups that have Quest progress ticked): it goes after \"Stays after " ..
 		"mouseover\" (Mouseover groups page)."])
 	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -48)
-	PageSwitch(content, "handleQuests", L["CineMode Quest tracker"],
+	PageSwitch(content, "handleQuests", L["Enable page"],
 		L["On: CineMode fades the quest tracker (and the quest timer and waypoint) as this page and its " ..
 		"Standard Frames row say. Off: it leaves them alone."], subtitle)
 	reveal:HookScript("OnClick", Refresh) -- grey out / enable the option below
@@ -6155,7 +6184,7 @@ local function CreateSwingPanel()
 
 	-- The page's master switch: off, CineMode leaves the swing timer alone
 	-- (everything below greys out, and its Standard Frames row).
-	local handleCheck = PageSwitch(content, "handleSwing", L["CineMode Swing timer"],
+	local handleCheck = PageSwitch(content, "handleSwing", L["Enable page"],
 		L["On: CineMode fades the swing timer as this page and its Standard Frames row say. Off: it " ..
 		"leaves it alone, and the game shows every bar as usual, in CineMode and out."], subtitle)
 
@@ -6203,7 +6232,7 @@ local function CreateCooldownPanel()
 
 	-- The page's master switch: off, CineMode leaves the Cooldown Manager alone
 	-- (everything below greys out, and its Standard Frames row).
-	local handleCheck = PageSwitch(content, "handleCooldowns", L["CineMode Cooldown Manager"],
+	local handleCheck = PageSwitch(content, "handleCooldowns", L["Enable page"],
 		L["On: CineMode fades the Cooldown Manager as this page and its Standard Frames row say. Off: " ..
 		"it leaves it alone, and the game's own options decide, in CineMode and out."], subtitle)
 	local function Handled() return ns.GetDB().handleCooldowns end
@@ -6386,12 +6415,19 @@ local function CreateVisionPanel()
 	local note = PageIntro(content, title,
 		L["Ways of showing just what matters: the health of a duel near you, or who in your group needs healing."])
 
-	local duelHeader = Header(content, L["Duel Vision"], note, -18)
+	local switch = PageSwitch(content, "handleVision", L["Enable page"],
+		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
+		"when you turn this back on."], note, function()
+		if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
+	end)
+
+	local duelHeader = Header(content, L["Duel Vision"], switch, -18)
+	duelHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -18)
 	local duelCheck = Check(content, "duelPlates", L["Enable"],
 		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
 		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
 		"kept invisible and click-through bar the duelists'. Each duel has its own colour, and the winner " ..
-		"and loser show when it ends. Needs CineMode Nameplates on (Nameplates page)."])
+		"and loser show when it ends. Needs the Nameplates page enabled."])
 	duelCheck:SetPoint("TOPLEFT", duelHeader, "BOTTOMLEFT", -2, -6)
 	GreyUnless(duelCheck, function(db) return db.handlePlates end)
 
@@ -6561,7 +6597,7 @@ local function CreateTooltipPanel()
 
 	local note = PageIntro(content, title, L["Only in CineMode. Hold your Show hidden tooltips " ..
 		"key (set it on the Keybinds page) to see a hidden one anyway."])
-	local switch = PageSwitch(content, "handleTooltips", L["CineMode Tooltips"],
+	local switch = PageSwitch(content, "handleTooltips", L["Enable page"],
 		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], note)
 
 	-- A header, then its ticks under it, each on a line of its own.
@@ -6635,7 +6671,7 @@ local function CreateExtrasPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Advanced Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleAddonFrames", L["CineMode Advanced Frames"],
+	local switch = PageSwitch(content, "handleAddonFrames", L["Enable page"],
 		L["On: CineMode fades the supported addons' frames, and frames you added, as this page says. " ..
 		"Off: it leaves them all alone."], title)
 	local stack = Stack(switch, "check")
@@ -7007,7 +7043,7 @@ local KEYBINDS = {
 			"while you're on a unit or something in the world brings its tooltip up; anything else, " ..
 			"hover it again with the key held."] },
 	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = L["Toggle tooltip hiding"],
-		tip = L["Turns the Tooltips page's \"CineMode Tooltips\" switch on or off."] },
+		tip = L["Turns the Tooltips page on or off (its Enable page switch)."] },
 }
 
 local IGNORED_KEYS = {
@@ -7608,12 +7644,13 @@ local function CreateMouseoverPanel()
 		"be in more than one group; one in no group comes up on its own."] .. " " ..
 		L["Click a group's icon below to go to it, or the + to make one of your own."])
 
-	local mouseover = Check(content, "mouseover", L["CineMode Mouseover"],
+	local mouseover = Check(content, "mouseover", L["Enable page"],
 		L["Pointing at a faded frame shows it, with the rest of its groups."], function(value)
 			ns.GetDB().mouseover = value
 			Refresh() -- grey out / enable the hold time
 		end)
 	mouseover:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -14)
+	RegisterPageSwitch(content, "mouseover", mouseover)
 	local hold = Slider(content, "mouseoverHold", L["Stays after mouseover"], 0, 30, 1, L["%d sec"])
 	hold:SetPoint("TOPLEFT", mouseover, "BOTTOMLEFT", 4, -26)
 	Tooltip(hold, L["How long until a frame is gone after your mouse leaves it (and its groups), fade " ..
@@ -8307,7 +8344,8 @@ ns.OnLanguage(function()
 	CreateBubblesPanel()
 	CreateFishingPanel()
 	CreateQualityPanel()
-	CreateTintPanel(CreateEffectsPanel())
+	CreateEffectsPanel()
+	CreateTintPanel()
 	CreateGraphicsPanel()
 	CreateAudioPanel()
 	CreateCameraPanel()

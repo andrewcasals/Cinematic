@@ -61,7 +61,7 @@ local function OpenCharacter()
 end
 
 local function CanOpen()
-	return not openedIt and ns.db and ns.db.dragEquipCharacter and not CharacterShown()
+	return not openedIt and ns.Setting("dragEquipCharacter") and not CharacterShown()
 		and not InCombatLockdown() and ToggleCharacter and ns.MouseOverWorld
 end
 

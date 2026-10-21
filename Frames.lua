@@ -5371,7 +5371,7 @@ do
 				local row = entry[4] or Ask(UnitExists, entry[3]) and Row(entry[3])
 				for _, part in ipairs(ns.UNIT_PARTS) do
 					local key = FRAMES.Key(entry, row, part)
-					local hide = FRAMES.Hidden(key)
+					local hide = ns.db.handleUnitFrames ~= false and FRAMES.Hidden(key)
 					local paths = entry[2][part]
 					if type(paths) == "function" then
 						for _, region in ipairs(paths(frame)) do

@@ -61,7 +61,7 @@ local function Num(value)
 end
 
 local function Enabled()
-	return ns.db and ns.db.talentCalc
+	return ns.Setting("talentCalc")
 end
 
 -------------------------------------------------------------------------------
