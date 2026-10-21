@@ -903,8 +903,9 @@ end
 
 local TALENTS_ICON = "Interface\\Icons\\Ability_Marksmanship" -- (the talents micro button's)
 
--- Where the talents window was last seen, so the calculator opens in its
--- place and size: { left, bottom, width, height } in UIParent's units.
+-- Where the talents window (or the calculator, dragged) was last seen, so
+-- the calculator opens in its place and size: { left, bottom, width, height }
+-- in UIParent's units.
 local talentsRect
 
 local function RememberTalentsRect(frame)
@@ -915,22 +916,54 @@ local function RememberTalentsRect(frame)
 	end
 end
 
+-- The talents window's scale against UIParent's (1 while it isn't loaded).
+local function TalentsScale()
+	local frame = PlayerSpellsFrame
+	local scale = frame and Num(frame:GetEffectiveScale())
+	local uiScale = Num(UIParent:GetEffectiveScale())
+	return scale and uiScale and scale > 0 and uiScale > 0 and scale / uiScale or 1
+end
+
+-- Dropped: the talents window's spot too. The two share one, like the quest
+-- giver's windows (CenterPanels.lua): the talents window opens where the
+-- calculator was left (at once, if it's open under it), and the other way round.
+local function DropWindow(frame)
+	frame:StopMovingOrSizing()
+	frame:SetUserPlaced(false)
+	RememberTalentsRect(frame)
+	local left, top = Num(frame:GetLeft()), Num(frame:GetTop())
+	if left and top and ns.SavePanelSpot then
+		local scale = TalentsScale()
+		ns.SavePanelSpot("PlayerSpellsFrame", { "TOPLEFT", "BOTTOMLEFT", left / scale, top / scale })
+	end
+end
+
 local function PlaceWindow()
 	window:ClearAllPoints()
+	-- (Open: where it is now, after the game and CenterPanels.lua are done.)
+	if PlayerSpellsFrame and ns.Flag(PlayerSpellsFrame:IsShown()) then
+		RememberTalentsRect(PlayerSpellsFrame)
+	end
 	if talentsRect then
 		window:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", talentsRect[1], talentsRect[2])
 		window:SetSize(talentsRect[3], talentsRect[4])
+		return
+	end
+	-- (Not seen yet: its size, where it was last dropped, else in the middle.)
+	local frame = PlayerSpellsFrame
+	local width, height = frame and Num(frame:GetWidth()), frame and Num(frame:GetHeight())
+	local scale = TalentsScale()
+	if width and height and width > 0 then
+		window:SetSize(width * scale, height * scale)
 	else
-		-- (Not seen yet: its size, in the middle.)
-		local frame = PlayerSpellsFrame
-		local width, height = frame and Num(frame:GetWidth()), frame and Num(frame:GetHeight())
-		local scale = frame and Num(frame:GetEffectiveScale()) and frame:GetEffectiveScale() / UIParent:GetEffectiveScale()
+		window:SetSize(DEFAULT_W, DEFAULT_H)
+	end
+	local spot = ns.PanelSpot and ns.PanelSpot("PlayerSpellsFrame")
+	local x, y = spot and Num(spot[3]), spot and Num(spot[4])
+	if x and y then
+		window:SetPoint(spot[1], UIParent, spot[2], x * scale, y * scale)
+	else
 		window:SetPoint("CENTER")
-		if width and height and scale and width > 0 then
-			window:SetSize(width * scale, height * scale)
-		else
-			window:SetSize(DEFAULT_W, DEFAULT_H)
-		end
 	end
 end
 
@@ -1027,8 +1060,14 @@ local function MakeWindow()
 	frame:EnableMouse(true)
 	frame:SetMovable(true)
 	frame:RegisterForDrag("LeftButton")
-	frame:SetScript("OnDragStart", frame.StartMoving)
-	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+	-- (Dragged as the game's windows are: with Drag windows to move them,
+	-- Quality of life page. Without it, it stays where the talents window is.)
+	frame:SetScript("OnDragStart", function(self)
+		if ns.Setting("dragPanels") then
+			self:StartMoving()
+		end
+	end)
+	frame:SetScript("OnDragStop", DropWindow)
 	frame:Hide()
 	tinsert(UISpecialFrames, "CinematicTalentCalc")
 	if frame.Inset then

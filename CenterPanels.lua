@@ -70,6 +70,25 @@ local hooked = {}  -- frame -> true once it can be dragged
 local moving = {}  -- frame -> where the mouse and the window started, while it's being dragged
 local dropped = {} -- frame -> { point, relativePoint, x, y } for windows without a name, while they stay open
 
+-- Where the window with this name was last dropped, or nil.
+local function NamedSpot(name)
+	local spots = ns.db and ns.db.panelSpots
+	if type(spots) ~= "table" then
+		return nil
+	end
+	local key = SPOT_NAME[name] or name
+	if spots[key] then
+		return spots[key]
+	end
+	-- (a spot saved before they were shared is still used, for both)
+	for other, shared in pairs(SPOT_NAME) do
+		if shared == key and spots[other] then
+			return spots[other]
+		end
+	end
+	return nil
+end
+
 -- Where the window was last dropped, or nil.
 local function Spot(frame)
 	if not ns.Setting("dragPanels") then
@@ -77,21 +96,7 @@ local function Spot(frame)
 	end
 	local name = frame:GetName()
 	if name then
-		local spots = ns.db and ns.db.panelSpots
-		if type(spots) ~= "table" then
-			return nil
-		end
-		local key = SPOT_NAME[name] or name
-		if spots[key] then
-			return spots[key]
-		end
-		-- (a spot saved before they were shared is still used, for both)
-		for other, shared in pairs(SPOT_NAME) do
-			if shared == key and spots[other] then
-				return spots[other]
-			end
-		end
-		return nil
+		return NamedSpot(name)
 	end
 	return dropped[frame]
 end
@@ -528,6 +533,28 @@ function ns.PrintPanelsDebug()
 		focus = focus.GetParent and focus:GetParent()
 	end
 	ns.Print("under the mouse: " .. (#names > 0 and table.concat(names, " < ") or "nothing"))
+end
+
+-- A window of ours that stands in for one of the game's shares its spot (the
+-- talent calculator and the talents window: dragging either moves both).
+-- { point, relativePoint, x, y }, in that window's own units, or nil.
+function ns.PanelSpot(name)
+	if not ns.Setting("dragPanels") then
+		return nil
+	end
+	return NamedSpot(name)
+end
+
+-- ...and dropped, it saves that spot; the game's window, if open, goes there.
+function ns.SavePanelSpot(name, spot)
+	if not (ns.db and ns.Setting("dragPanels")) then
+		return
+	end
+	if type(ns.db.panelSpots) ~= "table" then
+		ns.db.panelSpots = {}
+	end
+	ns.db.panelSpots[SPOT_NAME[name] or name] = spot
+	Placed()
 end
 
 -- Put windows back: every window opens in its usual place again (the open
