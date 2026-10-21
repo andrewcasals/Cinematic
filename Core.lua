@@ -502,6 +502,12 @@ DEFAULTS.runCameraDelay = 5
 DEFAULTS.walkOffInCities, DEFAULTS.walkOffInInstances = false, false
 DEFAULTS.runOffInCities, DEFAULTS.runOffInInstances = true, true
 DEFAULTS.deathOffInInstances = true -- (no death camera in dungeons and raids: the group's waiting)
+-- No camera mode in battlegrounds and arenas (flight has none there anyway).
+for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+	if not (ns.CAMERA_OFF_NEVER[cam[1]] or {}).BGs then
+		DEFAULTS[cam[1] .. "OffInBGs"] = true
+	end
+end
 DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette meanwhile
 DEFAULTS.deathScreenStrength = 1
 DEFAULTS.deathZoom = 4             -- yards it pulls back meanwhile
@@ -1244,6 +1250,11 @@ function ns.IsCameraOffHere(cam)
 	if not db then return false end
 	if db.cameraModes == false then
 		return true
+	end
+	-- Started by hand (camera wheel or key binding): runs wherever you are.
+	if (ns.manualCam and ns.manualCam == (cam == "idle" and "afk" or cam))
+		or (cam == "death" and GetTime() < (ns.deathTestUntil or 0)) then
+		return false
 	end
 	if SWITCHED_CAMS[cam] and db[SWITCHED_CAMS[cam]] == "none" then
 		return true
@@ -3103,6 +3114,22 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then saved.runCameraDelay = 5 end
 			end
 			ns.db.runCameraDelayV1 = true
+		end
+		-- Every camera mode is off in battlegrounds and arenas now: ticked in
+		-- every profile too, whatever it had. Once.
+		if not ns.db.camsOffInBGsV1 then
+			local function OffInBGs(t)
+				for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+					if not (ns.CAMERA_OFF_NEVER[cam[1]] or {}).BGs then
+						t[cam[1] .. "OffInBGs"] = true
+					end
+				end
+			end
+			OffInBGs(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then OffInBGs(saved) end
+			end
+			ns.db.camsOffInBGsV1 = true
 		end
 		-- The game's damage meter no longer comes up in fights by default: its
 		-- In combat box unticked in every profile too, whatever it had. Once.
