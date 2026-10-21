@@ -5193,7 +5193,8 @@ do
 	}) do
 		TARGET[part] = paths
 	end
-	-- Your pet's frame: no level, PvP or icons of its own.
+	-- Your pet's frame: no level or PvP of its own, and for icons only the
+	-- hunter pet's happiness face, where the client has one (not retail).
 	local PET = {
 		Portrait = { "portrait", "_G.PetPortrait" },
 		Name = { "name", "_G.PetName" },
@@ -5202,6 +5203,7 @@ do
 		Art = { "_G.PetFrameTexture", "_G.PetFrameFlash", "_G.PetAttackModeTexture", "threatIndicator",
 			"AttackModeTexture", "Flash", "FrameTexture" },
 		CombatText = { "feedbackText", "_G.PetHitIndicator" },
+		Icons = _G.PetFrameHappiness and { "_G.PetFrameHappiness" } or nil,
 	}
 	-- The target of target frames (the target's and the focus's): a portrait,
 	-- a name and the frame art, and on older frames numbered debuffs
