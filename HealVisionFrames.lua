@@ -113,38 +113,71 @@ local function KindOf(unit)
 end
 
 -- A debuff on them that the game's filters find: ones you can dispel
--- (newer filter first), or any. A secret answer is yes: only a debuff comes
--- back secret (nothing is nil). No answer, or an error (WoW Forever won't let
--- addons see members' auras while they're secret: in fights, battlegrounds):
--- no, they go by their health.
+-- (newer filter first, the older one if this client doesn't know it), or any.
+-- Long ones (over LONG_DEBUFF, or for good: seasonal and other hour-long
+-- ones) don't count, nothing on the frame needs a heal or a dispel. A secret
+-- answer is yes: only a debuff comes back secret (nothing is nil). No answer,
+-- or an error (WoW Forever won't let addons see members' auras while they're
+-- secret: in fights, battlegrounds): no, they go by their health.
+local LONG_DEBUFF = 120 -- seconds
 local DISPEL_FILTERS = { "HARMFUL|RAID_PLAYER_DISPELLABLE", "HARMFUL|RAID" }
 local ANY_FILTERS = { "HARMFUL" }
+local function Counts(duration)
+	if Secret(duration) then return true end
+	return type(duration) == "number" and duration > 0 and duration <= LONG_DEBUFF
+end
 local function Debuffed(unit, filters, oldFilter)
 	if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
 		for _, filter in ipairs(filters) do
 			local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, unit, 1, filter)
-			if ok and (Secret(data) or type(data) == "table") then
-				return true
+			if ok then
+				for i = 1, 40 do
+					if i > 1 then
+						ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, filter)
+						if not ok then return false end
+					end
+					if Secret(data) then return true end
+					if type(data) ~= "table" then return false end
+					local okDuration, duration = pcall(function() return data.duration end)
+					if okDuration and Counts(duration) then return true end
+				end
+				return false
 			end
 		end
 		return false
 	end
 	if UnitDebuff then
-		local ok, name = pcall(UnitDebuff, unit, 1, oldFilter)
-		return ok and (Secret(name) or type(name) == "string")
+		for i = 1, 40 do
+			local ok, name, _, _, _, duration = pcall(UnitDebuff, unit, i, oldFilter)
+			if not ok then return false end
+			if Secret(name) then return true end
+			if type(name) ~= "string" then return false end
+			if Counts(duration) then return true end
+		end
 	end
 	return false
 end
 
+-- What the debuff options would make of a member (for /cine debug auras),
+-- on WoW Forever too, where they're hidden for now.
+function ns.HealVisionDebuffs(unit)
+	return ("dispellable %s, any %s"):format(tostring(Debuffed(unit, DISPEL_FILTERS, "RAID")),
+		tostring(Debuffed(unit, ANY_FILTERS, nil)))
+end
+
 -- Shown whatever their health, as the Vision page's options say: tanks at
 -- 100%, and those with a debuff. (Your target goes before everything, in Rule.)
+-- The debuff ones are off for now, their options hidden (the choices kept):
+-- neither client lets addons see members' auras in fights in instances or
+-- battlegrounds (C_Secrets.ShouldAurasBeSecret says so then, see /cine debug
+-- auras), only out of combat.
+ns.HEAL_VISION_DEBUFFS = false
 local function ShownAnyway(unit)
 	local db = ns.db
-	-- (The debuff ones are retail only for now, hidden on WoW Forever: it
-	-- won't let addons see members' debuffs in fights and battlegrounds.)
+	local debuffs = ns.HEAL_VISION_DEBUFFS
 	return ((tonumber(db.healVisionTankBelow) or 1) >= 1 and Tank(unit)) -- (100%: always)
-		or (ns.isRetail and db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
-		or (ns.isRetail and db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
+		or (debuffs and db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
+		or (debuffs and db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
 end
 
 -- (kind: its setting, as the Vision grid's row has it: on here, see ns.HealVisionHere.)

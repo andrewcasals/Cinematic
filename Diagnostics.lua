@@ -1199,3 +1199,272 @@ do
 		ns.Print(("nodes: sweeping once a second for %d seconds, printing when it changes"):format(math.min(seconds, 600)))
 	end
 end
+
+-- Group debuffs (/cine debug auras) -------------------------------------------
+-- For Heal Vision's debuff options: where and when this client lets addons
+-- see the group's debuffs, which ways of asking work (by index, by slot, by
+-- aura instance from UNIT_AURA, with which filters), what comes back secret,
+-- and whether the raid frames' own debuff icons can be looked at. The first
+-- run starts watching UNIT_AURA (for the aura instances it hands out); run it
+-- in and out of combat, in the open world, dungeons, raids and battlegrounds.
+do
+	local FILTERS = { "HARMFUL", "HARMFUL|RAID", "HARMFUL|RAID_PLAYER_DISPELLABLE", "HARMFUL|PLAYER" }
+	local DETAIL_UNITS = 6 -- members logged in full; the rest get a line each
+	local seen = {}        -- unit -> { aura instance ID -> true } from UNIT_AURA
+	local events = {}      -- unit -> { events, secret answers, plain instance IDs }
+	local latest = {}      -- unit -> the last 3 auras UNIT_AURA added, described
+	local watcher
+
+	local function Secret(value)
+		return issecretvalue ~= nil and issecretvalue(value) == true
+	end
+
+	local function Show(value)
+		if Secret(value) then return "secret" end
+		if type(value) == "number" then return ("%.1f"):format(value) end
+		return tostring(value)
+	end
+
+	-- A call's answer: true and the value, or false and "no API" / "error <why>".
+	local function Try(func, ...)
+		if not func then return false, "no API" end
+		local ok, value = pcall(func, ...)
+		if not ok then return false, "error " .. tostring(value):gsub("^.-:%d+: ", ""):sub(1, 70) end
+		return true, value
+	end
+
+	-- An aura's fields that matter (any of them may be secret).
+	local function Describe(data)
+		if Secret(data) then return "secret table" end
+		if type(data) ~= "table" then return Show(data) end
+		local parts = {}
+		for _, key in ipairs({ "name", "spellId", "duration", "expirationTime", "dispelName", "isHarmful",
+			"isRaid", "auraInstanceID", "sourceUnit" }) do
+			local ok, value = pcall(function() return data[key] end)
+			parts[#parts + 1] = key .. " " .. (ok and Show(value) or "?")
+		end
+		return table.concat(parts, ", ")
+	end
+
+	local function Watch()
+		if watcher then return end
+		watcher = CreateFrame("Frame")
+		if not pcall(watcher.RegisterEvent, watcher, "UNIT_AURA") then return end
+		watcher:SetScript("OnEvent", function(_, _, unit, info)
+			if Secret(unit) or type(unit) ~= "string" then return end
+			local counts = events[unit] or { 0, 0, 0 }
+			events[unit] = counts
+			counts[1] = counts[1] + 1
+			if Secret(info) then
+				counts[2] = counts[2] + 1
+				return
+			end
+			if type(info) ~= "table" then return end
+			local ids = seen[unit] or {}
+			seen[unit] = ids
+			pcall(function()
+				for _, aura in ipairs(info.addedAuras or {}) do
+					local id = aura.auraInstanceID
+					if Secret(id) then
+						counts[2] = counts[2] + 1
+					elseif id then
+						ids[id] = true
+						counts[3] = counts[3] + 1
+					end
+					-- What the event itself hands over (the aura may be gone by the
+					-- next run), and whether the filters answer about it right then.
+					local filtered = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
+					local _, outAny = Try(filtered, unit, id, "HARMFUL")
+					local _, outRaid = Try(filtered, unit, id, "HARMFUL|RAID")
+					local _, outDispel = Try(filtered, unit, id, "HARMFUL|RAID_PLAYER_DISPELLABLE")
+					local list = latest[unit] or {}
+					latest[unit] = list
+					table.insert(list, 1, ("%s %s: %s; filtered out: HARMFUL %s, RAID %s, DISPELLABLE %s"):format(
+						date("%H:%M:%S"), InCombatLockdown() and "in combat" or "out of combat", Describe(aura),
+						Show(outAny), Show(outRaid), Show(outDispel)))
+					list[4] = nil
+				end
+				for _, id in ipairs(info.removedAuraInstanceIDs or {}) do
+					if not Secret(id) then ids[id] = nil end
+				end
+			end)
+		end)
+	end
+
+	local function Units()
+		local units = { "player" }
+		local count = GetNumGroupMembers and GetNumGroupMembers() or 0
+		if IsInRaid and IsInRaid() then
+			units = {}
+			for i = 1, count do units[#units + 1] = "raid" .. i end
+		else
+			for i = 1, math.max(0, count - 1) do units[#units + 1] = "party" .. i end
+		end
+		if UnitExists("target") and not UnitCanAttack("player", "target") then units[#units + 1] = "target" end
+		return units
+	end
+
+	-- Every function in a table whose name has one of the words (for spotting new APIs).
+	local function Names(where, words)
+		local found = {}
+		for key, value in pairs(where or {}) do
+			if type(key) == "string" and type(value) == "function" then
+				local lower = key:lower()
+				for _, word in ipairs(words) do
+					if lower:find(word, 1, true) then
+						found[#found + 1] = key
+						break
+					end
+				end
+			end
+		end
+		table.sort(found)
+		return #found > 0 and table.concat(found, " ") or "none"
+	end
+
+	-- The raid frames showing this unit: are their debuff icons and dispel
+	-- highlight forbidden, and can "shown" be read?
+	local function FrameLines(unit)
+		local lines = {}
+		local function Part(parts, label, part)
+			if not part then return end
+			local okF, isForbidden = pcall(part.IsForbidden, part)
+			if not okF then
+				parts[#parts + 1] = label .. " ?"
+			elseif isForbidden then
+				parts[#parts + 1] = label .. " forbidden"
+			else
+				local okS, shown = pcall(part.IsShown, part)
+				local okA, alpha = pcall(part.GetAlpha, part)
+				parts[#parts + 1] = ("%s shown %s alpha %s"):format(label, okS and Show(shown) or "error",
+					okA and Show(alpha) or "error")
+			end
+		end
+		local function Look(frame)
+			if not frame then return end
+			local okForbidden, forbidden = pcall(frame.IsForbidden, frame)
+			if not okForbidden or forbidden then return end
+			local okUnit, frameUnit = pcall(function() return frame.unit end)
+			if not okUnit or Secret(frameUnit) or frameUnit ~= unit then return end
+			local parts = {}
+			for i, icon in ipairs(frame.debuffFrames or {}) do Part(parts, "debuff" .. i, icon) end
+			for i, icon in ipairs(frame.dispelDebuffFrames or {}) do Part(parts, "dispel" .. i, icon) end
+			Part(parts, "DispelOverlay", frame.DispelOverlay)
+			Part(parts, "dispelHighlight", frame.dispelHighlight)
+			lines[#lines + 1] = ("%s: %s"):format(tostring(frame:GetName()),
+				#parts > 0 and table.concat(parts, "; ") or "no debuff parts")
+		end
+		for i = 1, 5 do Look(_G["CompactPartyFrameMember" .. i]) end
+		for i = 1, 40 do Look(_G["CompactRaidFrame" .. i]) end
+		for g = 1, 8 do
+			for i = 1, 5 do Look(_G["CompactRaidGroup" .. g .. "Member" .. i]) end
+		end
+		return lines
+	end
+
+	local function Log(text)
+		ns.Log("auras", text)
+	end
+
+	-- One member in full: other ways of asking, aura instances, their frames.
+	local function Detail(unit)
+		local _, slots = Try(C_UnitAuras and C_UnitAuras.GetAuraSlots, unit, "HARMFUL")
+		local _, list = Try(C_UnitAuras and C_UnitAuras.GetUnitAuras, unit, "HARMFUL")
+		local _, ids = Try(C_UnitAuras and C_UnitAuras.GetUnitAuraInstanceIDs, unit, "HARMFUL")
+		Log(("%s GetAuraSlots %s, GetUnitAuras %s, GetUnitAuraInstanceIDs %s"):format(unit, Show(slots),
+			type(list) == "table" and not Secret(list) and ("x" .. #list) or Show(list),
+			type(ids) == "table" and not Secret(ids) and ("x" .. #ids) or Show(ids)))
+		-- Aura instances (from UNIT_AURA, or the list just read): can they be
+		-- asked about one by one?
+		local known = {}
+		for id in pairs(seen[unit] or {}) do known[id] = true end
+		if type(ids) == "table" and not Secret(ids) then
+			for _, id in ipairs(ids) do
+				if not Secret(id) then known[id] = true end
+			end
+		end
+		local asked = 0
+		for id in pairs(known) do
+			if asked >= 4 then break end
+			asked = asked + 1
+			local _, data = Try(C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID, unit, id)
+			local filtered = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
+			local _, outAny = Try(filtered, unit, id, "HARMFUL")
+			local _, outDispel = Try(filtered, unit, id, "HARMFUL|RAID_PLAYER_DISPELLABLE")
+			local _, outRaid = Try(filtered, unit, id, "HARMFUL|RAID")
+			local _, duration = Try(C_UnitAuras and C_UnitAuras.GetAuraDuration, unit, id)
+			local secrets = _G.C_Secrets
+			local _, secret = Try(secrets and secrets.ShouldUnitAuraInstanceBeSecret, unit, id)
+			Log(("%s instance %s (secret: %s): %s; filtered out: HARMFUL %s, RAID %s, DISPELLABLE %s; GetAuraDuration %s"):format(
+				unit, Show(id), Show(secret), Describe(data), Show(outAny), Show(outRaid), Show(outDispel), Show(duration)))
+		end
+		local counts = events[unit] or { 0, 0, 0 }
+		Log(("%s UNIT_AURA since first run: %d events, %d secret, %d plain instance IDs"):format(
+			unit, counts[1], counts[2], counts[3]))
+		for _, line in ipairs(latest[unit] or {}) do Log(unit .. " UNIT_AURA added at " .. line) end
+		for _, line in ipairs(FrameLines(unit)) do Log(unit .. " frame " .. line) end
+		if ns.HealVisionDebug then
+			local ok, verdict = pcall(ns.HealVisionDebug, unit)
+			Log(unit .. " heal vision: " .. (ok and verdict or ("error " .. tostring(verdict))))
+		end
+		if ns.HealVisionDebuffs then
+			local ok, verdict = pcall(ns.HealVisionDebuffs, unit)
+			Log(unit .. " heal vision debuff check (short ones only): " .. (ok and verdict or ("error " .. tostring(verdict))))
+		end
+	end
+
+	function ns.AurasDebug()
+		local firstRun = not watcher
+		Watch()
+		local combat = InCombatLockdown and InCombatLockdown()
+		local _, inside, kind = pcall(IsInInstance)
+		local units = Units()
+		Log(("--- %s, %s (%s), zone %s, %d units"):format(combat and "IN COMBAT" or "out of combat",
+			inside and "instance" or "open world", Show(kind), Show(GetRealZoneText and GetRealZoneText()), #units))
+		if firstRun then
+			Log("C_UnitAuras: " .. Names(C_UnitAuras, { "" }))
+			Log("C_Secrets: " .. Names(_G.C_Secrets, { "" }))
+			Log("globals: " .. Names(_G, { "dispel", "debuff", "unitaura" }))
+		end
+		-- Does the game say up front whether auras are secret?
+		local someone = units[2] or "player"
+		for key, func in pairs(_G.C_Secrets or {}) do
+			if type(key) == "string" and type(func) == "function" and key:lower():find("aura") then
+				local _, plain = Try(func)
+				local _, forUnit = Try(func, someone)
+				Log(("C_Secrets.%s() %s, (%s) %s"):format(key, Show(plain), someone, Show(forUnit)))
+			end
+		end
+		local answered, failed = 0, 0
+		for n, unit in ipairs(units) do
+			local summary = {}
+			for _, filter in ipairs(FILTERS) do
+				local ok, data = Try(C_UnitAuras and C_UnitAuras.GetAuraDataByIndex, unit, 1, filter)
+				-- (How many by index, up to 40: stops at the first nil or secret.)
+				local count = 0
+				if ok and type(data) == "table" and not Secret(data) then
+					for i = 1, 40 do
+						local okI, more = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, filter)
+						if not okI or more == nil or Secret(more) then break end
+						count = i
+					end
+				end
+				local short = filter:gsub("^HARMFUL|?", "")
+				summary[#summary + 1] = ("%s %s"):format(short == "" and "any" or short,
+					not ok and "ERR" or data == nil and "none" or Secret(data) and "secret" or ("x" .. count))
+				if n <= DETAIL_UNITS then
+					-- (Shown with + for |: the log window takes |R for a colour code.)
+					local secrets = _G.C_Secrets
+					local _, secret = Try(secrets and secrets.ShouldUnitAuraIndexBeSecret, unit, 1, filter)
+					Log(("%s %s [%s] #1 (secret: %s): %s"):format(unit, Show(UnitName(unit)), (filter:gsub("|", "+")),
+						Show(secret), ok and Describe(data) or data))
+				end
+				if ok then answered = answered + 1 else failed = failed + 1 end
+			end
+			if n <= DETAIL_UNITS then Detail(unit) end
+			print(("  %s %s: %s"):format(unit, Show(UnitName(unit)), table.concat(summary, ", ")))
+		end
+		ns.Print(("auras (%s, %s): %d asks answered, %d errored. Details in /cine log"):format(
+			combat and "in combat" or "out of combat", inside and Show(kind) or "open world", answered, failed))
+	end
+end

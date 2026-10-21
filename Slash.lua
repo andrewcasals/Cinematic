@@ -101,6 +101,7 @@ local function PrintDebugHelp()
 	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
 	print("  /cine debug raidparts - log every part of the party and raid frames and how each is faded, print shown icons that aren't")
+	print("  /cine debug auras - whether your group's debuffs can be seen, and how (run in and out of combat, in different places)")
 	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
@@ -773,6 +774,8 @@ local function HandleSlash(msg)
 		ns.LogRaidFrames()
 	elseif cmd == "debug" and arg == "health" then
 		ns.HealthDebug()
+	elseif cmd == "debug" and arg == "auras" then
+		ns.AurasDebug()
 	elseif cmd == "debug" and arg:find("^healthfade") then
 		ns.HealthFadeDebug(arg:match("^healthfade%s+(%S+)"))
 	elseif cmd == "debug" and arg:find("^damage") then

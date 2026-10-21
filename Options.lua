@@ -6622,9 +6622,9 @@ local function CreateVisionPanel()
 		Option("healVisionTarget", L["Always show your target"],
 			L["The member you've targeted always shows, at full health too."])
 		-- (Any debuff takes in the ones you can dispel: that box greys while it's ticked.)
-		-- Retail only for now: WoW Forever won't let addons see members'
-		-- debuffs in fights and battlegrounds (HealVisionFrames.lua's ShownAnyway).
-		if ns.isRetail then
+		-- Off for now on both clients: they won't let addons see members'
+		-- debuffs in fights (HealVisionFrames.lua's ShownAnyway).
+		if ns.HEAL_VISION_DEBUFFS then
 			Option("healVisionDispel", L["Show members with a debuff you can dispel"],
 				L["A member with a debuff you can dispel shows, at full health too."],
 				function(db) return IfAny(db) and not db.healVisionAnyDebuff end)
