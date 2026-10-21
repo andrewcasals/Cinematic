@@ -93,7 +93,7 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with action bars " ..
 			"1 to 3, the micro menu and bags, and the XP bar each coming up on its own when you point at it. " ..
 			"Retail's default."],
-		parts = { frames = "immersive", camera = "immersive", misc = "immersive" },
+		parts = { frames = "immersive", bars = "split", camera = "immersive", misc = "immersive" },
 		preview = "bars",
 	},
 	{

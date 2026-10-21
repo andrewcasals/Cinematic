@@ -229,7 +229,7 @@ ns.PROFILE_PARTS = {
 		-- (Forever's, on retail).
 		grouped = { apply = function() end },
 		-- Action bars 1-3, the micro menu and bags, and the XP bars each coming
-		-- up on its own (retail's, on Forever); no micro menu, bags or XP bar
+		-- up on its own (retail's normal groups); no micro menu, bags or XP bar
 		-- in fights or with an enemy targeted.
 		split = { apply = function(set)
 			SplitBarGroups(set)
