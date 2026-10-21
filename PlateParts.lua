@@ -18,6 +18,8 @@ local PART_FRAMES = {
 	Buffs = { "AurasFrame.BuffListFrame" },
 	Debuffs = { "AurasFrame.DebuffListFrame", "AurasFrame.CrowdControlListFrame", all = true,
 		fallback = { "BuffFrame" } },
+	-- (On the plates that are up. Over the rest, the Names grid's Raid Marker
+	-- row keeps one of Effects' own.)
 	RaidMarker = { "RaidTargetFrame" },
 	Classification = { "ClassificationFrame", "classificationIndicator", all = true },
 	Level = { "PlayerLevelDiffFrame", "LevelFrame", "levelText" },
@@ -29,6 +31,11 @@ local PART_FRAMES = {
 
 -- How far each part shows, 0 to 1, faded at the UI's fade speeds.
 local levels = {}
+
+-- A plate held up only for its name (see ns.SetPlateBody): how much of its
+-- alpha the rest of it gets ([plate] = 0 to 1, nil for all of it), and the
+-- name ([plate] = 0 to 1, nil for none of its own).
+local bodyShare, nameShare = {}, {}
 
 local function Usable(frame)
 	return type(frame) == "table" and frame.SetAlpha and not (frame.IsForbidden and frame:IsForbidden())
@@ -105,13 +112,44 @@ local function Fade(frame, alpha)
 	end
 end
 
+-- A plate showing its name alone has it centred over where the health bar
+-- was (retail's sits at the bar's left end): its own justification is put
+-- back once the rest of the plate shows. [name text] = the game's justification.
+local centred = {}
+
+local function CentreName(unitFrame, on)
+	local name = unitFrame.name
+	if not (Usable(name) and name.SetJustifyH and name.GetJustifyH) then
+		return
+	end
+	if on then
+		if not centred[name] then
+			centred[name] = name:GetJustifyH() or "LEFT"
+		end
+		if name:GetJustifyH() ~= "CENTER" then
+			name:SetJustifyH("CENTER")
+		end
+	elseif centred[name] then
+		name:SetJustifyH(centred[name])
+		centred[name] = nil
+	end
+end
+
 local function ApplyPlate(plate, personal)
 	local unitFrame = plate and plate.UnitFrame
 	if not Usable(unitFrame) or (plate.IsForbidden and plate:IsForbidden()) then
 		return
 	end
+	local body = bodyShare[plate] or 1
+	CentreName(unitFrame, nameShare[plate] ~= nil and body < 1)
 	for _, part in ipairs(ns.PLATE_PARTS) do
-		EachPartFrame(unitFrame, part, Fade, plate ~= personal and levels[part] or 1)
+		local level = plate ~= personal and levels[part] or 1
+		if part == "Name" then
+			level = math.max(level * body, nameShare[plate] or 0)
+		else
+			level = level * body
+		end
+		EachPartFrame(unitFrame, part, Fade, level)
 	end
 	if next(held) then
 		keeper:Show()
@@ -136,7 +174,7 @@ local function AnyFaded()
 			return true
 		end
 	end
-	return next(held) ~= nil
+	return next(held) ~= nil or next(bodyShare) ~= nil
 end
 
 -- The class icon rows (ns.PLATE_CLASS_PARTS): our own icon left of a player's
@@ -197,7 +235,8 @@ local function RefreshClass(plate)
 		plateClass[plate] = ReadClass(plate)
 	end
 	local info = plateClass[plate]
-	local level = info and plate ~= PersonalPlate() and not ns.DuelBadgeShown(plate) and levels[info.part] or 0
+	local level = info and plate ~= PersonalPlate() and not ns.DuelBadgeShown(plate)
+		and levels[info.part] * (bodyShare[plate] or 1) or 0
 	local icon = icons[plate]
 	if level <= 0 then
 		if icon then
@@ -263,7 +302,7 @@ local function RefreshRoleIcon(plate)
 		plateRole[plate] = ReadRole(plate)
 	end
 	local role = plateRole[plate]
-	local level = role and plate ~= PersonalPlate() and levels[role.part] or 0
+	local level = role and plate ~= PersonalPlate() and levels[role.part] * (bodyShare[plate] or 1) or 0
 	local icon = roleIcons[plate]
 	if level <= 0 then
 		if icon then
@@ -335,6 +374,10 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 	end
 	if event == "NAME_PLATE_UNIT_REMOVED" then
 		plateClass[plate], plateRole[plate] = nil, nil
+		bodyShare[plate], nameShare[plate] = nil, nil
+		if Usable(plate.UnitFrame) then
+			CentreName(plate.UnitFrame, false)
+		end
 		if icons[plate] then
 			icons[plate]:Hide()
 		end
@@ -351,6 +394,25 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		ApplyPlate(plate, PersonalPlate())
 	end
 end)
+
+-- From Effects, with each plate's alpha: how much of it the plate's parts
+-- other than the name get (body, 0 to 1) and the name at least (name), for a
+-- plate held up for its name alone (Names rows: see Effects' nameLevel).
+function ns.SetPlateBody(plate, body, name)
+	if not plate then
+		return
+	end
+	body = body < 1 and body or nil
+	name = name > 0 and name or nil
+	if bodyShare[plate] == body and nameShare[plate] == name then
+		return
+	end
+	bodyShare[plate], nameShare[plate] = body, name
+	ApplyPlate(plate, PersonalPlate())
+	if AnyClassIcons() or icons[plate] or roleIcons[plate] then
+		ns.RefreshClassIcon(plate)
+	end
+end
 
 -- Each tick, from ns.UpdatePlates: active while the Nameplates page steers
 -- plates (CineMode, its master switch on).

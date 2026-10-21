@@ -14,28 +14,35 @@ ns.letterboxDirty = false
 -- nameCombat<key> in fights, otherwise nameKeep<key> in the open world and
 -- nameIn<place><key> elsewhere, like the plates. Minions rows (indent) sit
 -- under their players' rows and cover pets, guardians and totems too.
+-- Rows marked plate are for units with nameplates: in CineMode away from
+-- dungeons and raids (ns.PlatesForcedHere) a kept name shows on the unit's
+-- plate, the rest of the plate hidden, as a unit with a plate switched on
+-- gets no name over its head (even with the plate faded out). Beyond plate
+-- range, where no unit has one, the game's own names still show as the rows
+-- say. Your own name and critters' have no plate.
 ns.NAME_GROUPS = {
 	{ key = "Self", label = L["My Name"], cvars = { "UnitNameOwn" } },
 	-- The game's NPC Names choice (None, quest NPCs... all NPCs) is these
 	-- together; switched on, it only changes from None (to all).
-	{ key = "NPCs", label = L["NPC Names"], anyOn = true,
+	{ key = "NPCs", label = L["NPC Names"], anyOn = true, plate = true,
 		cvars = { "UnitNameNPC", "UnitNameHostleNPC", "UnitNameInteractiveNPC", "UnitNameFriendlySpecialNPCName" } },
 	{ key = "Critters", label = L["Critters and Companions"], cvars = { "UnitNameNonCombatCreatureName" } },
-	{ key = "Friends", label = L["Friendly Players"], cvars = { "UnitNameFriendlyPlayerName" } },
-	{ key = "FriendlyMinions", label = L["Minions"], indent = true,
+	{ key = "Friends", label = L["Friendly Players"], plate = true, cvars = { "UnitNameFriendlyPlayerName" } },
+	{ key = "FriendlyMinions", label = L["Minions"], indent = true, plate = true,
 		cvars = {
 			"UnitNameFriendlyMinionName", "UnitNameFriendlyPetName", "UnitNameFriendlyGuardianName",
 			"UnitNameFriendlyTotemName",
 		} },
-	{ key = "Enemies", label = L["Enemy Players"], cvars = { "UnitNameEnemyPlayerName" } },
-	{ key = "EnemyMinions", label = L["Minions"], indent = true,
+	{ key = "Enemies", label = L["Enemy Players"], plate = true, cvars = { "UnitNameEnemyPlayerName" } },
+	{ key = "EnemyMinions", label = L["Minions"], indent = true, plate = true,
 		cvars = {
 			"UnitNameEnemyMinionName", "UnitNameEnemyPetName", "UnitNameEnemyGuardianName",
 			"UnitNameEnemyTotemName",
 		} },
 	-- Not in the game's menu: whatever you've targeted shows its name
-	-- even with its kind's names off, unless this is off too.
-	{ key = "Target", label = L["Target"], cvars = { "UnitNameFocused" } },
+	-- even with its kind's names off, unless this is off too. (On a plate:
+	-- your target's, whatever its kind's row says.)
+	{ key = "Target", label = L["Target"], plate = true, cvars = { "UnitNameFocused" } },
 }
 ns.OnLanguage(function() ns.TranslateFields(ns.NAME_GROUPS, "label") end)
 
@@ -46,6 +53,13 @@ for _, group in ipairs(ns.NAME_GROUPS) do
 	-- Secure: the game blocks changing name settings in combat. A fight's
 	-- names are set just before it starts (ns.UpdateCVarsForFight).
 	CVAR_SETS[#CVAR_SETS + 1] = { key = group.key, values = values, secure = true, playerWins = true }
+end
+
+-- Whether CineMode keeps every nameplate switched on (see FORCED_PLATE_CVARS),
+-- leaving what shows to the plates' fades: everywhere but dungeons and raids,
+-- where the game locks friendly plates away from addons.
+function ns.PlatesForcedHere(cinematic)
+	return cinematic and ns.db.handlePlates and ns.PlateSuffix() ~= "Instances" or false
 end
 
 -- Whether this client has any of a group's name settings.
@@ -905,8 +919,7 @@ end
 -- page's Raid Markers grid says for the unit's side: the rest of the plate
 -- fades, and a marker of our own
 -- fades in over the middle of the plate, above the unit's head. (The game's
--- sits left of the health bar, which looks off with no bar there.) It goes by
--- the game's marker's alpha, so the Plate Parts row still hides it. WoW
+-- sits left of the health bar, which looks off with no bar there.) WoW
 -- Forever won't say which marker a unit has (GetRaidTargetIndex is secret),
 -- so ours copies the game's icon: its texture and its part of the sheet.
 -- Retail hides the marker on some plates itself (a friendly NPC's in an
@@ -960,14 +973,15 @@ local function KeptMarker(frame)
 end
 
 local function KeepRaidMarker(frame, alpha)
-	local icon, marker, standIn, kept
+	-- (A plate up for its name alone: its marker goes by the rest of it.)
+	local bodyAlpha = frame.cinematicBodyAlpha
+	alpha = bodyAlpha or alpha
+	local icon, standIn, kept
 	if ns.db and ns.db.handlePlates then
-		icon, marker, standIn = GameMarkerIcon(frame)
+		local _
+		icon, _, standIn = GameMarkerIcon(frame)
 		if icon then
-			-- (Unknown sides, secret on WoW Forever, go by the enemy row.)
-			local ok, friend = pcall(UnitIsFriend, "player", frame.unit)
-			friend = ok and not (issecretvalue and issecretvalue(friend)) and friend
-			kept = ns.PlateRowWanted(friend and "PartMarkerFriendly" or "PartMarkerEnemy")
+			kept = ns.PlateRowWanted("PartMarker")
 			-- (The game's own shows on a plate that's up. A stand-in only while
 			-- its row is ticked: unticked, it's as the game has it, none.)
 			if not kept or (not standIn and alpha >= 1) then
@@ -992,13 +1006,9 @@ local function KeepRaidMarker(frame, alpha)
 		ours:Hide()
 		return
 	end
-	local partAlpha = marker:GetAlpha()
-	if issecretvalue and issecretvalue(partAlpha) then
-		partAlpha = 1
-	end
 	-- (A stand-in shows with its plate up as well, the game's own being hidden.)
 	local level = standIn and 1 or (1 - alpha)
-	ours:SetAlpha(level * partAlpha)
+	ours:SetAlpha(level)
 	ours:Show()
 end
 
@@ -1047,7 +1057,8 @@ end)
 -- fn(plate, alpha), alpha nil to let go of the plate.
 ns.addonPlateAlpha = nil
 
-function ns.SetPlateAlpha(plate, alpha)
+-- bodyAlpha: for a plate up for its name alone, how far the rest of it shows.
+function ns.SetPlateAlpha(plate, alpha, bodyAlpha)
 	if ns.addonPlateAlpha and plate and not (plate.IsForbidden and plate:IsForbidden()) then
 		ns.addonPlateAlpha(plate, alpha)
 	end
@@ -1055,6 +1066,7 @@ function ns.SetPlateAlpha(plate, alpha)
 		local frame = plate.UnitFrame
 		KeepInteractPrompt(frame)
 		frame.cinematicAlpha = alpha < 1 and alpha or nil
+		frame.cinematicBodyAlpha = bodyAlpha ~= nil and bodyAlpha < alpha and bodyAlpha or nil
 		if frame.cinematicAlpha then
 			fadedPlates[frame] = true
 			plateKeeper:Show()
@@ -1173,6 +1185,30 @@ end
 -- How far each kind is held up by KeptHere, faded so moving between places
 -- (or changing the ticks) doesn't pop plates on or off. kind -> 0 to 1.
 local keptLevel = {}
+
+-- Plates kept switched on (ns.PlatesForcedHere): set each frame. Their
+-- settings (below).
+local platesForced = false
+local FORCED_PLATE_CVARS
+
+-- Names kept on plates (Names rows marked plate), faded like keptLevel:
+-- group key -> 0 to 1. A plate shows its name as far as its kind's group (or,
+-- your target's, the Target row) says, the rest of it only as far as its
+-- own alpha says.
+local nameLevel = {}
+local KIND_NAME_GROUP = {
+	Friends = "Friends", FriendlyMinions = "FriendlyMinions", Enemies = "Enemies", EnemyMinions = "EnemyMinions",
+	EnemyNPCs = "NPCs", NeutralNPCs = "NPCs", EnemyMinor = "NPCs", NeutralMinor = "NPCs", FriendlyNPCs = "NPCs",
+}
+
+local function NamesOnPlates()
+	for _, level in pairs(nameLevel) do
+		if level > 0 then
+			return true
+		end
+	end
+	return false
+end
 
 local function Ask(fn, ...)
 	local ok, value = pcall(fn, ...)
@@ -1453,8 +1489,9 @@ do
 		if want and not duels.on then
 			ns.ShowPlatesNow()
 		end
-		ns.ApplyCVarSet(duels.cvars, want)
-		duels.on = duels.cvars.active or false
+		-- (With every plate kept switched on, the watch needs none of its own.)
+		ns.ApplyCVarSet(duels.cvars, (want and not platesForced) or false)
+		duels.on = duels.cvars.active or (want and platesForced) or false
 		SetClickThrough(duels.on) -- (also puts back one left over from a reload)
 	end
 
@@ -1809,7 +1846,7 @@ end
 -- Kept raid markers (see KeepRaidMarker) need their plates switched on: in a
 -- group, where markers are used, or while your target has one.
 local function MarkersKeptUp()
-	if not (UnitRowWanted("PartMarkerFriendly") or UnitRowWanted("PartMarkerEnemy")) then
+	if not UnitRowWanted("PartMarker") then
 		return false
 	end
 	if ns.InGroup() then
@@ -1824,8 +1861,8 @@ local function MarkersKeptUp()
 	return plate ~= nil and plate.UnitFrame ~= nil and GameMarkerIcon(plate.UnitFrame) ~= nil
 end
 
--- Friendly units' markers that fade with the plates (the Raid Markers grid's
--- Friendly row, or the Plate Parts Raid Marker row, hiding them) need
+-- Friendly units' markers that fade with the plates (the Names grid's Raid
+-- Marker row unticked) need
 -- friendly players' plates switched on, kept invisible like the duel watch's: a friendly player with no plate has the
 -- game draw its marker over their head itself, and nothing hides that one
 -- (tested on WoW Forever; nor the one over your own head). Only where
@@ -1837,7 +1874,7 @@ local function MarkersHiddenOverFriends()
 	if not platesActive or placeSuffix == "Instances" then
 		return false
 	end
-	if UnitRowWanted("PartMarkerFriendly") and UnitRowWanted("PartRaidMarker") then
+	if UnitRowWanted("PartMarker") then
 		return false
 	end
 	return ns.InGroup() or markerWatcher.solo or false
@@ -1994,7 +2031,7 @@ local function PlatesFiltered()
 		end
 	end
 	return ns.plates.level < 1
-		and (AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil)
+		and (AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil or NamesOnPlates())
 end
 
 local function IsTarget(unit)
@@ -2051,6 +2088,30 @@ local function PlateAlpha(unit, plate)
 	return alpha
 end
 
+-- The plate's alpha with its name kept (see nameLevel), and how much of that
+-- the rest of the plate gets (body) and the name (name), for PlateParts.
+local function PlateAlphas(unit, plate)
+	local body = PlateAlpha(unit, plate)
+	local name = 0
+	if platesForced and unit and plate ~= PersonalPlate() then
+		local kind = PlateKind(unit)
+		name = kind and nameLevel[KIND_NAME_GROUP[kind]] or 0
+		if (nameLevel.Target or 0) > name and IsTarget(unit) then
+			name = nameLevel.Target
+		end
+	end
+	local alpha = math.max(body, name)
+	if alpha <= 0 then
+		return 0, 1, 0
+	end
+	return alpha, body / alpha, name / alpha
+end
+
+local function SetPlateAlphas(plate, alpha, body, name)
+	ns.SetPlateBody(plate, body, name)
+	ns.SetPlateAlpha(plate, alpha, alpha * body)
+end
+
 -- Leaves a plate's alpha to the game (or its nameplate addon) again.
 local function LetGoOfPlate(plate)
 	if plate.UnitFrame then
@@ -2076,10 +2137,11 @@ function ns.RefreshPlate(plate, unit)
 	ForgetTargetFade(plate) -- only called for a plate given a new unit
 	duels.Forget(plate)
 	duels.Attach(plate, unit)
-	local alpha = PlateAlpha(unit, plate)
-	if alpha < 1 or PlatesFiltered() then
-		ns.SetPlateAlpha(plate, alpha)
+	local alpha, body, name = PlateAlphas(unit, plate)
+	if alpha < 1 or body < 1 or PlatesFiltered() then
+		SetPlateAlphas(plate, alpha, body, name)
 	else
+		ns.SetPlateBody(plate, 1, 0)
 		LetGoOfPlate(plate) -- a reused plate: let go of its last unit's alpha
 	end
 end
@@ -2090,7 +2152,7 @@ local function RefreshAllPlates()
 	end
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-		ns.SetPlateAlpha(plate, PlateAlpha(unit, plate))
+		SetPlateAlphas(plate, PlateAlphas(unit, plate))
 	end
 end
 RefreshAllPlates = ns.Profiled("RefreshAllPlates", RefreshAllPlates)
@@ -2125,6 +2187,19 @@ function ns.PrintPlatesDebug()
 	ns.Print(("fade level=%.2f, switched off=%s, filtered=%s, kept in cinematic=%s, cinematic=%s, combat=%s"):format(
 		ns.plates.level, tostring(ns.plates.off), tostring(PlatesFiltered()),
 		tostring(AnyPlatesKeptCinematic()), tostring(ns.lastCinematic), tostring(InCombatLockdown())))
+	-- Plates kept switched on, names shown on plates, and sides made unclickable.
+	local onPlates, unclickable = {}, {}
+	for key, level in pairs(nameLevel) do
+		if level > 0 then
+			onPlates[#onPlates + 1] = ("%s %.2f"):format(key, level)
+		end
+	end
+	for side in pairs(ns.db.savedPlateClicks or {}) do
+		unclickable[#unclickable + 1] = side
+	end
+	ns.Print(("plates kept on=%s (settings %s), names on plates: %s, unclickable: %s"):format(tostring(platesForced),
+		FORCED_PLATE_CVARS.active and "held" or "not held", #onPlates > 0 and table.concat(onPlates, ", ") or "none",
+		#unclickable > 0 and table.concat(unclickable, ", ") or "none"))
 	local keptHere = {}
 	for _, kind in ipairs(ns.PLATE_KINDS) do
 		if KeptHere(kind) then
@@ -2165,8 +2240,10 @@ function ns.PrintPlatesDebug()
 			end)
 			gameText = ok and text or "?"
 		end
-		local marker = (" marker=%s game=%s kept=%s"):format(mark, gameText,
-			ours and (ours:IsShown() and ("%.2f"):format(ours:GetAlpha()) or "hidden") or "none")
+		local body = plate and plate.UnitFrame and plate.UnitFrame.cinematicBodyAlpha
+		local marker = (" marker=%s game=%s kept=%s%s"):format(mark, gameText,
+			ours and (ours:IsShown() and ("%.2f"):format(ours:GetAlpha()) or "hidden") or "none",
+			body and (", name only (rest at %.2f)"):format(body) or "")
 		return ("%s: kind=%s, alpha=%.2f, can attack=%s, player=%s, faction=%s%s"):format(
 			Known(name) and tostring(name) or "?", tostring(PlateKind(unit)), PlateAlpha(unit, plate),
 			tostring(UnitCanAttack("player", unit)),
@@ -2182,6 +2259,21 @@ function ns.PrintPlatesDebug()
 		end
 	end
 	ns.Print(("%d plates up (%d counting locked ones, %d nameplate units)"):format(#plates, #all, units))
+	-- (Marked ones and ones up for their name alone first: the list is cut short.)
+	local function Notable(plate)
+		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+		local ok, mark = pcall(GetRaidTargetIndex, unit)
+		return (ok and mark ~= nil) or (plate.UnitFrame and plate.UnitFrame.cinematicBodyAlpha ~= nil) or false
+	end
+	local sorted = {}
+	for _, plate in ipairs(plates) do
+		if Notable(plate) then
+			table.insert(sorted, 1, plate)
+		else
+			sorted[#sorted + 1] = plate
+		end
+	end
+	plates = sorted
 	for i, plate in ipairs(plates) do
 		if i > 8 then break end
 		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
@@ -2461,6 +2553,97 @@ local function UpdateLockedPlates()
 	end
 end
 
+-- In CineMode away from dungeons and raids (ns.PlatesForcedHere) every
+-- nameplate is kept switched on, plates and their names only made visible or
+-- not by their fades: fades can change in fights, plate settings can't, and a
+-- unit whose plate is switched off shows the game's own name over its head
+-- (or none). Plate names on: retail's plates otherwise follow the game's name
+-- settings, off for rows whose names are hidden. The player's own settings come back after.
+FORCED_PLATE_CVARS = { secure = true, playerWins = true, values = {
+	nameplateShowAll = "1", nameplateForceShowUnitName = "1", nameplateShowOnlyNameForFriendlyPlayerUnits = "0",
+} }
+for _, cvars in pairs(PLATE_KIND_CVARS) do
+	for _, cvar in ipairs(cvars) do
+		FORCED_PLATE_CVARS.values[cvar] = "1"
+	end
+end
+
+-- Invisible plates still take clicks, so while every plate of a side
+-- (friendly or enemy) is faded out, that side's plates are made unclickable
+-- (their click area shrunk to nothing): clicks reach the world behind them.
+-- Not in fights (the game won't allow it): every plate takes clicks again as
+-- one starts. The game's own areas are kept in the saved variables and put
+-- back. Clients without the setting are left alone.
+local PlateManager = C_NamePlateManager
+local PLATE_SIDES = {
+	Friendly = { kinds = { Friends = true, FriendlyMinions = true, FriendlyNPCs = true } },
+	Enemy = { kinds = {} },
+}
+for _, kind in ipairs(ns.PLATE_KINDS) do
+	if not PLATE_SIDES.Friendly.kinds[kind] then
+		PLATE_SIDES.Enemy.kinds[kind] = true
+	end
+end
+
+local function SetPlateClicks(side, on)
+	local plateType = Enum and Enum.NamePlateType and Enum.NamePlateType[side]
+	if not (plateType and PlateManager and PlateManager.SetNamePlateHitTestInsets
+		and PlateManager.GetNamePlateHitTestInsets) or InCombatLockdown() then
+		return
+	end
+	ns.db.savedPlateClicks = ns.db.savedPlateClicks or {}
+	local saved = ns.db.savedPlateClicks[side]
+	if on then
+		if saved then
+			pcall(PlateManager.SetNamePlateHitTestInsets, plateType, unpack(saved))
+			ns.db.savedPlateClicks[side] = nil
+		end
+	elseif not saved then
+		local ok, left, right, top, bottom = pcall(PlateManager.GetNamePlateHitTestInsets, plateType)
+		if ok and type(left) == "number" then
+			ns.db.savedPlateClicks[side] = { left, right, top, bottom }
+			pcall(PlateManager.SetNamePlateHitTestInsets, plateType, 1000, 1000, 1000, 1000)
+		end
+	end
+end
+
+-- Whether any plate of a side may be showing.
+local function SideShown(side)
+	if ns.plates.level > 0 or TargetKeptUp() or next(leavingTargets) ~= nil or (nameLevel.Target or 0) > 0 then
+		return true
+	end
+	for kind in pairs(side.kinds) do
+		if (keptLevel[kind] or 0) > 0 or (combatCap[kind] or 0) > 0 or (nameLevel[KIND_NAME_GROUP[kind]] or 0) > 0 then
+			return true
+		end
+	end
+	if side == PLATE_SIDES.Friendly then
+		for _, level in pairs(unitRowLevel) do
+			if level > 0 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function UpdatePlateClicks()
+	for name, side in pairs(PLATE_SIDES) do
+		SetPlateClicks(name, not platesForced or SideShown(side))
+	end
+end
+
+-- As a fight starts (just before lockdown): every plate takes clicks.
+local clickWatcher = CreateFrame("Frame")
+clickWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+clickWatcher:SetScript("OnEvent", function()
+	if ns.db then
+		for name in pairs(PLATE_SIDES) do
+			SetPlateClicks(name, true)
+		end
+	end
+end)
+
 local platesWereFiltered = false
 
 -- While plates are filtered (each at its own alpha) and none of the fades is
@@ -2497,6 +2680,9 @@ end
 local platesReleased = false
 local function ReleasePlates()
 	platesActive = false
+	platesForced = false
+	ns.ApplyCVarSet(FORCED_PLATE_CVARS, false)
+	UpdatePlateClicks()
 	duels.Sync(false)
 	duels.Clear()
 	UpdateLockedPlates()
@@ -2507,7 +2693,7 @@ local function ReleasePlates()
 	end
 	if C_NamePlate and C_NamePlate.GetNamePlates then
 		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
-			ns.SetPlateAlpha(plate, 1)
+			SetPlateAlphas(plate, 1, 1, 0)
 		end
 	end
 	platesWereFiltered = false
@@ -2515,7 +2701,8 @@ local function ReleasePlates()
 	for _, set in pairs(LOCKED_PLATE_SETS) do
 		locked = locked or set.active or false
 	end
-	platesReleased = not ns.plates.off and not locked and not duels.on
+	platesReleased = not ns.plates.off and not locked and not duels.on and not FORCED_PLATE_CVARS.active
+		and not (ns.db.savedPlateClicks and next(ns.db.savedPlateClicks))
 end
 
 function ns.UpdatePlates(cinematic, elapsed)
@@ -2529,8 +2716,18 @@ function ns.UpdatePlates(cinematic, elapsed)
 	platesReleased = false
 	platesActive = cinematic and true or false
 	placeSuffix = ns.PlateSuffix()
+	platesForced = ns.PlatesForcedHere(cinematic)
+	-- (Let go before the other plate switches take hold, and taken up after
+	-- they let go: they share settings, and each puts back what it saved.)
+	if not platesForced then
+		ns.ApplyCVarSet(FORCED_PLATE_CVARS, false)
+	end
 	duels.Sync(duels.NotWatchingWhy() == nil or MarkersHiddenOverFriends())
 	UpdateLockedPlates()
+	if platesForced then
+		ns.ShowPlatesNow()
+		ns.ApplyCVarSet(FORCED_PLATE_CVARS, true)
+	end
 	-- Plates show for every fight (bar kinds cinematic mode hides in fights)
 	-- and hide again afterwards. Just after a fight, kinds ticked for fights
 	-- stay up through their linger; the rest go as cinematic mode comes back.
@@ -2538,7 +2735,8 @@ function ns.UpdatePlates(cinematic, elapsed)
 	local lingering = FightLingering()
 	local holding = platesActive and lingering and AnyFightKinds()
 	local hide = platesActive and not inCombat and not holding
-	local keep = AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil or MarkersKeptUp()
+	local keep = platesForced or AnyPlatesKeptCinematic() or TargetKeptUp() or next(leavingTargets) ~= nil
+		or MarkersKeptUp()
 	if not hide or keep then
 		ns.ShowPlatesNow()
 	end
@@ -2603,6 +2801,20 @@ function ns.UpdatePlates(cinematic, elapsed)
 			changed = true
 		end
 	end
+	-- Names kept on plates fade up and down likewise.
+	for _, group in ipairs(ns.NAME_GROUPS) do
+		if group.plate then
+			local nameTarget = platesForced and NameKeptHere(group.key, inCombat) and 1 or 0
+			local level = nameLevel[group.key]
+			if level == nil then
+				nameLevel[group.key] = nameTarget
+			elseif level ~= nameTarget then
+				nameLevel[group.key] = ns.Approach(level, nameTarget, elapsed,
+					nameTarget > level and ns.FadeInTime() or ns.FadeOutTime())
+				changed = true
+			end
+		end
+	end
 	-- One more pass after filtering stops, to put every plate back. (Filtered
 	-- with nothing moving: see FilteredInputsChanged.)
 	local filtered = PlatesFiltered()
@@ -2611,6 +2823,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 	end
 	platesWereFiltered = filtered
 	ns.UpdatePlateParts(platesActive, elapsed)
+	UpdatePlateClicks()
 
 	if hide and not keep and ns.plates.level == 0 and not ns.plates.off and not InCombatLockdown() then
 		ns.ApplyCVarSet(PLATE_CVARS, true)

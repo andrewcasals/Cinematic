@@ -46,6 +46,7 @@ read_globals = {
 	"C_Minimap",
 	"C_TooltipInfo",
 	"C_NamePlate",
+	"C_NamePlateManager",
 	"C_PlayerInfo",
 	"C_QuestLog",
 	"C_Spell",

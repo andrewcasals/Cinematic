@@ -725,11 +725,12 @@ DEFAULTS.plateAlwaysGroupMinions = true
 -- everywhere to start with, as the game has them.
 ns.PLATE_PARTS = { "Health", "Name", "CastBar", "Buffs", "Debuffs", "RaidMarker", "Classification", "Level",
 	"Threat", "Highlight", "Widgets" }
--- The Raid Markers grid's rows (see KeepRaidMarker in Effects), the same
--- columns: friendly and enemy units' raid markers (skull, moon...) kept up
--- as their plates fade (keys plate<column>PartMarker<side>). Kept everywhere
--- to start with.
-ns.PLATE_MARKER_PARTS = { "MarkerFriendly", "MarkerEnemy" }
+-- The Names grid's Raid Marker row (see KeepRaidMarker in Effects), the same
+-- columns: raid markers (skull, moon...) kept up over units as their plates
+-- fade, or show their names alone (keys plate<column>PartMarker). Kept
+-- everywhere to start with. (It was a grid of its own, friendly and enemy
+-- markers apart: see the migration below.)
+ns.PLATE_MARKER_PARTS = { "Marker" }
 for _, list in ipairs({ ns.PLATE_PARTS, ns.PLATE_MARKER_PARTS }) do
 	for _, part in ipairs(list) do
 		for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
@@ -3523,6 +3524,30 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			if type(profile) == "table" then
 				profile.keepRaidMarkers = nil
 			end
+		end
+		-- The Raid Markers grid's Friendly and Enemy rows are now the Names
+		-- grid's one Raid Marker row: ticked in each column where either was.
+		local function MarkersJoined(t)
+			if type(t) ~= "table" then
+				return
+			end
+			local prefixes = { "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }
+			for _, suffix in ipairs(ns.PLATE_PLACES) do
+				prefixes[#prefixes + 1] = "plateIn" .. suffix
+			end
+			for _, prefix in ipairs(prefixes) do
+				local friendly, enemy = t[prefix .. "PartMarkerFriendly"], t[prefix .. "PartMarkerEnemy"]
+				if friendly ~= nil or enemy ~= nil then
+					local default = prefix == "plateAlways"
+					local value = (friendly == nil and default or friendly) or (enemy == nil and default or enemy)
+					t[prefix .. "PartMarker"] = value
+				end
+				t[prefix .. "PartMarkerFriendly"], t[prefix .. "PartMarkerEnemy"] = nil, nil
+			end
+		end
+		MarkersJoined(ns.db)
+		for _, profile in pairs(ns.db.profiles or {}) do
+			MarkersJoined(profile)
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
