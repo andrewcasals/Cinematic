@@ -157,7 +157,9 @@ end
 
 -- A layout part: Edit Mode switches to the layout called name when the
 -- profile's picked (Layouts.lua: one of Cinematic's own is made first if it
--- isn't there). No layout part: the player's own layout.
+-- isn't there). No layout part: the player's own layout. ns.LAYOUT_PRESET:
+-- the game's own, a preset (Layouts.lua: the one they're on, else Modern).
+ns.LAYOUT_PRESET = "*preset"
 local function LayoutPart(name, client)
 	return { client = client, editMode = name, apply = function(set)
 		set("editModeLayout", name)
@@ -171,6 +173,9 @@ ns.PROFILE_PARTS = {
 		retail = LayoutPart("CINE_FOREVER_RETAIL_LAYOUT", "forever"),
 		-- Retail laid out like WoW Forever's default.
 		forever = LayoutPart("CINE_RETAIL_FOREVER_LAYOUT", "retail"),
+		-- The game's own layout (Modern or Classic), which the fades and
+		-- mouseover groups are made for, not one the player's moved things in.
+		preset = LayoutPart(ns.LAYOUT_PRESET, "forever"),
 	},
 	frames = {
 		standard = { apply = FramesBase },

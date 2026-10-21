@@ -59,6 +59,20 @@ local function ActiveName(info)
 	return NameAt(info, info.activeLayout)
 end
 
+-- A profile's layout (db.editModeLayout) as the name to go to. A preset
+-- (ns.LAYOUT_PRESET): the one the player was on before a profile switched it,
+-- or is on now, else the first (Modern); nil: the game has none.
+local function Target(info, name)
+	if name ~= ns.LAYOUT_PRESET then return name end
+	local presets = Presets()
+	for _, preset in ipairs(presets) do
+		if preset.layoutName == ns.chardb.layoutOwn then return preset.layoutName end
+	end
+	local active = info.activeLayout
+	if active and presets[active] then return presets[active].layoutName end
+	return presets[1] and presets[1].layoutName
+end
+
 -- The action bars one of ours lays out (def.bars: 2 = MultiBarBottomLeft, 3 =
 -- MultiBarBottomRight...), switched on when it's switched to: they're the
 -- game's Action Bars options, not part of a layout. The ones Cinematic
@@ -283,6 +297,8 @@ function ns.ApplyProfileLayout()
 		end
 		return
 	end
+	name = Target(info, name)
+	if not name then return end
 	-- (the one to go back to: what's on now, unless a profile's switched it already)
 	local current = ActiveName(info)
 	if not ns.chardb.layoutOwn and current ~= name then ns.chardb.layoutOwn = current end
@@ -353,11 +369,13 @@ function ns.LayoutWouldChange()
 	local manager = _G.EditModeManagerFrame
 	if manager and manager:IsShown() then return false end
 	local name = ns.db.editModeLayout or ""
+	local info = C_EditMode.GetLayouts()
 	if name == "" then
 		name = ns.chardb.layoutOwn
-		if not name then return false end
+	else
+		name = Target(info, name)
 	end
-	local info = C_EditMode.GetLayouts()
+	if not name then return false end
 	local index = IndexOf(info, name)
 	if not index then return ns.EDIT_MODE_LAYOUTS[name] ~= nil end
 	return info.activeLayout ~= index

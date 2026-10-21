@@ -57,7 +57,7 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with the action " ..
 			"bars, micro menu, bags and XP bar coming up together when you point at one. WoW Forever's default, " ..
 			"and how the developer plays every day."],
-		parts = { frames = "immersive", camera = "immersive", misc = "immersive" },
+		parts = { layout = "preset", frames = "immersive", camera = "immersive", misc = "immersive" },
 		preview = "bars",
 	},
 	{
@@ -68,7 +68,7 @@ ns.BUILTIN_PROFILES = {
 		icon = "Interface\\Icons\\Spell_Shadow_AntiShadow", -- (Preparation)
 		tip = L["Default, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
 			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
-		parts = { frames = "cdm", bars = "cdm", camera = "immersive", misc = "immersive" },
+		parts = { layout = "preset", frames = "cdm", bars = "cdm", camera = "immersive", misc = "immersive" },
 		preview = "cooldowns",
 	},
 	{
@@ -79,7 +79,8 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Default, looking like retail: Cinematic's own Edit Mode layout (the action bars centred along " ..
 			"the bottom, the micro menu and bags in the corner, the XP bar under them), with action bars 1 to 3, " ..
 			"the micro menu and bags, and the XP bar each coming up on its own when you point at it. Picking it " ..
-			"adds the layout to Edit Mode if you haven't got it; other profiles put your own layout back."],
+			"adds the layout to Edit Mode if you haven't got it; the other profiles go back to the game's own layout " ..
+			"(Classic if you were on it, otherwise Modern)."],
 		parts = { layout = "retail", frames = "immersive", bars = "split", camera = "immersive", misc = "immersive" },
 		preview = "bars",
 	},
@@ -125,14 +126,14 @@ ns.BUILTIN_PROFILES = {
 		icon = "Interface\\Icons\\Spell_Holy_HolyBolt",
 		tip = L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
-		parts = { camera = "lite", misc = "lite" },
+		parts = { layout = { forever = "preset" }, camera = "lite", misc = "lite" },
 	},
 	{
 		name = "VFX Only",
 		icon = "Interface\\Icons\\Spell_Nature_Lightning",
 		tip = L["Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no " ..
 			"letterbox, and the camera's left to you."],
-		parts = { frames = "nofade", vfx = "noletterbox", misc = "nomusic" },
+		parts = { layout = { forever = "preset" }, frames = "nofade", vfx = "noletterbox", misc = "nomusic" },
 	},
 	{
 		name = "Camera Only",
@@ -140,14 +141,14 @@ ns.BUILTIN_PROFILES = {
 		tip = L["The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), " ..
 			"then CineMode until it ends. The letterbox, tint, vignette and weather show only while a " ..
 			"camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music."],
-		parts = { frames = "nofade", camera = "cinemode", vfx = "cameras", misc = "quietnpcs" },
+		parts = { layout = { forever = "preset" }, frames = "nofade", camera = "cinemode", vfx = "cameras", misc = "quietnpcs" },
 	},
 	{
 		name = "Solo Explorer",
 		icon = "Interface\\Icons\\Ability_Mount_RidingHorse",
 		tip = L["Everything on while you're out in the world on your own; the normal UI in a group, " ..
 			"in dungeons, raids and PvP."],
-		parts = { frames = "solo" },
+		parts = { layout = { forever = "preset" }, frames = "solo" },
 	},
 	{
 		name = "Pure Cinema",
@@ -156,7 +157,7 @@ ns.BUILTIN_PROFILES = {
 			"don't pop up on their own (hovering still shows them), group members' " ..
 			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
 			"your target and your cast bar (hidden otherwise), and every camera can start music."],
-		parts = { frames = "pure", bars = "pure", camera = "pure", vfx = "pure", misc = "pure" },
+		parts = { layout = { forever = "preset" }, frames = "pure", bars = "pure", camera = "pure", vfx = "pure", misc = "pure" },
 	},
 }
 -- Each client's order, by name, where it isn't the list's (those not in it
