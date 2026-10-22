@@ -40,6 +40,13 @@ local function UpdatePosition()
 		return
 	end
 	local minimapScale, buttonScale = Minimap:GetEffectiveScale(), button:GetEffectiveScale()
+	-- Faded but kept full size (a Reveal tick, Minimap page), the minimap is
+	-- moved off the screen: following it there left the button gone after it
+	-- came back, until the next scan. Keep the last good position.
+	local uiScale = UIParent:GetEffectiveScale()
+	if mx * minimapScale / uiScale > UIParent:GetWidth() then
+		return
+	end
 	local radius = (Minimap:GetWidth() / 2) * minimapScale / buttonScale + EDGE_OFFSET
 	local cx, cy = mx * minimapScale / buttonScale, my * minimapScale / buttonScale
 	local angle = math.rad(db.minimapAngle)
