@@ -39,6 +39,10 @@ ns.NAME_GROUPS = {
 			"UnitNameEnemyMinionName", "UnitNameEnemyPetName", "UnitNameEnemyGuardianName",
 			"UnitNameEnemyTotemName",
 		} },
+	-- Players' guilds (<Guild>) under their names, wherever their names show
+	-- over their heads (never on a plate).
+	{ key = "Guild", label = L["Guild Names"], cvars = { "UnitNamePlayerGuild" },
+		tip = L[" Players' guilds, under their names wherever their names show over their heads (not on nameplates)."] },
 	-- Not in the game's menu: whatever you've targeted shows its name
 	-- even with its kind's names off, unless this is off too. (On a plate:
 	-- your target's, whatever its kind's row says.)

@@ -5566,7 +5566,7 @@ local function CreatePlatesPanel()
 	-- (Units with plates show a kept name on theirs in CineMode: see Effects.)
 	local plateNameTip = L[" In CineMode, away from dungeons and raids, the name shows on the unit's nameplate instead, with the rest of the plate hidden."]
 	for r, group in ipairs(ns.NAME_GROUPS) do
-		local tip = group.plate and (plateNameTip .. nameTip) or nameTip
+		local tip = (group.tip or "") .. (group.plate and (plateNameTip .. nameTip) or nameTip)
 		local function Ticked(key)
 			return function(value)
 				ns.GetDB()[key] = value
@@ -6955,7 +6955,7 @@ local function CreateVisionPanel()
 			"slider")
 		Tooltip(raidRows, L["In a raid, each item lists only this many players' rolls: the winner, then need " ..
 			"before greed, the highest numbers first. The rest are counted on an \"and N more\" line. " ..
-			"In a party, everyone is listed."])
+			"In a party, everyone is listed. Click an item's panel to list everyone on it."])
 		GreyUnless(raidRows, RollsOn)
 	end
 
@@ -9079,7 +9079,7 @@ ns.OnLanguage(function()
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
-	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua).
+	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua, NameStyleDev.lua).
 	if ns.isDev and ns.CreateProfileBuilder then
 		ns.CreateProfileBuilder({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
@@ -9087,6 +9087,10 @@ ns.OnLanguage(function()
 	if ns.isDev and ns.CreateLayoutPanel and C_EditMode and C_EditMode.GetLayouts then
 		ns.CreateLayoutPanel({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage })
+	end
+	if ns.isDev and ns.CreateNameStylePanel then
+		ns.CreateNameStylePanel({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
+			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip, Check = Check, Slider = Slider })
 	end
 	GuardGamepadClose()
 end)

@@ -137,8 +137,8 @@ end
 
 -- And coloured as the game colours names over heads (red hostile, yellow
 -- neutral, green friendly): the plate's own name is white or grey, the
--- health bar giving its colour. Friendly players are left as the game draws
--- them. The game sets the name's colour again on its own updates, so ours
+-- health bar giving its colour. Friendly players too (blue), unless the
+-- style keeps the game's class colours on them. The game sets the name's colour again on its own updates, so ours
 -- is put back every frame; WoW Forever's colours can be secret, so they go
 -- straight from the game to the text. Its text and vertex colours both get
 -- it (on WoW Forever they're one: the game sets both), their alpha left as
@@ -155,10 +155,12 @@ local function Ask(fn, ...)
 	return ok and Known(value) and value and true or false
 end
 
+local Style -- (below, with the rest of the name style)
+
 local function TintUnit(unit)
 	local okGuid, guid = pcall(UnitGUID, unit)
 	if okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-") then
-		return Ask(UnitCanAttack, "player", unit)
+		return not Style("classColours") or Ask(UnitCanAttack, "player", unit)
 	end
 	return true
 end
@@ -190,25 +192,57 @@ end
 -- drop shadow in its place. The game's font comes back with the rest of the
 -- plate (by its font object where it has one: the object may hold other
 -- alphabets than its file). [name text] = { font object, file, size, flags,
--- shadow colour, shadow offset }.
+-- shadow colour, shadow offset; base, baseFlags: the game's size and flags
+-- ours start from; oursSize, oursFlags: what ours came out as }.
 local styled = {}
-local SHADOW_X, SHADOW_Y = 1, -1
 
-local function Unoutlined(flags)
+-- How names on name-only plates look. The dev build's Name Style page
+-- (NameStyleDev.lua) tries others in ns.db.devNameStyle; everyone else gets these.
+-- outline: 0 none, 1 thin, 2 thick. size: times the game's. classColours:
+-- friendly players' names left in the class colours the game gives them.
+local NAME_STYLE = { colour = true, classColours = false, outline = 0, size = 1, shadow = true,
+	shadowX = 1, shadowY = -1, shadowAlpha = 1 }
+ns.NAME_STYLE_DEFAULTS = NAME_STYLE
+
+function Style(key)
+	local own = ns.db and ns.db.devNameStyle
+	local value = own and own[key]
+	if value == nil then
+		return NAME_STYLE[key]
+	end
+	return value
+end
+
+local OUTLINES = { [0] = "", "OUTLINE", "THICKOUTLINE" }
+
+local function Outlined(flags, outline)
 	flags = (flags or ""):gsub("THICKOUTLINE", ""):gsub("OUTLINE", "")
+	if OUTLINES[outline] ~= "" then
+		flags = flags .. "," .. OUTLINES[outline]
+	end
 	return (flags:gsub("^,+", ""):gsub(",+$", ""):gsub(",,+", ","))
 end
 
 local function KeepStyle(name, saved)
 	local file, size, flags = name:GetFont()
-	if file and flags ~= saved.ours then
-		saved.ours = Unoutlined(flags)
-		pcall(name.SetFont, name, file, size, saved.ours)
+	if file and (saved.dirty or flags ~= saved.oursFlags or size ~= saved.oursSize) then
+		if not saved.dirty or not saved.base then
+			saved.base, saved.baseFlags = size, flags -- (the game's own, set again)
+		end
+		saved.dirty = nil
+		pcall(name.SetFont, name, file, saved.base * Style("size"), Outlined(saved.baseFlags, Style("outline")))
+		local _
+		_, saved.oursSize, saved.oursFlags = name:GetFont()
 	end
-	local x, y = name:GetShadowOffset()
-	if x ~= SHADOW_X or y ~= SHADOW_Y then
-		name:SetShadowOffset(SHADOW_X, SHADOW_Y)
-		name:SetShadowColor(0, 0, 0, 1)
+	local x, y, alpha = 0, 0, 0
+	if Style("shadow") then
+		x, y, alpha = Style("shadowX"), Style("shadowY"), Style("shadowAlpha")
+	end
+	local nowX, nowY = name:GetShadowOffset()
+	local nowAlpha = select(4, name:GetShadowColor())
+	if nowX ~= x or nowY ~= y or nowAlpha ~= alpha then
+		name:SetShadowOffset(x, y)
+		name:SetShadowColor(0, 0, 0, alpha)
 	end
 end
 
@@ -300,7 +334,7 @@ local function TintName(unitFrame, on)
 		return
 	end
 	local unit = unitFrame.unit
-	if on and unit and TintUnit(unit) then
+	if on and unit and Style("colour") and TintUnit(unit) then
 		local saved = tinted[name]
 		if not saved then
 			saved = { text = { name:GetTextColor() } }
@@ -358,6 +392,15 @@ local function ApplyAll()
 	end
 end
 ApplyAll = ns.Profiled("Plate parts", ApplyAll)
+
+-- After a name style change (the dev Name Style page): every name-only
+-- plate's name drawn again from the game's.
+function ns.RefreshPlateNameStyle()
+	for _, saved in pairs(styled) do
+		saved.dirty = true
+	end
+	ApplyAll()
+end
 
 -- Whether any part is faded (or still held from being faded).
 local function AnyFaded()

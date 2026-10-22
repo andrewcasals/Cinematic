@@ -3,7 +3,8 @@
 -- rolled on gets a card: its icon and name, a bar for the time left, and a
 -- row for each player with what they picked (need, greed, transmog) and, once
 -- the rolls are revealed, their number. The winner goes to the top, lit;
--- passes share one line. The window opens as a roll starts and goes again a
+-- passes share one line. In a raid a card lists only the top few: clicking
+-- it lists everyone (and every pass), clicking again goes back. The window opens as a roll starts and goes again a
 -- while after the last one's done. /cine rolls shows the latest ones.
 --
 -- The rolls come from the game's loot history (C_LootHistory, what /loot
@@ -224,7 +225,7 @@ local CROWN = "Interface\\GroupFrame\\UI-Group-LeaderIcon"
 local REVEAL_GAP = 0.35
 
 local window
-local DismissCard, DragStack, RemoveDrop -- (below: they need the window's insides)
+local DismissCard, DragStack, RemoveDrop, FindDrop, Layout -- (below: they need the window's insides)
 local cards = {}    -- the card frames, reused
 local shown = {}    -- the drops on show, newest first: { key, encounterID, lootListID, info }
 local pinned = false -- opened with /cine rolls: stays until closed
@@ -309,11 +310,11 @@ end
 -- A small grey x in the top right corner, lighter on hover.
 local function CloseButton(parent, onClick)
 	local close = CreateFrame("Button", nil, parent)
-	close:SetSize(20, 20)
-	close:SetPoint("TOPRIGHT", -6, -6)
+	close:SetSize(24, 24)
+	close:SetPoint("TOPRIGHT", -5, -5)
 	for _, angle in ipairs({ 45, -45 }) do
 		local bar = Line(close, "ARTWORK", 0.6, 0.6, 0.6, 1)
-		bar:SetSize(14, 2)
+		bar:SetSize(18, 2)
 		bar:SetPoint("CENTER")
 		bar:SetRotation(math.rad(angle))
 		close[#close + 1] = bar
@@ -425,18 +426,31 @@ local function NewCard(index)
 	CloseButton(card, function() DismissCard(card) end)
 	DragStack(card)
 	card.rows = {}
-	-- Hovering the item shows it; shift-click links it, as the game's item buttons do.
-	card:SetScript("OnEnter", function(self)
-		if self.link and not self.link:find("|Hitem:0|h", 1, true) then -- (not the test's stand-ins)
+	-- Hovering the icon shows the item; shift-click links it, as the game's item buttons do.
+	card.hover = CreateFrame("Button", nil, card)
+	card.hover:SetAllPoints(card.frame)
+	card.hover:SetScript("OnEnter", function(self)
+		if card.link and not card.link:find("|Hitem:0|h", 1, true) then -- (not the test's stand-ins)
 			GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-			GameTooltip:SetHyperlink(self.link)
+			GameTooltip:SetHyperlink(card.link)
 			GameTooltip:Show()
 		end
 	end)
-	card:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	card.hover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	card.hover:SetScript("OnClick", function() card:GetScript("OnClick")(card) end)
+	DragStack(card.hover)
+	-- A plain click lists everyone on it, or back to the top few.
 	card:SetScript("OnClick", function(self)
-		if self.link and HandleModifiedItemClick and not self.link:find("|Hitem:0|h", 1, true) then
-			HandleModifiedItemClick(self.link)
+		if IsShiftKeyDown() or IsControlKeyDown() then -- (linking it, trying it on)
+			if self.link and HandleModifiedItemClick and not self.link:find("|Hitem:0|h", 1, true) then
+				HandleModifiedItemClick(self.link)
+			end
+			return
+		end
+		local _, drop = FindDrop(self.key)
+		if drop and (drop.expanded or self.cut) then
+			drop.expanded = not drop.expanded
+			Layout()
 		end
 	end)
 	cards[index] = card
@@ -534,6 +548,7 @@ local function FillCard(card, drop)
 	local compact = YourChoiceDue(info)
 	card.icon:SetShown(not compact)
 	card.frame:SetShown(not compact)
+	card.hover:SetShown(not compact)
 	card.item:SetShown(not compact)
 	card.status:ClearAllPoints()
 	if compact then
@@ -593,7 +608,7 @@ local function FillCard(card, drop)
 	end
 
 	local y = compact and -(INSET + 18) or -(HEAD + 6)
-	local maxRows = MaxRows()
+	local maxRows = drop.expanded and #rolls or MaxRows()
 	local more = #rolls - maxRows
 	for i = 1, math.max(#rolls, #card.rows) do
 		local row = card.rows[i]
@@ -641,10 +656,16 @@ local function FillCard(card, drop)
 	if more > 0 then
 		lines[#lines + 1] = L["and %d more"]:format(more)
 	end
-	if #passed > MAX_PASSED then
+	if #passed > MAX_PASSED and not drop.expanded then
 		lines[#lines + 1] = L["Passed: %s"]:format(#passed)
 	elseif #passed > 0 then
 		lines[#lines + 1] = L["Passed: %s"]:format(table.concat(passed, ", "))
+	end
+	-- (something left out: a click lists it all; listed, a click goes back)
+	card.cut = more > 0 or #passed > MAX_PASSED
+	if card.cut or drop.expanded then
+		lines[#lines + 1] = "|cff808080" .. (drop.expanded and L["Click to show fewer"]
+			or L["Click to list everyone"]) .. "|r"
 	end
 	if #lines > 0 then
 		card.passed:SetText(table.concat(lines, "\n"))
@@ -658,7 +679,7 @@ local function FillCard(card, drop)
 	return -y + INSET
 end
 
-local function Layout()
+Layout = function()
 	if not window then
 		return
 	end
@@ -1010,6 +1031,7 @@ local function Find(key)
 		end
 	end
 end
+FindDrop = Find
 
 -- A drop the game told us about: refreshed if on show, else added if its roll
 -- is still going (finished ones turn up after a reload, or someone else's

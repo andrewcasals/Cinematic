@@ -452,7 +452,12 @@ end
 -- Loot rolls (need, greed, pass) stack up in GroupLootContainer, which the
 -- game lays out with its other frames above the action bars whenever one of
 -- them shows or hides. Dragging any roll moves the whole stack, and it's put
--- back where it was dropped each time the game lays it out again.
+-- back where it was dropped each time the game lays it out again. Never
+-- dropped, it sits left of the middle, a third of the way down (ROLLS_X,
+-- ROLLS_TOP: its top centre, shares of the screen's width and height), clear
+-- of your character and of the action bars.
+local ROLLS_X = 0.26
+local ROLLS_TOP = 0.32
 local placingRolls = false
 
 local function PlaceRolls()
@@ -461,6 +466,12 @@ local function PlaceRolls()
 		return
 	end
 	local spot = Spot(box)
+	if not spot and ns.Setting("dragPanels") then
+		local width, height = Number(UIParent:GetWidth()), Number(UIParent:GetHeight())
+		if width and height then
+			spot = { "TOP", "TOPLEFT", width * ROLLS_X, -height * ROLLS_TOP }
+		end
+	end
 	if not spot then
 		return
 	end

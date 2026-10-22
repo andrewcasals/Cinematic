@@ -53,6 +53,7 @@ QuestMobs.lua
 QuestGlow.lua
 Effects.lua
 PlateParts.lua
+NameStyleDev.lua
 Camera.lua
 QuestCam.lua
 Tint.lua

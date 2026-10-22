@@ -181,6 +181,7 @@ local DEFAULTS = {
 	nameKeepFriendlyMinions = false,
 	nameKeepEnemies = false,
 	nameKeepEnemyMinions = false,
+	nameKeepGuild = false,
 	nameKeepTarget = false,
 	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
 	-- In CineMode, out of combat, hide the tooltips of (world ones and unit frames')...
@@ -261,7 +262,7 @@ local DEFAULTS = {
 	cooldownManagerOn = false, -- the profile turns the game's Cooldown Manager on if it's off (the CDM part; Profiles.lua)
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
-	rollWindow = false,        -- a window of the group's loot rolls, instead of reading them in chat (RollWindow.lua)
+	rollWindow = true,         -- a window of the group's loot rolls, instead of reading them in chat (RollWindow.lua)
 	rollMinQuality = 2,        -- ...only items of this quality and up (2 uncommon, 3 rare, 4 epic)
 	rollRaidRows = 3,          -- ...in a raid, the top this many players' rolls per item (a party: all)
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
@@ -856,7 +857,7 @@ for _, part in ipairs(ns.PLATE_ICONS_ALWAYS) do
 	DEFAULTS["plateAlwaysPart" .. part] = true
 end
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
-for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions", "Target" }) do
+for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions", "Guild", "Target" }) do
 	DEFAULTS["nameCombat" .. key], DEFAULTS["nameCombatPvP" .. key] = false, false
 	for _, suffix in ipairs(ns.PLATE_PLACES) do
 		DEFAULTS["nameIn" .. suffix .. key] = false
@@ -873,7 +874,7 @@ for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateGroup" .. kind] = kind == "Friends" or kind == "FriendlyMinions"
 	DEFAULTS["plateAlways" .. kind] = false
 end
-for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions", "Target" }) do
+for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions", "Guild", "Target" }) do
 	DEFAULTS["nameGroup" .. key] = false
 	DEFAULTS["nameAlways" .. key] = false
 end
@@ -3186,6 +3187,14 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then AddDialRow(saved.hoverGroups) end
 			end
 			ns.db.minimapDialHoverV1 = true
+		end
+		-- Roll Vision was first off by default; on once. Saved profiles too.
+		if not ns.db.rollWindowV1 then
+			ns.db.rollWindow = true
+			for _, saved in pairs(type(ns.db.profiles) == "table" and ns.db.profiles or {}) do
+				if type(saved) == "table" then saved.rollWindow = true end
+			end
+			ns.db.rollWindowV1 = true
 		end
 		-- The vignette and weather went with the tint's row of the Visual
 		-- Effects grid: rows of their own now, starting as the tint's was. Once.
