@@ -164,11 +164,14 @@ local function TintUnit(unit)
 end
 
 -- Sets a name's colour, keeping its alpha.
+local painting -- (so our own setting doesn't paint it again)
 local function SetNameColor(name, r, g, b)
+	painting = true
 	pcall(name.SetTextColor, name, r, g, b, select(4, name:GetTextColor()))
 	if name.SetVertexColor and name.GetVertexColor then
 		pcall(name.SetVertexColor, name, r, g, b, select(4, name:GetVertexColor()))
 	end
+	painting = nil
 end
 
 local function PaintName(name, unit)
@@ -238,6 +241,30 @@ repainter:SetScript("OnEvent", function()
 	end
 end)
 
+-- It also sets it again on its own while units move, at any time in the
+-- frame: shown white for a frame, again and again (a flicker). So ours goes
+-- back on the moment the game sets its colour. [name text] = true once hooked.
+local hookedNames = {}
+
+local function Repaint(name)
+	local saved = tinted[name]
+	if saved and not painting then
+		pcall(PaintName, name, saved.unit)
+	end
+end
+
+local function HookName(name)
+	if hookedNames[name] then
+		return
+	end
+	hookedNames[name] = true
+	for _, method in ipairs({ "SetTextColor", "SetVertexColor", "SetFontObject" }) do
+		if name[method] then
+			hooksecurefunc(name, method, Repaint)
+		end
+	end
+end
+
 local function StyleName(unitFrame, on)
 	local name = unitFrame.name
 	if not (Usable(name) and name.GetFont and name.SetFont and name.SetShadowOffset) then
@@ -283,6 +310,7 @@ local function TintName(unitFrame, on)
 			tinted[name] = saved
 		end
 		saved.unit = unit
+		HookName(name)
 		PaintName(name, unit)
 		painter:Show()
 	elseif tinted[name] then
