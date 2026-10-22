@@ -523,7 +523,7 @@ DEFAULTS.deathVignetteSize = 0.35  -- ...and the fraction of the screen each edg
 DEFAULTS.deathBanner = true        -- "YOU DIED" across the screen as it starts
 DEFAULTS.deathCorpseRun = true     -- released with no wave to wait for, the vignette lifts as you near your body
 -- While dead: CineMode stays on and only the parts ticked here stay up (ns.DEATH_SHOW).
-DEFAULTS.deathFadeUI = false
+DEFAULTS.deathFadeUI = true
 DEFAULTS.deathFadeGhost = true     -- ...as a ghost too, all the way back
 DEFAULTS.deathShowRelease = true   -- the release window (and soulstone, Reincarnation)
 DEFAULTS.deathShowGhost = true     -- the ghost's Return to graveyard button
