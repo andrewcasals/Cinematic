@@ -10,7 +10,8 @@ end
 -- Chat messages that briefly reveal the chat window they land in (only that
 -- window and its tabs: not the input bar or the rest of the UI).
 -- Message types the player can switch on or off individually (db.chatPeekTypes,
--- missing = the type's default, on unless it says otherwise). Numbered channels
+-- missing = the type's default, on unless it says otherwise: their Always
+-- column; their rows' other columns are below). Numbered channels
 -- are chosen one by one instead (db.chatPeekChannelList by channel name,
 -- missing = db.chatPeekChannels). "game" types are game events rather than
 -- conversation; the noisy ones default off.
@@ -33,16 +34,20 @@ ns.CHAT_PEEK_TYPES = {
 		events = { "CHAT_MSG_RAID_BOSS_EMOTE", "CHAT_MSG_RAID_BOSS_WHISPER" } },
 
 	-- Guild members' comings and goings arrive as system messages; see IsGuildLine below.
-	{ key = "guildmembers", label = L["Guild members (online, offline, joins, leaves)"], section = "game",
+	{ key = "guildmembers", label = L["Guild members"], section = "game",
+		tip = L["Guild members coming online, going offline, joining and leaving."],
 		events = {} },
 	-- Group members' comings and goings likewise; see IsGroupLine below.
-	{ key = "groupmembers", label = L["Group members (joins, leaves)"], section = "game", events = {} },
+	{ key = "groupmembers", label = L["Group members"], section = "game",
+		tip = L["People joining and leaving your group."], events = {} },
 	-- Server announcements ("[SERVER] Shutdown in 9:00"); see the AddMessage hook below.
-	{ key = "server", label = L["Server messages (shutdowns, restarts)"], section = "game", events = {} },
+	{ key = "server", label = L["Server messages"], section = "game",
+		tip = L["Server shutdowns and restarts."], events = {} },
 	-- Level ups arrive as a system message; see LEVEL_UP_WINDOW below.
 	{ key = "levelup", label = L["Level ups"], section = "game", events = {} },
 	-- /who replies (shift-clicking a name in the guild list, too); see WHO_WINDOW below.
-	{ key = "who", label = L["/who results (shift-clicking a name)"], section = "game", events = {} },
+	{ key = "who", label = L["/who results"], section = "game",
+		tip = L["Replies to a /who, shift-clicking a name in the guild list too."], events = {} },
 	{ key = "skill", label = L["Skill ups"], section = "game", events = { "CHAT_MSG_SKILL" } },
 	{ key = "achievement", label = L["Achievements"], section = "game", default = false,
 		events = { "CHAT_MSG_ACHIEVEMENT", "CHAT_MSG_GUILD_ACHIEVEMENT" } },
@@ -52,10 +57,12 @@ ns.CHAT_PEEK_TYPES = {
 		events = { "CHAT_MSG_COMBAT_FACTION_CHANGE" } },
 	{ key = "honor", label = L["Honor"], section = "game", default = false,
 		events = { "CHAT_MSG_COMBAT_HONOR_GAIN" } },
-	{ key = "battleground", label = L["Battleground objectives (assaults, captures, flags)"], section = "game",
+	{ key = "battleground", label = L["BG objectives"], section = "game",
+		tip = L["Battleground assaults, captures and flags."],
 		events = { "CHAT_MSG_BG_SYSTEM_ALLIANCE", "CHAT_MSG_BG_SYSTEM_HORDE", "CHAT_MSG_BG_SYSTEM_NEUTRAL" } },
 	-- Group loot rolls arrive as loot messages; see IsLootRollLine below.
-	{ key = "rolls", label = L["Loot rolls (need, greed, won)"], section = "game", default = false, events = {} },
+	{ key = "rolls", label = L["Loot rolls"], section = "game", default = false,
+		tip = L["Need, greed and who won."], events = {} },
 	{ key = "loot", label = L["All loot"], section = "game", default = false, events = { "CHAT_MSG_LOOT" } },
 	{ key = "money", label = L["Money"], section = "game", default = false, events = { "CHAT_MSG_MONEY" } },
 	{ key = "tradeskill", label = L["Other players' crafting"], section = "game", default = false,
@@ -63,18 +70,28 @@ ns.CHAT_PEEK_TYPES = {
 	{ key = "system", label = L["All other system messages"], section = "game", default = false,
 		events = { "CHAT_MSG_SYSTEM" } },
 }
-ns.OnLanguage(function() ns.TranslateFields(ns.CHAT_PEEK_TYPES, "label") end)
+ns.OnLanguage(function() ns.TranslateFields(ns.CHAT_PEEK_TYPES, "label", "tip") end)
 local PEEK_TYPE_DEFAULT = {}
 for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 	PEEK_TYPE_DEFAULT[peekType.key] = peekType.default ~= false
 end
 
-local function IsPeekTypeOn(key)
+-- A type's Always tick on the Chat page (shows chat for it whenever).
+function ns.IsPeekTypeAlways(key)
 	local on = ns.db.chatPeekTypes[key]
 	if on == nil then
 		return PEEK_TYPE_DEFAULT[key]
 	end
 	return on
+end
+-- Each type is a row on the Chat page's grids ("chat:<type>"): its other
+-- columns, roles and rule say when else it shows chat.
+local PEEK_ROW = {}
+for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
+	PEEK_ROW[peekType.key] = "chat:" .. peekType.key
+end
+local function IsPeekTypeOn(key)
+	return PEEK_ROW[key] ~= nil and ns.RowOnNow(PEEK_ROW[key], ns.IsPeekTypeAlways(key))
 end
 
 -- The level-up line is a plain system message among many, and matching its
@@ -243,12 +260,26 @@ local function IsGroupLine(text)
 	return false
 end
 
+-- A channel's Always tick on the Chat page.
 function ns.IsChannelPeekOn(name)
 	local on = ns.db.chatPeekChannelList[name]
 	if on == nil then
 		return ns.db.chatPeekChannels
 	end
 	return on
+end
+-- ...and whether a message in it shows chat now: its row ("chan:<name>")
+-- says when else, as the message types' do.
+local CHANNEL_ROW = setmetatable({}, { __index = function(keys, name)
+	local key = "chan:" .. name
+	keys[name] = key
+	return key
+end })
+function ns.ChannelRowKey(name)
+	return CHANNEL_ROW[name]
+end
+local function IsChannelPeekNow(name)
+	return ns.RowOnNow(CHANNEL_ROW[name], ns.IsChannelPeekOn(name))
 end
 
 -- Channels the player has joined, by name (e.g. "General", "Trade"). Depending
@@ -379,7 +410,7 @@ local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, 
 	if ns.db.chatHideOwn and IsFromPlayer(author, guid) then
 		wanted = false
 	elseif event == "CHAT_MSG_CHANNEL" then
-		wanted = ns.IsChannelPeekOn(ChannelBaseName(channelBaseName, channelString))
+		wanted = IsChannelPeekNow(ChannelBaseName(channelBaseName, channelString))
 	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < ns.levelUpUntil and IsPeekTypeOn("levelup") then
 		wanted = true
 	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < whoUntil and IsPeekTypeOn("who") then

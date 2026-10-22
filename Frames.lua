@@ -2412,6 +2412,40 @@ do
 		end
 		return shown
 	end
+
+	-- Whether a grid row that isn't a frame (the Chat page's: a message type,
+	-- a channel) is on now, as a Standard Frames row would show: its rule if
+	-- it has one, else Always (always: its own setting, when it has one), a
+	-- place column that applies here, or In combat / Tar Enemy / Tar Friendly;
+	-- never while you're a role its roles button has unticked.
+	function ns.RowOnNow(key, always)
+		local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+		local calm = not fighting and GetTime() - lastCombatAt < (ns.db.calmTime or 0)
+		local inCombat = fighting or (calm and ns.db.combatShowCalm)
+		local facts = ns.RuleFacts(inCombat)
+		if ns.RoleHides(facts)[key] then
+			return false
+		end
+		local ticked = ns.RuleShows(key, facts)
+		if ticked ~= nil then
+			return ticked
+		end
+		if always == nil then
+			always = ns.IsCineShowOn(key)
+		end
+		if always or KeptHere(PlaceListsHere(), key) then
+			return true
+		end
+		if inCombat then
+			return ns.db.stayInCombat and ns.IsCombatShowOn(key) and true or false
+		elseif HasAnyTarget() then
+			if ns.IsEnemyUnit("target") and not ns.Flag(UnitIsDeadOrGhost("target")) then
+				return ns.IsEnemyShowOn(key) and true or false
+			end
+			return ns.IsFriendlyShowOn(key) and true or false
+		end
+		return false
+	end
 end
 GetCombatShownFrames = ns.Profiled("GetCombatShownFrames", GetCombatShownFrames)
 
@@ -4529,6 +4563,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 		ns.chatTypingUntil = now + ns.HoldTime("chatPeekTime")
 	end
 	local typing = ns.chatTypingUntil > now
+	-- (The Chat page's Typing row: where it's off, just the input box comes up.)
+	local typingWindows = typing and ns.RowOnNow("chat:typing", ns.db.chatShowWhileTyping)
+	-- (Then the input box only while it's open: held after, it was an empty bar.)
+	local activeEditBox = not typingWindows and ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()
 	-- A whisper tab waiting to be read keeps the whole chat window up, tabs
 	-- and all, so it can be clicked (Chat page).
 	local whisperUnread = cinematic and ns.db.chatUntilWhisperRead and ns.HasUnreadWhisper()
@@ -4610,7 +4648,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 	end
 	local events = tickTables.events
-	events.chat, events.whisper, events.typing = dockPeek, whisperUnread, typing
+	events.chat, events.whisper, events.typing = dockPeek, whisperUnread, typingWindows
 	-- (The Minimap, Quest tracker, Buffs/debuffs and Cooldown Manager pages'
 	-- extras: none while their page's switch is off.)
 	local minimapPage = ns.PageOn("handleMinimap")
@@ -4657,10 +4695,13 @@ function ns.UpdateFrames(cinematic, elapsed)
 			SyncOwnAlpha(entry)
 		end
 		local target = 1
+		-- (Typing always shows the input box, to see what you type, and the
+		-- chat windows too where the Chat page's Typing row is on.)
+		local typingShown = entry.group == "chat" and (typingWindows or (activeEditBox and entry.frame == activeEditBox))
 		local chatShowing = (ns.chatPeekUntil[entry.frame] or 0) > now
-			-- (Typing always shows chat, to see what you type; an unread whisper
-			-- brings up the Mouseover groups with it ticked, chat by default.)
-			or (typing and entry.group == "chat")
+			-- (An unread whisper brings up the Mouseover groups with it ticked,
+			-- chat by default.)
+			or typingShown
 			or (dockPeek and entry.name == "GeneralDockManager")
 		entry.row = entry.row or ns.HoverRowFor(entry)
 		-- (Its own row's group is its row too: see ns.RAID_STYLE_PARTY.)
@@ -4684,7 +4725,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			and not fightingShown and (fadeChat or entry.group ~= "chat") then
 			target = 0
 		end
-		if deathFade and not hovered[row] and not (typing and entry.group == "chat") then
+		if deathFade and not hovered[row] and not typingShown then
 			target = 0
 		end
 		-- (Swing timer page: in CineMode and out, hovering included.)
@@ -4724,7 +4765,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if entry.frame == Minimap then
 			RedrawMinimapWhenShown()
 		end
-		if typing and entry.group == "chat" and entry.alpha < 1 then
+		if typingShown and entry.alpha < 1 then
 			-- Pressing Enter shows the chat input (and its window) at once.
 			ns.SetEntryAlpha(entry, 1)
 		elseif target == 0 and entry.alpha == 0 and not entry.shrinkWhenFaded

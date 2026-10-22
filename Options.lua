@@ -1833,20 +1833,6 @@ local function CreateCameraPanel()
 	RegisterSubpage(cameraCanvas, L["Camera Modes"])
 end
 
--- A checkbox for one entry of a table setting (db[tableKey][subKey]), where a
--- missing entry means defaultValue.
-local function TableCheck(parent, tableKey, subKey, label, defaultValue, tip)
-	local cb = Check(parent, tableKey, label, tip, function(value)
-		ns.GetDB()[tableKey][subKey] = value
-	end)
-	cb.Refresh = function(self)
-		local value = ns.GetDB()[tableKey][subKey]
-		if value == nil then value = defaultValue end
-		self:SetChecked(value)
-	end
-	return cb
-end
-
 -- Camera rotation settings, built once per profile (taxiOrbit* for flights,
 -- idleOrbit* for standing still), each on its own sub-page.
 -- Rotation controls for a camera's fixed style: "sweep" (steady sweeps: the
@@ -4135,21 +4121,25 @@ do
 end
 
 -- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
--- items), a column per situation. Used by the Gamepad page too. ...: where
--- the rows are, for the Rules section's menu.
+-- items), a column per situation. Used by the Gamepad and Chat pages too.
+-- ...: where the rows are, for the Rules section's menu. The Chat page's rows
+-- aren't frames: rows.labelWidth widens the names, rows.columnTips[c] is a
+-- column's tip, rows.noHeadings leaves the headings out (a row added later
+-- under a table's), and a row's alwaysOn() / setAlways(value) are its Always
+-- box's own setting.
 local function ShowTable(content, anchor, rows, ...)
 	-- One table: a row per frame, a column per situation.
-	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, 24
+	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = rows.labelWidth or FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, 24
 	local COLUMNS = FRAME_COLUMNS
 	local columnTop = CreateFrame("Frame", nil, content)
 	columnTop:SetSize(1, 1)
 	columnTop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
-	for c, column in ipairs(COLUMNS) do
+	for c, column in ipairs(rows.noHeadings and {} or COLUMNS) do
 		FrameHeading(content, column[1]):SetPoint("TOPLEFT", columnTop, "TOPLEFT",
 			LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
 	end
 	-- (Over the rows' roles buttons.)
-	if ROLES_MENU then
+	if ROLES_MENU and not rows.noHeadings then
 		FrameHeading(content, L["Role"]):SetPoint("TOPLEFT", columnTop, "TOPLEFT",
 			LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0)
 	end
@@ -4183,19 +4173,24 @@ local function ShowTable(content, anchor, rows, ...)
 			RecordKey(content, ns.CINE_SHOW_SETTING[item.key]) -- (for the page's Reset)
 		end
 		-- The roles it shows for, after its last column.
-		local roles = not item.alwaysOnly and RolesButton(content, content, item.key)
+		local roles = not item.alwaysOnly and RolesButton(content, content, item.key, rows.rolesTip)
 		if roles then
 			roles:SetPoint("LEFT", rowLabel, "LEFT", LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0)
 		end
+		local alwaysOn = item.alwaysOn or ns.IsCineShowOn
 		for c, column in ipairs(item.alwaysOnly and { COLUMNS[1] } or COLUMNS) do
 			local isOn, tableKey, needsStay = column[2], column[3], column[4]
+			if c == 1 then isOn = alwaysOn end
 			local alwaysTip = item.alwaysTip or item.part
 				and L["Show it whenever its frame shows. This overrides its Mouseover groups: untick it to " ..
 				"hide it in CineMode except when hovered or brought up by the other columns."]
 				or L["Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)"]
-			local check = Check(content, tableKey, "", c == 1 and alwaysTip or column[5], function(value)
+			local columnTip = rows.columnTips and rows.columnTips[c] or column[5]
+			local check = Check(content, tableKey, "", c == 1 and alwaysTip or columnTip, function(value)
 				local setting = c == 1 and ns.CINE_SHOW_SETTING[item.key]
-				if setting then
+				if c == 1 and item.setAlways then
+					item.setAlways(value)
+				elseif setting then
 					ns.GetDB()[setting] = value
 				else
 					ns.GetDB()[tableKey][item.key] = value
@@ -4211,7 +4206,7 @@ local function ShowTable(content, anchor, rows, ...)
 				self:SetChecked(isOn(item.key))
 				-- (A row with a rule that reads: the rule decides, its ticks greyed.)
 				self:SetEnabled(not ns.RuleTest(item.key) and (c == 1
-					or (not ns.IsCineShowOn(item.key) and (not needsStay or db.stayInCombat))))
+					or (not alwaysOn(item.key) and (not needsStay or db.stayInCombat))))
 			end
 		end
 		lastLabel = rowLabel
@@ -4222,7 +4217,8 @@ end
 -- A section's name row on the Unit Frames and Standard Frames pages: a band
 -- across the top of frame (BAND_HEIGHT high), clicked to open or close the
 -- section (the +/- sits in the page margin). check: a tick to sit at its
--- right end ("Same as target"). nameRow:SetOpen(open) shows which it is.
+-- right end ("Same as target"). nameRow:SetOpen(open) shows which it is;
+-- nameRow.title is its name.
 local BAND_HEIGHT = 26
 local function SectionBand(frame, title, onClick, check)
 	local nameRow = CreateFrame("Button", nil, frame)
@@ -4238,7 +4234,8 @@ local function SectionBand(frame, title, onClick, check)
 	local icon = nameRow:CreateTexture(nil, "ARTWORK")
 	icon:SetSize(14, 14)
 	icon:SetPoint("LEFT", nameRow, "LEFT", 1, 0)
-	Label(nameRow, "GameFontNormal", title):SetPoint("LEFT", nameRow, "LEFT", 18, 0)
+	nameRow.title = Label(nameRow, "GameFontNormal", title)
+	nameRow.title:SetPoint("LEFT", nameRow, "LEFT", 18, 0)
 	nameRow:SetScript("OnClick", onClick)
 	function nameRow:SetOpen(open)
 		icon:SetTexture(open and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
@@ -5598,155 +5595,309 @@ local function CreatePlatesPanel()
 end
 
 -- Sub-page for everything chat: fading, new-message peeks (by message type and
--- by channel) and the places chat stays visible.
-local channelRows = {}
+-- by channel) and when chat stays up. Its options on top, then sections that
+-- open and close (as on the Standard Frames page), each a Standard Frames
+-- table: the chat window's row, then a row per message type and per channel,
+-- its columns saying when a new message shows chat (ns.RowOnNow).
+-- (In a block: the main chunk's locals are near Lua's cap.)
+local CreateChatPanel
+do
+	local CHAT_LABEL_WIDTH = 200
+	local channelHolders = {} -- channel name -> its row's frame (made once, reused)
 
-local function RefreshChannels()
-	local channels = ns.GetJoinedChannels()
-	local previous = chatPanel.channelHelp
-	for i, name in ipairs(channels) do
-		local row = channelRows[i]
-		if not row then
-			row = CreateFrame("CheckButton", nil, chatPanel, "UICheckButtonTemplate")
-			row:SetSize(26, 26)
-			row.label = row.Text or row.text
-			if not row.label then
-				row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-				row.label:SetPoint("LEFT", row, "RIGHT", 2, 0)
+	-- The message types' and channels' tables: their tips, as what each column
+	-- does for a message.
+	local MESSAGE_TIPS = {
+		cineShow = L["Its messages show chat any time the UI is faded. (The other columns then have nothing to add.)"],
+		combatShow = L["Its messages show chat in fights (while you stay cinematic in them)."],
+		enemyShow = L["Its messages show chat out of combat with a living enemy targeted."],
+		friendlyShow = L["Its messages show chat out of combat with anything else targeted (friends, NPCs, dead enemies)."],
+		bgShow = L["Its messages show chat in battlegrounds and arenas."],
+		worldShow = L["Its messages show chat everywhere else, cities and inns included."],
+		groupShow = L["Its messages show chat while you're in a party or raid, wherever you are."],
+		instanceShow = L["Its messages show chat in dungeons, scenarios and raids."],
+	}
+	local MESSAGE_COLUMN_TIPS = {}
+	for c, column in ipairs(FRAME_COLUMNS) do
+		MESSAGE_COLUMN_TIPS[c] = MESSAGE_TIPS[column[3]]
+	end
+	-- A message table's rows: these, its settings.
+	local function MessageRows()
+		return { labelWidth = CHAT_LABEL_WIDTH, columnTips = MESSAGE_COLUMN_TIPS,
+			rolesTip = L["The roles it shows chat for: untick one and its messages don't show chat while you're " ..
+			"that role (your specialization's, or the one picked in the group finder), whatever its ticks or rule say."] }
+	end
+
+	-- The settings a table recorded on its own frame are the page's (its Reset),
+	-- and its boxes grey while new messages don't show chat at all.
+	local function ToPage(from)
+		for key in pairs(pageKeys[from] or {}) do
+			RecordKey(chatPanel, key)
+		end
+		for key, keyRows in pairs(pageRows[from] or {}) do
+			for row in pairs(keyRows) do RecordRow(chatPanel, key, row) end
+		end
+		pageKeys[from], pageRows[from] = nil, nil
+	end
+	local function GreyUnlessPeek(parent)
+		for _, object in ipairs({ parent:GetChildren() }) do
+			if object.Refresh and object.SetEnabled then
+				local refresh = object.Refresh
+				object.Refresh = function(self)
+					refresh(self)
+					if not ns.GetDB().chatPeek then
+						self:SetEnabled(false)
+					end
+				end
 			end
-			SetLabelFont(row.label, "GameFontHighlight")
-			row:SetScript("OnClick", function(self)
-				ns.GetDB().chatPeekChannelList[self.channel] = self:GetChecked() and true or false
+		end
+	end
+
+	-- A channel's row, under the Channels table's headings: made the first
+	-- time the channel is joined, kept for the next.
+	local function ChannelHolder(name)
+		local holder = channelHolders[name]
+		if holder then
+			return holder
+		end
+		holder = CreateFrame("Frame", nil, chatPanel.channelBody)
+		holder:SetSize(1, 1)
+		local rows = MessageRows()
+		rows.noHeadings = true
+		rows[1] = { key = ns.ChannelRowKey(name), label = name, alwaysTip = MESSAGE_TIPS.cineShow,
+			alwaysOn = function() return ns.IsChannelPeekOn(name) end,
+			setAlways = function(value) ns.GetDB().chatPeekChannelList[name] = value end }
+		ShowTable(holder, holder, rows, "Chat", L["Channels"])
+		GreyUnlessPeek(holder)
+		ToPage(holder)
+		channelHolders[name] = holder
+		return holder
+	end
+
+	local function RefreshChannels()
+		local channels = ns.GetJoinedChannels()
+		local shown = {}
+		for i, name in ipairs(channels) do
+			local holder = ChannelHolder(name)
+			holder:ClearAllPoints()
+			holder:SetPoint("TOPLEFT", chatPanel.channelBody, "TOPLEFT", 0, -(i - 1) * 24)
+			holder:Show()
+			shown[holder] = true
+		end
+		for _, holder in pairs(channelHolders) do
+			if not shown[holder] then holder:Hide() end
+		end
+		chatPanel.channelHeadings:SetShown(#channels > 0)
+		chatPanel.noChannels:SetShown(#channels == 0)
+		chatPanel.layoutSections()
+	end
+
+	function CreateChatPanel()
+		local chatCanvas
+		chatCanvas, chatPanel = CreateScrollPage()
+
+		local title = Label(chatPanel, "GameFontNormalLarge", L["Chat"])
+		title:SetPoint("TOPLEFT", 16, -16)
+
+		local subtitle = PageIntro(chatPanel, title,
+			L["The chat window fades with the rest of the UI in CineMode. Mousing over it or typing " ..
+			"always shows it."])
+
+		-- On top: the master switch and the peek's own options.
+		local switch = PageSwitch(chatPanel, "handleChat", L["Enable page"],
+			L["On: CineMode fades the chat windows and tabs as this page says. Off: it leaves them alone."],
+			subtitle)
+
+		local chatPeek = Check(chatPanel, "chatPeek", L["Show chat when a message arrives"],
+			L["While the UI is faded, a new message briefly shows just the chat window it " ..
+			"arrived in, with its tabs. Choose which messages below."], function(value)
+				ns.GetDB().chatPeek = value
+				Refresh() -- grey out / enable the time and the messages below
 			end)
-			channelRows[i] = row
+		chatPeek:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -2)
+		local function IfPeek(db) return db.chatPeek end
+
+		local peekTime = Slider(chatPanel, "chatPeekTime", L["Show chat for"], 2, 30, 1, L["%d sec"])
+		peekTime:SetPoint("TOPLEFT", chatPeek, "BOTTOMLEFT", 4, -26)
+		Tooltip(peekTime, L["How long chat stays up after a message arrives or after you finish typing."])
+		GreyUnless(peekTime, IfPeek)
+
+		local hideOwn = Check(chatPanel, "chatHideOwn", L["Hide your messages"],
+			L["Your own messages don't show chat: your emotes (a /bow, or sitting or kneeling at the " ..
+			"campfire), and what you say in /say, party, guild and so on. Other people's still do."])
+		hideOwn:SetPoint("TOPLEFT", peekTime, "BOTTOMLEFT", -4, -18)
+		GreyUnless(hideOwn, IfPeek)
+
+		local hideBubbled = Check(chatPanel, "chatHideBubbled", L["Hide speech you can see as a bubble"],
+			L["Says and yells (people's and NPCs') don't show chat when their chat bubble shows on your " ..
+			"screen: you can read it there. Ones from out of view, or where bubbles are off, still do."])
+		hideBubbled:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 0, -2)
+		GreyUnless(hideBubbled, IfPeek)
+
+		-- The sections, each a band that opens and closes with a click and its
+		-- body under it (all open to start with). A setting found by search in a
+		-- closed one opens it.
+		local sections = {}
+		local top = CreateFrame("Frame", nil, chatPanel)
+		top:SetSize(1, 1)
+		top:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 2, -16) -- (back to the column edge)
+		local function LayoutNow()
+			local above
+			for _, section in ipairs(sections) do
+				local frame = section.frame
+				frame:ClearAllPoints()
+				if above then
+					frame:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -6)
+				else
+					frame:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
+				end
+				frame:SetPoint("RIGHT", chatPanel, "RIGHT", -16, 0)
+				section.body:SetShown(section.open)
+				section.nameRow:SetOpen(section.open)
+				frame:SetHeight(BAND_HEIGHT + (section.open and (ContentDepth(section.body) or 0) + 10 or 0))
+				above = frame
+			end
+			FitContentHeight(chatPanel)
 		end
-		row.channel = name
-		row.label:SetText(name)
-		row:SetChecked(ns.IsChannelPeekOn(name))
-		row:SetEnabled(SwitchOn("handleChat"))
-		row:ClearAllPoints()
-		row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
-		row:Show()
-		previous = row
-	end
-	for i = #channels + 1, #channelRows do
-		channelRows[i]:Hide()
-	end
-	chatPanel.noChannels:SetShown(#channels == 0)
-end
-
-local function CreateChatPanel()
-	local chatCanvas
-	chatCanvas, chatPanel = CreateScrollPage()
-
-	local title = Label(chatPanel, "GameFontNormalLarge", L["Chat"])
-	title:SetPoint("TOPLEFT", 16, -16)
-
-	local subtitle = PageIntro(chatPanel, title,
-		L["The chat window fades with the rest of the UI in CineMode. Mousing over it or typing " ..
-		"always shows it."])
-
-	-- Left column: the chat window, message types
-	local switch = PageSwitch(chatPanel, "handleChat", L["Enable page"],
-		L["On: CineMode fades the chat windows and tabs as this page says. Off: it leaves them alone."],
-		subtitle)
-	local windowHeader = Header(chatPanel, L["Chat window"], switch, -20)
-	windowHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -16)
-
-	local chatPeek = Check(chatPanel, "chatPeek", L["Show chat when a message arrives"],
-		L["While the UI is faded, a new message briefly shows just the chat window it " ..
-		"arrived in, with its tabs. Choose which messages below."], function(value)
-			ns.GetDB().chatPeek = value
-			Refresh() -- grey out / enable the time and the messages below
-		end)
-	chatPeek:SetPoint("TOPLEFT", windowHeader, "BOTTOMLEFT", -2, -6)
-	local function IfPeek(db) return db.chatPeek end
-
-	local peekTime = Slider(chatPanel, "chatPeekTime", L["Show chat for"], 2, 30, 1, L["%d sec"])
-	peekTime:SetPoint("TOPLEFT", chatPeek, "BOTTOMLEFT", 4, -26)
-	Tooltip(peekTime, L["How long chat stays up after a message arrives or after you finish typing."])
-	GreyUnless(peekTime, IfPeek)
-
-	local untilRead = Check(chatPanel, "chatUntilWhisperRead", L["Keep chat up until whispers are read"],
-		L["When a whisper arrives in its own tab, the whole chat window stays up in CineMode " ..
-		"while that tab flashes, until you click it. Whispers that land in the tab you're " ..
-		"looking at don't flash, so they just show as above."])
-	untilRead:SetPoint("TOPLEFT", peekTime, "BOTTOMLEFT", -4, -18)
-
-	local hideOwn = Check(chatPanel, "chatHideOwn", L["Hide your messages"],
-		L["Your own messages don't show chat: your emotes (a /bow, or sitting or kneeling at the " ..
-		"campfire), and what you say in /say, party, guild and so on. Other people's still do."])
-	hideOwn:SetPoint("TOPLEFT", untilRead, "BOTTOMLEFT", 0, -2)
-	GreyUnless(hideOwn, IfPeek)
-
-	local hideBubbled = Check(chatPanel, "chatHideBubbled", L["Hide speech you can see as a bubble"],
-		L["Says and yells (people's and NPCs') don't show chat when their chat bubble shows on your " ..
-		"screen: you can read it there. Ones from out of view, or where bubbles are off, still do."])
-	hideBubbled:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 0, -2)
-	GreyUnless(hideBubbled, IfPeek)
-
-	local attackAlert = Check(chatPanel, "chatAttackAlert", L["Show attacks on the screen"],
-		L["When the LocalDefense channel says a place is under attack (\"Dun Algaz is under attack!\"), " ..
-		"it also shows in red where the zone name appears, with your faction's city bell. The same " ..
-		"place shows at most once every 90 seconds. /cine attacktest shows one."])
-	attackAlert:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 0, -2)
-
-	local updateNotice = Check(chatPanel, "updateNotice", L["Get notified of updates"],
-		L["The first time you log in after Cinematic updates, a line in chat says so, with a " ..
-		"What's new link to what's been added. Chat shows for it while the UI is faded."])
-	updateNotice:SetPoint("TOPLEFT", attackAlert, "BOTTOMLEFT", 0, -2)
-
-	local typesHeader = Header(chatPanel, L["Show chat for these messages"], updateNotice, -24)
-	typesHeader:SetPoint("TOPLEFT", updateNotice, "BOTTOMLEFT", 2, -24) -- (headers sit 2 right of boxes)
-	local previous, previousIsHeader, section = typesHeader, true, nil
-	for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
-		if peekType.section == "game" and section ~= "game" then
-			section = "game"
-			local gameHeader = Label(chatPanel, "GameFontNormal", L["Game messages"])
-			gameHeader:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 2, -14)
-			previous, previousIsHeader = gameHeader, true
+		-- (Laid out again next frame too, once the rows have settled.)
+		local function Layout()
+			LayoutNow()
+			C_Timer.After(0, LayoutNow)
 		end
-		local check = TableCheck(chatPanel, "chatPeekTypes", peekType.key, peekType.label,
-			peekType.default ~= false)
-		GreyUnless(check, IfPeek)
-		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previousIsHeader and -2 or 0,
-			previousIsHeader and -6 or -2)
-		previous, previousIsHeader = check, false
+		chatPanel.layoutSections = Layout
+		local function Section(heading)
+			local frame = CreateFrame("Frame", nil, chatPanel)
+			frame:SetHeight(BAND_HEIGHT)
+			local body = CreateFrame("Frame", nil, frame)
+			body:SetPoint("TOPLEFT", 0, -BAND_HEIGHT)
+			body:SetPoint("TOPRIGHT", 0, -BAND_HEIGHT)
+			body:SetHeight(1)
+			body.searchAlways = true
+			local section = { frame = frame, body = body, open = true }
+			section.nameRow = SectionBand(frame, heading, function()
+				section.open = not section.open
+				Layout()
+			end)
+			function body.openSection()
+				if not section.open then
+					section.open = true
+					Layout()
+				end
+			end
+			sections[#sections + 1] = section
+			return body, section.nameRow
+		end
+		-- (A table's anchor: the top of its section's body.)
+		local function TableTop(body)
+			local anchor = CreateFrame("Frame", nil, body)
+			anchor:SetSize(1, 1)
+			anchor:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0)
+			return anchor
+		end
+
+		-- Chat window: plain ticks, the places it stays up in a line.
+		local windowBody = Section(L["Chat window"])
+		local untilRead = Check(windowBody, "chatUntilWhisperRead", L["Keep chat up until whispers are read"],
+			L["When a whisper arrives in its own tab, the whole chat window stays up in CineMode " ..
+			"while that tab flashes, until you click it. Whispers that land in the tab you're " ..
+			"looking at don't flash, so they just show as above."])
+		untilRead:SetPoint("TOPLEFT", windowBody, "TOPLEFT", -2, -6)
+		local keepLabel = Label(windowBody, "GameFontHighlight", L["Always show in"])
+		keepLabel:SetPoint("TOPLEFT", untilRead, "BOTTOMLEFT", 2, -10)
+		local CHAT_TIP = L["The chat window stays up here while the rest of the UI fades. " ..
+			"Only matters where CineMode isn't turned off."]
+		for i, place in ipairs({
+			{ "chatInCities", L["Cities"], L["Capital cities. "] },
+			{ "chatInDungeons", L["Dungeons"], "" },
+			{ "chatInRaids", L["Raids"], "" },
+			{ "chatInPvP", L["PvP"], PVP_TIP .. " " },
+		}) do
+			local check = Check(windowBody, place[1], place[2], place[3] .. CHAT_TIP)
+			check:SetPoint("TOPLEFT", keepLabel, "BOTTOMLEFT", -2 + (i - 1) * 110, -4)
+		end
+
+		-- The message types that show chat: people's, then the game's.
+		local function TypeSection(heading, game)
+			local body = Section(heading)
+			local rows = MessageRows()
+			for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
+				if (peekType.section == "game") == game then
+					local key = peekType.key
+					rows[#rows + 1] = { key = "chat:" .. key, label = peekType.label, tip = peekType.tip,
+						alwaysTip = MESSAGE_TIPS.cineShow,
+						alwaysOn = function() return ns.IsPeekTypeAlways(key) end,
+						setAlways = function(value) ns.GetDB().chatPeekTypes[key] = value end }
+				end
+			end
+			ShowTable(body, TableTop(body), rows, "Chat", heading)
+			GreyUnlessPeek(body)
+			return body, #rows
+		end
+		local conversationBody, conversationRows = TypeSection(L["Conversation"], false)
+		-- Typing last, a row of its own (chatShowWhileTyping its Always; see
+		-- Frames.lua): not a message, so not greyed with the peek off.
+		local typing = CreateFrame("Frame", nil, conversationBody)
+		typing:SetSize(1, 1)
+		typing:SetPoint("TOPLEFT", conversationBody, "TOPLEFT", 0, -conversationRows * 24)
+		local typingRows = MessageRows()
+		typingRows.noHeadings = true
+		typingRows.columnTips = nil
+		typingRows.rolesTip = L["The roles it shows chat for: untick one and typing brings up just the input box " ..
+			"while you're that role (your specialization's, or the one picked in the group finder), whatever its ticks or rule say."]
+		typingRows[1] = { key = "chat:typing", label = L["Typing"],
+			tip = L["Pressing Enter to type brings up the chat window with the input box where it's ticked. " ..
+			"Elsewhere just the input box comes up, so you can type without the chat window (or Mouseover " ..
+			"groups set to come up for Typing) showing."],
+			alwaysTip = L["Typing brings up the chat window any time. (The other columns then have nothing to add.)"],
+			alwaysOn = function() return ns.GetDB().chatShowWhileTyping end,
+			setAlways = function(value) ns.GetDB().chatShowWhileTyping = value end }
+		ShowTable(typing, typing, typingRows, "Chat", L["Conversation"])
+		ToPage(typing)
+		RecordKey(chatPanel, "chatShowWhileTyping")
+		TypeSection(L["Game messages"], true)
+
+		-- Channels the player has joined, a row each (ChannelHolder), listed
+		-- again each time the page opens.
+		local channelBody, channelBand = Section(L["Channels"])
+		chatPanel.channelBody = channelBody
+		local headings = CreateFrame("Frame", nil, channelBody)
+		headings:SetSize(1, 1)
+		headings:SetPoint("TOPLEFT", channelBody, "TOPLEFT", 0, 0)
+		ShowTable(headings, headings, MessageRows())
+		chatPanel.channelHeadings = headings
+		PageIntro(channelBand, channelBand.title,
+			L["Channels you've joined, like General or Trade. The list updates each time " ..
+			"you open this page."])
+		chatPanel.noChannels = Label(channelBody, "GameFontDisableSmall", L["No channels joined."])
+		chatPanel.noChannels:SetPoint("TOPLEFT", channelBody, "TOPLEFT", 0, -10)
+
+		-- Other: chat lines of Cinematic's own.
+		local otherBody = Section(L["Other"])
+		local attackAlert = Check(otherBody, "chatAttackAlert", L["Show attacks on the screen"],
+			L["When the LocalDefense channel says a place is under attack (\"Dun Algaz is under attack!\"), " ..
+			"it also shows in red where the zone name appears, with your faction's city bell. The same " ..
+			"place shows at most once every 90 seconds. /cine attacktest shows one."])
+		attackAlert:SetPoint("TOPLEFT", otherBody, "TOPLEFT", -2, -6)
+		local updateNotice = Check(otherBody, "updateNotice", L["Get notified of updates"],
+			L["The first time you log in after Cinematic updates, a line in chat says so, with a " ..
+			"What's new link to what's been added. Chat shows for it while the UI is faded."])
+		updateNotice:SetPoint("TOPLEFT", attackAlert, "BOTTOMLEFT", 0, -2)
+
+		for _, section in ipairs(sections) do
+			ToPage(section.body)
+		end
+		-- (The Always boxes' own settings, for the page's Reset too.)
+		RecordKey(chatPanel, "chatPeekTypes")
+		RecordKey(chatPanel, "chatPeekChannelList")
+
+		chatCanvas:SetScript("OnShow", PageShown(function()
+			if ns.GetDB() then RefreshChannels() end
+			Refresh() -- (after: new channels' rows too)
+			Layout()
+		end, chatPanel))
+		chatCanvas:Hide()
+		RegisterSubpage(chatCanvas, "Chat")
 	end
-
-	-- Right column: the places chat stays up, then channels the player has joined
-	local keepHeader = Label(chatPanel, "GameFontNormal", L["Always show in"])
-	keepHeader:SetPoint("TOPLEFT", windowHeader, "TOPLEFT", 320, 0)
-	local CHAT_TIP = L["The chat window stays up here while the rest of the UI fades. " ..
-		"Only matters where CineMode isn't turned off."]
-	previous = keepHeader
-	for i, place in ipairs({
-		{ "chatInCities", L["Cities"], L["Capital cities. "] },
-		{ "chatInDungeons", L["Dungeons"], "" },
-		{ "chatInRaids", L["Raids"], "" },
-		{ "chatInPvP", L["PvP"], PVP_TIP .. " " },
-	}) do
-		local check = Check(chatPanel, place[1], place[2], place[3] .. CHAT_TIP)
-		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", i == 1 and -2 or 0, i == 1 and -6 or -2)
-		previous = check
-	end
-
-	local channelHeader = Label(chatPanel, "GameFontNormal", L["Show chat for these channels"])
-	channelHeader:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 2, -18)
-
-	chatPanel.channelHelp = PageIntro(chatPanel, channelHeader,
-		L["Channels you've joined, like General or Trade. The list updates each time " ..
-		"you open this page."])
-
-	chatPanel.noChannels = Label(chatPanel, "GameFontDisableSmall", L["No channels joined."])
-	chatPanel.noChannels:SetPoint("TOPLEFT", chatPanel.channelHelp, "BOTTOMLEFT", 0, -10)
-
-	chatCanvas:SetScript("OnShow", PageShown(function()
-		Refresh()
-		if ns.GetDB() then RefreshChannels() end
-	end, chatPanel))
-	chatCanvas:Hide()
-	RegisterSubpage(chatCanvas, "Chat")
 end
 
 -- Rules (a test): a boolean expression in place of a row's ticks, one at

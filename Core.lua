@@ -208,6 +208,7 @@ local DEFAULTS = {
 	chatPeekChannels = false, -- old "include public channels"; now the default for channels not yet set
 	chatPeekTime = 8,         -- seconds the chat window stays up
 	chatUntilWhisperRead = true, -- keep chat up while a whisper tab is flashing (until it's clicked)
+	chatShowWhileTyping = true, -- typing brings up the chat windows, not just the input box
 	chatHideOwn = true, -- your own messages (emotes, say, party...) don't show chat
 	chatHideBubbled = true, -- say/yell you can see as a bubble on screen doesn't show chat
 	chatAttackAlert = true, -- LocalDefense "... is under attack!" also shows as a title
