@@ -138,11 +138,20 @@ L["The glow round a member with threat (aggro). To hide it all the time, CineMod
 L["Player names"] = "Nombres de jugadores"
 L["Pet names"] = "Nombres de mascotas"
 L["Group titles"] = "Títulos de grupo"
+L["Party title"] = "Título del grupo"
+L["Raid-style party players"] = "Grupo estilo banda: jugadores"
+L["Raid-style party pets"] = "Grupo estilo banda: mascotas"
+L["Raid-style party role icons"] = "Grupo estilo banda: iconos de rol"
+L["Raid-style party threat highlight"] = "Grupo estilo banda: resaltado de amenaza"
+L["Raid-style party player names"] = "Grupo estilo banda: nombres de jugadores"
+L["Raid-style party pet names"] = "Grupo estilo banda: nombres de mascotas"
+L["Raid-style party title"] = "Grupo estilo banda: título"
+L["Raid-style party buffs"] = "Grupo estilo banda: beneficios"
+L["Raid-style party debuffs"] = "Grupo estilo banda: perjuicios"
 L["Buffs"] = "Beneficios"
 L["Debuffs"] = "Perjuicios"
 L["Raid Frame Manager"] = "Gestor de marcos de banda"
 L["Target highlight"] = "Resaltado del objetivo"
-L["Show the outline round your target's raid frame. Untick it to hide it all the time, CineMode or not, in fights and out."] = "Muestra el contorno alrededor del marco de banda de tu objetivo. Desmárcalo para ocultarlo siempre, en CineMode o no, en combate y fuera."
 L["The white outline round your target's raid frame."] = "El contorno blanco alrededor del marco de banda de tu objetivo."
 L["Flag carriers"] = "Portadores de bandera"
 L["Minimap"] = "Minimapa"
@@ -210,6 +219,7 @@ L["Someone joining or leaving your party or raid, or you joining or leaving one.
 L["Cooldown recharging"] = "Reutilización en curso"
 L["While a spell in the Cooldown Manager (or Enhanced Cooldown Manager's cooldown bars) is still recharging, until they're all ready. Not the global cooldown (Cooldown Manager page)."] = "Mientras un hechizo del Gestor de reutilización (o las barras de reutilización de Enhanced Cooldown Manager) se está recargando, hasta que todos estén listos. No el tiempo de reutilización global (página Gestor de reutilización)."
 L["Action bars"] = "Barras de acción"
+L["Extra action bars"] = "Barras de acción adicionales"
 L["Action bars 6-8"] = "Barras de acción 6-8"
 L["Side bars"] = "Barras laterales"
 L["Player"] = "Jugador"
@@ -621,6 +631,9 @@ L["Frames ticked In combat (here and on the Advanced Frames page) stay up after 
 L["Unit frames"] = "Marcos de unidad"
 L["Interface"] = "Interfaz"
 L["Party frames (not raid-style)"] = "Marcos de grupo (no estilo banda)"
+L["Party frames (raid-style)"] = "Marcos de grupo (estilo banda)"
+L["Same as raid frames"] = "Igual que los marcos de banda"
+L["Ticked: party frames shown raid-style (the game's Use Raid-Style Party Frames, in Edit Mode) fade as the Raid frames rows below say. Untick it to give them rows of their own."] = "Marcado: los marcos de grupo con estilo de banda (la opción del juego Usar marcos de grupo con estilo de banda, en el Modo edición) se desvanecen según las filas de Marcos de banda de abajo. Desmárcalo para darles filas propias."
 L["Battlegrounds"] = "Campos de batalla"
 L["Other"] = "Otros"
 L["Fishing"] = "Pesca"
@@ -1462,12 +1475,7 @@ L["Drag windows to move them"] = "Arrastrar ventanas para moverlas"
 L["Drag the game's windows (quest log, group finder, character, spellbook and the like) to move them. A window opens where you last dropped it from then on, in this profile. Some windows can't be moved in a fight."] = "Arrastra las ventanas del juego (registro de misiones, buscador de grupo, personaje, libro de hechizos y similares) para moverlas. A partir de entonces, una ventana se abre donde la soltaste por última vez, en este perfil. Algunas ventanas no se pueden mover en combate."
 L["Put windows back"] = "Devolver ventanas"
 L["Forget where you've dragged the windows to: each opens in its usual place again."] = "Olvida adónde has arrastrado las ventanas: cada una vuelve a abrirse en su sitio de siempre."
-L["Loot roll window"] = "Ventana de tiradas de botín"
 L["In a group, items rolled on show in a window instead of only as lines in chat: each item, a bar for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. /cine rolls shows the latest rolls."] = "En grupo, los objetos que se sortean aparecen en una ventana en vez de solo como líneas en el chat: cada objeto, una barra con el tiempo que queda y lo que eligió cada uno (necesidad, codicia, transfiguración) con su número, y el ganador resaltado arriba. Se abre al caer un objeto, justo debajo del marco de tirada del juego, para que veas qué ha elegido cada uno antes de elegir tú, y ocupa su lugar cuando lo has hecho. Cada objeto se desvanece unos segundos después de que alguien lo gane (señálalos para que se queden). Va con los marcos de tirada del juego: con \"Arrastrar ventanas para moverlas\" activado, arrastrar cualquiera de los dos mueve ambos. /cine rolls muestra las últimas tiradas."
-L["Test"] = "Probar"
-L["Show the window with two made-up items and players picking and rolling, to see how it looks."] = "Muestra la ventana con dos objetos inventados y jugadores eligiendo y tirando, para ver cómo queda."
-L["Leave roll lines out of chat"] = "Quitar las líneas de tiradas del chat"
-L["\"Name selected Need\", \"Need Roll - 87 by Name\" and \"Name won\" lines stay out of the chat window, as the roll window shows them. Your own \"You receive loot\" line stays."] = "Las líneas como \"Nombre ha elegido Necesidad\", \"Tirada de Necesidad - 87 por Nombre\" y \"Nombre ha ganado\" no salen en el chat, ya que la ventana de tiradas las muestra. Tu propia línea de \"Recibes botín\" se queda."
 
 -- RollWindow.lua
 L["No rolls yet."] = "Aún no hay tiradas."
@@ -1545,13 +1553,21 @@ L["Shadow sharpness"] = "Nitidez de las sombras"
 L["This game version has none of these settings."] = "Esta versión del juego no tiene ninguna de estas opciones."
 L["Ground clutter changes show as the ground around you loads again: move on a little, or /reload. Changing the game's Graphics menu doesn't undo these: they're written again over its new settings."] = "Los cambios de vegetación se ven cuando el suelo a tu alrededor se vuelve a cargar: avanza un poco o usa /reload. Cambiar el menú de Gráficos del juego no los deshace: se vuelven a escribir sobre sus nuevas opciones."
 
--- Options.lua: the Vision page (and HealVisionFrames.lua)
+-- Options.lua: the Vision hub's pages (and HealVisionFrames.lua)
 L["Vision"] = "Visión"
-L["Ways of showing just what matters: the health of a duel near you, what you still need for your quests, " ..
-	"or who in your group needs healing."] = "Formas de mostrar solo lo que importa: la salud de un duelo cerca de ti, " ..
-	"lo que aún necesitas para tus misiones, o quién de tu grupo necesita sanación."
+L["Visions"] = "Visiones"
+L["Ways of showing just what matters: the health of a duel near you, and the group's loot rolls. " ..
+	"Heal Vision and Quest Vision have pages of their own."] = "Formas de mostrar solo lo que importa: la salud de " ..
+	"un duelo cerca de ti y las tiradas de botín del grupo. Heal Vision y la Visión de misión tienen sus propias páginas."
+L["Roll Vision"] = "Visión de tiradas"
 L["Quest Vision"] = "Visión de misión"
-L["Off: none of Quest Vision below works, and each keeps its tick for when you turn this back on."] = "Desactivado: nada de la Visión de misión de abajo funciona, y cada opción conserva su marca para cuando lo vuelvas a activar."
+L["Mobs and NPCs you still need for a quest objective keep their nameplates up, with a quest mark on " ..
+	"them and on your target frame, and the quest object in front of you glows."] = "Los enemigos y PNJ que aún " ..
+	"necesitas para un objetivo de misión mantienen visibles sus placas de nombre, con una marca de misión en ellas " ..
+	"y en el marco de tu objetivo, y el objeto de misión que tienes delante brilla."
+L["On: Heal Vision works as ticked below. Off: it doesn't, and each keeps its tick for " ..
+	"when you turn this back on."] = "Activado: Heal Vision funciona como esté marcado abajo. Desactivado: no funciona, " ..
+	"y cada opción conserva su marca para cuando lo vuelvas a activar."
 L["Always show their nameplates"] = "Mostrar siempre sus placas de nombre"
 L["In CineMode, the nameplates of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
 	"an NPC to talk to) show, in fights and out, whatever the Nameplates page's grids say. Once the " ..
@@ -1735,11 +1751,11 @@ L["FlareUI support"] = "Compatibilidad con FlareUI"
 L["FlareUI's unit frames, resource bars, buffs, quest tracker, party and raid frames fade in CineMode, following the Standard Frames rows of the frames they replace."] = "Los marcos de unidad, barras de recursos, beneficios, seguimiento de misiones y marcos de grupo y banda de FlareUI se desvanecen en CineMode, siguiendo las filas de Marcos estándar de los marcos que sustituyen."
 L["Custom Visibility Rules"] = "Reglas de visibilidad personalizadas"
 L["Give any frame, nameplate row or unit frame part a rule of its own instead of its ticks, like \"In combat AND (Open World OR BGs & Arenas)\". Build it with buttons at the bottom of the Advanced Frames page."] = "Da a cualquier marco, fila de placas de nombre o parte de un marco de unidad una regla propia en lugar de sus casillas, como \"En combate Y (Mundo abierto O CB y arenas)\". Créala con botones al final de la página Marcos avanzados."
-L["The party and raid frames show only who needs healing. Pick where it works on the Vision page."] = "Los marcos de grupo y de banda muestran solo a quien necesita sanación. Elige dónde funciona en la página Visión."
+L["The party and raid frames show only who needs healing. Pick where it works on the Heal Vision page."] = "Los marcos de grupo y de banda muestran solo a quien necesita sanación. Elige dónde funciona en la página Heal Vision."
 L["A calculator button on your talents window opens a talent planner that looks just like it, starting from your talents. Plan a build, see the level it needs, then copy it over to your talents window to apply."] = "Un botón de calculadora en tu ventana de talentos abre un planificador de talentos igual que ella, empezando por tus talentos. Planea una configuración, mira el nivel que necesita y cópiala a tu ventana de talentos para aplicarla."
 L["Retail profile"] = "Perfil Retail"
 L["A new Retail profile gives WoW Forever retail's look: Cinematic's own Edit Mode layout, with action bars 1 to 3, the micro menu and bags, and the XP bar each coming up on its own. Switch back to Default and your own layout returns."] = "Un nuevo perfil Retail da a WoW Forever el aspecto de retail: la disposición propia de Cinematic en el Modo Edición, con las barras de acción 1 a 3, el micromenú y las bolsas, y la barra de experiencia apareciendo cada uno por su cuenta. Vuelve a Predeterminado y regresa tu propia disposición."
 L["Marker wheels"] = "Ruedas de marcas"
 L["Hold a key to bring up a wheel of raid markers and put one on your target, or drop a ground marker where you let go. A master wheel opens any of the wheels from one key. Set the keys on the Keybinds page."] = "Mantén pulsada una tecla para abrir una rueda de marcas de banda y ponerle una a tu objetivo, o dejar una marca de suelo donde sueltes. Una rueda de ruedas abre cualquiera de las ruedas con una sola tecla. Asigna las teclas en la página Teclas."
 L["Mobs and NPCs you still need for a quest keep their nameplates up, with a golden ! on their plate and your target frame. Optionally, the quest object in front of you glows so it's easy to spot."] = "Los enemigos y PNJ que aún necesitas para una misión mantienen visibles sus placas de nombre, con un ! dorado en su placa y en el marco de tu objetivo. Opcionalmente, el objeto de misión que tienes delante brilla para que sea fácil de ver."
-L["In a group, a window shows each item being rolled on, with everyone's pick and roll and the winner on top, so you needn't read the rolls in chat. Turn it on in the General page."] = "En grupo, una ventana muestra cada objeto que se sortea, con lo que eligió y sacó cada uno y el ganador arriba, para que no tengas que leer las tiradas en el chat. Actívala en la página General."
+L["In a group, a window shows each item being rolled on, with everyone's pick and roll and the winner on top, so you needn't read the rolls in chat. Turn it on in the Visions page."] = "En grupo, una ventana muestra cada objeto que se sortea, con lo que eligió y sacó cada uno y el ganador arriba, para que no tengas que leer las tiradas en el chat. Actívala en la página Visiones."

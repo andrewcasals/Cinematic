@@ -506,7 +506,7 @@ function ns.HealVisionDebug(unit)
 			or role == "DAMAGER" and "damageHide"
 		on = ns.IsSuspended() and "false (stopped for this session)"
 			or (list and ns.RoleHidden(db, list, "healVision") and ("false (role button: off as " .. role .. ")"))
-			or (db.handleVision == false and "false (Vision page switched off)")
+			or (db.handleHealVision == false and "false (Heal Vision page switched off)")
 			or "false (Show in grid: not ticked here)"
 	end
 	local rule = Rule(unit)

@@ -11,10 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
-	{ date = "2026-10-22", page = "General", title = "Loot roll window",
+	{ date = "2026-10-22", page = "Vision", title = "Roll Vision",
 		text = "In a group, a window shows each item being rolled on, with everyone's pick and roll and the " ..
-		"winner on top, so you needn't read the rolls in chat. Turn it on in the General page." },
-	{ date = "2026-10-21", page = "Vision", title = "Quest Vision",
+		"winner on top, so you needn't read the rolls in chat. Turn it on in the Visions page." },
+	{ date = "2026-10-21", page = "Quest Vision", title = "Quest Vision",
 		text = "Mobs and NPCs you still need for a quest keep their nameplates up, with a golden ! on their " ..
 		"plate and your target frame. Optionally, the quest object in front of you glows so it's easy to spot." },
 	{ date = "2026-10-21", page = "Keybinds", title = "Marker wheels",
@@ -29,8 +29,8 @@ ns.CHANGELOG_FEATURES = {
 		text = "A calculator button on your talents window opens a talent planner that looks just like it, " ..
 		"starting from your talents. Plan a build, see the level it needs, then copy it over to your talents " ..
 		"window to apply." },
-	{ date = "2026-10-20", page = "Vision", title = "Heal Vision",
-		text = "The party and raid frames show only who needs healing. Pick where it works on the Vision page." },
+	{ date = "2026-10-20", page = "Heal Vision", title = "Heal Vision",
+		text = "The party and raid frames show only who needs healing. Pick where it works on the Heal Vision page." },
 	{ date = "2026-10-19", page = "Advanced Frames", title = "Custom Visibility Rules",
 		text = "Give any frame, nameplate row or unit frame part a rule of its own instead of its ticks, like " ..
 		"\"In combat AND (Open World OR BGs & Arenas)\". Build it with buttons at the bottom of the Advanced " ..

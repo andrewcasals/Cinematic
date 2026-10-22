@@ -1039,7 +1039,6 @@ do
 			{ "Chat", "Interface\\Icons\\INV_Scroll_03" },
 			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout" },
 			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01" },
-			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl" },
 		} },
 		{ name = "Camera", pages = {
 			{ "Camera Modes", "Interface\\Icons\\INV_Misc_Spyglass_03" },
@@ -1051,6 +1050,11 @@ do
 			{ "Effects", "Interface\\Icons\\Spell_Holy_Restoration", label = "General" },
 			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02" },
 			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04" },
+		} },
+		{ name = "Visions", pages = {
+			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
+			{ "Heal Vision", "Interface\\Icons\\Spell_Holy_FlashHeal" },
+			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01" },
 		} },
 		{ name = "Audio", pages = {
 			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01" },
@@ -4200,6 +4204,43 @@ local function ShowTable(content, anchor, rows, ...)
 	return lastLabel -- (the last row's label, to place what comes below)
 end
 
+-- A section's name row on the Unit Frames and Standard Frames pages: a band
+-- across the top of frame (BAND_HEIGHT high), clicked to open or close the
+-- section (the +/- sits in the page margin). check: a tick to sit at its
+-- right end ("Same as target"). nameRow:SetOpen(open) shows which it is.
+local BAND_HEIGHT = 26
+local function SectionBand(frame, title, onClick, check)
+	local nameRow = CreateFrame("Button", nil, frame)
+	nameRow:SetPoint("TOPLEFT", -18, 0)
+	nameRow:SetPoint("TOPRIGHT")
+	nameRow:SetHeight(BAND_HEIGHT)
+	local band = nameRow:CreateTexture(nil, "BACKGROUND")
+	band:SetAllPoints()
+	band:SetColorTexture(1, 1, 1, 0.05)
+	local hover = nameRow:CreateTexture(nil, "HIGHLIGHT")
+	hover:SetAllPoints()
+	hover:SetColorTexture(1, 0.82, 0, 0.08)
+	local icon = nameRow:CreateTexture(nil, "ARTWORK")
+	icon:SetSize(14, 14)
+	icon:SetPoint("LEFT", nameRow, "LEFT", 1, 0)
+	Label(nameRow, "GameFontNormal", title):SetPoint("LEFT", nameRow, "LEFT", 18, 0)
+	nameRow:SetScript("OnClick", onClick)
+	function nameRow:SetOpen(open)
+		icon:SetTexture(open and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
+	end
+	if check then
+		-- The label hangs off the row's right edge and the box sits left of it,
+		-- so the text never runs past the edge whatever its width (measuring it
+		-- here came up short and cut it off).
+		local text = check.Text or check.text
+		text:ClearAllPoints()
+		text:SetPoint("RIGHT", nameRow, "RIGHT", -6, 0)
+		check:SetPoint("RIGHT", text, "LEFT", -2, 0)
+		check:SetFrameLevel(nameRow:GetFrameLevel() + 2)
+	end
+	return nameRow
+end
+
 -- Sub-page for combat: staying cinematic in fights, and what to show then.
 local function CreateCombatPanel()
 	local canvas, content = CreateScrollPage()
@@ -4281,34 +4322,170 @@ local function CreateCombatPanel()
 		lastCheck, lastIndent = petCam, INDENT
 	end
 
-	local lastRow = lastCheck
+	-- Each section a band that opens and closes with a click, its table under
+	-- it, as on the Unit Frames page: all open to start with, but the
+	-- raid-style party frames' (page = "rsparty") while its "Same as raid
+	-- frames" is ticked, when the raid frames' rows decide for them. Unticked,
+	-- it opens on rows of their own, starting from the raid frames' choices;
+	-- opened while ticked, they're greyed. (section.widgets: what its table
+	-- made; section.last: its last row's label, to place the next one below.)
+	local sections = {}
+	local top = CreateFrame("Frame", nil, content)
+	top:SetSize(1, 1)
+	top:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 2 - lastIndent, -16) -- (back to the column edge)
+	local function OwnPartyRows()
+		-- (The page is built before the settings load: the default then.)
+		local db = ns.GetDB()
+		return db ~= nil and db.raidStylePartySame == false
+	end
+	local function Layout()
+		local above
+		for _, section in ipairs(sections) do
+			section.frame:ClearAllPoints()
+			if above then
+				section.frame:SetPoint("TOPLEFT", above.open and above.last or above.frame, "BOTTOMLEFT", 0,
+					above.open and -16 or -6)
+			else
+				section.frame:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
+			end
+			for _, widget in ipairs(section.widgets) do
+				widget:SetShown(section.open)
+			end
+			section.nameRow:SetOpen(section.open)
+			above = section
+		end
+		FitContentHeight(content)
+	end
+	-- Extra action bars: open only with a box ticked in its grid.
+	local function AnyTicked(rows)
+		for _, item in ipairs(rows) do
+			for _, column in ipairs(FRAME_COLUMNS) do
+				if column[2](item.key) then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	-- (The raid-style party frames' section as its tick says, and the extra
+	-- action bars' as their ticks say, on show and reset.)
+	local function OpenPartySection()
+		for _, section in ipairs(sections) do
+			if section.page == "rsparty" then
+				section.open = OwnPartyRows()
+			elseif section.page == "extrabars" then
+				section.open = ns.GetDB() ~= nil and AnyTicked(section.rows)
+			end
+		end
+		Layout()
+	end
+	resetHooks[content] = OpenPartySection
+	-- Set apart: its rows start as the raid frames' (ticks, roles and rules),
+	-- unless they have choices of their own from before.
+	local ROLE_SETTINGS = { "tankHide", "healerHide", "damageHide" }
+	local function CopyRaidRows()
+		local db = ns.GetDB()
+		for _, key in pairs(ns.RAID_STYLE_PARTY) do
+			for _, column in ipairs(FRAME_COLUMNS) do
+				if db[column[3]][key] ~= nil then
+					return
+				end
+			end
+		end
+		for raidKey, key in pairs(ns.RAID_STYLE_PARTY) do
+			for _, column in ipairs(FRAME_COLUMNS) do
+				db[column[3]][key] = column[2](raidKey)
+			end
+			for _, setting in ipairs(ROLE_SETTINGS) do
+				if type(db[setting]) == "table" then
+					db[setting][key] = db[setting][raidKey]
+				end
+			end
+			if type(db.frameRules) == "table" then
+				db.frameRules[key] = db.frameRules[raidKey]
+			end
+		end
+	end
+	-- What's on the page, to tell what a table adds.
+	local function Widgets()
+		local set = {}
+		for _, object in ipairs({ content:GetChildren() }) do set[object] = true end
+		for _, object in ipairs({ content:GetRegions() }) do set[object] = true end
+		return set
+	end
+
+	local SECTION_WIDTH = FRAME_LABEL_WIDTH + #FRAME_COLUMNS * FRAME_COLUMN_WIDTH + (ROLES_MENU and 46 or 0)
 	local function Section(page, heading)
 		local sectionRows = {}
 		for _, item in ipairs(ns.COMBAT_SHOW) do
-			if item.page == page and ns.OptionAvailable(item) and not item.key:find("^addon:") then
+			if item.page == page and ns.OptionAvailable(item) and not item.key:find("^addon:")
+				and not (item.auraFrames and not _G.CompactUnitFrame_UtilSetBuff) then
 				sectionRows[#sectionRows + 1] = item
 			end
 		end
 		if #sectionRows == 0 then
 			return
 		end
-		local header = Header(content, heading, lastRow, -28)
-		if lastRow == lastCheck then
-			header:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", -lastIndent, -16) -- (back to the column edge)
+		local section = { page = page, open = page ~= "rsparty" or OwnPartyRows(), widgets = {}, rows = sectionRows }
+		if page == "extrabars" then
+			section.open = ns.GetDB() ~= nil and AnyTicked(sectionRows)
 		end
-		lastRow = ShowTable(content, header, sectionRows, "Standard Frames", heading)
+		local frame = CreateFrame("Frame", nil, content)
+		frame:SetSize(SECTION_WIDTH, BAND_HEIGHT)
+		section.frame = frame
+		local same
+		if page == "rsparty" then
+			same = Check(content, "raidStylePartySame", L["Same as raid frames"],
+				L["Ticked: party frames shown raid-style (the game's Use Raid-Style Party Frames, in Edit Mode) " ..
+				"fade as the Raid frames rows below say. Untick it to give them rows of their own."], function(value)
+				ns.GetDB().raidStylePartySame = value
+				if not value then
+					CopyRaidRows()
+				end
+				section.open = not value
+				Refresh()
+				Layout()
+			end)
+		end
+		section.nameRow = SectionBand(frame, heading, function()
+			section.open = not section.open
+			Layout()
+		end, same)
+		local before = Widgets()
+		section.last = ShowTable(content, frame, sectionRows, "Standard Frames", heading)
+		for object in pairs(Widgets()) do
+			if not before[object] then
+				section.widgets[#section.widgets + 1] = object
+				-- (Greyed while the raid frames' rows decide for them.)
+				if same and object.Refresh and object.SetEnabled then
+					local refresh = object.Refresh
+					object.Refresh = function(self)
+						refresh(self)
+						if not OwnPartyRows() then
+							self:SetEnabled(false)
+						end
+					end
+				end
+			end
+		end
+		sections[#sections + 1] = section
 	end
 	local SECTIONS = {
 		{ "units", L["Unit frames"] }, { "combat", L["Combat"] }, { "bars", L["Action bars"] },
-		{ "interface", L["Interface"] }, { "minimap", L["Minimap"] }, { "party", L["Party frames (not raid-style)"] },
-		{ "raid", L["Raid frames"] }, { "bg", L["Battlegrounds"] },
+		{ "extrabars", L["Extra action bars"] }, { "interface", L["Interface"] }, { "minimap", L["Minimap"] }, { "party", L["Party frames (not raid-style)"] },
+		{ "rsparty", L["Party frames (raid-style)"] }, { "raid", L["Raid frames"] }, { "bg", L["Battlegrounds"] },
 		{ false, L["Other"] }, -- (any row not given a section)
 	}
 	for _, section in ipairs(SECTIONS) do
 		Section(section[1] or nil, section[2])
 	end
+	Layout()
 
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	local pageShown = PageShown(Refresh, content)
+	canvas:SetScript("OnShow", function()
+		OpenPartySection()
+		pageShown()
+	end)
 	canvas:Hide()
 	RegisterSubpage(canvas, L["Standard Frames"])
 end
@@ -4356,7 +4533,7 @@ local function CreatePortraitsPanel()
 		-- (Nine columns must fit the page's width, no wider than eight were at
 		-- 128 + 8 * 58: wider, the last column and the Same as target tick were
 		-- cut off at the right edge.)
-		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, SECTION_HEADER = 124, 52, 24, 26
+		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 124, 52, 24
 		local COLUMNS = {
 			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
 			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] }, { "Auras", L["Auras"] },
@@ -4423,9 +4600,8 @@ local function CreatePortraitsPanel()
 				for _, widget in ipairs(section.widgets) do
 					widget:SetShown(section.open)
 				end
-				section.frame:SetHeight(SECTION_HEADER + (section.open and section.height or 0))
-				section.icon:SetTexture(section.open and "Interface\\Buttons\\UI-MinusButton-Up"
-					or "Interface\\Buttons\\UI-PlusButton-Up")
+				section.frame:SetHeight(BAND_HEIGHT + (section.open and section.height or 0))
+				section.nameRow:SetOpen(section.open)
 				above = section.frame
 			end
 			FitContentHeight(content)
@@ -4481,29 +4657,11 @@ local function CreatePortraitsPanel()
 			frame:SetWidth(LABEL_WIDTH + most * COLUMN_WIDTH)
 			section.frame = frame
 
-			-- The name row: click to open or close (the +/- sits in the page margin).
-			local nameRow = CreateFrame("Button", nil, frame)
-			nameRow:SetPoint("TOPLEFT", -18, 0)
-			nameRow:SetPoint("TOPRIGHT")
-			nameRow:SetHeight(SECTION_HEADER)
-			local band = nameRow:CreateTexture(nil, "BACKGROUND")
-			band:SetAllPoints()
-			band:SetColorTexture(1, 1, 1, 0.05)
-			local hover = nameRow:CreateTexture(nil, "HIGHLIGHT")
-			hover:SetAllPoints()
-			hover:SetColorTexture(1, 0.82, 0, 0.08)
-			section.icon = nameRow:CreateTexture(nil, "ARTWORK")
-			section.icon:SetSize(14, 14)
-			section.icon:SetPoint("LEFT", nameRow, "LEFT", 1, 0)
-			Label(nameRow, "GameFontNormal", section.title):SetPoint("LEFT", nameRow, "LEFT", 18, 0)
-			nameRow:SetScript("OnClick", function()
-				section.open = not section.open
-				Layout()
-			end)
-
+			-- The name row: click to open or close.
+			local check
 			if section.same then
 				local same = section.same
-				local check = Check(content, same, L["Same as target"],
+				check = Check(content, same, L["Same as target"],
 					L["Ticked: this frame shows the parts the Target grid says. Untick it to give the frame " ..
 					"choices of its own."], function(value)
 					ns.GetDB()[same] = value
@@ -4515,18 +4673,14 @@ local function CreatePortraitsPanel()
 					Refresh()
 					Layout()
 				end)
-				-- The label hangs off the row's right edge and the box sits left of it,
-				-- so the text never runs past the edge whatever its width (measuring it
-				-- here came up short and cut it off).
-				local text = check.Text or check.text
-				text:ClearAllPoints()
-				text:SetPoint("RIGHT", nameRow, "RIGHT", -6, 0)
-				check:SetPoint("RIGHT", text, "LEFT", -2, 0)
-				check:SetFrameLevel(nameRow:GetFrameLevel() + 2)
 			end
+			section.nameRow = SectionBand(frame, section.title, function()
+				section.open = not section.open
+				Layout()
+			end, check)
 
 			local columns = section.columns
-			local gridTop = -SECTION_HEADER - 6
+			local gridTop = -BAND_HEIGHT - 6
 			for c, column in ipairs(columns) do
 				local text = Label(content, "GameFontNormalSmall", column[2])
 				text:SetWidth(COLUMN_WIDTH)
@@ -4698,7 +4852,6 @@ local function CreateQualityPanel()
 		"when you turn this back on."], subtitle, function()
 		if ns.RefreshTalentLink then ns.RefreshTalentLink() end
 		if ns.RefreshTalentCalc then ns.RefreshTalentCalc() end
-		if ns.RefreshRollWindow then ns.RefreshRollWindow() end
 	end)
 
 	local stack = Stack(switch, "check")
@@ -4781,33 +4934,6 @@ local function CreateQualityPanel()
 		end
 	end)
 	stack:Add(putBack, "label", 24)
-	-- (RollWindow.lua: only where the game has a loot history.)
-	if ns.hasRollWindow then
-		local rolls = stack:Add(Check(content, "rollWindow", L["Loot roll window"],
-			L["In a group, items rolled on show in a window instead of only as lines in chat: each item, a bar " ..
-			"for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. " ..
-			"It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. " ..
-			"/cine rolls shows the latest rolls."],
-			function(value)
-				ns.GetDB().rollWindow = value
-				ns.RefreshRollWindow()
-				Refresh() -- (greys the tick below)
-			end), "check")
-		local test = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-		test:SetSize(80, 22)
-		test:SetText(L["Test"])
-		test:SetPoint("LEFT", rolls.Text or rolls.text, "RIGHT", 12, 0)
-		Tooltip(test, L["Show the window with two made-up items and players picking and rolling, to see how it looks."])
-		test:SetScript("OnClick", function() ns.TestRollWindow() end)
-		test.Refresh = function() end
-		GreyUnless(test, function(db) return db.rollWindow end)
-		controls[#controls + 1] = test
-		local chat = stack:Add(Check(content, "rollWindowChat", L["Leave roll lines out of chat"],
-			L["\"Name selected Need\", \"Need Roll - 87 by Name\" and \"Name won\" lines stay out of the chat " ..
-			"window, as the roll window shows them. Your own \"You receive loot\" line stays."]), "check", 24)
-		GreyUnless(chat, function(db) return db.rollWindow end)
-	end
-
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	-- (Quality of life's first page: "General" there.)
@@ -6556,55 +6682,74 @@ local function CreateCooldownPanel()
 	RegisterSubpage(canvas, L["Cooldown Manager"])
 end
 
--- Sub-page: the visions, each a way of showing just what matters. Duel
--- Vision: the plates of two players dueling near you (see Effects). Heal
--- Vision: the party and raid frames show only who needs healing
--- (HealVisionFrames.lua).
+-- Sub-pages: the visions, each a way of showing just what matters, in a hub
+-- of their own. General: Duel Vision, the plates of two players dueling near
+-- you (see Effects), and Roll Vision, a window of the group's loot rolls
+-- (RollWindow.lua). Heal Vision: the party and raid frames show only who
+-- needs healing (HealVisionFrames.lua). Quest Vision: what you still need for
+-- your quests (QuestMobs.lua, QuestGlow.lua).
 local function CreateVisionPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Vision"])
+	local title = Label(content, "GameFontNormalLarge", L["General"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local note = PageIntro(content, title,
-		L["Ways of showing just what matters: the health of a duel near you, what you still need for your quests, " ..
-		"or who in your group needs healing."])
+		L["Ways of showing just what matters: the health of a duel near you, and the group's loot rolls. " ..
+		"Heal Vision and Quest Vision have pages of their own."])
 
 	local switch = PageSwitch(content, "handleVision", L["Enable page"],
 		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 		"when you turn this back on."], note, function()
-		if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
+		if ns.RefreshRollWindow then ns.RefreshRollWindow() end
 	end)
 
-	local duelHeader = Header(content, L["Duel Vision"], switch, -18)
-	duelHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -18)
-	local duelCheck = Check(content, "duelPlates", L["Enable"],
+	local stack = Stack(switch, "check")
+	stack:Header(content, L["Duel Vision"])
+	local duelCheck = stack:Add(Check(content, "duelPlates", L["Enable"],
 		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
 		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
 		"kept invisible and click-through bar the duelists'. Each duel has its own colour, and the winner " ..
-		"and loser show when it ends. Needs the Nameplates page enabled."])
-	duelCheck:SetPoint("TOPLEFT", duelHeader, "BOTTOMLEFT", -2, -6)
+		"and loser show when it ends. Needs the Nameplates page enabled."]), "check")
 	GreyUnless(duelCheck, function(db) return db.handlePlates end)
+
+	-- (Only where the game has a loot history.)
+	if ns.hasRollWindow then
+		stack:Header(content, L["Roll Vision"])
+		stack:Add(Check(content, "rollWindow", L["Enable"],
+			L["In a group, items rolled on show in a window instead of only as lines in chat: each item, a bar " ..
+			"for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. " ..
+			"It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. " ..
+			"/cine rolls shows the latest rolls."],
+			function(value)
+				ns.GetDB().rollWindow = value
+				ns.RefreshRollWindow()
+			end), "check")
+	end
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	-- (The Vision hub's first page: "General" there.)
+	RegisterSubpage(canvas, "Vision")
 
 	-- Quest Vision: mobs and NPCs you still need for a quest objective (see
 	-- QuestMobs): their plates kept up, a quest icon on them and on the target frame.
-	local questHeader = Header(content, L["Quest Vision"], duelCheck, -24)
-	questHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -24)
-	local questStack = Stack(questHeader)
+	canvas, content = CreateScrollPage()
+	title = Label(content, "GameFontNormalLarge", L["Quest Vision"])
+	title:SetPoint("TOPLEFT", 16, -16)
+	note = PageIntro(content, title,
+		L["Mobs and NPCs you still need for a quest objective keep their nameplates up, with a quest mark on " ..
+		"them and on your target frame, and the quest object in front of you glows."])
 	local function ApplyQuest()
 		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
 		if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
 	end
-	local questEnable = Check(content, "questVision", L["Enable"],
-		L["Off: none of Quest Vision below works, and each keeps its tick for when you turn this back on."],
-		function(value)
-			ns.GetDB().questVision = value
-			ApplyQuest()
-			Refresh() -- grey out / enable the rest
-		end)
-	questStack:Add(questEnable, "check")
-	local function QuestOn(db) return db.questVision ~= false end
-	local function QuestPlatesOn(db) return db.questVision ~= false and db.handlePlates end
+	-- (Its switch: questVision, its Enable before it had a page.)
+	local questSwitch = PageSwitch(content, "questVision", L["Enable page"],
+		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
+		"when you turn this back on."], note, ApplyQuest)
+	local questStack = Stack(questSwitch, "check")
+	local function QuestPlatesOn(db) return db.handlePlates end
 	local questPlates = Check(content, "plateQuestMobs", L["Always show their nameplates"],
 		L["In CineMode, the nameplates of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
 		"an NPC to talk to) show, in fights and out, whatever the Nameplates page's grids say. Once the " ..
@@ -6622,7 +6767,6 @@ local function CreateVisionPanel()
 		ns.GetDB().targetQuestIcon = value
 		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
 	end)
-	GreyUnless(questTarget, QuestOn)
 	questStack:Add(questTarget, "check")
 	local questGlow = Check(content, "questObjectGlow", L["Glow on quest objects"],
 		L["The thing on the ground you pick up or use for a quest objective glows gold, with the quest mark " ..
@@ -6633,9 +6777,13 @@ local function CreateVisionPanel()
 			ns.GetDB().questObjectGlow = value
 			if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
 		end)
-	GreyUnless(questGlow, QuestOn)
 	questStack:Add(questGlow, "check")
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Quest Vision")
 
+	-- Heal Vision.
+	canvas, content = CreateScrollPage()
 	do
 		local function Apply()
 			if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
@@ -6648,9 +6796,9 @@ local function CreateVisionPanel()
 		end
 		local function IfAny(db) return ns.HealVisionAny(db) end
 
-		local healHeader = Header(content, L["Heal Vision"], questGlow, -24)
-		healHeader:SetPoint("TOPLEFT", questGlow, "BOTTOMLEFT", 2, -24)
-		local healNote = PageIntro(content, healHeader,
+		local healTitle = Label(content, "GameFontNormalLarge", L["Heal Vision"])
+		healTitle:SetPoint("TOPLEFT", 16, -16)
+		local healIntro = PageIntro(content, healTitle,
 			L["The game's party and raid frames show only who needs healing: everyone (pets too) while below full " ..
 			"health, and tanks as set below. The group titles hide. The members stay " ..
 			"in their places, so there are gaps. Out of combat, the mouse over the frames brings everyone back. " ..
@@ -6682,9 +6830,13 @@ local function CreateVisionPanel()
 		local function ColumnX(c)
 			return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= 2 and GAP or 0) + (c >= firstGroup and GAP or 0)
 		end
+		local healSwitch = PageSwitch(content, "handleHealVision", L["Enable page"],
+			L["On: Heal Vision works as ticked below. Off: it doesn't, and each keeps its tick for " ..
+			"when you turn this back on."], healIntro, ApplyFrames)
+
 		local gridTop = CreateFrame("Frame", nil, content)
 		gridTop:SetSize(ColumnX(#COLUMNS) + COLUMN_WIDTH, 26)
-		gridTop:SetPoint("TOPLEFT", healNote, "BOTTOMLEFT", 0, -10)
+		gridTop:SetPoint("TOPLEFT", healSwitch, "BOTTOMLEFT", 2, -10)
 		for c, column in ipairs(COLUMNS) do
 			local heading = Label(gridTop, "GameFontNormalSmall", column.heading)
 			heading:SetWidth(COLUMN_WIDTH)
@@ -6834,7 +6986,7 @@ local function CreateVisionPanel()
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Vision")
+	RegisterSubpage(canvas, "Heal Vision")
 end
 
 -- Sub-page: tooltips. In CineMode, world tooltips and unit frames' hide by
@@ -7979,7 +8131,7 @@ local function CreateMouseoverPanel()
 	end
 	for _, item in ipairs(ns.HOVER_ROWS) do
 		if ns.OptionAvailable(item) then
-			AddToCatalog(item.key, item.label, item.key:find("^addon:") and L["addon"])
+			AddToCatalog(item.key, item.hoverLabel or item.label, item.key:find("^addon:") and L["addon"])
 		end
 	end
 	local function ScanCatalog()
@@ -8672,6 +8824,7 @@ ns.OnLanguage(function()
 		CreateCooldownPanel()
 	end
 	CreateTooltipPanel()
+	-- (its hub listed after UI Manager's)
 	CreateVisionPanel()
 	CreateBuffsPanel()
 	CreatePlatesPanel()

@@ -168,7 +168,7 @@ local OWN_ALPHA = {
 -- the mouse: hovering the raid frames brings them up (their Mouseover group).
 local PART_GROUPS = {
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true,
-	raidthreat = true, partyroles = true, partynames = true, partystatus = true,
+	raidthreat = true, raidtarget = true, partyroles = true, partynames = true, partystatus = true,
 }
 -- Parts that go only while a row's frames are up (part -> row): the "Party"
 -- title sits in no faded frame (the party members fade one by one), so its
@@ -1533,15 +1533,9 @@ ns.COMBAT_SHOW = {
 		page = "raid", groups = { "raidthreat" }, part = true,
 		tip = L["The glow round a member with threat (aggro). To hide it all the time, CineMode or not, " ..
 			"turn off the game's own Display Aggro Highlight raid frame option."] },
-	-- The white outline round your target's frame: just an Always tick
-	-- (alwaysOnly: its other cells stay empty), and unlike the other rows it
-	-- isn't only for CineMode: unticked, it's gone CineMode or not (the game
-	-- has no option for it). Its setting: ns.CINE_SHOW_SETTING.
+	-- The white outline round your target's frame.
 	{ key = "raidtarget", label = L["Target highlight"], default = false, addon = "Blizzard_CompactRaidFrames",
-		page = "raid", alwaysOnly = true, noHoverRow = true,
-		apply = function() if ns.ApplyRaidTargetOutline then ns.ApplyRaidTargetOutline() end end,
-		alwaysTip = L["Show the outline round your target's raid frame. Untick it to hide it all the time, " ..
-			"CineMode or not, in fights and out."],
+		page = "raid", groups = { "raidtarget" }, part = true,
 		tip = L["The white outline round your target's raid frame."] },
 	{ key = "raidnames", label = L["Player names"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidnames" }, part = true },
@@ -1666,14 +1660,54 @@ ns.COMBAT_SHOW = {
 local ROW_SECTIONS = {
 	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units", focustot = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
-	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars", right1 = "bars", right2 = "bars",
-	bar6 = "bars", bar7 = "bars", bar8 = "bars", pet = "bars", stance = "bars", totems = "bars", extra = "bars",
+	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars",
+	pet = "bars", stance = "bars", totems = "bars", extra = "bars",
+	right1 = "extrabars", right2 = "extrabars", bar6 = "extrabars", bar7 = "extrabars", bar8 = "extrabars",
 	minimap = "minimap", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap",
 	quests = "interface", waypoint = "interface", micro = "interface", bags = "interface", xp = "interface",
 }
 for _, item in ipairs(ns.COMBAT_SHOW) do
 	item.page = item.page or ROW_SECTIONS[item.key]
+end
+
+-- The raid-style party frames' own rows: the raid frames' rows again, for the
+-- Standard Frames page's Party frames (raid-style) section (page = "rsparty").
+-- They only count with its "Same as raid frames" unticked (raidStylePartySame):
+-- ticked, the raid frames' rows decide for those frames too (see
+-- UpdateFrames), and these follow theirs until set (ROW_FALLBACK). Not the
+-- target highlight or the Raid Frame Manager: one for both.
+ns.RAID_STYLE_PARTY = {
+	raidplayers = "rspartyplayers", raidpets = "rspartypets", raidroles = "rspartyroles", raidthreat = "rspartythreat",
+	raidnames = "rspartynames", raidpetnames = "rspartypetnames", raidtitles = "rspartytitles",
+	raidbuffs = "rspartybuffs", raiddebuffs = "rspartydebuffs",
+}
+do
+	-- (hoverLabel: their names on the Mouseover page, where the raid frames'
+	-- rows go by the same ones. auraFrames: only where auras fade as frames,
+	-- not WoW Forever's game setting, which is the raid frames' too.)
+	local HOVER_LABELS = {
+		rspartyplayers = L["Raid-style party players"], rspartypets = L["Raid-style party pets"],
+		rspartyroles = L["Raid-style party role icons"], rspartythreat = L["Raid-style party threat highlight"],
+		rspartynames = L["Raid-style party player names"], rspartypetnames = L["Raid-style party pet names"],
+		rspartytitles = L["Raid-style party title"], rspartybuffs = L["Raid-style party buffs"],
+		rspartydebuffs = L["Raid-style party debuffs"],
+	}
+	local copies = {}
+	for _, item in ipairs(ns.COMBAT_SHOW) do
+		local key = ns.RAID_STYLE_PARTY[item.key]
+		if key then
+			local copy = {}
+			for field, value in pairs(item) do copy[field] = value end
+			copy.key, copy.page, copy.groups, copy.hoverLabel = key, "rsparty", { key }, HOVER_LABELS[key]
+			if key == "rspartytitles" then copy.label = L["Party title"] end
+			copy.auraFrames = (key == "rspartybuffs" or key == "rspartydebuffs") or nil
+			copies[#copies + 1] = copy
+		end
+	end
+	for _, copy in ipairs(copies) do
+		ns.COMBAT_SHOW[#ns.COMBAT_SHOW + 1] = copy
+	end
 end
 
 -- Then the Other addons, by group (their frames may have no names).
@@ -1720,7 +1754,7 @@ local HOVER_ROW_BY_GROUP = {
 	raidplayers = "raidplayers", raidpets = "raidpets", raidmanager = "raidmanager", flags = "flags",
 	raidroles = "raidroles", raidnames = "raidnames", raidpetnames = "raidpetnames", raidtitles = "raidtitles",
 	partyroles = "partyroles", partynames = "partynames", partystatus = "partystatus",
-	raidbuffs = "raidbuffs", raiddebuffs = "raiddebuffs", raidthreat = "raidthreat",
+	raidbuffs = "raidbuffs", raiddebuffs = "raiddebuffs", raidthreat = "raidthreat", raidtarget = "raidtarget",
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", castbar = "castbar", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
@@ -1773,12 +1807,16 @@ ns.HOVER_GROUPS_DEFAULT = {
 	-- (Raid-style party frames are the raid frames. The Raid Frame Manager
 	-- comes up with both out of fights only: its own group, below.)
 	{ preset = "raid", icon = "Interface\\Icons\\Spell_Holy_PrayerOfFortitude", name = L["Raid frames"],
-		members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidnames", "raidpetnames", "raidtitles",
+		members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidtarget", "raidnames", "raidpetnames", "raidtitles",
 		"raidbuffs", "raiddebuffs" }, triggers = { roster = true } },
+	-- (The raid-style ones' own rows too: they count once set apart from the raid frames.)
 	{ preset = "party", icon = "Interface\\Icons\\Spell_Holy_PrayerOfHealing02", name = L["Party frames"],
-		members = { "party", "partyroles", "partynames", "partystatus" }, triggers = { roster = true } },
+		members = { "party", "partyroles", "partynames", "partystatus", "rspartyplayers", "rspartypets", "rspartyroles",
+		"rspartythreat", "rspartynames", "rspartypetnames", "rspartytitles", "rspartybuffs", "rspartydebuffs" },
+		triggers = { roster = true } },
 	{ preset = "raidmanager", icon = "Interface\\Icons\\Ability_Warrior_RallyingCry", name = L["Raid Frame Manager"],
-		members = { "raidmanager", "raidplayers", "raidpets", "party" }, triggers = { roster = true }, when = "calm" },
+		members = { "raidmanager", "raidplayers", "raidpets", "party", "rspartyplayers", "rspartypets" },
+		triggers = { roster = true }, when = "calm" },
 	{ preset = "minimap", icon = "Interface\\Icons\\INV_Misc_Map_01", name = L["Minimap"],
 		members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock",
 			"minimapdial" },
@@ -1994,6 +2032,10 @@ local ROW_FALLBACK = {
 	art = "mainbar", petframe = "player", prdpower = "prd", focustot = "focus", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap", bags = "micro",
 }
+-- (And the raid-style party frames' rows the raid frames'.)
+for raidKey, key in pairs(ns.RAID_STYLE_PARTY) do
+	ROW_FALLBACK[key] = raidKey
+end
 
 function ns.IsCombatShowOn(key)
 	local on = ns.db.combatShow[key]
@@ -2027,13 +2069,12 @@ end
 
 -- Standard Frames page's Always column (cineShow): ticked, a row's frames stay shown all through CineMode.
 -- Some rows' Always tick is an option elsewhere too (the same setting).
-ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWaypoint",
-	raidtarget = "showRaidTargetOutline" }
+ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWaypoint" }
 -- Rows ticked there until changed (no profile lists them, so none hides them).
 local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
-	raiddebuffs = true, raidthreat = true, extra = true,
+	raiddebuffs = true, raidthreat = true, raidtarget = true, extra = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
@@ -3013,7 +3054,7 @@ ns.GAMEPAD_BUTTONS = {
 }
 -- The labels above were made before the language was known: translated again.
 ns.OnLanguage(function()
-	ns.TranslateFields(ns.COMBAT_SHOW, "label", "tip", "alwaysTip")
+	ns.TranslateFields(ns.COMBAT_SHOW, "label", "tip", "alwaysTip", "hoverLabel")
 	ns.TranslateFields(ns.HOVER_ROWS, "label", "tip")
 	ns.TranslateFields(ns.HOVER_TRIGGERS, "label", "tip")
 	ns.TranslateFields(ns.HOVER_GROUPS_DEFAULT, "name")
@@ -4527,12 +4568,15 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- that's left out now. A group turned off (group.off) is always left out.)
 	local offWhen = fighting and "calm" or "combat"
 	local hovered, triggered, pinged = wipe(tickTables.hovered), wipe(tickTables.triggered), wipe(tickTables.pinged)
+	-- The raid-style party frames set apart from the raid frames (Standard
+	-- Frames page): their own rows (rspGroup) decide for them, not the raid frames'.
+	local ownPartyRows = ns.db.raidStylePartySame == false
 	if cinematic and ns.db.mouseover then
 		local mouseRows = wipe(tickTables.mouseRows)
 		for _, entry in ipairs(ns.managed) do
 			entry.row = entry.row or ns.HoverRowFor(entry)
 			if ns.IsEntryHovered(entry) then
-				mouseRows[entry.row] = true
+				mouseRows[ownPartyRows and entry.rspGroup or entry.row] = true
 			end
 		end
 		-- Rows linger after the mouse leaves. The hold time counts the fade
@@ -4619,25 +4663,28 @@ function ns.UpdateFrames(cinematic, elapsed)
 			or (typing and entry.group == "chat")
 			or (dockPeek and entry.name == "GeneralDockManager")
 		entry.row = entry.row or ns.HoverRowFor(entry)
+		-- (Its own row's group is its row too: see ns.RAID_STYLE_PARTY.)
+		local ownRow = ownPartyRows and entry.rspGroup
+		local row = ownRow or entry.row
 		-- (Kept up by a setting, or brought up by an event ticked for one of its Mouseover groups.)
 		local tracking = ((ns.db.alwaysShowMinimap or keepIndoors) and entry.group == "minimap")
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
 			or (questTimerUp and entry.group == "questtimer")
 			or (durabilityUp and entry.group == "misc")
 			or (petUnhappyUp and entry.name == "PetFrame")
-			or triggered[entry.row]
+			or triggered[row]
 		local listShown = combatShown
-			and (entry.name and combatShown[entry.name] or combatShown[GROUP_KEY[entry.group]])
+			and (entry.name and combatShown[entry.name] or combatShown[GROUP_KEY[ownRow or entry.group]])
 		local fightingShown = listShown
 		if not fightingShown and PORTRAIT_FRAMES[entry.name] and ns.db[PORTRAIT_FRAMES[entry.name]] and cinematic
 			and portraitAllowed and IsPlayerRecovering() then
 			fightingShown = true -- shown like a combat frame, at the normal fade speeds
 		end
-		if cinematic and not hovered[entry.row] and not chatShowing and not tracking
+		if cinematic and not hovered[row] and not chatShowing and not tracking
 			and not fightingShown and (fadeChat or entry.group ~= "chat") then
 			target = 0
 		end
-		if deathFade and not hovered[entry.row] and not (typing and entry.group == "chat") then
+		if deathFade and not hovered[row] and not (typing and entry.group == "chat") then
 			target = 0
 		end
 		-- (Swing timer page: in CineMode and out, hovering included.)
@@ -4645,6 +4692,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 			target = 0
 		end
 		local follows = followsRow[entry.frame]
+		if follows and ownPartyRows and entry.rspGroup then
+			follows = ns.RAID_STYLE_PARTY[follows] or follows
+		end
 		if follows and cinematic and not hovered[follows] and not triggered[follows]
 			and not (combatShown and combatShown[GROUP_KEY[follows]]) then
 			target = 0
@@ -4661,7 +4711,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		-- (The header too: its bar, zone name, clock and buttons are groups of their own.)
 		if camHidesMinimap and GROUP_SWITCH[entry.group] == "handleMinimap"
-			and not hovered[entry.row] and not pinged[entry.row] then
+			and not hovered[row] and not pinged[row] then
 			target = 0
 		end
 		-- (Fading out for a profile's layout change, Layouts.lua; then a
@@ -4669,7 +4719,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if ns.layoutFadeUntil then
 			target = 0
 		elseif ns.previewRows then
-			target = ns.previewRows[entry.row] and 1 or 0
+			target = ns.previewRows[row] and 1 or 0
 		end
 		if entry.frame == Minimap then
 			RedrawMinimapWhenShown()
@@ -5112,6 +5162,9 @@ end
 -- reuses them as the group changes (one can go from a player to a pet), so
 -- they're sorted afresh at each scan, and soon after the group changes.
 do
+	-- (While sorting the raid-style party frames: theirs get their own rows'
+	-- groups as well (rspGroup), for when they're set apart from the raid frames.)
+	local sortingParty = false
 	local function SortRaidPart(part, group)
 		if not part or IsForbidden(part) then
 			return
@@ -5120,6 +5173,7 @@ do
 			for _, entry in ipairs(ns.managed) do
 				if entry.frame == part then
 					if entry.group == group then
+						entry.rspGroup = sortingParty and ns.RAID_STYLE_PARTY[group] or nil
 						return
 					end
 					RemoveFrame(part) -- (sorted again below)
@@ -5127,7 +5181,9 @@ do
 				end
 			end
 		end
-		AddFrame(part, group)
+		if AddFrame(part, group) then
+			ns.managed[#ns.managed].rspGroup = sortingParty and ns.RAID_STYLE_PARTY[group] or nil
+		end
 	end
 
 	local function GroupTitle(group)
@@ -5135,42 +5191,9 @@ do
 		return group.title or (name and _G[name .. "Title"])
 	end
 
-	-- The white outline round your target's frame: gone for good with its
-	-- row's Always tick off (showRaidTargetOutline), CineMode or not.
-	-- The game shows it again as the target changes, so it's hidden after.
-	local outlined = setmetatable({}, { __mode = "k" }) -- frames whose outline was seen
-	-- (Raid and raid-style party frames only, by name: nameplates go through
-	-- the same function.)
-	local function HideTargetOutline(frame)
-		local outline = frame and frame.selectionHighlight
-		local name = outline and not IsForbidden(frame) and frame:GetName()
-		if name and name:find("^Compact") and not IsForbidden(outline) then
-			outlined[frame] = true
-			if ns.db and not ns.db.showRaidTargetOutline then
-				outline:Hide()
-			end
-		end
-	end
-	if _G.CompactUnitFrame_UpdateSelectionHighlight then
-		hooksecurefunc("CompactUnitFrame_UpdateSelectionHighlight", HideTargetOutline)
-	end
-	-- The setting changed: off, the game puts the outline back where it goes.
-	-- (Not on spare frames showing no unit: the game's update errors on those.)
-	function ns.ApplyRaidTargetOutline()
-		for frame in pairs(outlined) do
-			local unit = frame.displayedUnit
-			if not ns.db.showRaidTargetOutline or not _G.CompactUnitFrame_UpdateSelectionHighlight then
-				HideTargetOutline(frame)
-			elseif not Secret(unit) and type(unit) == "string" then
-				_G.CompactUnitFrame_UpdateSelectionHighlight(frame)
-			end
-		end
-	end
-
 	-- A member's or pet's frame (inGroup: inside a group's frame, which fades
 	-- for it), and its parts.
 	local function SortUnitFrame(frame, inGroup)
-		HideTargetOutline(frame)
 		local unit = frame.unit or frame.displayedUnit
 		if Secret(unit) or type(unit) ~= "string" then
 			return
@@ -5182,6 +5205,8 @@ do
 		SortRaidPart(frame.roleIcon, "raidroles")
 		-- (The game only shows and hides it, never sets its alpha.)
 		SortRaidPart(frame.aggroHighlight, "raidthreat")
+		-- (The white outline round your target's frame: shown and hidden too.)
+		SortRaidPart(frame.selectionHighlight, "raidtarget")
 		SortRaidPart(frame.name, isPet and "raidpetnames" or "raidnames")
 		for _, aura in ipairs(frame.buffFrames or {}) do
 			SortRaidPart(aura, "raidbuffs")
@@ -5196,8 +5221,9 @@ do
 	local function ScanRaidFrames()
 		for _, holderName in ipairs({ "CompactRaidFrameContainer", "CompactPartyFrame" }) do
 			local holder = _G[holderName]
+			sortingParty = holderName == "CompactPartyFrame"
 			if holder and not IsForbidden(holder) then
-				if holderName == "CompactPartyFrame" then
+				if sortingParty then
 					local title = GroupTitle(holder) -- ("Party")
 					SortRaidPart(title, "raidtitles")
 					if title then
@@ -5222,6 +5248,7 @@ do
 				end
 			end
 		end
+		sortingParty = false
 	end
 	ns.AddScanner(ScanRaidFrames)
 

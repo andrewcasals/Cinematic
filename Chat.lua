@@ -55,7 +55,7 @@ ns.CHAT_PEEK_TYPES = {
 	{ key = "battleground", label = L["Battleground objectives (assaults, captures, flags)"], section = "game",
 		events = { "CHAT_MSG_BG_SYSTEM_ALLIANCE", "CHAT_MSG_BG_SYSTEM_HORDE", "CHAT_MSG_BG_SYSTEM_NEUTRAL" } },
 	-- Group loot rolls arrive as loot messages; see IsLootRollLine below.
-	{ key = "rolls", label = L["Loot rolls (need, greed, won)"], section = "game", events = {} },
+	{ key = "rolls", label = L["Loot rolls (need, greed, won)"], section = "game", default = false, events = {} },
 	{ key = "loot", label = L["All loot"], section = "game", default = false, events = { "CHAT_MSG_LOOT" } },
 	{ key = "money", label = L["Money"], section = "game", default = false, events = { "CHAT_MSG_MONEY" } },
 	{ key = "tradeskill", label = L["Other players' crafting"], section = "game", default = false,
@@ -144,16 +144,6 @@ local function IsLootRollLine(text)
 		end
 	end
 	return false
-end
-
--- With the loot roll window on (RollWindow.lua), roll lines stay out of chat
--- (rollWindowChat): the window shows them.
-local function IsHiddenRollLine(text)
-	return ns.hasRollWindow and ns.Setting("rollWindow") and ns.Setting("rollWindowChat") and IsLootRollLine(text)
-end
-
-local function RollLineFilter(_, _, text)
-	return IsHiddenRollLine(text) and true or false
 end
 
 -- Guild members coming online, going offline, joining, leaving, removed,
@@ -386,9 +376,7 @@ local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, 
 		return false
 	end
 	local wanted
-	if event == "CHAT_MSG_LOOT" and IsHiddenRollLine(text) then
-		wanted = false -- (left out of chat: nothing to see)
-	elseif ns.db.chatHideOwn and IsFromPlayer(author, guid) then
+	if ns.db.chatHideOwn and IsFromPlayer(author, guid) then
 		wanted = false
 	elseif event == "CHAT_MSG_CHANNEL" then
 		wanted = ns.IsChannelPeekOn(ChannelBaseName(channelBaseName, channelString))
@@ -551,7 +539,5 @@ function ns.RegisterChatPeek()
 	for _, event in ipairs(CHAT_PEEK_EVENTS) do
 		addFilter(event, ns.Profiled("Chat filter", ChatPeekFilter))
 	end
-	-- (after the peek filter: it sees every line first)
-	addFilter("CHAT_MSG_LOOT", RollLineFilter)
 	WatchServerMessages()
 end

@@ -100,7 +100,6 @@ local DEFAULTS = {
 	durabilityHideInCam = true, -- ...except while a camera mode is running
 	petUnhappyShow = true,     -- keep the pet frame visible in cinematic mode while a hunter's pet isn't happy (not retail)
 	petUnhappyHideInCam = true, -- ...except while a camera mode is running
-	showRaidTargetOutline = true, -- the outline round your target's raid frame (off: gone, CineMode or not)
 	-- Swing timer page (not retail), in CineMode and out:
 	swingSmartShow = true,     -- melee and ranged bars only while that weapon is in use
 	swingHideAfter = 5,        -- ...seconds after its last swing or shot (and the bar running down) it fades
@@ -262,7 +261,6 @@ local DEFAULTS = {
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	rollWindow = false,        -- a window of the group's loot rolls, instead of reading them in chat (RollWindow.lua)
-	rollWindowChat = true,     -- ...and roll lines left out of chat while it's on
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
 	cozyZoomClose = 10,       -- yards: the distance it zooms in to (if you're further out); far side of a fire
 	cozyTentClose = 8,        -- ...closer with a Camp Tent seen nearby (Campfire.lua), and no drifting further out
@@ -572,7 +570,7 @@ DEFAULTS.plateInstanceFriendlyMinions = "hide"
 DEFAULTS.plateInstanceFriendlyNPCs = "target"
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
-DEFAULTS.questVision = true -- Quest Vision's Enable (Vision page): off, none of the three below works
+DEFAULTS.questVision = true -- the Quest Vision page's switch: off, none of the four below works
 DEFAULTS.plateQuestMobs = true -- in CineMode, plates of units for a quest objective you haven't finished show (see Effects)
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
 DEFAULTS.questObjectGlow = true -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
@@ -679,7 +677,7 @@ do
 		local list = role == "TANK" and "tankHide" or role == "HEALER" and "healerHide"
 			or role == "DAMAGER" and "damageHide"
 		if list and ns.RoleHidden(db, list, "healVision") then return false end
-		if db.handleVision == false then return false end -- (the Vision page's switch)
+		if db.handleHealVision == false then return false end -- (its page's switch)
 		if db.healVision or db["healVisionIn" .. (VISION_PLACE[ns.GetPlaceType()] or "World")] then return true end
 		if IsInRaid() then return db.healVisionInRaid end
 		return IsInGroup() and db.healVisionInParty
@@ -789,12 +787,13 @@ DEFAULTS.handleUnitFrames = true -- the Unit Frames page's switch
 DEFAULTS.handleQuality = true -- Quality of life > General
 DEFAULTS.handleHunter = true
 DEFAULTS.handleVision = true
+DEFAULTS.handleHealVision = true -- (read by ns.HealVisionHere; Quest Vision's switch is questVision)
 local PAGE_SWITCH = {}
 for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
-		"centerPanels", "dragPanels", "rollWindow", "rollWindowChat" },
+		"centerPanels", "dragPanels" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
-	handleVision = { "duelPlates", "questVision", "plateQuestMobs", "targetQuestIcon", "questObjectGlow" },
+	handleVision = { "duelPlates", "rollWindow" }, -- Vision > General
 }) do
 	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end
 end
@@ -803,7 +802,7 @@ function ns.Setting(key)
 	if not db or db[PAGE_SWITCH[key] or ""] == false then return false end
 	return db[key]
 end
--- A Quest Vision tick as its Enable and the page's switch leave it.
+-- A Quest Vision tick as its Enable leaves it.
 function ns.QuestVisionSetting(key)
 	return ns.Setting("questVision") and ns.Setting(key) or false
 end
@@ -811,6 +810,8 @@ DEFAULTS.unitPartsFocusSame = true
 DEFAULTS.unitPartsToTSame = true
 DEFAULTS.unitPartsFocusToTSame = true
 DEFAULTS.unitPartsFocusToT = true -- the focus's target of target frame shows at all
+-- Raid-style party frames go by the raid frames' rows (Standard Frames page)
+DEFAULTS.raidStylePartySame = true
 -- And rows of our own: a class icon by friendly and by enemy players' health
 -- bars (as Duel Vision shows), and a role icon by group members' (tank,
 -- healer, damage), and a quest icon by quest mobs' (see QuestMobs). Off
@@ -2944,6 +2945,30 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.raidThreatHoverV1 = true
 		end
+		-- The raid frames' target highlight, an on/off switch (showRaidTargetOutline),
+		-- got a full row: switched off, its Always tick starts off; and into saved
+		-- Mouseover groups with the threat highlight, as the default groups have it.
+		if not ns.db.raidTargetRowV1 then
+			local function MoveTargetRow(saved)
+				if saved.showRaidTargetOutline == false and type(saved.cineShow) == "table"
+					and saved.cineShow.raidtarget == nil then
+					saved.cineShow.raidtarget = false
+				end
+				saved.showRaidTargetOutline = nil
+				for _, group in ipairs(saved.hoverGroups or {}) do
+					local has = {}
+					for _, key in ipairs(group.members or {}) do has[key] = true end
+					if has.raidthreat and not has.raidtarget then
+						table.insert(group.members, "raidtarget")
+					end
+				end
+			end
+			MoveTargetRow(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then MoveTargetRow(saved) end
+			end
+			ns.db.raidTargetRowV1 = true
+		end
 		-- The pet portrait got a row apart from yours: into saved Mouseover
 		-- groups with your portrait, as the default groups have it. Once.
 		if not ns.db.petFrameHoverV1 then
@@ -3491,6 +3516,20 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then SayOn(saved) end
 			end
 			ns.db.chatSayOnV1 = true
+		end
+		-- Loot rolls no longer bring up chat (off by default now). Once, in every
+		-- profile.
+		if not ns.db.chatRollsOffV1 then
+			local function RollsOff(t)
+				if type(t.chatPeekTypes) == "table" then
+					t.chatPeekTypes.rolls = nil -- (off by default)
+				end
+			end
+			RollsOff(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then RollsOff(saved) end
+			end
+			ns.db.chatRollsOffV1 = true
 		end
 		-- The cozy camera by a tent: 8 yards, not 7. Once, in every profile still
 		-- at the old default (there's no slider for it).

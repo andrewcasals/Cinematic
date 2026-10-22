@@ -1,10 +1,10 @@
--- Cinematic: a window of the group's loot rolls (rollWindow, Quality of life
--- page), so you needn't read them in chat. Each item rolled on gets a card:
--- its icon and name, a bar for the time left, and a row for each player with
--- what they picked (need, greed, transmog) and, once the rolls are revealed,
--- their number. The winner goes to the top, lit; passes share one line. The
--- window opens as a roll starts and goes again a while after the last one's
--- done. /cine rolls shows the latest ones.
+-- Cinematic: Roll Vision, a window of the group's loot rolls (rollWindow, the
+-- Vision hub's General page), so you needn't read them in chat. Each item
+-- rolled on gets a card: its icon and name, a bar for the time left, and a
+-- row for each player with what they picked (need, greed, transmog) and, once
+-- the rolls are revealed, their number. The winner goes to the top, lit;
+-- passes share one line. The window opens as a roll starts and goes again a
+-- while after the last one's done. /cine rolls shows the latest ones.
 --
 -- The rolls come from the game's loot history (C_LootHistory, what /loot
 -- shows): the server tells the whole group everyone's choice and number.
