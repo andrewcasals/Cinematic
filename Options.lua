@@ -6730,6 +6730,32 @@ local function CreateVisionPanel()
 				ns.GetDB().rollWindow = value
 				ns.RefreshRollWindow()
 			end), "check")
+		local function RollsOn(db) return db.rollWindow end
+		local QUALITIES = {
+			{ value = 2, text = L["Uncommon and up"] },
+			{ value = 3, text = L["Rare and up"] },
+			{ value = 4, text = L["Epic and up"] },
+		}
+		local QUALITY_TIP = L["Only items of this quality and better get a panel in the window. Rolls on the " ..
+			"rest are only in chat. The test (/cine rolls test) goes by it too."]
+		stack:Add(Label(content, "GameFontHighlight", L["Show rolls on"]), "label")
+		local quality = Dropdown(content, "rollMinQuality", QUALITIES, 200)
+		if quality then
+			stack:Add(quality, "dropdown")
+			Tooltip(quality, QUALITY_TIP)
+			GreyUnless(quality, RollsOn)
+		else
+			for _, choice in ipairs(QUALITIES) do
+				local check = stack:Add(Choice(content, "rollMinQuality", choice.value, choice.text, QUALITY_TIP), "check")
+				GreyUnless(check, RollsOn)
+			end
+		end
+		local raidRows = stack:Add(Slider(content, "rollRaidRows", L["Players shown per item in a raid"], 1, 10, 1, "%d"),
+			"slider")
+		Tooltip(raidRows, L["In a raid, each item lists only this many players' rolls: the winner, then need " ..
+			"before greed, the highest numbers first. The rest are counted on an \"and N more\" line. " ..
+			"In a party, everyone is listed."])
+		GreyUnless(raidRows, RollsOn)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

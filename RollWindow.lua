@@ -22,7 +22,7 @@ local WIDTH = 280
 local ICON = 34
 local ROW = 16
 local MAX_CARDS = 4    -- newest first; older ones drop off the bottom
-local MAX_ROWS = 10    -- player rows per card (raids): the rest as "and N more"
+local MAX_PASSED = 4   -- names on the "Passed:" line; more (a raid), and it's only the count
 local LINGER = 3       -- seconds a roll's panel stays once it's won (or all passed), the mouse off them
 
 local State = Enum and Enum.EncounterLootDropRollState or {}
@@ -37,6 +37,15 @@ local TRANSMOG_ATLAS = "lootroll-toast-icon-transmog-up"
 
 local function Enabled()
 	return ns.Setting("rollWindow")
+end
+
+-- Player rows per card: everyone in a party; in a raid, the top few
+-- (rollRaidRows), the rest as "and N more".
+local function MaxRows()
+	if IsInRaid and IsInRaid() then
+		return ns.Setting("rollRaidRows") or 3
+	end
+	return 5
 end
 
 local function Secret(value)
@@ -127,6 +136,36 @@ local function TimeGone(info)
 		return nil
 	end
 	return math.min(math.max(Gone(now, info), 0), 1)
+end
+
+-- The item's quality (0 poor to 5 legendary...), from its link or the item
+-- cache, or nil if it can't be told yet.
+local function ItemQuality(link)
+	if type(link) ~= "string" or Secret(link) then
+		return nil
+	end
+	local quality = tonumber(link:match("|cnIQ(%d+):"))
+	if quality then
+		return quality
+	end
+	if C_Item and C_Item.GetItemQualityByID then
+		local ok, value = pcall(C_Item.GetItemQualityByID, link)
+		if ok and type(value) == "number" then
+			return value
+		end
+	end
+	local color = link:match("|c(%x%x%x%x%x%x%x%x)")
+	for q, info in pairs(ITEM_QUALITY_COLORS or {}) do
+		if color and info.hex and info.hex:lower():find(color:lower(), 1, true) then
+			return q
+		end
+	end
+end
+
+-- Good enough for a panel (rollMinQuality); an item not known yet is.
+local function Wanted(info)
+	local quality = ItemQuality(info.itemHyperlink)
+	return not quality or quality >= (ns.Setting("rollMinQuality") or 0)
 end
 
 -- The item's quality colour, from its link (either way links colour it), else white.
@@ -241,31 +280,40 @@ local function Line(parent, layer, r, g, b, a)
 	return line
 end
 
--- Near-black behind a frame, with a hairline border; returns the border's lines.
+-- How far in from a panel's edge its rounded border reaches.
+local RIM = 4
+local EDGE = 22
+
+-- Near-black behind a frame, in the game's rounded roll-frame border (tinted
+-- by quality, as its roll frames are, with a dark line round the outside);
+-- returns the border, for its colour.
 local function Panel(frame)
 	local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -3)
-	bg:SetAllPoints()
+	bg:SetPoint("TOPLEFT", RIM, -RIM)
+	bg:SetPoint("BOTTOMRIGHT", -RIM, RIM)
 	bg:SetColorTexture(0.03, 0.03, 0.04, 0.88)
-	local edges = {}
-	for _, edge in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 1 },
-			{ "TOPLEFT", "BOTTOMLEFT", 1, nil }, { "TOPRIGHT", "BOTTOMRIGHT", 1, nil } }) do
-		local line = Line(frame, "BORDER", 1, 1, 1, 0.1)
-		line:SetPoint(edge[1])
-		line:SetPoint(edge[2])
-		if edge[3] then line:SetWidth(edge[3]) else line:SetHeight(edge[4]) end
-		edges[#edges + 1] = line
+	local function Edge(outset)
+		local edge = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate")
+		edge:SetPoint("TOPLEFT", -outset, outset)
+		edge:SetPoint("BOTTOMRIGHT", outset, -outset)
+		edge:SetFrameLevel(frame:GetFrameLevel())
+		edge:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = EDGE })
+		return edge
 	end
-	return edges
+	Edge(2):SetBackdropBorderColor(0, 0, 0, 0.9)
+	local border = Edge(0)
+	border:SetBackdropBorderColor(0.5, 0.5, 0.5, 0.8)
+	return border
 end
 
 -- A small grey x in the top right corner, lighter on hover.
 local function CloseButton(parent, onClick)
 	local close = CreateFrame("Button", nil, parent)
-	close:SetSize(16, 16)
-	close:SetPoint("TOPRIGHT", -3, -3)
+	close:SetSize(20, 20)
+	close:SetPoint("TOPRIGHT", -6, -6)
 	for _, angle in ipairs({ 45, -45 }) do
 		local bar = Line(close, "ARTWORK", 0.6, 0.6, 0.6, 1)
-		bar:SetSize(10, 1.5)
+		bar:SetSize(14, 2)
 		bar:SetPoint("CENTER")
 		bar:SetRotation(math.rad(angle))
 		close[#close + 1] = bar
@@ -324,10 +372,10 @@ end
 local function NewCard(index)
 	local card = CreateFrame("Button", nil, window)
 	card:SetWidth(CARD_W)
-	card.edges = Panel(card) -- (coloured as its item's quality, as the game's roll frames are)
+	card.border = Panel(card) -- (coloured as its item's quality, as the game's roll frames are)
 	card.wash = card:CreateTexture(nil, "BACKGROUND", nil, -1)
-	card.wash:SetPoint("TOPLEFT")
-	card.wash:SetPoint("BOTTOMLEFT")
+	card.wash:SetPoint("TOPLEFT", RIM, -RIM)
+	card.wash:SetPoint("BOTTOMLEFT", RIM, RIM)
 	card.wash:SetWidth(CARD_W * 0.75)
 	-- The icon in a thin frame of its quality colour.
 	card.frame = card:CreateTexture(nil, "BORDER")
@@ -339,7 +387,7 @@ local function NewCard(index)
 	card.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 	card.item = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	card.item:SetPoint("TOPLEFT", card.frame, "TOPRIGHT", 9, -3)
-	card.item:SetPoint("RIGHT", card, "RIGHT", -(INSET + 14), 0)
+	card.item:SetPoint("RIGHT", card, "RIGHT", -(INSET + 20), 0)
 	card.item:SetJustifyH("LEFT")
 	card.item:SetWordWrap(false)
 	card.status = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -493,12 +541,10 @@ local function FillCard(card, drop)
 	else
 		card.status:SetPoint("TOPLEFT", card.item, "BOTTOMLEFT", 0, -5)
 	end
-	card.status:SetPoint("RIGHT", card, "RIGHT", -(INSET + 14), 0)
+	card.status:SetPoint("RIGHT", card, "RIGHT", -(INSET + 20), 0)
 	card.item:SetText(ItemText(info.itemHyperlink) or "")
 	card.frame:SetColorTexture(r, g, b, 0.9)
-	for _, line in ipairs(card.edges) do
-		line:SetColorTexture(r, g, b, done and 0.45 or 0.85)
-	end
+	card.border:SetBackdropBorderColor(r, g, b, done and 0.5 or 1)
 	Gradient(card.wash, r, g, b, done and 0.1 or 0.2, 0)
 	card.bar:SetColorTexture(r, g, b, 0.9)
 
@@ -515,11 +561,16 @@ local function FillCard(card, drop)
 			rolls[#rolls + 1] = roll
 		end
 	end
-	-- (sorted by the numbers out so far: rows climb as they come in)
+	-- (need before greed, as the game decides it; then by the numbers out so
+	-- far: rows climb as they come in)
 	table.sort(rolls, function(a, b)
 		local wa, wb = winner and a.isWinner or false, winner and b.isWinner or false
 		if wa ~= wb then
 			return wa and true or false
+		end
+		local oa, ob = ORDER[a.state] or 9, ORDER[b.state] or 9
+		if oa ~= ob then
+			return oa < ob
 		end
 		local ra, rb = Revealed(a) and a.roll or -1, Revealed(b) and b.roll or -1
 		if ra ~= rb then
@@ -542,10 +593,11 @@ local function FillCard(card, drop)
 	end
 
 	local y = compact and -(INSET + 18) or -(HEAD + 6)
-	local more = #rolls - MAX_ROWS
+	local maxRows = MaxRows()
+	local more = #rolls - maxRows
 	for i = 1, math.max(#rolls, #card.rows) do
 		local row = card.rows[i]
-		local roll = i <= MAX_ROWS and rolls[i]
+		local roll = i <= maxRows and rolls[i]
 		if roll then
 			row = row or NewRow(card)
 			card.rows[i] = row
@@ -589,7 +641,9 @@ local function FillCard(card, drop)
 	if more > 0 then
 		lines[#lines + 1] = L["and %d more"]:format(more)
 	end
-	if #passed > 0 then
+	if #passed > MAX_PASSED then
+		lines[#lines + 1] = L["Passed: %s"]:format(#passed)
+	elseif #passed > 0 then
 		lines[#lines + 1] = L["Passed: %s"]:format(table.concat(passed, ", "))
 	end
 	if #lines > 0 then
@@ -969,7 +1023,7 @@ local function Seen(encounterID, lootListID, info)
 	local _, drop = Find(key)
 	if drop then
 		drop.info = info
-	elseif not Done(info) and not dismissed[key] then
+	elseif not Done(info) and not dismissed[key] and Wanted(info) then
 		table.insert(shown, 1, { key = key, encounterID = encounterID, lootListID = lootListID, info = info })
 		shown[MAX_CARDS + 1] = nil
 	else
@@ -1032,7 +1086,7 @@ function ns.ToggleRollWindow()
 		if ok and type(drops) == "table" then
 			for j = #drops, 1, -1 do
 				local listID = ListID(drops[j])
-				if listID then
+				if listID and Wanted(drops[j]) then
 					table.insert(shown, 1, { key = Key(encounterID, listID), encounterID = encounterID,
 						lootListID = listID, info = drops[j], instant = Done(drops[j]) })
 				end
@@ -1122,14 +1176,17 @@ function ns.TestRollWindow()
 		{ NEED, TRANSMOG, NEED, GREED, PASS } }
 	local now = GetTime()
 	for d, quality in ipairs(TEST_QUALITIES) do
-		local link, icon = FakeItem(quality)
-		local info = { itemHyperlink = link, testIcon = icon, playerRollState = NO_ROLL, rollInfos = {},
-			startTime = now, duration = 12, testClock = true }
-		for _, player in ipairs(players) do
-			info.rollInfos[#info.rollInfos + 1] = { playerName = player.name, playerClass = player.class,
-				isSelf = player.isSelf, state = NO_ROLL }
+		-- (below the window's quality: not shown, as a real one wouldn't be)
+		if quality >= (ns.Setting("rollMinQuality") or 0) then
+			local link, icon = FakeItem(quality)
+			local info = { itemHyperlink = link, testIcon = icon, playerRollState = NO_ROLL, rollInfos = {},
+				startTime = now, duration = 12, testClock = true }
+			for _, player in ipairs(players) do
+				info.rollInfos[#info.rollInfos + 1] = { playerName = player.name, playerClass = player.class,
+					isSelf = player.isSelf, state = NO_ROLL }
+			end
+			table.insert(shown, 1, { key = "test" .. d, info = info, choices = choices[d] })
 		end
-		table.insert(shown, 1, { key = "test" .. d, info = info, choices = choices[d] })
 	end
 	Show()
 	-- One player picks every so often; then the numbers, then the winner.
