@@ -19,28 +19,41 @@ local _, ns = ...
 -- the only ones it takes, in place of a range. also: settings written the
 -- same value alongside it, but only ever raised. noMenu: not in the Graphics
 -- menu at all. secure: can't change in a fight (it waits). resetToDefault:
--- Reset page puts the game's default back, not just its own.
+-- Reset page puts the game's default back, not just its own. decimals: shown
+-- with this many. group: the page's header it goes under (in this order).
 ns.GRAPHICS_PLUS = {
 	-- (How far away nameplates show, in yards. The game caps it at its own limit.)
 	{ key = "graphicsPlusPlateDistance", cvar = "nameplateMaxDistance", min = 10, menu = 60, max = 100, step = 5,
-		noMenu = true, secure = true, resetToDefault = true },
-	{ key = "graphicsPlusClutter", cvar = "groundEffectDensity", min = 16, menu = 48, max = 256, step = 8 },
-	{ key = "graphicsPlusClutterDistance", cvar = "groundEffectDist", min = 40, menu = 320, max = 500, step = 20 },
+		group = "Camera and nameplates", noMenu = true, secure = true, resetToDefault = true },
+	-- (How far out the camera zooms, times the game's base distance. The game caps it at its own limit.)
+	{ key = "graphicsPlusZoomMax", cvar = "cameraDistanceMaxZoomFactor", min = 1, menu = 2.6, max = 4, step = 0.1,
+		group = "Camera and nameplates", noMenu = true, decimals = 1 },
+	{ key = "graphicsPlusClutter", cvar = "groundEffectDensity", min = 16, menu = 48, max = 256, step = 8,
+		group = "Ground clutter" },
+	{ key = "graphicsPlusClutterDistance", cvar = "groundEffectDist", min = 40, menu = 320, max = 500, step = 20,
+		group = "Ground clutter" },
 	-- (Not set by the menu, always 70: where the grass starts thinning out, towards groundEffectDist.)
-	{ key = "graphicsPlusClutterFade", cvar = "groundEffectFade", min = 0, menu = 70, max = 500, step = 10 },
+	{ key = "graphicsPlusClutterFade", cvar = "groundEffectFade", min = 0, menu = 70, max = 500, step = 10,
+		group = "Ground clutter" },
 	-- (Where the land turns to the flat horizon, and how far anything's drawn: together.)
 	{ key = "graphicsPlusView", cvar = "horizonStart", also = { "farclip" }, min = 400, menu = 4000,
-		max = 24000, step = 400 },
-	{ key = "graphicsPlusTerrain", cvar = "terrainLodDist", min = 200, menu = 650, max = 2000, step = 50 },
-	{ key = "graphicsPlusBuildings", cvar = "wmoLodDist", min = 250, menu = 400, max = 2000, step = 50 },
-	{ key = "graphicsPlusObjects", cvar = "doodadLodScale", min = 50, menu = 150, max = 300, step = 10 },
-	{ key = "graphicsPlusObjectFade", cvar = "lodObjectFadeScale", min = 50, menu = 150, max = 600, step = 25 },
-	{ key = "graphicsPlusCreatures", cvar = "entityLodDist", min = 5, menu = 10, max = 1000, step = 5 },
+		max = 24000, step = 400, group = "Land and buildings" },
+	{ key = "graphicsPlusTerrain", cvar = "terrainLodDist", min = 200, menu = 650, max = 2000, step = 50,
+		group = "Land and buildings" },
+	{ key = "graphicsPlusBuildings", cvar = "wmoLodDist", min = 250, menu = 400, max = 2000, step = 50,
+		group = "Land and buildings" },
+	{ key = "graphicsPlusObjects", cvar = "doodadLodScale", min = 50, menu = 150, max = 300, step = 10,
+		group = "Objects and creatures" },
+	{ key = "graphicsPlusObjectFade", cvar = "lodObjectFadeScale", min = 50, menu = 150, max = 600, step = 25,
+		group = "Objects and creatures" },
+	{ key = "graphicsPlusCreatures", cvar = "entityLodDist", min = 5, menu = 10, max = 1000, step = 5,
+		group = "Objects and creatures" },
 	{ key = "graphicsPlusShadows", cvar = "shadowTextureSize", min = 512, menu = 2048, max = 4096,
-		values = { 512, 1024, 2048, 4096 } },
+		values = { 512, 1024, 2048, 4096 }, group = "Shadows" },
 }
 
 local writing = false
+local borrowed = false -- a setting left alone while another feature has it
 
 local function Exists(cvar)
 	return GetCVar(cvar) ~= nil
@@ -62,6 +75,12 @@ end
 -- graphicsPlusSaved: [cvar] = the game's own value; graphicsPlusWritten:
 -- [cvar] = what we wrote, to tell the Graphics menu's changes from ours.
 local function ApplyOne(cvar, wanted, raiseOnly, saved, written)
+	if ns.db.savedCVars and ns.db.savedCVars[cvar] ~= nil then
+		-- Borrowed for now (idle zoom raising the max zoom): looked at again
+		-- once it's put back.
+		borrowed = true
+		return
+	end
 	local now = GetCVar(cvar)
 	if saved[cvar] ~= nil and not Same(now, written[cvar]) then
 		-- Changed since we wrote it (the Graphics menu): that's the game's own now.
@@ -95,6 +114,7 @@ function ns.ApplyGraphicsPlus()
 	db.graphicsPlusSaved = db.graphicsPlusSaved or {}
 	db.graphicsPlusWritten = db.graphicsPlusWritten or {}
 	local saved, written = db.graphicsPlusSaved, db.graphicsPlusWritten
+	borrowed = false
 	for _, setting in ipairs(ns.GRAPHICS_PLUS) do
 		if Exists(setting.cvar) and not (setting.secure and InCombatLockdown()) then
 			local wanted = db.graphicsPlus and db[setting.key .. "On"] and db[setting.key] or nil
@@ -157,7 +177,7 @@ local function Settled()
 end
 local function Recheck(name)
 	if writing or pending or type(name) ~= "string"
-		or not (ns.db and ns.db.graphicsPlusSaved and next(ns.db.graphicsPlusSaved)) then
+		or not (borrowed or (ns.db and ns.db.graphicsPlusSaved and next(ns.db.graphicsPlusSaved))) then
 		return
 	end
 	name = name:lower()

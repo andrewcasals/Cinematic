@@ -1959,6 +1959,14 @@ end
 -- only restored once the camera is inside the old limit again, or the game
 -- would clamp the zoom with a visible snap.
 local ZOOM_MAX_CVARS = { values = { cameraDistanceMaxZoomFactor = "2.6" } }
+-- Raised only: a max already past it (Graphics+) is left as it is.
+local function RaiseZoomMax()
+	if not ZOOM_MAX_CVARS.active and (tonumber(GetCVar("cameraDistanceMaxZoomFactor")) or 0)
+		>= tonumber(ZOOM_MAX_CVARS.values.cameraDistanceMaxZoomFactor) then
+		return
+	end
+	ns.ApplyCVarSet(ZOOM_MAX_CVARS, true)
+end
 local ZOOM_MIN_CHANGE = 1           -- yards: smallest random zoom worth making
 local ZOOM_CLOSEST = 1              -- yards: never zoom in past this
 
@@ -2326,7 +2334,7 @@ local function StartIdleZoom()
 		return
 	end
 	if ZoomSetting("PastMax") then
-		ns.ApplyCVarSet(ZOOM_MAX_CVARS, true)
+		RaiseZoomMax()
 	end
 	idleZoom.active = true
 	if idleZoom.context == "cozy" then
@@ -2519,7 +2527,7 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 	-- now, or the zoom stops dead at your own limit. (Only ever raised mid-zoom:
 	-- dropping it while pulled back would snap the camera in.)
 	if idleZoom.active and idleZoom.context == context and not indoors and ZoomSetting("PastMax") then
-		ns.ApplyCVarSet(ZOOM_MAX_CVARS, true)
+		RaiseZoomMax()
 	end
 	if idleZoom.active and idleZoom.context ~= context then
 		local footHandoff = FOOT_ZOOM[idleZoom.context] and FOOT_ZOOM[context]
@@ -2528,7 +2536,7 @@ local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
 			-- settings from here on (same base distance, no glide back).
 			idleZoom.context, idleZoom.doneContext = context, context
 			if ZoomSetting("PastMax") then
-				ns.ApplyCVarSet(ZOOM_MAX_CVARS, true)
+				RaiseZoomMax()
 			end
 			if context == "cozy" then
 				-- Into the cozy camera: zoom in to its close-up as it swings round.

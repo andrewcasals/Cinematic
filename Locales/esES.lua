@@ -679,6 +679,13 @@ L["How far away nameplates show, in yards. " ..
 	"The game won't go past its own limit. Reset page puts the game's default back."] =
 	"Hasta qué distancia se ven las placas de nombre, en metros. " ..
 	"El juego no pasa de su propio límite. Restablecer página vuelve a poner el valor por defecto del juego."
+L["Max zoom distance"] = "Distancia máxima del zoom"
+L["How far out you can zoom the camera, as times the " ..
+	"game's base distance. The game won't go past its own limit. Idle zoom's \"past your max\" still " ..
+	"raises it to 2.6 while it zooms, if it's lower."] =
+	"Hasta dónde puedes alejar la cámara, en veces la distancia base del juego. El juego no pasa de su " ..
+	"propio límite. El \"más allá de tu máximo\" del zoom en reposo aún lo sube a 2.6 mientras hace zoom, " ..
+	"si es menor."
 L["The game's menu doesn't change it. Its default is %s."] = "El menú del juego no lo cambia. Su valor por defecto es %s."
 L["On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, and the game's own options decide, in CineMode and out."] = "Activado: CineMode desvanece las placas de nombre y los nombres según esta página. Desactivado: los deja en paz y deciden las opciones del propio juego, con CineMode y sin él."
 L["Show in fights, and for the Calm Timer after."] = "Se muestran en combate, y durante el Temporizador de calma posterior."
@@ -1474,6 +1481,11 @@ L["It's full (or you can't afford any)."] = "Está lleno (o no puedes pagar ning
 
 -- Options.lua: Graphics+ page
 L["Graphics+"] = "Gráficos+"
+L["Camera and nameplates"] = "Cámara y placas de nombre"
+L["Ground clutter"] = "Vegetación del suelo"
+L["Land and buildings"] = "Terreno y edificios"
+L["Objects and creatures"] = "Objetos y criaturas"
+L["Shadows"] = "Sombras"
 L["The game's own graphics settings one by one, past its Graphics menu either way: higher for a better look, lower for a faster game. They're this computer's: the same in every profile."] = "Las opciones gráficas del propio juego una a una, más allá de su menú de Gráficos en ambos sentidos: más altas para que se vea mejor, más bajas para que vaya más rápido. Son de este ordenador: las mismas en todos los perfiles."
 L["On: the settings below, as you've set them. Off: the game's own settings, put back as they were."] = "Activado: las opciones de abajo, como las has puesto. Desactivado: las opciones del propio juego, devueltas como estaban."
 L["A slider changes nothing until you move it. Higher (in gold) costs frame rate, lower (in blue) saves it. Tick and untick a setting to compare it with the game's own; Reset page leaves them all alone again."] = "Un control no cambia nada hasta que lo mueves. Más alto (en dorado) cuesta fotogramas por segundo, más bajo (en azul) los ahorra. Marca y desmarca una opción para compararla con la del juego; Restablecer página las deja todas como estaban."

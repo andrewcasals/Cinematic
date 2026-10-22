@@ -3819,18 +3819,34 @@ local function CreateGraphicsPanel()
 			"their full detail before they're swapped for simpler models."] },
 		graphicsPlusPlateDistance = { L["Nameplate distance"], L["How far away nameplates show, in yards. " ..
 			"The game won't go past its own limit. Reset page puts the game's default back."] },
+		graphicsPlusZoomMax = { L["Max zoom distance"], L["How far out you can zoom the camera, as times the " ..
+			"game's base distance. The game won't go past its own limit. Idle zoom's \"past your max\" still " ..
+			"raises it to 2.6 while it zooms, if it's lower."] },
 		graphicsPlusShadows = { L["Shadow sharpness"], L["The size of the game's shadow maps: bigger gives " ..
 			"crisper shadow edges, smaller saves frame rate. Players found nothing more above 2048, so 4096 may " ..
 			"look the same. Needs shadows on in the game's menu."] },
 	}
-	stack:Header(content, L["Settings"])
+	-- (The groups' names, for the translations: see setting.group in Graphics.lua.)
+	local GROUPS = {
+		["Camera and nameplates"] = L["Camera and nameplates"],
+		["Ground clutter"] = L["Ground clutter"],
+		["Land and buildings"] = L["Land and buildings"],
+		["Objects and creatures"] = L["Objects and creatures"],
+		["Shadows"] = L["Shadows"],
+	}
 	local any = false
+	local group
 	-- Each setting's tick and slider share a row: the sliders lined up past
-	-- the longest label, each one's value to its right.
+	-- the longest label on the page, each one's value to its right. A header
+	-- over each group (none for a group this game version has none of).
 	local rows = {}
 	for _, setting in ipairs(ns.GRAPHICS_PLUS) do
 		if ns.GraphicsPlusExists(setting.cvar) then
 			any = true
+			if setting.group ~= group then
+				group = setting.group
+				stack:Header(content, GROUPS[group])
+			end
 			local text = LABELS[setting.key]
 			local tip = text[2] .. " " .. ((setting.noMenu
 				and L["The game's menu doesn't change it. Its default is %s."]:format(
@@ -3875,12 +3891,14 @@ local function CreateGraphicsPanel()
 				function(position)
 					local value = values and values[position] or position
 					local own = Own()
+					local num = setting.decimals and ("%." .. setting.decimals .. "f") or "%d"
+					if not setting.decimals then own = own + 0.5 end -- (%d rounds down)
 					if ns.GetDB()[setting.key] == nil then
-						return ("|cffffffff%d|r  |cff9d9d9d"):format(value) .. L["(game's own)"]
+						return ("|cffffffff" .. num .. "|r  |cff9d9d9d"):format(value) .. L["(game's own)"]
 					end
 					-- (Lower than the game's own in blue: it saves frame rate.)
-					return (value < own and "|cff4fb3ff%d|r" or "%d|r"):format(value) .. "  |cff9d9d9d" ..
-						L["(game's own: %s)"]:format(("%d"):format(own + 0.5))
+					return ((value < Own() and "|cff4fb3ff" or "") .. num .. "|r"):format(value) .. "  |cff9d9d9d" ..
+						L["(game's own: %s)"]:format(num:format(own))
 				end, nil, function()
 					Changed()
 					slider:Refresh() -- (its label: moved now, and against the game's own)
