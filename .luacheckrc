@@ -263,6 +263,8 @@ read_globals = {
 	"DUEL_WINNER",
 	"DUEL_FLED",
 	"UnitIsPlayer",
+	"UnitIsGameObject",
+	"SetUnitCursorTexture",
 	"UnitIsUnit",
 	"UnitName",
 	"UnitOnTaxi",

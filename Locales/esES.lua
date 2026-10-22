@@ -1506,7 +1506,35 @@ L["Ground clutter changes show as the ground around you loads again: move on a l
 
 -- Options.lua: the Vision page (and HealVisionFrames.lua)
 L["Vision"] = "Visión"
-L["Ways of showing just what matters: the health of a duel near you, or who in your group needs healing."] = "Formas de mostrar solo lo que importa: la salud de un duelo cerca de ti, o quién de tu grupo necesita sanación."
+L["Ways of showing just what matters: the health of a duel near you, what you still need for your quests, " ..
+	"or who in your group needs healing."] = "Formas de mostrar solo lo que importa: la salud de un duelo cerca de ti, " ..
+	"lo que aún necesitas para tus misiones, o quién de tu grupo necesita sanación."
+L["Quest Vision"] = "Visión de misión"
+L["Always show their nameplates"] = "Mostrar siempre sus placas de nombre"
+L["In CineMode, the nameplates of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
+	"an NPC to talk to) show, in fights and out, whatever the Nameplates page's grids say. Once the " ..
+	"objective is done, they fade with the rest. Needs the Nameplates page enabled."] = "En CineMode, se muestran " ..
+	"las placas de nombre de los enemigos y PNJ que aún necesitas para un objetivo de misión (un enemigo que " ..
+	"matar, un PNJ con quien hablar), en combate y fuera de él, digan lo que digan las tablas de la página " ..
+	"Placas de nombre. Una vez cumplido el objetivo, se desvanecen con las demás. Necesita la página Placas de " ..
+	"nombre activada."
+L["Quest icon on their nameplates"] = "Icono de misión en sus placas de nombre"
+L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show. " ..
+	"Needs the Nameplates page enabled."] = "Un signo de exclamación dorado junto a la barra de salud de sus " ..
+	"placas de nombre, dondequiera que se muestren. Necesita la página Placas de nombre activada."
+L["Quest icon on your target frame"] = "Icono de misión en el marco de tu objetivo"
+L["The same mark beside your target frame's health bar while your target is one of them. " ..
+	"In CineMode and out."] = "La misma marca junto a la barra de salud del marco de tu objetivo mientras tu " ..
+	"objetivo sea uno de ellos. En CineMode y fuera de él."
+L["Glow on quest objects"] = "Brillo en objetos de misión"
+L["The thing on the ground you pick up or use for a quest objective glows gold, with the quest mark " ..
+	"over it, in CineMode and out. One at a time: the one in front of you that your interact key would " ..
+	"use, up to 20 yards away. Turns on the game's soft targeting for things to interact with (Interact " ..
+	"key on keyboard and mouse too) while it's on; your own settings come back when you untick it."] = "El " ..
+	"objeto del suelo que recoges o usas para un objetivo de misión brilla en dorado, con la marca de misión " ..
+	"encima, en CineMode y fuera de él. Uno cada vez: el que tienes delante y que usaría tu tecla de " ..
+	"interactuar, hasta a 20 metros. Activa el objetivo suave del juego para cosas con las que interactuar " ..
+	"(también la tecla de interactuar con teclado y ratón) mientras está activo; tus ajustes vuelven al desmarcarlo."
 L["Enable"] = "Activar"
 L["Heal Vision"] = "Heal Vision"
 L["The game's party and raid frames show only who needs healing: everyone (pets too) while below full health, and as ticked below, tanks and members with debuffs. The group titles hide. The members stay in their places, so there are gaps. Out of combat, the mouse over the frames brings everyone back. Ticked in the grid, it's on there. Always: everywhere. Party and Raid: while you're in one, wherever you are."] = "Los marcos de grupo y de banda del juego muestran solo a quien necesita sanación: a todos (también las mascotas) mientras tengan menos de la salud completa y, según lo marcado abajo, a los tanques y a los miembros con perjuicios. Los títulos de los grupos se ocultan. Los miembros se quedan en su sitio, así que quedan huecos. Fuera de combate, el ratón sobre los marcos los muestra a todos. Marcado en la cuadrícula, está activado allí. Siempre: en todas partes. Grupo y Banda: mientras estés en uno, estés donde estés."
@@ -1655,3 +1683,4 @@ L["Retail profile"] = "Perfil Retail"
 L["A new Retail profile gives WoW Forever retail's look: Cinematic's own Edit Mode layout, with action bars 1 to 3, the micro menu and bags, and the XP bar each coming up on its own. Switch back to Default and your own layout returns."] = "Un nuevo perfil Retail da a WoW Forever el aspecto de retail: la disposición propia de Cinematic en el Modo Edición, con las barras de acción 1 a 3, el micromenú y las bolsas, y la barra de experiencia apareciendo cada uno por su cuenta. Vuelve a Predeterminado y regresa tu propia disposición."
 L["Marker wheels"] = "Ruedas de marcas"
 L["Hold a key to bring up a wheel of raid markers and put one on your target, or drop a ground marker where you let go. A master wheel opens any of the wheels from one key. Set the keys on the Keybinds page."] = "Mantén pulsada una tecla para abrir una rueda de marcas de banda y ponerle una a tu objetivo, o dejar una marca de suelo donde sueltes. Una rueda de ruedas abre cualquiera de las ruedas con una sola tecla. Asigna las teclas en la página Teclas."
+L["Mobs and NPCs you still need for a quest keep their nameplates up, with a golden ! on their plate and your target frame. Optionally, the quest object in front of you glows so it's easy to spot."] = "Los enemigos y PNJ que aún necesitas para una misión mantienen visibles sus placas de nombre, con un ! dorado en su placa y en el marco de tu objetivo. Opcionalmente, el objeto de misión que tienes delante brilla para que sea fácil de ver."

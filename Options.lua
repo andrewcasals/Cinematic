@@ -6522,7 +6522,8 @@ local function CreateVisionPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local note = PageIntro(content, title,
-		L["Ways of showing just what matters: the health of a duel near you, or who in your group needs healing."])
+		L["Ways of showing just what matters: the health of a duel near you, what you still need for your quests, " ..
+		"or who in your group needs healing."])
 
 	local switch = PageSwitch(content, "handleVision", L["Enable page"],
 		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
@@ -6540,6 +6541,40 @@ local function CreateVisionPanel()
 	duelCheck:SetPoint("TOPLEFT", duelHeader, "BOTTOMLEFT", -2, -6)
 	GreyUnless(duelCheck, function(db) return db.handlePlates end)
 
+	-- Quest Vision: mobs and NPCs you still need for a quest objective (see
+	-- QuestMobs): their plates kept up, a quest icon on them and on the target frame.
+	local questHeader = Header(content, L["Quest Vision"], duelCheck, -24)
+	questHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -24)
+	local questStack = Stack(questHeader)
+	local questPlates = Check(content, "plateQuestMobs", L["Always show their nameplates"],
+		L["In CineMode, the nameplates of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
+		"an NPC to talk to) show, in fights and out, whatever the Nameplates page's grids say. Once the " ..
+		"objective is done, they fade with the rest. Needs the Nameplates page enabled."])
+	GreyUnless(questPlates, function(db) return db.handlePlates end)
+	questStack:Add(questPlates, "check")
+	local questIcon = Check(content, "plateAlwaysPartQuestIcon", L["Quest icon on their nameplates"],
+		L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show. " ..
+		"Needs the Nameplates page enabled."])
+	GreyUnless(questIcon, function(db) return db.handlePlates end)
+	questStack:Add(questIcon, "check")
+	local questTarget = Check(content, "targetQuestIcon", L["Quest icon on your target frame"],
+		L["The same mark beside your target frame's health bar while your target is one of them. " ..
+		"In CineMode and out."], function(value)
+		ns.GetDB().targetQuestIcon = value
+		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
+	end)
+	questStack:Add(questTarget, "check")
+	local questGlow = Check(content, "questObjectGlow", L["Glow on quest objects"],
+		L["The thing on the ground you pick up or use for a quest objective glows gold, with the quest mark " ..
+		"over it, in CineMode and out. One at a time: the one in front of you that your interact key would " ..
+		"use, up to 20 yards away. Turns on the game's soft targeting for things to interact with (Interact " ..
+		"key on keyboard and mouse too) while it's on; your own settings come back when you untick it."],
+		function(value)
+			ns.GetDB().questObjectGlow = value
+			if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
+		end)
+	questStack:Add(questGlow, "check")
+
 	do
 		local function Apply()
 			if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
@@ -6552,8 +6587,8 @@ local function CreateVisionPanel()
 		end
 		local function IfAny(db) return ns.HealVisionAny(db) end
 
-		local healHeader = Header(content, L["Heal Vision"], duelCheck, -24)
-		healHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -24)
+		local healHeader = Header(content, L["Heal Vision"], questGlow, -24)
+		healHeader:SetPoint("TOPLEFT", questGlow, "BOTTOMLEFT", 2, -24)
 		local healNote = PageIntro(content, healHeader,
 			L["The game's party and raid frames show only who needs healing: everyone (pets too) while below full " ..
 			"health, and as ticked below, tanks and members with debuffs. The group titles hide. The members stay " ..

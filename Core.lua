@@ -570,6 +570,9 @@ DEFAULTS.plateInstanceFriendlyMinions = "hide"
 DEFAULTS.plateInstanceFriendlyNPCs = "target"
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
+DEFAULTS.plateQuestMobs = true -- in CineMode, plates of units for a quest objective you haven't finished show (see Effects)
+DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
+DEFAULTS.questObjectGlow = false -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
 DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
 -- The other pages' master switches likewise (see ns.HANDLE_SWITCHES): off,
@@ -788,7 +791,7 @@ for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
 		"centerPanels", "dragPanels" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
-	handleVision = { "duelPlates" },
+	handleVision = { "duelPlates", "plateQuestMobs", "targetQuestIcon", "questObjectGlow" },
 }) do
 	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end
 end
@@ -803,12 +806,13 @@ DEFAULTS.unitPartsFocusToTSame = true
 DEFAULTS.unitPartsFocusToT = true -- the focus's target of target frame shows at all
 -- And rows of our own: a class icon by friendly and by enemy players' health
 -- bars (as Duel Vision shows), and a role icon by group members' (tank,
--- healer, damage). Off everywhere to start with, except enemy class icons and
--- tank and healer role icons: shown always.
+-- healer, damage), and a quest icon by quest mobs' (see QuestMobs). Off
+-- everywhere to start with, except enemy class icons, tank and healer role
+-- icons and quest icons: shown always.
 ns.PLATE_CLASS_PARTS = { "ClassFriendly", "ClassEnemy" }
 ns.PLATE_ROLE_PARTS = { "RoleTank", "RoleHealer", "RoleDamager" }
-ns.PLATE_ICON_PARTS = { "ClassFriendly", "ClassEnemy", "RoleTank", "RoleHealer", "RoleDamager" }
-ns.PLATE_ICONS_ALWAYS = { "ClassEnemy", "RoleTank", "RoleHealer" }
+ns.PLATE_ICON_PARTS = { "ClassFriendly", "ClassEnemy", "RoleTank", "RoleHealer", "RoleDamager", "QuestIcon" }
+ns.PLATE_ICONS_ALWAYS = { "ClassEnemy", "RoleTank", "RoleHealer", "QuestIcon" }
 for _, part in ipairs(ns.PLATE_ICON_PARTS) do
 	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
 		DEFAULTS[prefix .. "Part" .. part] = false

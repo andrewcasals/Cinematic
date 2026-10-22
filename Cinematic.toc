@@ -57,6 +57,8 @@ CenterPanels.lua
 CameraWheel.lua
 MenuWheel.lua
 MarkerWheel.lua
+QuestMobs.lua
+QuestGlow.lua
 Effects.lua
 PlateParts.lua
 Camera.lua

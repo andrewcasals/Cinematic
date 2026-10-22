@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-21", page = "Vision", title = "Quest Vision",
+		text = "Mobs and NPCs you still need for a quest keep their nameplates up, with a golden ! on their " ..
+		"plate and your target frame. Optionally, the quest object in front of you glows so it's easy to spot." },
 	{ date = "2026-10-21", page = "Keybinds", title = "Marker wheels",
 		text = "Hold a key to bring up a wheel of raid markers and put one on your target, or drop a ground " ..
 		"marker where you let go. A master wheel opens any of the wheels from one key. Set the keys on the " ..

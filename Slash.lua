@@ -95,6 +95,7 @@ local function PrintDebugHelp()
 	print("  /cine debug marker [across up size] - where the kept raid markers sit over faded plates")
 	print("  /cine debug platewatch - log how faded nameplates are drawn each time it changes, to find one flashing up")
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
+	print("  /cine debug questglow - quest object glow: what soft targeting picked and why it glows or not")
 	print("  /cine debug sounds - print each sound the game plays, by number and name, e.g. the talents window's (again to stop)")
 	print("  /cine debug talentart - log every part of the open talents window (sizes, textures, atlases) and its trees")
 	print("  /cine debug talentcalc - the talent calculator: your trees as read, their grids, the row rule, its button")
@@ -754,6 +755,8 @@ local function HandleSlash(msg)
 			.. " (/reload to write the log)")
 	elseif cmd == "debug" and arg == "duels" then
 		ns.PrintDuelsDebug()
+	elseif cmd == "debug" and arg == "questglow" then
+		ns.PrintQuestGlowDebug()
 	elseif cmd == "debug" and arg == "sounds" and ns.ToggleSoundWatch then
 		ns.Print("print each sound the game plays: " .. OnOff(ns.ToggleSoundWatch()))
 	elseif cmd == "debug" and arg == "talentart" and ns.LogTalentArt then

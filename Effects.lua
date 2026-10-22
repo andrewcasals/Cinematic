@@ -1229,7 +1229,12 @@ end
 ns.PlateRowWanted = UnitRowWanted -- (the Plate Parts rows go by the same columns: see PlateParts)
 
 -- Whether a unit row has anyone to show now (your target's has its own fade, below).
+-- Quest mobs (plateQuestMobs, the Vision page's Quest Vision): units that count
+-- for a quest objective you haven't finished, everywhere in CineMode, fights included.
 local function UnitRowActive(row)
+	if row == "QuestMobs" then
+		return ns.Setting("plateQuestMobs") and true or false
+	end
 	if not UnitRowWanted(row) then
 		return false
 	end
@@ -1244,6 +1249,9 @@ local function InUnitRow(row, unit, kind)
 	if row == "MyPet" then
 		return kind == "FriendlyMinions" and Ask(UnitIsUnit, unit, "pet")
 	end
+	if row == "QuestMobs" then
+		return kind ~= "Friends" and kind ~= "Enemies" and ns.IsQuestMob(unit)
+	end
 	local wanted = row == "GroupMembers" and "Friends" or "FriendlyMinions"
 	if kind ~= wanted or (row == "GroupMinions" and Ask(UnitIsUnit, unit, "pet")) then
 		return false -- (your pet has its own row)
@@ -1252,7 +1260,7 @@ local function InUnitRow(row, unit, kind)
 end
 
 -- How far each unit row holds its plates up, faded like keptLevel. row -> 0 to 1.
-local unitRowLevel = { MyPet = 0, GroupMembers = 0, GroupMinions = 0 }
+local unitRowLevel = { MyPet = 0, GroupMembers = 0, GroupMinions = 0, QuestMobs = 0 }
 
 local function UnitRowAlpha(unit, kind)
 	local alpha = 0
@@ -2077,6 +2085,9 @@ local function PlateAlpha(unit, plate)
 	if plate and plate == PersonalPlate() then
 		return personalAlpha
 	end
+	if ns.SoftTargetCorpse(unit) then
+		return 0 -- (a plate only Quest Vision's soft targeting gave it: see QuestGlow)
+	end
 	local alpha = KindAlpha(unit)
 	if plate == targetFade.plate and not (unit and IsTarget(unit) and AlwaysShownTarget(unit)) then
 		return alpha -- a frame before the target fade catches up with a new target
@@ -2616,6 +2627,9 @@ local function SideShown(side)
 		if (keptLevel[kind] or 0) > 0 or (combatCap[kind] or 0) > 0 or (nameLevel[KIND_NAME_GROUP[kind]] or 0) > 0 then
 			return true
 		end
+	end
+	if unitRowLevel.QuestMobs > 0 then
+		return true -- (quest mobs are on either side)
 	end
 	if side == PLATE_SIDES.Friendly then
 		for _, level in pairs(unitRowLevel) do

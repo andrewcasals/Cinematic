@@ -322,10 +322,62 @@ local function RefreshRoleIcon(plate)
 	end
 end
 
--- Both a plate's icons (the role icon goes by where the class icon is).
+-- The Quest Icon row: a golden exclamation mark left of the health bar of a
+-- unit for a quest objective you haven't finished (ns.IsQuestMob), where
+-- players' class icons go (quest mobs aren't players). Shown like the class
+-- icons, its one box (Always) ticked on the Vision page's Quest Vision, whose
+-- page switch it follows.
+local QUEST_TEXTURE = ns.QUEST_MOB_TEXTURE
+local questIcons = {} -- [plate] = icon frame
+
+local function QuestIcon(plate)
+	local icon = questIcons[plate]
+	local unitFrame = plate.UnitFrame
+	if icon or not Usable(unitFrame) then
+		return icon
+	end
+	local bar = unitFrame.HealthBarsContainer or unitFrame.healthBar or unitFrame
+	icon = CreateFrame("Frame", nil, unitFrame)
+	icon:SetSize(20, 20)
+	icon:SetPoint("RIGHT", bar, "LEFT", -3, 0)
+	icon:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
+	icon.texture = icon:CreateTexture(nil, "OVERLAY")
+	icon.texture:SetAllPoints()
+	icon.texture:SetTexture(QUEST_TEXTURE)
+	questIcons[plate] = icon
+	return icon
+end
+
+local function RefreshQuestIcon(plate)
+	if not plate or (plate.IsForbidden and plate:IsForbidden()) then
+		return
+	end
+	local level = (levels.QuestIcon or 0) * (bodyShare[plate] or 1)
+	local icon = questIcons[plate]
+	if level > 0 and plate ~= PersonalPlate() then
+		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+		if not (unit and ns.IsQuestMob(unit)) then
+			level = 0
+		end
+	end
+	if level <= 0 then
+		if icon then
+			icon:Hide()
+		end
+		return
+	end
+	icon = QuestIcon(plate)
+	if icon then
+		icon:SetAlpha(level)
+		icon:Show()
+	end
+end
+
+-- A plate's icons (the role icon goes by where the class icon is).
 function ns.RefreshClassIcon(plate)
 	RefreshClass(plate)
 	RefreshRoleIcon(plate)
+	RefreshQuestIcon(plate)
 end
 
 local function RefreshClassIcons()
@@ -384,10 +436,13 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		if roleIcons[plate] then
 			roleIcons[plate]:Hide()
 		end
+		if questIcons[plate] then
+			questIcons[plate]:Hide()
+		end
 		return
 	end
 	plateClass[plate], plateRole[plate] = nil, nil
-	if AnyClassIcons() or icons[plate] or roleIcons[plate] then
+	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] then
 		ns.RefreshClassIcon(plate)
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" and AnyFaded() then
@@ -409,10 +464,13 @@ function ns.SetPlateBody(plate, body, name)
 	end
 	bodyShare[plate], nameShare[plate] = body, name
 	ApplyPlate(plate, PersonalPlate())
-	if AnyClassIcons() or icons[plate] or roleIcons[plate] then
+	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] then
 		ns.RefreshClassIcon(plate)
 	end
 end
+
+local QUEST_ICONS_EVERY = 0.5
+local questIconsAt = 0
 
 -- Each tick, from ns.UpdatePlates: active while the Nameplates page steers
 -- plates (CineMode, its master switch on).
@@ -436,7 +494,7 @@ function ns.UpdatePlateParts(active, elapsed)
 	local iconsChanged = false
 	for _, part in ipairs(ns.PLATE_ICON_PARTS) do
 		local wanted
-		if not ns.db.handlePlates then
+		if not ns.db.handlePlates or (part == "QuestIcon" and ns.db.handleVision == false) then
 			wanted = false
 		elseif active then
 			wanted = ns.PlateRowWanted("Part" .. part)
@@ -455,6 +513,12 @@ function ns.UpdatePlateParts(active, elapsed)
 	end
 	if iconsChanged then
 		RefreshClassIcons()
+	elseif (levels.QuestIcon or 0) > 0 and GetTime() >= questIconsAt then
+		-- (Quest progress comes and goes without the row changing: looked at again now and then.)
+		questIconsAt = GetTime() + QUEST_ICONS_EVERY
+		for _, plate in ipairs(C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}) do
+			RefreshQuestIcon(plate)
+		end
 	end
 end
 
@@ -526,6 +590,11 @@ function ns.DescribePlateParts(unitFrame)
 	local roleIcon = roleIcons[unitFrame:GetParent()]
 	found[#found + 1] = "Role=" .. (okRole and tostring(role) or "?") .. " icon="
 		.. (roleIcon and (roleIcon:IsShown() and "shown" or "hidden") or "none")
+	if unit and ns.DescribeQuestMob then
+		local questIcon = questIcons[unitFrame:GetParent()]
+		found[#found + 1] = ns.DescribeQuestMob(unit) .. " icon="
+			.. (questIcon and (questIcon:IsShown() and "shown" or "hidden") or "none")
+	end
 	-- The health bar's container, the bar, and any frame on the bar (its border).
 	local healthFields = {}
 	local container, bar = unitFrame.HealthBarsContainer, unitFrame.healthBar
