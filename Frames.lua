@@ -1925,7 +1925,7 @@ function ns.CopyHoverGroups()
 		for key, on in pairs(group.triggers or {}) do triggers[key] = on end
 		local preset = ns.HoverGroupPreset(group)
 		copy[#copy + 1] = { name = group.name, members = members, triggers = triggers, when = group.when,
-			preset = preset and preset.preset or nil, icon = not preset and group.icon or nil }
+			off = group.off, preset = preset and preset.preset or nil, icon = not preset and group.icon or nil }
 	end
 	return copy
 end
@@ -4524,7 +4524,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local hoverGroups = ns.GetHoverGroups()
 	-- (A group set to work only in fights, or only out of them: left out
 	-- otherwise, its frames still coming up on their own. offWhen: the "when"
-	-- that's left out now.)
+	-- that's left out now. A group turned off (group.off) is always left out.)
 	local offWhen = fighting and "calm" or "combat"
 	local hovered, triggered, pinged = wipe(tickTables.hovered), wipe(tickTables.triggered), wipe(tickTables.pinged)
 	if cinematic and ns.db.mouseover then
@@ -4552,7 +4552,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		-- (Only groups a hovered row is in directly: groups sharing a row don't chain.)
 		local mouseGroups = wipe(tickTables.mouseGroups)
 		for _, group in ipairs(hoverGroups) do
-			for _, key in ipairs(group.when ~= offWhen and group.members or NO_DEFAULTS) do
+			for _, key in ipairs(not group.off and group.when ~= offWhen and group.members or NO_DEFAULTS) do
 				if hovered[key] then
 					mouseGroups[#mouseGroups + 1] = group
 					break
@@ -4582,7 +4582,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
 		and AnyCooldownRecharging(now)
 	for _, group in ipairs(hoverGroups) do
-		for key, on in pairs(group.when ~= offWhen and group.triggers or NO_DEFAULTS) do
+		for key, on in pairs(not group.off and group.when ~= offWhen and group.triggers or NO_DEFAULTS) do
 			if on and events[key] then
 				for _, member in ipairs(group.members) do
 					triggered[member] = true

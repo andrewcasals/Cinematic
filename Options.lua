@@ -8305,8 +8305,11 @@ local function CreateMouseoverPanel()
 		-- (Below the main switch and slider.)
 		local top, bottom = content:GetTop(), hold:GetBottom()
 		local y = (top and bottom) and (top - bottom + 22) or 180
+		-- (dim: the alpha for what's placed, lower for a group that's off.)
+		local dim = 1
 		local function At(widget, x, extraY)
 			widget:SetPoint("TOPLEFT", content, "TOPLEFT", x, -(y + (extraY or 0)))
+			widget:SetAlpha(dim)
 		end
 
 		-- A row of every group's icon: click one to go to it. The + at the
@@ -8322,7 +8325,8 @@ local function CreateMouseoverPanel()
 			local tile = Take("tile", function() return IconTile(TILE) end)
 			TileAt(tile, index)
 			tile.icon:SetTexture(ns.HoverGroupIcon(group))
-			tile.tipTitle = group.name
+			tile.icon:SetDesaturated(group.off and true or false)
+			tile.tipTitle = group.off and group.name .. " |cff808080(" .. L["Off"] .. ")|r" or group.name
 			local names = {}
 			for _, key in ipairs(group.members) do
 				local item = byKey[key]
@@ -8337,6 +8341,7 @@ local function CreateMouseoverPanel()
 		local add = Take("tile", function() return IconTile(TILE) end)
 		TileAt(add, #groups + 1)
 		add.icon:SetTexture("Interface\\Icons\\Spell_ChargePositive")
+		add.icon:SetDesaturated(false)
 		add.tipTitle, add.tipLines = L["New group"], { L["A group of your own, to pick its frames and icon."] }
 		add:SetScript("OnClick", function()
 			newGroup:Click()
@@ -8348,6 +8353,7 @@ local function CreateMouseoverPanel()
 		wipe(headingY)
 		for index, group in ipairs(groups) do
 			-- Divider and heading: name box, delete.
+			dim = 1
 			local line = Take("line", function()
 				local t = content:CreateTexture(nil, "ARTWORK")
 				t:SetColorTexture(1, 1, 1, 0.15)
@@ -8358,6 +8364,8 @@ local function CreateMouseoverPanel()
 			line:SetWidth(WIDTH)
 			headingY[index] = y
 			y = y + 20
+			-- (An off group is greyed out, all but its On/Off and Delete buttons.)
+			dim = group.off and 0.4 or 1
 
 			-- Its icon: one you pick, for a group you made.
 			local preset = ns.HoverGroupPreset(group)
@@ -8414,6 +8422,24 @@ local function CreateMouseoverPanel()
 				Layout()
 			end)
 
+			-- On or off: an off group is kept, but does nothing. (off: nil or true.)
+			local onOff = Take("onOff", function()
+				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+				button:SetSize(80, 22)
+				Tooltip(button, L["Turns this group on or off. While it's off it's kept as it is, but its frames " ..
+					"come up on their own (or with their other groups), and its events don't bring it up."])
+				return button
+			end)
+			At(onOff, LEFT + 372, -1)
+			onOff:SetAlpha(1)
+			onOff:SetText(group.off and L["Off"] or L["On"])
+			onOff:SetScript("OnClick", function()
+				local editable = Writable()[index]
+				editable.off = not editable.off or nil
+				Layout()
+			end)
+			icon.icon:SetDesaturated(group.off and true or false)
+
 			local delete = Take("delete", function()
 				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 				button:SetSize(100, 22)
@@ -8422,6 +8448,7 @@ local function CreateMouseoverPanel()
 				return button
 			end)
 			At(delete, LEFT + WIDTH - 100, -1)
+			delete:SetAlpha(1)
 			delete:SetScript("OnClick", function()
 				table.remove(Writable(), index)
 				Layout()
@@ -8485,6 +8512,7 @@ local function CreateMouseoverPanel()
 			At(AddBox("addEvent", L["Add an event: type to search..."], index, true), LEFT + 34, 4)
 			y = y + 48
 		end
+		dim = 1
 
 		newGroup:ClearAllPoints()
 		newGroup:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, -(y + 4))
