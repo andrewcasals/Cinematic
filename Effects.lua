@@ -915,6 +915,34 @@ local function KeepInteractPrompt(frame)
 	end
 end
 
+-- Classic Era's health bar has a highlight that ignores the plate's alpha:
+-- hovering a faded plate's unit showed it as a grey bar over their head.
+-- While the plate is faded it fades with it.
+local function FadeBarHighlight(frame, faded)
+	local bar = frame.healthBar or (frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
+	if type(bar) ~= "table" or not bar.GetRegions or (bar.IsForbidden and bar:IsForbidden()) then
+		return
+	end
+	-- (Found once per bar: the regions that ignored their parent's alpha.)
+	local lone = bar.cinematicLoneRegions
+	if not lone then
+		lone = {}
+		for _, region in ipairs({ bar:GetRegions() }) do
+			if region.IsIgnoringParentAlpha and ns.Flag(region:IsIgnoringParentAlpha()) then
+				lone[#lone + 1] = region
+			end
+		end
+		bar.cinematicLoneRegions = lone
+	end
+	if #lone == 0 or bar.cinematicHighlightFaded == faded then
+		return
+	end
+	bar.cinematicHighlightFaded = faded
+	for _, region in ipairs(lone) do
+		region:SetIgnoreParentAlpha(not faded)
+	end
+end
+
 -- The raid marker on a plate (skull, moon...) likewise, as the Nameplates
 -- page's Raid Markers grid says for the unit's side: the rest of the plate
 -- fades, and a marker of our own
@@ -1065,6 +1093,7 @@ function ns.SetPlateAlpha(plate, alpha, bodyAlpha)
 	if plate and plate.UnitFrame and not (plate.IsForbidden and plate:IsForbidden()) then
 		local frame = plate.UnitFrame
 		KeepInteractPrompt(frame)
+		FadeBarHighlight(frame, alpha < 1)
 		frame.cinematicAlpha = alpha < 1 and alpha or nil
 		frame.cinematicBodyAlpha = bodyAlpha ~= nil and bodyAlpha < alpha and bodyAlpha or nil
 		if frame.cinematicAlpha then
@@ -2145,6 +2174,7 @@ end
 -- Leaves a plate's alpha to the game (or its nameplate addon) again.
 local function LetGoOfPlate(plate)
 	if plate.UnitFrame then
+		FadeBarHighlight(plate.UnitFrame, false)
 		plate.UnitFrame.cinematicAlpha = nil
 		if plate.UnitFrame.cinematicMarker then
 			plate.UnitFrame.cinematicMarker:Hide() -- (its last unit's)
@@ -2309,6 +2339,57 @@ function ns.PrintPlatesDebug()
 		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 		local shown = plate.UnitFrame and ("%.2f"):format(plate.UnitFrame:GetAlpha()) or "-"
 		ns.Print(("  %s (unit %s, frame alpha %s)"):format(unit and describe(unit) or "?", tostring(unit), shown))
+	end
+	-- What still shows on the plate of the unit under the mouse (all of the
+	-- plate, not just its unit frame): a part outside the unit frame, or one
+	-- ignoring its parent's alpha, shows through a faded plate.
+	local overPlate = UnitExists("mouseover") and C_NamePlate and C_NamePlate.GetNamePlateForUnit
+		and C_NamePlate.GetNamePlateForUnit("mouseover")
+	if overPlate then
+		local found = 0
+		local function Key(object, fallback)
+			local ok, key = pcall(object.GetParentKey, object)
+			return (ok and key) or object:GetName() or fallback
+		end
+		local function Visit(object, path)
+			if found >= 20 then return end
+			local okShown, shown = pcall(object.IsVisible, object)
+			if not (okShown and ns.Flag(shown)) then return end
+			local okAlpha, alpha = pcall(object.GetEffectiveAlpha, object)
+			alpha = okAlpha and Known(alpha) and alpha or nil
+			local ignoring = object.IsIgnoringParentAlpha and ns.Flag(object:IsIgnoringParentAlpha())
+			if (alpha and alpha > 0.01) or ignoring then
+				local w, h = object:GetSize()
+				local art = ""
+				if object.GetAtlas and object:GetAtlas() then
+					art = " atlas " .. tostring(object:GetAtlas())
+				elseif object.GetTexture then
+					art = " texture " .. tostring(object:GetTexture())
+				end
+				found = found + 1
+				ns.Print(("  shows: %s (%s) alpha %s%s, %.0fx%.0f%s"):format(path, object:GetObjectType(),
+					alpha and ("%.2f"):format(alpha) or "?", ignoring and " IGNORES PARENT ALPHA" or "",
+					Known(w) and w or 0, Known(h) and h or 0, art))
+			end
+			if object.GetRegions then
+				for i, region in ipairs({ object:GetRegions() }) do
+					Visit(region, path .. "." .. Key(region, "region" .. i))
+				end
+			end
+			if object.GetChildren then
+				for i, child in ipairs({ object:GetChildren() }) do
+					Visit(child, path .. "." .. Key(child, "child" .. i))
+				end
+			end
+		end
+		ns.Print(("mouseover %s's plate, what shows (plate alpha %.2f):"):format(
+			tostring(UnitName("mouseover")), overPlate:GetAlpha()))
+		Visit(overPlate, "plate")
+		if found == 0 then
+			ns.Print("  nothing")
+		end
+	elseif UnitExists("mouseover") then
+		ns.Print("mouseover " .. tostring(UnitName("mouseover")) .. ": NO plate")
 	end
 	if UnitExists("target") then
 		local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit("target")
