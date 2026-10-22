@@ -2099,12 +2099,31 @@ local function PlateAlpha(unit, plate)
 	return alpha
 end
 
+-- Whether the game's name settings, as they are now, show a unit's name over
+-- its head (a plate takes that name away, even faded out).
+local function GameNameShown(unit)
+	local group = KIND_NAME_GROUP[PlateKind(unit) or ""]
+	for _, info in ipairs(ns.NAME_GROUPS) do
+		if info.key == group then
+			for _, cvar in ipairs(info.cvars) do
+				if GetCVar(cvar) == "1" and (cvar ~= "UnitNameHostleNPC" or Ask(UnitCanAttack, "player", unit)) then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
 -- The plate's alpha with its name kept (see nameLevel), and how much of that
 -- the rest of the plate gets (body) and the name (name), for PlateParts.
 local function PlateAlphas(unit, plate)
 	local body = PlateAlpha(unit, plate)
 	local name = 0
-	if platesForced and unit and plate ~= PersonalPlate() then
+	if body <= 0 and unit and ns.SoftPlateHidden(unit) then
+		-- (A plate only soft targeting gave it: its name stays, as without one.)
+		name = GameNameShown(unit) and 1 or 0
+	elseif platesForced and unit and plate ~= PersonalPlate() then
 		local kind = PlateKind(unit)
 		name = kind and nameLevel[KIND_NAME_GROUP[kind]] or 0
 		if (nameLevel.Target or 0) > name and IsTarget(unit) then
