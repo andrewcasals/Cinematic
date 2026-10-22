@@ -513,9 +513,34 @@ local function ScheduleReveals(drop, now)
 	return not drop.instant and now < (drop.nextReveal or 0) - REVEAL_GAP
 end
 
--- Its roll is done and every number's out.
+-- Its roll is done (or long overdue) and every number's out.
 local function Settled(drop)
-	return Done(drop.info) and not (not drop.instant and drop.nextReveal and GetTime() < drop.nextReveal)
+	return (Done(drop.info) or drop.expired)
+		and not (not drop.instant and drop.nextReveal and GetTime() < drop.nextReveal)
+end
+
+-- The game doesn't always say a roll's over (no winner, no "all passed"):
+-- once its time's up it's asked again each second, and a few seconds on it's
+-- taken as over. (Its time can't be told? Three minutes from when it came up.)
+local OVERDUE = 5
+local function CheckOverdue(drop, now)
+	if Done(drop.info) or not drop.encounterID then
+		return
+	end
+	drop.seenAt = drop.seenAt or now
+	local gone = TimeGone(drop.info)
+	if not (gone and gone >= 1) and now - drop.seenAt < 180 then
+		return
+	end
+	drop.overAt = drop.overAt or now
+	if now - (drop.askedAt or 0) >= 1 then
+		drop.askedAt = now
+		local ok, info = pcall(History.GetSortedInfoForDrop, drop.encounterID, drop.lootListID)
+		if ok and type(info) == "table" then
+			drop.info = info
+		end
+	end
+	drop.expired = now - drop.overAt > OVERDUE
 end
 
 -- You've still to pick on this one: the game's roll frame is up for it.
@@ -890,6 +915,7 @@ local function OnUpdate(self, delta)
 	local now = GetTime()
 	local busy, hovered = false, self:IsMouseOver()
 	for _, drop in ipairs(shown) do
+		CheckOverdue(drop, now)
 		if Settled(drop) then
 			-- (each goes a while after it's settled; not while you're pointing at them)
 			drop.settledAt = hovered and now or drop.settledAt or now
