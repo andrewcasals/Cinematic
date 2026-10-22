@@ -795,6 +795,102 @@ local function UpdateDeathScreen(elapsed)
 	end
 end
 
+-- "YOU DIED" banner (a nod to Elden Ring): as the death camera starts, a dark
+-- band with soft edges fades in across the middle of the screen, the words in
+-- dull red on it, then it all fades away. Above the letterbox,
+-- under popups (the release button). The text is a game font scaled up with
+-- its frame, so other alphabets keep their letters. It looks worn: faint
+-- offset copies behind it bleed its edges. (A grain texture over it wore the
+-- band round the letters too, and looked dirty: tested.)
+local BANNER_IN, BANNER_HOLD, BANNER_OUT = 1.2, 4, 1.5 -- seconds
+local BANNER_HEIGHT, BANNER_EDGE = 0.1, 0.07 -- solid band, and each soft edge (shares of the screen height)
+local BANNER_ALPHA = 0.7
+local BANNER_SCALE = 3.3 -- the text's size (its font's, times this)
+local BANNER_COLOR = { 0.72, 0.11, 0.14 }
+local BANNER_BLEED = { { -0.7, 0 }, { 0.7, 0 }, { 0, -0.7 }, { 0, 0.7 }, { -0.4, 0.4 }, { 0.4, -0.4 } }
+local BANNER_BLEED_ALPHA, BANNER_TEXT_ALPHA = 0.16, 0.9
+local banner = { started = nil, was = nil, bleed = {} }
+
+local function CreateDeathBanner()
+	local frame = CreateFrame("Frame", nil, UIParent)
+	frame:SetAllPoints(UIParent)
+	frame:SetFrameStrata("HIGH")
+	frame:EnableMouse(false)
+	ns.AddOverlay(frame)
+	-- A full-width strip, its colour from bottom to top.
+	local function Strip(bottom, top, ...)
+		local strip = frame:CreateTexture(nil, "BACKGROUND")
+		strip:SetColorTexture(1, 1, 1, 1)
+		strip:SetPoint("LEFT")
+		strip:SetPoint("RIGHT")
+		strip:SetPoint(...)
+		SetGradient(strip, "VERTICAL", bottom, top)
+		return strip
+	end
+	local clear, black = { 0, 0, 0, 0 }, { 0, 0, 0, BANNER_ALPHA }
+	banner.middle = Strip(black, black, "CENTER")
+	banner.top = Strip(black, clear, "BOTTOM", banner.middle, "TOP")
+	banner.bottom = Strip(clear, black, "TOP", banner.middle, "BOTTOM")
+	banner.holder = CreateFrame("Frame", nil, frame)
+	banner.holder:SetSize(1, 1)
+	banner.holder:SetPoint("CENTER")
+	local function Text(layer, x, y, alpha)
+		local text = banner.holder:CreateFontString(nil, layer)
+		text:SetFontObject(GameFontNormalHuge) -- (a font before any text)
+		text:SetShadowOffset(0, 0)
+		text:SetTextColor(BANNER_COLOR[1], BANNER_COLOR[2], BANNER_COLOR[3], alpha)
+		text:SetPoint("CENTER", x, y)
+		return text
+	end
+	for i, offset in ipairs(BANNER_BLEED) do
+		banner.bleed[i] = Text("ARTWORK", offset[1], offset[2], BANNER_BLEED_ALPHA)
+	end
+	banner.text = Text("OVERLAY", 0, 0, BANNER_TEXT_ALPHA)
+	-- One size throughout. Growing it (the frame's scale each frame, or a
+	-- Scale animation) redraws the letters at whole font sizes, so it grew in
+	-- jumps, from its top left corner: it wobbled (tested).
+	banner.holder:SetScale(BANNER_SCALE)
+	banner.frame = frame
+	frame:Hide()
+end
+
+local function ShowDeathBanner()
+	local height = UIParent:GetHeight()
+	banner.middle:SetHeight(height * BANNER_HEIGHT)
+	banner.top:SetHeight(height * BANNER_EDGE)
+	banner.bottom:SetHeight(height * BANNER_EDGE)
+	banner.text:SetText(L["YOU DIED"])
+	for _, bleed in ipairs(banner.bleed) do
+		bleed:SetText(L["YOU DIED"])
+	end
+	banner.started = GetTime()
+	banner.frame:SetAlpha(0)
+	banner.frame:Show()
+end
+
+local function UpdateDeathBanner()
+	if not banner.frame then
+		return
+	end
+	local want = db.enabled and db.deathBanner and ns.IsDeathCinematic and ns.IsDeathCinematic() or false
+	if want and banner.was == false then
+		ShowDeathBanner()
+	end
+	banner.was = want -- (nil until the first check: dead at login, it doesn't show)
+	if not banner.started then
+		return
+	end
+	local t = GetTime() - banner.started
+	local total = BANNER_IN + BANNER_HOLD + BANNER_OUT
+	if t >= total or not want then
+		banner.started = nil
+		banner.frame:Hide()
+		return
+	end
+	local alpha = math.min(1, t / BANNER_IN, (total - t) / BANNER_OUT)
+	banner.frame:SetAlpha(alpha * alpha * (3 - 2 * alpha))
+end
+
 -- Indoors in an inn: resting outside a capital, under a roof. (The rested area
 -- often spills out the door; the roof check keeps the street outside dark.)
 local function InInn()
@@ -919,6 +1015,7 @@ end
 -- cinematic, vignetteOn, weatherOn: whether each is wanted now (see Core).
 local function UpdateTint(cinematic, elapsed, vignetteOn, weatherOn)
 	UpdateDeathScreen(elapsed)
+	UpdateDeathBanner()
 	local target = TintWanted(cinematic) and 1 or 0
 	local vignetteWant = TintWanted(vignetteOn) and 1 or 0
 	local weatherWant = TintWanted(weatherOn) and 1 or 0
@@ -975,6 +1072,7 @@ function ns.CreateTint()
 	db = ns.GetDB()
 	CreateTint()
 	CreateDeathScreen()
+	CreateDeathBanner()
 end
 
 ns.UpdateTint = UpdateTint

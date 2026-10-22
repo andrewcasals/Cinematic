@@ -2726,6 +2726,10 @@ local function CreateDeathPanel()
 	Tooltip(reach, L["How far the dark edges reach in once they've closed in, as a share of the " ..
 		"screen from each side."])
 	GreyUnless(reach, function(db) return IfOn(db) and db.deathScreen end)
+	local banner = rightStack:Add(Check(content, "deathBanner", L["Show \"YOU DIED\""],
+		L["As the death camera starts, \"YOU DIED\" fades in across the middle of the screen on a " ..
+		"dark band, then fades away after a few seconds."]), "check")
+	GreyUnless(banner, IfOn)
 
 	rightStack:Header(content, L["Music"])
 	local song = rightStack:Add(Check(content, "deathSong", L["Play a death song"],

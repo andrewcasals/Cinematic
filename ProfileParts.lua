@@ -284,6 +284,7 @@ ns.PROFILE_PARTS = {
 			set("runCine", true)
 			set("deathCine", true)
 			set("deathScreen", false)
+			set("deathBanner", false)
 			set("eventStillCamera", "afk")
 			for _, event in ipairs(MUSIC_EVENTS) do set("event" .. event .. "Music", true) end
 			set("musicCamWalk", true)

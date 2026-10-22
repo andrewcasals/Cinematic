@@ -520,6 +520,7 @@ DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette mea
 DEFAULTS.deathScreenStrength = 1
 DEFAULTS.deathVignetteTime = 10    -- seconds for its vignette to creep in
 DEFAULTS.deathVignetteSize = 0.35  -- ...and the fraction of the screen each edge covers then
+DEFAULTS.deathBanner = true        -- "YOU DIED" across the screen as it starts
 DEFAULTS.deathZoom = 4             -- yards it pulls back meanwhile
 DEFAULTS.deathOrbitPause = 0       -- (always one continuous turn)
 -- Auto-run camera: like RP walk, while auto-running (runOrbit*, runZoom*).
