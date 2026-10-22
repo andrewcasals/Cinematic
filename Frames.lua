@@ -1390,6 +1390,7 @@ do
 	end
 end
 
+ns.CHAT_SCROLL_PARTS = { "ScrollBar", "ScrollToBottomButton", "buttonFrame", "Background" }
 function ns.IsEntryHovered(entry)
 	if PART_GROUPS[entry.group] then
 		return false
@@ -1435,6 +1436,18 @@ function ns.IsEntryHovered(entry)
 	-- rest can be hovered, so no need to ask each frame.)
 	if entry.group ~= "chat" and not MouseFocus() then
 		return false
+	end
+	-- A chat window's scroll bar and jump-to-bottom button sit outside its
+	-- rect (Classic's button column too), and so does the dark background
+	-- around them: hovering any of them counts.
+	if entry.group == "chat" and ns.Flag(entry.frame:IsVisible()) then
+		local name = entry.frame:GetName()
+		for _, key in ipairs(ns.CHAT_SCROLL_PARTS) do
+			local part = entry.frame[key] or (name and _G[name .. key])
+			if part and part.IsMouseOver and ns.Flag(part:IsVisible()) and ns.Flag(part:IsMouseOver()) then
+				return true
+			end
+		end
 	end
 	if not (ns.Flag(entry.frame:IsVisible()) and ns.Flag(entry.frame:IsMouseOver())) then
 		return false
@@ -4470,6 +4483,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- A whisper tab waiting to be read keeps the whole chat window up, tabs
 	-- and all, so it can be clicked (Chat page).
 	local whisperUnread = cinematic and ns.db.chatUntilWhisperRead and ns.HasUnreadWhisper()
+	ns.HoldScrolledChat(now)
 	-- A docked chat window peeking brings its tabs up with it.
 	local dockPeek = false
 	for chatFrame, untilTime in pairs(ns.chatPeekUntil) do

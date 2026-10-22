@@ -296,6 +296,21 @@ function ns.PeekChat(chatFrame, seconds)
 	end
 end
 
+-- A chat window scrolled up to read older lines stays up, and fades after the
+-- peek time once it's back at the bottom.
+function ns.HoldScrolledChat(now)
+	for i = 1, NUM_CHAT_WINDOWS or 10 do
+		local chatFrame = _G["ChatFrame" .. i]
+		if chatFrame and chatFrame.AtBottom and ns.Flag(chatFrame:IsShown()) then
+			-- (Only a plain false: a secret answer mustn't keep chat up for good.)
+			local atBottom = chatFrame:AtBottom()
+			if not (issecretvalue and issecretvalue(atBottom)) and atBottom == false then
+				ns.chatPeekUntil[chatFrame] = now + ns.HoldTime("chatPeekTime")
+			end
+		end
+	end
+end
+
 -- With "Hide your messages" (db.chatHideOwn), your own lines don't peek: your
 -- emotes ("You bow.", the campfire button's sit or kneel), says, party lines...
 -- You know you did them. Told by the sender's GUID, or by name where a client
