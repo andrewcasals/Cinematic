@@ -1510,6 +1510,7 @@ L["Ways of showing just what matters: the health of a duel near you, what you st
 	"or who in your group needs healing."] = "Formas de mostrar solo lo que importa: la salud de un duelo cerca de ti, " ..
 	"lo que aún necesitas para tus misiones, o quién de tu grupo necesita sanación."
 L["Quest Vision"] = "Visión de misión"
+L["Off: none of Quest Vision below works, and each keeps its tick for when you turn this back on."] = "Desactivado: nada de la Visión de misión de abajo funciona, y cada opción conserva su marca para cuando lo vuelvas a activar."
 L["Always show their nameplates"] = "Mostrar siempre sus placas de nombre"
 L["In CineMode, the nameplates of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
 	"an NPC to talk to) show, in fights and out, whatever the Nameplates page's grids say. Once the " ..

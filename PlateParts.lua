@@ -326,7 +326,7 @@ end
 -- unit for a quest objective you haven't finished (ns.IsQuestMob), where
 -- players' class icons go (quest mobs aren't players). Shown like the class
 -- icons, its one box (Always) ticked on the Vision page's Quest Vision, whose
--- page switch it follows.
+-- Enable and page switch it follows.
 local QUEST_TEXTURE = ns.QUEST_MOB_TEXTURE
 local questIcons = {} -- [plate] = icon frame
 
@@ -494,7 +494,7 @@ function ns.UpdatePlateParts(active, elapsed)
 	local iconsChanged = false
 	for _, part in ipairs(ns.PLATE_ICON_PARTS) do
 		local wanted
-		if not ns.db.handlePlates or (part == "QuestIcon" and ns.db.handleVision == false) then
+		if not ns.db.handlePlates or (part == "QuestIcon" and not ns.Setting("questVision")) then
 			wanted = false
 		elseif active then
 			wanted = ns.PlateRowWanted("Part" .. part)

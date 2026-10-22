@@ -570,6 +570,7 @@ DEFAULTS.plateInstanceFriendlyMinions = "hide"
 DEFAULTS.plateInstanceFriendlyNPCs = "target"
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
+DEFAULTS.questVision = true -- Quest Vision's Enable (Vision page): off, none of the three below works
 DEFAULTS.plateQuestMobs = true -- in CineMode, plates of units for a quest objective you haven't finished show (see Effects)
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
 DEFAULTS.questObjectGlow = false -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
@@ -791,7 +792,7 @@ for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
 		"centerPanels", "dragPanels" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
-	handleVision = { "duelPlates", "plateQuestMobs", "targetQuestIcon", "questObjectGlow" },
+	handleVision = { "duelPlates", "questVision", "plateQuestMobs", "targetQuestIcon", "questObjectGlow" },
 }) do
 	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end
 end
@@ -799,6 +800,10 @@ function ns.Setting(key)
 	local db = ns.db
 	if not db or db[PAGE_SWITCH[key] or ""] == false then return false end
 	return db[key]
+end
+-- A Quest Vision tick as its Enable and the page's switch leave it.
+function ns.QuestVisionSetting(key)
+	return ns.Setting("questVision") and ns.Setting(key) or false
 end
 DEFAULTS.unitPartsFocusSame = true
 DEFAULTS.unitPartsToTSame = true

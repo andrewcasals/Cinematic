@@ -156,7 +156,7 @@ end
 
 function ns.RefreshTargetQuestIcon()
 	local db = ns.db
-	local on = db and ns.Setting("targetQuestIcon")
+	local on = db and ns.QuestVisionSetting("targetQuestIcon")
 	local ok, exists = pcall(UnitExists, "target")
 	local show = on and ok and Known(exists) and exists and ns.IsQuestMob("target")
 	if show then

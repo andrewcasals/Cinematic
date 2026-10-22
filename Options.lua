@@ -6546,16 +6546,30 @@ local function CreateVisionPanel()
 	local questHeader = Header(content, L["Quest Vision"], duelCheck, -24)
 	questHeader:SetPoint("TOPLEFT", duelCheck, "BOTTOMLEFT", 2, -24)
 	local questStack = Stack(questHeader)
+	local function ApplyQuest()
+		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
+		if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
+	end
+	local questEnable = Check(content, "questVision", L["Enable"],
+		L["Off: none of Quest Vision below works, and each keeps its tick for when you turn this back on."],
+		function(value)
+			ns.GetDB().questVision = value
+			ApplyQuest()
+			Refresh() -- grey out / enable the rest
+		end)
+	questStack:Add(questEnable, "check")
+	local function QuestOn(db) return db.questVision ~= false end
+	local function QuestPlatesOn(db) return db.questVision ~= false and db.handlePlates end
 	local questPlates = Check(content, "plateQuestMobs", L["Always show their nameplates"],
 		L["In CineMode, the nameplates of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
 		"an NPC to talk to) show, in fights and out, whatever the Nameplates page's grids say. Once the " ..
 		"objective is done, they fade with the rest. Needs the Nameplates page enabled."])
-	GreyUnless(questPlates, function(db) return db.handlePlates end)
+	GreyUnless(questPlates, QuestPlatesOn)
 	questStack:Add(questPlates, "check")
 	local questIcon = Check(content, "plateAlwaysPartQuestIcon", L["Quest icon on their nameplates"],
 		L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show. " ..
 		"Needs the Nameplates page enabled."])
-	GreyUnless(questIcon, function(db) return db.handlePlates end)
+	GreyUnless(questIcon, QuestPlatesOn)
 	questStack:Add(questIcon, "check")
 	local questTarget = Check(content, "targetQuestIcon", L["Quest icon on your target frame"],
 		L["The same mark beside your target frame's health bar while your target is one of them. " ..
@@ -6563,6 +6577,7 @@ local function CreateVisionPanel()
 		ns.GetDB().targetQuestIcon = value
 		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
 	end)
+	GreyUnless(questTarget, QuestOn)
 	questStack:Add(questTarget, "check")
 	local questGlow = Check(content, "questObjectGlow", L["Glow on quest objects"],
 		L["The thing on the ground you pick up or use for a quest objective glows gold, with the quest mark " ..
@@ -6573,6 +6588,7 @@ local function CreateVisionPanel()
 			ns.GetDB().questObjectGlow = value
 			if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
 		end)
+	GreyUnless(questGlow, QuestOn)
 	questStack:Add(questGlow, "check")
 
 	do

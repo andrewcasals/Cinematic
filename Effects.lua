@@ -1233,7 +1233,7 @@ ns.PlateRowWanted = UnitRowWanted -- (the Plate Parts rows go by the same column
 -- for a quest objective you haven't finished, everywhere in CineMode, fights included.
 local function UnitRowActive(row)
 	if row == "QuestMobs" then
-		return ns.Setting("plateQuestMobs") and true or false
+		return ns.QuestVisionSetting("plateQuestMobs") and true or false
 	end
 	if not UnitRowWanted(row) then
 		return false

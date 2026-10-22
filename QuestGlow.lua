@@ -247,7 +247,7 @@ local function GlowOff()
 end
 
 local function Wanted()
-	return ns.db and ns.Setting("questObjectGlow") and true or false
+	return ns.db and ns.QuestVisionSetting("questObjectGlow") and true or false
 end
 
 -- The object soft targeting picked and its plate, if it has one: plate, or nil.
