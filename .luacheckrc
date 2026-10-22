@@ -265,6 +265,8 @@ read_globals = {
 	"UnitPlayerOrPetInRaid",
 	"UnitIsFriend",
 	"UnitReaction",
+	"UnitSelectionColor",
+	"FACTION_BAR_COLORS",
 	"UnitIsGhost",
 	"GetAreaSpiritHealerTime",
 	"UnitIsPVP",

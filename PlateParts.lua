@@ -135,6 +135,153 @@ local function CentreName(unitFrame, on)
 	end
 end
 
+-- And coloured as the game colours names over heads (red hostile, yellow
+-- neutral, green friendly): the plate's own name is white or grey, the
+-- health bar giving its colour. Friendly players are left as the game draws
+-- them. The game sets the name's colour again on its own updates, so ours
+-- is put back every frame; WoW Forever's colours can be secret, so they go
+-- straight from the game to the text. Its text and vertex colours both get
+-- it (on WoW Forever they're one: the game sets both), their alpha left as
+-- it is for the fades. [name text] = { unit, the game's text colour, its
+-- vertex colour }.
+local tinted = {}
+
+local function Known(value)
+	return not (issecretvalue and issecretvalue(value))
+end
+
+local function Ask(fn, ...)
+	local ok, value = pcall(fn, ...)
+	return ok and Known(value) and value and true or false
+end
+
+local function TintUnit(unit)
+	local okGuid, guid = pcall(UnitGUID, unit)
+	if okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-") then
+		return Ask(UnitCanAttack, "player", unit)
+	end
+	return true
+end
+
+-- Sets a name's colour, keeping its alpha.
+local function SetNameColor(name, r, g, b)
+	pcall(name.SetTextColor, name, r, g, b, select(4, name:GetTextColor()))
+	if name.SetVertexColor and name.GetVertexColor then
+		pcall(name.SetVertexColor, name, r, g, b, select(4, name:GetVertexColor()))
+	end
+end
+
+local function PaintName(name, unit)
+	if UnitSelectionColor then
+		SetNameColor(name, UnitSelectionColor(unit))
+	else
+		local reaction = Ask(UnitReaction, unit, "player") and UnitReaction(unit, "player")
+		local color = reaction and FACTION_BAR_COLORS and FACTION_BAR_COLORS[reaction]
+		if color then
+			SetNameColor(name, color.r, color.g, color.b)
+		end
+	end
+end
+
+-- Drawn like those names too: the nameplate font's outline taken off, a
+-- drop shadow in its place. The game's font comes back with the rest of the
+-- plate (by its font object where it has one: the object may hold other
+-- alphabets than its file). [name text] = { font object, file, size, flags,
+-- shadow colour, shadow offset }.
+local styled = {}
+local SHADOW_X, SHADOW_Y = 1, -1
+
+local function Unoutlined(flags)
+	flags = (flags or ""):gsub("THICKOUTLINE", ""):gsub("OUTLINE", "")
+	return (flags:gsub("^,+", ""):gsub(",+$", ""):gsub(",,+", ","))
+end
+
+local function KeepStyle(name, saved)
+	local file, size, flags = name:GetFont()
+	if file and flags ~= saved.ours then
+		saved.ours = Unoutlined(flags)
+		pcall(name.SetFont, name, file, size, saved.ours)
+	end
+	local x, y = name:GetShadowOffset()
+	if x ~= SHADOW_X or y ~= SHADOW_Y then
+		name:SetShadowOffset(SHADOW_X, SHADOW_Y)
+		name:SetShadowColor(0, 0, 0, 1)
+	end
+end
+
+local painter = CreateFrame("Frame")
+painter:Hide()
+painter:SetScript("OnUpdate", ns.Profiled("Plate name colours", function(self)
+	for name, saved in pairs(tinted) do
+		PaintName(name, saved.unit)
+	end
+	for name, saved in pairs(styled) do
+		KeepStyle(name, saved)
+	end
+	if not (next(tinted) or next(styled)) then
+		self:Hide()
+	end
+end))
+
+local function StyleName(unitFrame, on)
+	local name = unitFrame.name
+	if not (Usable(name) and name.GetFont and name.SetFont and name.SetShadowOffset) then
+		return
+	end
+	if on then
+		if not styled[name] then
+			local file, size, flags = name:GetFont()
+			local saved = { object = name.GetFontObject and name:GetFontObject(), file = file, size = size,
+				flags = flags, shadow = { name:GetShadowColor() }, offset = { name:GetShadowOffset() } }
+			styled[name] = saved
+		end
+		KeepStyle(name, styled[name])
+		painter:Show()
+	elseif styled[name] then
+		local saved = styled[name]
+		styled[name] = nil
+		if saved.object then
+			name:SetFontObject(saved.object)
+			-- (Set again, so it takes the object's alphabet for its letters.)
+			pcall(function() name:SetText(name:GetText()) end)
+		elseif saved.file then
+			pcall(name.SetFont, name, saved.file, saved.size, saved.flags)
+		end
+		pcall(name.SetShadowColor, name, unpack(saved.shadow))
+		pcall(name.SetShadowOffset, name, unpack(saved.offset))
+	end
+end
+
+local function TintName(unitFrame, on)
+	local name = unitFrame.name
+	if not (Usable(name) and name.SetTextColor and name.GetTextColor) then
+		return
+	end
+	local unit = unitFrame.unit
+	if on and unit and TintUnit(unit) then
+		local saved = tinted[name]
+		if not saved then
+			saved = { text = { name:GetTextColor() } }
+			if name.GetVertexColor then
+				saved.vertex = { name:GetVertexColor() }
+			end
+			tinted[name] = saved
+		end
+		saved.unit = unit
+		PaintName(name, unit)
+		painter:Show()
+	elseif tinted[name] then
+		local saved = tinted[name]
+		tinted[name] = nil
+		local r, g, b = unpack(saved.text)
+		pcall(name.SetTextColor, name, r, g, b, select(4, name:GetTextColor()))
+		if saved.vertex then
+			r, g, b = unpack(saved.vertex)
+			pcall(name.SetVertexColor, name, r, g, b, select(4, name:GetVertexColor()))
+		end
+	end
+end
+
 local function ApplyPlate(plate, personal)
 	local unitFrame = plate and plate.UnitFrame
 	if not Usable(unitFrame) or (plate.IsForbidden and plate:IsForbidden()) then
@@ -142,6 +289,8 @@ local function ApplyPlate(plate, personal)
 	end
 	local body = bodyShare[plate] or 1
 	CentreName(unitFrame, nameShare[plate] ~= nil and body < 1)
+	TintName(unitFrame, nameShare[plate] ~= nil and body < 1)
+	StyleName(unitFrame, nameShare[plate] ~= nil and body < 1)
 	for _, part in ipairs(ns.PLATE_PARTS) do
 		local level = plate ~= personal and levels[part] or 1
 		if part == "Name" then
@@ -184,15 +333,6 @@ end
 local CLASS_TEXTURE = "Interface\\TargetingFrame\\UI-Classes-Circles"
 local plateClass = {} -- [plate] = { part = row, class = file name }, or false for no icon
 local icons = {} -- [plate] = icon frame
-
-local function Known(value)
-	return not (issecretvalue and issecretvalue(value))
-end
-
-local function Ask(fn, ...)
-	local ok, value = pcall(fn, ...)
-	return ok and Known(value) and value and true or false
-end
 
 -- What icon a plate's unit has, if any: players' only. (Players that can't be
 -- attacked count as friendly.)
@@ -429,6 +569,8 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		bodyShare[plate], nameShare[plate] = nil, nil
 		if Usable(plate.UnitFrame) then
 			CentreName(plate.UnitFrame, false)
+			TintName(plate.UnitFrame, false)
+			StyleName(plate.UnitFrame, false)
 		end
 		if icons[plate] then
 			icons[plate]:Hide()
@@ -567,6 +709,35 @@ local function ListFields(frame)
 		end
 	end
 	return table.concat(children, ", ")
+end
+
+-- For /cine debug plates: the plate's name colour (text, then vertex), the
+-- game's colour for its unit, and why ours is on it or not.
+local function Rgb(r, g, b)
+	if not (Known(r) and Known(g) and Known(b)) then
+		return "secret"
+	end
+	return ("%.2f/%.2f/%.2f"):format(r or -1, g or -1, b or -1)
+end
+
+function ns.DescribePlateName(unitFrame)
+	local name = unitFrame and unitFrame.name
+	if not Usable(name) then
+		return "no name text"
+	end
+	local plate = unitFrame:GetParent()
+	local unit = unitFrame.unit
+	local ok, text = pcall(function()
+		return "text " .. Rgb(name:GetTextColor())
+			.. (name.GetVertexColor and (" vertex " .. Rgb(name:GetVertexColor())) or "")
+	end)
+	local okGame, game = pcall(function()
+		return UnitSelectionColor and Rgb(UnitSelectionColor(unit)) or "no UnitSelectionColor"
+	end)
+	return ("%s, game %s, ours=%s unit=%s tint unit=%s body=%s name=%s"):format(
+		ok and text or ("error " .. tostring(text)), okGame and game or ("error " .. tostring(game)),
+		tostring(tinted[name] ~= nil), tostring(unit), tostring(unit and TintUnit(unit)),
+		tostring(bodyShare[plate]), tostring(nameShare[plate]))
 end
 
 function ns.DescribePlateParts(unitFrame)

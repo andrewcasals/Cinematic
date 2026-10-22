@@ -2388,6 +2388,7 @@ function ns.PrintPlatesDebug()
 		if found == 0 then
 			ns.Print("  nothing")
 		end
+		ns.Print("  name colour: " .. ns.DescribePlateName(overPlate.UnitFrame))
 	elseif UnitExists("mouseover") then
 		ns.Print("mouseover " .. tostring(UnitName("mouseover")) .. ": NO plate")
 	end
@@ -2435,6 +2436,7 @@ function ns.PrintPlatesDebug()
 					Show(function() return container:IsShown() end), Show(function() return container:GetAlpha() end),
 					Show(function() return UnitHealth("target"), UnitHealthMax("target") end)))
 			end
+			ns.Print("  name colour: " .. ns.DescribePlateName(frame))
 			local parts, fields, healthFields = ns.DescribePlateParts(frame)
 			ns.Print("  parts: " .. parts)
 			ns.Print("  fields: " .. fields)
