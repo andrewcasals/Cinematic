@@ -28,6 +28,7 @@ local RADIUS = 110     -- from the middle to each icon's centre (UI units)
 local ICON_SIZE = 46
 local PICKED_SCALE = 1.3
 local DEAD_ZONE = 64   -- the cursor this near the middle picks nothing (the middle circle)
+local OUTER = RADIUS + ICON_SIZE * 0.9 -- the disc's edge: a click past it picks nothing
 local FADE_TIME = 0.12
 -- (The middle lights up while the cursor's in it: nothing picked, so letting
 -- go there leaves the wheel up.)
@@ -100,7 +101,7 @@ local OPEN_SNIPPET = [[
 	self:SetPoint("CENTER", "$cursor")
 	area:EnableMouse(true)
 	self:Show()
-	self:SetBindingClick(true, "ESCAPE", area:GetName())
+	self:SetBindingClick(true, "ESCAPE", area:GetName(), "Escape")
 ]]
 
 -- Makes a wheel. spec: name (its frame's; its key's button and click-catcher
@@ -180,9 +181,9 @@ local function MakeWheel(spec)
 	end
 
 	-- Which slot the cursor points at: the nearest by angle, once it's out of
-	-- the dead zone in the middle. (The secure snippet below works it out the
-	-- same way.)
-	local function SlotAtCursor()
+	-- the dead zone in the middle (and, for a click, still on the disc). (The
+	-- secure snippets below work it out the same way.)
+	local function SlotAtCursor(clicking)
 		local x, y = GetCursorPosition()
 		local scale = wheel:GetEffectiveScale()
 		local cx, cy = wheel:GetCenter()
@@ -190,7 +191,7 @@ local function MakeWheel(spec)
 			return nil
 		end
 		x, y = x / scale - cx, y / scale - cy
-		if x * x + y * y < DEAD_ZONE * DEAD_ZONE then
+		if x * x + y * y < DEAD_ZONE * DEAD_ZONE or (clicking and x * x + y * y > OUTER * OUTER) then
 			return nil
 		end
 		local step = 360 / #list
@@ -209,11 +210,12 @@ local function MakeWheel(spec)
 	wheel:SetPoint("CENTER", UIParent)
 	wheel:SetAttribute("count", #list)
 	wheel:SetAttribute("deadzone", DEAD_ZONE)
+	wheel:SetAttribute("outer", OUTER)
 	wheel:Hide()
 
 	local disc = wheel:CreateTexture(nil, "BACKGROUND")
 	disc:SetPoint("CENTER")
-	disc:SetSize((RADIUS + ICON_SIZE * 0.9) * 2, (RADIUS + ICON_SIZE * 0.9) * 2)
+	disc:SetSize(OUTER * 2, OUTER * 2)
 	disc:SetColorTexture(0, 0, 0, 0.55)
 	hub = wheel:CreateTexture(nil, "BORDER")
 	hub:SetPoint("CENTER")
@@ -239,13 +241,17 @@ local function MakeWheel(spec)
 	stateText:SetPoint("TOP", centerText, "BOTTOM", 0, -3)
 	stateText:SetWidth(DEAD_ZONE * 2 - 10)
 
-	-- The click-catcher: the whole screen, behind the icons. It only takes
-	-- the mouse once the key's let go in the middle; then a click anywhere but
-	-- an icon puts the wheel away. The snippets also measure the cursor with it.
+	-- The click-catcher: the whole screen, under the icons. It only takes the
+	-- mouse once the key's let go in the middle; then a click does the slot the
+	-- cursor points at (the lit one: all its slice of the disc, not just its
+	-- icon, which is drawn bigger than any button could be), and a click in
+	-- the middle or off the disc puts the wheel away. The snippets also
+	-- measure the cursor with it.
 	local area = CreateFrame("Button", areaName, wheel, "SecureActionButtonTemplate")
 	area:SetAllPoints(WorldFrame)
 	area:SetFrameLevel(wheel:GetFrameLevel())
 	area:RegisterForClicks("AnyUp")
+	area:SetAttribute("useOnKeyDown", false)
 	area:EnableMouse(false)
 	wheel:SetFrameRef("area", area)
 
@@ -256,20 +262,17 @@ local function MakeWheel(spec)
 	keyButton:RegisterForClicks("AnyDown", "AnyUp")
 	keyButton:SetAttribute("useOnKeyDown", false)
 
-	-- The icons: secure buttons doing their marker's action.
+	-- The icons: just art. Their actions are the key's button's and the
+	-- catcher's, as the "button" slotN.
 	for i, entry in ipairs(list) do
-		local slot = CreateFrame("Button", nil, wheel, "SecureActionButtonTemplate")
+		local slot = CreateFrame("Frame", nil, wheel)
 		slot:SetSize(ICON_SIZE, ICON_SIZE)
 		slot:SetFrameLevel(wheel:GetFrameLevel() + 5)
 		local angle = math.rad(90 - (i - 1) * 360 / #list)
 		slot:SetPoint("CENTER", wheel, "CENTER", RADIUS * math.cos(angle), RADIUS * math.sin(angle))
-		slot:RegisterForClicks("AnyUp")
-		-- (Acts as the click comes up, which is all it hears: else, with the game's
-		-- "act on key down" setting on, it waits for a down that never comes.)
-		slot:SetAttribute("useOnKeyDown", false)
 		for key, value in pairs(entry.attributes or {}) do
-			slot:SetAttribute(key, value)
 			keyButton:SetAttribute(key .. "-slot" .. i, value)
+			area:SetAttribute(key .. "-slot" .. i, value)
 		end
 		if entry.opens then
 			wheel:SetFrameRef("open" .. i, entry.opens)
@@ -295,16 +298,6 @@ local function MakeWheel(spec)
 		slot.art, slot.glow, slot.ring, slot.icon = art, glow, ring, icon
 		slots[i] = slot
 		SizeSlot(slot, ICON_SIZE)
-		-- (A click on it puts the wheel away; the click itself goes on, or
-		-- opens the wheel it's for.)
-		wheel:WrapScript(slot, "OnClick", [[
-			owner:Hide()
-			local sub = owner:GetFrameRef("open]] .. i .. [[")
-			if sub then
-				sub:SetAttribute("cineopen", true)
-				return false
-			end
-		]])
 	end
 
 	keyButton:SetScript("PreClick", function(_, _, down)
@@ -340,7 +333,7 @@ local function MakeWheel(spec)
 			owner:SetPoint("CENTER", "$cursor")
 			area:EnableMouse(false)
 			owner:Show()
-			owner:SetBindingClick(true, "ESCAPE", "]] .. areaName .. [[")
+			owner:SetBindingClick(true, "ESCAPE", "]] .. areaName .. [[", "Escape")
 			held = true
 			return false
 		end
@@ -374,10 +367,33 @@ local function MakeWheel(spec)
 		end
 		return "slot" .. index
 	]])
-	-- A click on the catcher (or Escape) puts it away.
+	-- A click on the catcher: the slot the cursor points at, or (in the
+	-- middle, off the disc, or Escape) just away.
 	wheel:WrapScript(area, "OnClick", [[
+		local fx, fy = self:GetMousePosition()
+		local al, ab, aw, ah = self:GetRect()
+		local wl, wb, ww, wh = owner:GetRect()
 		owner:Hide()
-		return false
+		if button == "Escape" or not (fx and al and wl) then
+			return false
+		end
+		local dx = al + fx * aw - (wl + ww / 2)
+		local dy = ab + fy * ah - (wb + wh / 2)
+		local dead, outer = owner:GetAttribute("deadzone"), owner:GetAttribute("outer")
+		local far = dx * dx + dy * dy
+		if far < dead * dead or far > outer * outer then
+			return false
+		end
+		local count = owner:GetAttribute("count")
+		local step = 360 / count
+		local angle = (90 - math.deg(math.atan2(dy, dx))) % 360
+		local index = math.floor((angle + step / 2) / step) % count + 1
+		local sub = owner:GetFrameRef("open" .. index)
+		if sub then
+			sub:SetAttribute("cineopen", true)
+			return false
+		end
+		return "slot" .. index
 	]])
 	wheel:SetAttribute("_onhide", [[
 		self:ClearBindings()
@@ -392,7 +408,7 @@ local function MakeWheel(spec)
 		if alpha < 1 then
 			wheel:SetAlpha(math.min(1, alpha + elapsed / FADE_TIME))
 		end
-		Pick(SlotAtCursor())
+		Pick(SlotAtCursor(area:IsMouseEnabled()))
 		sinceRefresh = sinceRefresh + elapsed
 		if sinceRefresh >= 0.2 then
 			sinceRefresh = 0
@@ -411,7 +427,7 @@ local function MakeWheel(spec)
 	end)
 	wheel:SetScript("OnUpdate", ns.Profiled(spec.title, OnUpdate))
 
-	wheel.keyButton, wheel.slots = keyButton, slots
+	wheel.keyButton, wheel.area = keyButton, area
 	wheels[#wheels + 1] = wheel
 	return wheel
 end
@@ -453,24 +469,23 @@ end
 local unitSlots = {}
 for _, icon in ipairs(RING) do
 	unitSlots[#unitSlots + 1] = { icon = ICON .. icon, color = COLORS[icon], label = IconName(icon), index = icon,
-		attributes = { type = "raidtarget", action = "set", marker = icon, unit = unit } }
+		attributes = { type = "raidtarget", action = "set", marker = icon } }
 end
 unitSlots[#unitSlots + 1] = { icon = CLEAR_ICON, color = { 1, 1, 1 }, index = 0,
 	label = type(NONE) == "string" and NONE or "None",
-	attributes = { type = "raidtarget", action = "clear", unit = unit } }
+	attributes = { type = "raidtarget", action = "clear" } }
 
 local markerWheel
 
--- Points the buttons at who to mark. Out of a fight only.
+-- Points the buttons at who to mark (one "unit" for all their slots: a
+-- slot's own unit-slotN would win over it). Out of a fight only.
 local function SetUnit(token)
 	if InCombatLockdown() then
 		return
 	end
 	unit = token
 	markerWheel.keyButton:SetAttribute("unit", token)
-	for _, slot in ipairs(markerWheel.slots) do
-		slot:SetAttribute("unit", token)
-	end
+	markerWheel.area:SetAttribute("unit", token)
 end
 
 markerWheel = MakeWheel({
@@ -506,6 +521,7 @@ markerWheel = MakeWheel({
 		return (index or 0) == entry.index
 	end,
 })
+SetUnit(unit)
 
 -- The ground marker wheel (where the client has world markers) --------------
 

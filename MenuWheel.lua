@@ -65,6 +65,11 @@ local openButtons = {}   -- by slot: what it clicks for a button with no OnClick
 local radius = MIN_RADIUS
 local picked             -- the slot the cursor points at, or nil
 
+-- The disc's edge: a click past it picks nothing.
+local function OuterRadius()
+	return radius + ICON_SIZE * 0.85
+end
+
 local function CursorFromMiddle()
 	local x, y = GetCursorPosition()
 	local scale = wheel:GetEffectiveScale()
@@ -228,7 +233,8 @@ local function Build()
 	-- (Not in UIParent, so it shows with the UI hidden: scaled like it.)
 	wheel:SetScale(UIParent:GetEffectiveScale())
 	wheel:SetSize(size, size)
-	disc:SetSize((radius + ICON_SIZE * 0.85) * 2, (radius + ICON_SIZE * 0.85) * 2)
+	disc:SetSize(OuterRadius() * 2, OuterRadius() * 2)
+	wheel:SetAttribute("outer", OuterRadius())
 	wheel:SetAttribute("count", count)
 	for i, slot in ipairs(slots) do
 		local item = i <= count and list[i]
@@ -247,27 +253,28 @@ local function Build()
 				openButtons[i]:SetScript("OnClick", item.entry.open)
 				target = openButtons[i]
 			end
-			slot:SetAttribute("clickbutton", target)
 			keyButton:SetAttribute("clickbutton-slot" .. i, target)
+			area:SetAttribute("clickbutton-slot" .. i, target)
 			slot:Show()
 		else
-			slot:SetAttribute("clickbutton", nil)
 			keyButton:SetAttribute("clickbutton-slot" .. i, nil)
+			area:SetAttribute("clickbutton-slot" .. i, nil)
 			slot:Hide()
 		end
 	end
 end
 
 -- Which slot the cursor points at: the nearest by angle, once it's out of
--- the dead zone in the middle. (The secure snippet below works it out the
--- same way.)
-local function SlotAtCursor()
+-- the dead zone in the middle (and, for a click, still on the disc). (The
+-- secure snippets below work it out the same way.)
+local function SlotAtCursor(clicking)
 	local count = #shown
 	if count == 0 then
 		return nil
 	end
 	local x, y = CursorFromMiddle()
-	if x * x + y * y < DEAD_ZONE * DEAD_ZONE then
+	local outer = OuterRadius()
+	if x * x + y * y < DEAD_ZONE * DEAD_ZONE or (clicking and x * x + y * y > outer * outer) then
 		return nil
 	end
 	local step = 360 / count
@@ -316,6 +323,7 @@ wheel:SetSize((MIN_RADIUS + ICON_SIZE) * 2, (MIN_RADIUS + ICON_SIZE) * 2)
 wheel:SetPoint("CENTER", UIParent)
 wheel:SetAttribute("count", 0)
 wheel:SetAttribute("deadzone", DEAD_ZONE)
+wheel:SetAttribute("outer", OuterRadius())
 wheel:Hide()
 
 disc = wheel:CreateTexture(nil, "BACKGROUND")
@@ -341,30 +349,36 @@ stateText = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 stateText:SetPoint("TOP", centerText, "BOTTOM", 0, -3)
 stateText:SetWidth(DEAD_ZONE * 2 - 10)
 
--- The click-catcher: the whole screen, behind the icons. It only takes the
--- mouse once the key's let go in the middle; then a click anywhere but an
--- icon puts the wheel away. The snippets also measure the cursor with it.
+-- The click-catcher: the whole screen, under the icons. It only takes the
+-- mouse once the key's let go in the middle; then a click opens the slot the
+-- cursor points at (the lit one: all its slice of the disc, not just its
+-- icon, which is drawn bigger than any button could be), and a click in the
+-- middle or off the disc puts the wheel away. The snippets also measure the
+-- cursor with it.
 area = CreateFrame("Button", AREA, wheel, "SecureActionButtonTemplate")
 area:SetAllPoints(WorldFrame)
 area:SetFrameLevel(wheel:GetFrameLevel())
 area:RegisterForClicks("AnyUp")
+-- (Acts as the click comes up, which is all it hears: else, with the game's
+-- "act on key down" setting on, it waits for a down that never comes.)
+area:SetAttribute("useOnKeyDown", false)
+for i = 1, #BUTTONS do
+	area:SetAttribute("type-slot" .. i, "click")
+end
+area:SetScript("PreClick", function(_, button)
+	if button ~= "Escape" then
+		ShowUIFor(SlotAtCursor(true))
+	end
+end)
 area:EnableMouse(false)
 wheel:SetFrameRef("area", area)
 
--- The icons: secure buttons that click the game's button, made now (they
--- can't be in a fight), as many as the bar could have.
+-- The icons: just art, made now, as many as the bar could have. What they
+-- click is the key's button's and the catcher's, as the "button" slotN.
 for i = 1, #BUTTONS do
-	local slot = CreateFrame("Button", nil, wheel, "SecureActionButtonTemplate")
+	local slot = CreateFrame("Frame", nil, wheel)
 	slot:SetSize(ICON_SIZE, ICON_SIZE)
 	slot:SetFrameLevel(wheel:GetFrameLevel() + 5)
-	slot:RegisterForClicks("AnyUp")
-	-- (Acts as the click comes up, which is all it hears: else, with the game's
-	-- "act on key down" setting on, it waits for a down that never comes.)
-	slot:SetAttribute("useOnKeyDown", false)
-	slot:SetAttribute("type", "click")
-	slot:SetScript("PreClick", function()
-		ShowUIFor(i)
-	end)
 	local art = CreateFrame("Frame", nil, slot)
 	art:SetPoint("CENTER")
 	art:SetSize(ICON_SIZE, ICON_SIZE)
@@ -394,8 +408,6 @@ for i = 1, #BUTTONS do
 	slot.art, slot.glow, slot.ring, slot.under, slot.icon = art, glow, ring, under, icon
 	slot:Hide()
 	slots[i] = slot
-	-- (A click on it puts the wheel away; the click itself goes on.)
-	wheel:WrapScript(slot, "OnClick", [[ owner:Hide() ]])
 end
 
 -- The key's button: its binding clicks it on the way down and up. Its action
@@ -446,7 +458,7 @@ wheel:WrapScript(keyButton, "OnClick", [[
 		owner:SetPoint("CENTER", "$cursor")
 		area:EnableMouse(false)
 		owner:Show()
-		owner:SetBindingClick(true, "ESCAPE", "]] .. AREA .. [[")
+		owner:SetBindingClick(true, "ESCAPE", "]] .. AREA .. [[", "Escape")
 		held = true
 		return false
 	end
@@ -475,10 +487,27 @@ wheel:WrapScript(keyButton, "OnClick", [[
 	owner:Hide()
 	return "slot" .. index
 ]])
--- A click on the catcher (or Escape) puts it away.
+-- A click on the catcher: the slot the cursor points at, or (in the middle,
+-- off the disc, or Escape) just away.
 wheel:WrapScript(area, "OnClick", [[
+	local fx, fy = self:GetMousePosition()
+	local al, ab, aw, ah = self:GetRect()
+	local wl, wb, ww, wh = owner:GetRect()
 	owner:Hide()
-	return false
+	if button == "Escape" or not (fx and al and wl) then
+		return false
+	end
+	local dx = al + fx * aw - (wl + ww / 2)
+	local dy = ab + fy * ah - (wb + wh / 2)
+	local dead, outer = owner:GetAttribute("deadzone"), owner:GetAttribute("outer")
+	local far = dx * dx + dy * dy
+	if far < dead * dead or far > outer * outer then
+		return false
+	end
+	local count = owner:GetAttribute("count")
+	local step = 360 / count
+	local angle = (90 - math.deg(math.atan2(dy, dx))) % 360
+	return "slot" .. (math.floor((angle + step / 2) / step) % count + 1)
 ]])
 wheel:SetAttribute("_onhide", [[
 	self:ClearBindings()
@@ -492,7 +521,7 @@ local function OnUpdate(_, elapsed)
 	if alpha < 1 then
 		wheel:SetAlpha(math.min(1, alpha + elapsed / FADE_TIME))
 	end
-	Pick(SlotAtCursor())
+	Pick(SlotAtCursor(area:IsMouseEnabled()))
 	sinceRefresh = sinceRefresh + elapsed
 	if sinceRefresh >= 0.2 then
 		sinceRefresh = 0
