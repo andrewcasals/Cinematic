@@ -314,31 +314,46 @@ local function Usable(plate)
 	return plate and not (plate.IsForbidden and plate:IsForbidden())
 end
 
--- The soft targeting held above gives a plate to whatever it picks, a dead
--- mob you can loot included: that plate stays up until you loot it. While
--- the settings are ours, a dead unit's plate is hidden (Effects asks here).
-function ns.SoftTargetCorpse(unit)
-	if not (CVARS.active and unit) then
-		return false
+-- Your own value for a game setting (put back once the glow lets go).
+local function Own(cvar)
+	local saved = ns.db.savedCVars[cvar]
+	if saved ~= nil then
+		return saved
 	end
-	return Ask(UnitIsDead, unit) and Ask(UnitIsUnit, unit, SOFT)
+	return GetCVar(cvar)
 end
 
--- The corpse plate shown last tick: refreshed as one turns up or goes, so
--- Effects hides it (or gives it back) at once.
-local corpsePlate
+-- The soft targeting held above gives a plate to whatever it picks, a dead
+-- mob you can loot included: that plate stays up until you loot it. While
+-- the settings are ours, a dead unit's plate is hidden (Effects asks here),
+-- and so is a living one's that only got its plate from us (an NPC you face,
+-- with your own plates for its kind off): the glow only needs objects'.
+function ns.SoftPlateHidden(unit)
+	if not (CVARS.active and unit and Ask(UnitIsUnit, unit, SOFT)) then
+		return false
+	end
+	if Ask(UnitIsDead, unit) then
+		return true
+	end
+	return Own("SoftTargetNameplateInteract") ~= "1" and not IsObject(unit)
+		and not (ns.PlateShownAnyway and ns.PlateShownAnyway(unit))
+end
 
-local function UpdateCorpsePlate()
+-- The soft plate hidden last tick: refreshed as one turns up or goes, so
+-- Effects hides it (or gives it back) at once.
+local hiddenSoftPlate
+
+local function UpdateHiddenSoftPlate()
 	local plate = SoftPlate()
 	local unit = plate and plate.namePlateUnitToken
-	if not (unit and ns.SoftTargetCorpse(unit)) then
+	if not (unit and ns.SoftPlateHidden(unit)) then
 		plate = nil
 	end
-	if plate == corpsePlate then
+	if plate == hiddenSoftPlate then
 		return
 	end
-	local old = corpsePlate
-	corpsePlate = plate
+	local old = hiddenSoftPlate
+	hiddenSoftPlate = plate
 	for _, changed in ipairs({ old or false, plate or false }) do
 		if changed and ns.RefreshPlate and not (changed.IsForbidden and changed:IsForbidden()) then
 			ns.RefreshPlate(changed, changed.namePlateUnitToken)
@@ -354,14 +369,6 @@ end
 -- mouse, or gamepad) and the icon on for that kind of thing. Elsewhere it's
 -- hidden (quest objects have our mark). [icon frame] = true while hidden by us.
 local hiddenIcons = {}
-
-local function Own(cvar)
-	local saved = ns.db.savedCVars[cvar]
-	if saved ~= nil then
-		return saved
-	end
-	return GetCVar(cvar)
-end
 
 local function OwnIconShows(object)
 	local mode = tonumber(Own("SoftTargetInteract")) or 0
@@ -471,7 +478,7 @@ local function Update()
 	ns.ApplyCVarSet(CVARS, on)
 	HealSaved()
 	KeepHeld()
-	UpdateCorpsePlate()
+	UpdateHiddenSoftPlate()
 	UpdateIcon()
 	if not on then
 		lock = nil

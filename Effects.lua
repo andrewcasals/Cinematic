@@ -2085,7 +2085,7 @@ local function PlateAlpha(unit, plate)
 	if plate and plate == PersonalPlate() then
 		return personalAlpha
 	end
-	if ns.SoftTargetCorpse(unit) then
+	if ns.SoftPlateHidden(unit) then
 		return 0 -- (a plate only Quest Vision's soft targeting gave it: see QuestGlow)
 	end
 	local alpha = KindAlpha(unit)
@@ -2456,6 +2456,35 @@ local PLATE_ROW_PARENT = { EnemyMinions = "Enemies", EnemyMinor = "EnemyNPCs", N
 local UNIT_ROW_KIND = { MyPet = "FriendlyMinions", GroupMembers = "Friends", GroupMinions = "FriendlyMinions" }
 local pendingPlateRows = {}
 
+-- Whether the player's own settings show a kind's plates (out of fights:
+-- with "Always show nameplates" off they show only in fights). Settings this
+-- client doesn't have count as on.
+local function OwnKindShown(kind)
+	if not InCombatLockdown() and OwnValue("nameplateShowAll") == "0" then
+		return false
+	end
+	for _, row in ipairs({ kind, PLATE_ROW_PARENT[kind] }) do
+		for _, cvar in ipairs(PLATE_KIND_CVARS[row]) do
+			local value = OwnValue(cvar)
+			if value ~= nil and tonumber(value) == 0 then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+-- Whether a unit would have a plate up without Quest Vision's soft targeting
+-- (see QuestGlow): always in CineMode (every plate is kept on there, its fade
+-- deciding), elsewhere if your own settings show its kind.
+function ns.PlateShownAnyway(unit)
+	if platesForced then
+		return true
+	end
+	local kind = PlateKind(unit)
+	return not kind or OwnKindShown(kind)
+end
+
 -- Whether this client has any of a row's nameplate settings.
 function ns.HasPlateSettings(kind)
 	if kind:find("Target$") then
@@ -2740,7 +2769,17 @@ function ns.UpdatePlates(cinematic, elapsed)
 	UpdateLockedPlates()
 	if platesForced then
 		ns.ShowPlatesNow()
+		-- Kinds your own settings had switched off start hidden, not at the
+		-- full fade on its way out: switched on, they'd pop up for the fade.
+		local was = FORCED_PLATE_CVARS.active
 		ns.ApplyCVarSet(FORCED_PLATE_CVARS, true)
+		if not was and FORCED_PLATE_CVARS.active then
+			for _, kind in ipairs(ns.PLATE_KINDS) do
+				if not OwnKindShown(kind) then -- (your own values: saved as it switched them)
+					combatCap[kind] = 0
+				end
+			end
+		end
 	end
 	-- Plates show for every fight (bar kinds cinematic mode hides in fights)
 	-- and hide again afterwards. Just after a fight, kinds ticked for fights
