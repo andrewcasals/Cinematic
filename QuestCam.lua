@@ -45,6 +45,8 @@
 -- turning the camera yourself as you go doesn't stop it: only zooming
 -- yourself does.
 -- Moving the camera yourself while talking hands it over: nothing is undone.
+-- It waits questCamDelay seconds after the window opens before starting, so
+-- a quest picked up and gone at once gets no camera at all.
 local _, ns = ...
 
 local CLOSE_GRACE = 3 -- seconds held after the window closes (going from gossip to a quest closes one window before opening the next)
@@ -871,8 +873,9 @@ local function OnUpdate(_, elapsed)
 	elseif cam.active and ns.playerMoving then
 		Stop() -- walked off: back to normal, and no more until the next conversation
 		cam.cancelled = true
-	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving and Wanted() then
-		Start()
+	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving
+		and now - cam.since >= (ns.db.questCamDelay or 0) and Wanted() then
+		Start() -- (after questCamDelay: a quest picked up and gone sooner gets no camera)
 	end
 end
 

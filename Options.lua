@@ -2791,6 +2791,10 @@ local function CreateQuestPanel()
 		L["Also for NPCs with nothing to say about quests (innkeepers, guards...). Off: only when " ..
 		"they have a quest to offer or take in."]), "check")
 	GreyUnless(gossip, IfOn)
+	local delay = stack:Add(Slider(content, "questCamDelay", L["Wait before starting"], 0, 10, 0.5, L["%.1f sec"]), "slider")
+	Tooltip(delay, L["The camera waits this long after the quest window opens. Accept a quest and go " ..
+		"sooner, and it doesn't move at all; stay to read, and it starts. 0 starts at once."])
+	GreyUnless(delay, IfOn)
 
 	-- Left column: rotation, height, over the shoulder
 	local rotationHeader = stack:Header(content, L["Rotation"])

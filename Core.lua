@@ -278,6 +278,7 @@ local DEFAULTS = {
 	taxiInputPause = 15,      -- seconds the flight camera waits after the player moves the camera
 	idleInputPause = 15,      -- ...and the AFK camera
 	-- Quest cam (eventQuestCamera on the Camera Triggers page): talking to a quest giver, zoom in and swing behind you
+	questCamDelay = 3,        -- ...seconds the window is open before it starts (picked up and gone sooner: no camera)
 	questCamDistance = 4,     -- ...yards it zooms in to (if you're further out)
 	questCamTime = 3,         -- ...seconds the swing behind you takes
 	questCamZoomSpeed = 0.5,  -- ...yards a second the zoom in goes
