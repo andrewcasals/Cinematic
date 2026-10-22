@@ -799,9 +799,9 @@ end
 -- position while dead (saved here), or after a reload the game's corpse
 -- marker on the map.
 local LIFT_KNEE = 0.8       -- share of the dark still there as the fast part starts
-local WAVE_SLOW, WAVE_FAST = 30, 3 -- seconds left: starts lifting, then fast
+local WAVE_SLOW, WAVE_FAST = 30, 5 -- seconds left: starts lifting, then fast
 local WAVE_LAST = 1         -- seconds left: the wave's bringing you back
-local CORPSE_FAST, CORPSE_NEAR = 50, 30 -- yards: fast from here, gone by here
+local CORPSE_FAST, CORPSE_NEAR = 80, 30 -- yards: fast from here, gone by here
                             -- (about where you can come back to life)
 local CORPSE_CHECK = 0.25   -- seconds between checks
 local CORPSE_FOLLOW = 1     -- seconds the vignette takes to follow a change as you walk...
