@@ -6607,9 +6607,10 @@ local function CreateVisionPanel()
 		healHeader:SetPoint("TOPLEFT", questGlow, "BOTTOMLEFT", 2, -24)
 		local healNote = PageIntro(content, healHeader,
 			L["The game's party and raid frames show only who needs healing: everyone (pets too) while below full " ..
-			"health, and as ticked below, tanks and members with debuffs. The group titles hide. The members stay " ..
+			"health, and tanks as set below. The group titles hide. The members stay " ..
 			"in their places, so there are gaps. Out of combat, the mouse over the frames brings everyone back. " ..
-			"Ticked in the grid, it's on there. Always: everywhere. Party and Raid: while you're in one, wherever you are."])
+			"Ticked in the grid, it's on there. Always: everywhere. Party and Raid: while you're in one, wherever you are. " ..
+			"Members with debuffs can't be shown: the game doesn't let addons see your group's debuffs in fights."])
 
 		-- Show in: by place, then group (columns), like the Visual Effects
 		-- page's grid but ticked where it's on. Always greys the rest.
@@ -6687,8 +6688,6 @@ local function CreateVisionPanel()
 			GreyUnless(check, enabled or IfAny)
 			previous = check
 		end
-		Option("healVisionTarget", L["Always show your target"],
-			L["The member you've targeted always shows, at full health too."])
 		-- (Any debuff takes in the ones you can dispel: that box greys while it's ticked.)
 		-- Off for now on both clients: they won't let addons see members'
 		-- debuffs in fights (HealVisionFrames.lua's ShownAnyway).
@@ -6748,6 +6747,17 @@ local function CreateVisionPanel()
 		Kind(PET_ICON, L["Pets"], "healVisionPetBelow",
 			L["A pet shows once its health drops below this. 100% shows it at any damage."],
 			"healVisionPetAlpha", L["How much of a hidden pet still shows. 0% hides them completely."])
+
+		-- Your target: hidden no fainter than this (100%: always shown).
+		local TARGET_ICON = "|TInterface\\Cursor\\Crosshairs:16:16|t"
+		local target = Slider(content, "healVisionTargetAlpha", TARGET_ICON .. " " .. L["Target opacity"], 0, 100, 1,
+			"%d%%", 100, ApplyFrames)
+		target.searchLabel = L["Target opacity"] -- (search: without the icon)
+		target:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -40)
+		Tooltip(target, L["How much of the member you've targeted still shows while they'd be hidden, if more " ..
+			"than their own opacity above. 100% always shows them, at full health too."])
+		GreyUnless(target, IfAny)
+		previous = target
 
 		-- The dead and offline: always hidden (nothing to heal), only how
 		-- faded, each beside the other. Under them, the far away (100%: off).

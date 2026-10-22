@@ -79,6 +79,8 @@ function ns.InitLog()
 		ns.db.log[#ns.db.log + 1] = line
 	end
 	pending = nil
+	-- (Left on from last session: /cine debug combatlog again turns it off.)
+	if ns.db.debugCombatLog and ns.CombatLogDebug then ns.CombatLogDebug(true) end
 end
 
 -- Errors ---------------------------------------------------------------------
@@ -1466,5 +1468,105 @@ do
 		end
 		ns.Print(("auras (%s, %s): %d asks answered, %d errored. Details in /cine log"):format(
 			combat and "in combat" or "out of combat", inside and Show(kind) or "open world", answered, failed))
+	end
+end
+
+-- Combat log tab (/cine debug combatlog) --------------------------------------
+-- The combat log event is blocked on WoW Forever, but Blizzard still writes its
+-- lines into the Combat Log chat tab. Can we read who got a debuff there in
+-- combat? Logs the lines it sees (the first LINES_MAX), plus how many were
+-- secret or plain, until switched off or /reload (then read the log).
+do
+	local LINES_MAX = 300 -- aura lines logged per session, so the log keeps the rest
+	local on, hooked
+	local counts = { secret = 0, plain = 0, aura = 0, secretCombat = 0, plainCombat = 0, token = 0 }
+
+	local function Summary()
+		return ("combat log lines kept by the tab: %d plain (%d in combat), %d secret (%d in combat), %d handed over as |K tokens, %d logged"):format(
+			counts.plain, counts.plainCombat, counts.secret, counts.secretCombat, counts.token, counts.aura)
+	end
+
+	-- Forever hands most lines over as a bare |Ky123|k token (and some don't
+	-- go through AddMessage at all), but the tab keeps the filled-in text: the
+	-- tab's own list is read a few times a second instead (Poll, below).
+	local function OnLine(_, text)
+		if on and type(text) == "string" and not (issecretvalue and issecretvalue(text))
+			and text:find("^|K[^|]*|k$") then
+			counts.token = counts.token + 1
+		end
+	end
+
+	local function OnStored(stored)
+		local combat = InCombatLockdown()
+		if issecretvalue and issecretvalue(stored) then
+			counts.secret = counts.secret + 1
+			if combat then counts.secretCombat = counts.secretCombat + 1 end
+			if counts.secret == 1 then
+				ns.Log("combatlog", ("first secret line (%s)"):format(combat and "in combat" or "out of combat"))
+			end
+			return
+		end
+		if type(stored) ~= "string" then return end
+		counts.plain = counts.plain + 1
+		if combat then counts.plainCombat = counts.plainCombat + 1 end
+		if counts.aura < LINES_MAX then
+			counts.aura = counts.aura + 1
+			ns.Log("combatlog", (combat and "IN COMBAT " or "") .. stored)
+		end
+		-- Every so often, so a /reload mid-dungeon still leaves the totals.
+		if (counts.plain + counts.secret) % 200 == 0 then ns.Log("combatlog", Summary()) end
+	end
+
+	-- The lines added since the last look: the tab's list stops growing once
+	-- full, so it goes back from the newest to the last line already seen.
+	local lastSeen, lastCount = nil, 0
+	local function Poll(frame)
+		if not on then return end
+		local okN, count = pcall(frame.GetNumMessages, frame)
+		if not okN or type(count) ~= "number" or count == 0 then return end
+		local new = {}
+		for i = count, math.max(1, count - 60), -1 do
+			local ok, text = pcall(function() return (frame:GetMessageInfo(i)) end)
+			if not ok then break end
+			local plain = not (issecretvalue and issecretvalue(text))
+			if plain and lastSeen ~= nil and text == lastSeen then break end
+			if lastSeen == nil and i <= lastCount then break end
+			new[#new + 1] = text
+		end
+		local okL, newest = pcall(function() return (frame:GetMessageInfo(count)) end)
+		lastSeen = okL and not (issecretvalue and issecretvalue(newest)) and newest or nil
+		lastCount = count
+		for i = #new, 1, -1 do OnStored(new[i]) end
+	end
+
+	-- resume: turning back on at load because it was left on (stays on until
+	-- the command is run again).
+	function ns.CombatLogDebug(resume)
+		local frame = _G.COMBATLOG or _G.ChatFrame2
+		if not frame then
+			ns.Print("combatlog: no Combat Log chat frame on this client")
+			return
+		end
+		on = resume or not on
+		ns.db.debugCombatLog = on or nil
+		if on and not hooked then
+			hooksecurefunc(frame, "AddMessage", OnLine)
+			-- (Skip what's already in the tab from before.)
+			local okN, count = pcall(frame.GetNumMessages, frame)
+			lastCount = okN and type(count) == "number" and count or 0
+			local okL, newest = pcall(function() return (frame:GetMessageInfo(lastCount)) end)
+			lastSeen = okL and not (issecretvalue and issecretvalue(newest)) and newest or nil
+			C_Timer.NewTicker(0.25, function() Poll(frame) end)
+			-- The totals, when a /reload or logout saves the log.
+			local saver = CreateFrame("Frame")
+			saver:RegisterEvent("PLAYER_LOGOUT")
+			saver:SetScript("OnEvent", function()
+				if on then ns.Log("combatlog", "at reload: " .. Summary()) end
+			end)
+			hooked = true
+		end
+		ns.Log("combatlog", (on and "watching " or "stopped, ") .. tostring(frame:GetName()) .. ". " .. Summary())
+		ns.Print(on and "combatlog: watching the Combat Log tab, after reloads too, until you run it again"
+			or ("combatlog: stopped. " .. Summary()))
 	end
 end

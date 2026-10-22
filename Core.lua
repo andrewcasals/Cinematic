@@ -631,7 +631,7 @@ DEFAULTS.healVisionPetAlpha = 0.05
 DEFAULTS.healVisionDeadAlpha = 0.05 -- the dead: always hidden, this much shows
 DEFAULTS.healVisionOfflineAlpha = 0.05 -- and the offline
 DEFAULTS.healVisionFarAlpha = 0.05 -- those more than 100 yards away (another zone...), whatever else: 1, off
-DEFAULTS.healVisionTarget = true -- your target always shows
+DEFAULTS.healVisionTargetAlpha = 1 -- your target while hidden, if more than their kind's (1: always shown)
 DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
 DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
 do
@@ -3249,6 +3249,21 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			TanksSlider(ns.db)
 			for _, saved in pairs(ns.db.profiles or {}) do TanksSlider(saved) end
 			ns.db.healVisionTankBelowV1 = true
+		end
+		-- Always show your target (healVisionTarget) is now the target opacity
+		-- slider: unticked, your target faded as their kind does, which 0% does.
+		-- Once, in every profile.
+		if not ns.db.healVisionTargetAlphaV1 then
+			local function TargetSlider(t)
+				if type(t) ~= "table" then return end
+				if t.healVisionTarget == false then t.healVisionTargetAlpha = 0 end
+				t.healVisionTarget = nil
+				t.healVisionTargetBelow = nil -- (an earlier try, never released)
+			end
+			TargetSlider(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do TargetSlider(saved) end
+			ns.db.healVisionTargetBelowV1 = nil
+			ns.db.healVisionTargetAlphaV1 = true
 		end
 		-- Tanks and pets have an opacity of their own now: each starts as the
 		-- one opacity was. Once, in every profile.

@@ -55,10 +55,29 @@ local DEAD = { alpha = "healVisionDeadAlpha" } -- (no health setting for these t
 local OFFLINE = { alpha = "healVisionOfflineAlpha" }
 local FAR = { alpha = "healVisionFarAlpha" } -- (100%: off)
 
+-- Your target: their kind's settings, but hidden no fainter than the target
+-- opacity (raise).
+local targetKinds = {}
+local function TargetOf(kind)
+	local made = targetKinds[kind]
+	if not made then
+		made = { below = kind.below, alpha = kind.alpha, raise = "healVisionTargetAlpha" }
+		targetKinds[kind] = made
+	end
+	return made
+end
+
+-- A kind's opacity setting (your target's: see TargetOf).
+local function Floor(kind)
+	local floor = ns.db and tonumber(ns.db[kind.alpha]) or 0
+	if kind.raise and ns.db then floor = math.max(floor, tonumber(ns.db[kind.raise]) or 1) end
+	return floor
+end
+
 -- The alpha a hidden member of this kind has at this step of the mouse's
 -- fade: its opacity setting at 0, full at STEPS.
 local function Shown(step, kind)
-	local floor = ns.db and tonumber(ns.db[kind.alpha]) or 0
+	local floor = Floor(kind)
 	floor = math.max(0, math.min(floor, 1))
 	return floor + (1 - floor) * step / STEPS
 end
@@ -66,7 +85,7 @@ end
 -- Health percent to alpha: 1 below the kind's health setting; at or above
 -- it, Shown(step). 100% there means any damage (full is 1), 0% never.
 local function Curve(step, kind)
-	local floor = ns.db and ns.db[kind.alpha]
+	local floor = Floor(kind)
 	local below = ns.db and ns.db[kind.below]
 	local made = curves[kind]
 	if not made or made.floor ~= floor or made.below ~= below then
@@ -443,12 +462,16 @@ local function Far(unit)
 end
 
 -- Which rule a member goes by, first that fits (unknown, secret: it doesn't):
--- your target (shown), offline, dead (or a ghost), far away (its slider below
--- 100%), shown anyway (tanks at 100%, debuffs), else their health. The second
--- value: the opacity setting the hidden ones go by (DEAD...).
+-- your target (shown, its opacity at 100%), offline, dead (or a ghost), far
+-- away (its slider below 100%), shown anyway (tanks at 100%, debuffs), else
+-- their health (your target's hidden no fainter than its opacity: see
+-- TargetOf). The second value: the opacity setting the hidden ones go by (DEAD...).
+local function IsTarget(unit)
+	return Plain(UnitIsUnit(unit, "target")) == true
+end
 local function Rule(unit)
 	local db = ns.db
-	if db.healVisionTarget and Plain(UnitIsUnit(unit, "target")) == true then return "target" end
+	if (tonumber(db.healVisionTargetAlpha) or 1) >= 1 and IsTarget(unit) then return "target" end
 	if UnitIsConnected and Plain(UnitIsConnected(unit)) == false then return "offline", OFFLINE end
 	if UnitIsDeadOrGhost and Plain(UnitIsDeadOrGhost(unit)) == true then return "dead", DEAD end
 	if (tonumber(db.healVisionFarAlpha) or 1) < 1 and Far(unit) then return "far", FAR end
@@ -520,6 +543,9 @@ local function Update(frame)
 	local alpha, gone, rule = 1, nil, nil
 	if revealStep < STEPS and UnitExists(unit) then
 		rule, gone = Rule(unit)
+		if rule == "health" and IsTarget(unit) then
+			fade = Curve(revealStep, TargetOf(kind)) or fade
+		end
 		if gone then
 			alpha = Shown(revealStep, gone)
 		elseif rule == "health" then
