@@ -124,6 +124,54 @@ local function Objectives()
 	return objectives
 end
 
+-- Whether a quest you're on needs something picked up or used here: an
+-- objective you haven't finished that's an object to use or an item to
+-- collect, for a quest on the map you're in (any map where the game won't
+-- say, or says no quest at all is here: quests without map data). Soft targeting is only held while one does: it picks every corpse
+-- you walk past too, the game's ring flashing on each. Made as needed, again
+-- when the quest log or zone changes. The quest (for the debug line) or nil.
+local NEEDS_GLOW = { object = true, item = true }
+local needed -- false: none
+
+local function NeededFor()
+	if needed ~= nil then
+		return needed or nil
+	end
+	needed = false
+	local log = C_QuestLog
+	if not (log and log.GetNumQuestLogEntries and log.GetQuestIDForLogIndex and log.GetQuestObjectives) then
+		return nil
+	end
+	local elsewhere, anyHere
+	pcall(function()
+		for index = 1, log.GetNumQuestLogEntries() or 0 do
+			local questID = log.GetQuestIDForLogIndex(index)
+			if type(questID) == "number" and questID > 0 then
+				local here = true
+				if log.IsOnMap then
+					local ok, onMap = pcall(log.IsOnMap, questID)
+					here = not (ok and Known(onMap) and onMap == false)
+				end
+				anyHere = anyHere or here
+				for _, objective in ipairs(log.GetQuestObjectives(questID) or {}) do
+					if not objective.finished and NEEDS_GLOW[objective.type] then
+						if here then
+							needed = questID
+						else
+							elsewhere = elsewhere or questID
+						end
+						break
+					end
+				end
+			end
+		end
+	end)
+	if not needed and not anyHere and elsewhere then
+		needed = elsewhere
+	end
+	return needed or nil
+end
+
 local function NamedInObjective(unit)
 	local ok, name = pcall(UnitName, unit)
 	if not (ok and type(name) == "string" and Known(name) and #name > 2) then
@@ -247,7 +295,7 @@ local function GlowOff()
 end
 
 local function Wanted()
-	return ns.db and ns.QuestVisionSetting("questObjectGlow") and true or false
+	return ns.db and ns.QuestVisionSetting("questObjectGlow") and NeededFor() and true or false
 end
 
 -- The object soft targeting picked and its plate, if it has one: plate, or nil.
@@ -390,6 +438,20 @@ local function UnitOf(plate)
 	return plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 end
 
+-- The game sets an icon's alpha back as it updates it (a dead mob's skinning
+-- icon flashed when hidden only each check): the hidden ones every frame.
+local iconKeeper = CreateFrame("Frame")
+iconKeeper:Hide()
+iconKeeper:SetScript("OnUpdate", function(self)
+	if not next(hiddenIcons) then
+		self:Hide()
+		return
+	end
+	for frame in pairs(hiddenIcons) do
+		frame:SetAlpha(0)
+	end
+end)
+
 local hideNow = {}
 local function UpdateIcon()
 	wipe(hideNow)
@@ -418,8 +480,9 @@ local function UpdateIcon()
 	end
 	for frame in pairs(hideNow) do
 		hiddenIcons[frame] = true
-		frame:SetAlpha(0) -- (again each time: the game may set it back)
+		frame:SetAlpha(0)
 	end
+	iconKeeper:SetShown(next(hiddenIcons) ~= nil)
 end
 
 -- The held settings written again where the game changed them (once a
@@ -522,17 +585,120 @@ end)
 
 local watcher = CreateFrame("Frame")
 for _, event in ipairs({ "QUEST_LOG_UPDATE", "UNIT_QUEST_LOG_CHANGED", "QUEST_ACCEPTED", "QUEST_REMOVED",
-	"QUEST_TURNED_IN", "PLAYER_ENTERING_WORLD", "PLAYER_SOFT_INTERACT_CHANGED" }) do
+	"QUEST_TURNED_IN", "PLAYER_ENTERING_WORLD", "PLAYER_SOFT_INTERACT_CHANGED", "NAME_PLATE_UNIT_ADDED",
+	"ZONE_CHANGED", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED_INDOORS" }) do
 	pcall(watcher.RegisterEvent, watcher, event)
 end
 watcher:SetScript("OnEvent", function(_, event)
-	if event == "PLAYER_SOFT_INTERACT_CHANGED" then
-		ticker.at = 0 -- (looked at on the next frame)
+	if event == "PLAYER_SOFT_INTERACT_CHANGED" or event == "NAME_PLATE_UNIT_ADDED" then
+		-- At once: the game has just shown the icon on the new plate (its own
+		-- handler runs first), and soft targeting can hop between several
+		-- corpses a second, each hop a flash if left to the next frame.
+		if Wanted() or CVARS.active then
+			Update()
+		end
+		ticker.at = 0 -- (and looked at again on the next frame)
 		return
 	end
 	wipe(answers)
 	objectives = nil
+	needed = nil
 end)
+
+-- /cine debug iconwatch: for 30 seconds, logs each plate's game icon as it
+-- changes (shown, alpha, hidden by us), checked every frame, with the plate
+-- events, to see when an icon we hide still shows.
+local function Text(fn, ...)
+	local ok, value = pcall(fn, ...)
+	if not ok then
+		return "err"
+	end
+	if not Known(value) then
+		return "secret"
+	end
+	return type(value) == "number" and ("%.2f"):format(value) or tostring(value)
+end
+
+local iconWatch
+function ns.StartIconWatch()
+	if iconWatch then
+		iconWatch:Hide()
+	end
+	local watch = iconWatch or CreateFrame("Frame")
+	iconWatch = watch
+	watch.untilAt = GetTime() + 30
+	watch.last = {}
+	watch.lastSoft = nil
+	local function Log(text)
+		ns.Log("iconwatch", ("%.3f %s"):format(GetTime(), text))
+	end
+	watch:UnregisterAllEvents()
+	for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_SOFT_INTERACT_CHANGED",
+		"CVAR_UPDATE" }) do
+		pcall(watch.RegisterEvent, watch, event)
+	end
+	watch:SetScript("OnEvent", function(_, event, arg1, arg2)
+		if event == "CVAR_UPDATE" then
+			Log(("CVAR_UPDATE %s = %s"):format(tostring(arg1), tostring(arg2)))
+			return
+		end
+		local x, y = Position()
+		Log(("%s %s %s (%s) facing=%s at=%s"):format(event, tostring(arg1), tostring(arg2), Text(UnitName, SOFT),
+			GetPlayerFacing and Text(GetPlayerFacing) or "?",
+			x and ("%.1f,%.1f"):format(x, y) or "?"))
+	end)
+	watch:SetScript("OnUpdate", function(self)
+		if GetTime() > self.untilAt then
+			self:Hide()
+			self:UnregisterAllEvents()
+			Log("done")
+			ns.Print("icon watch: done (/reload to write the log)")
+			return
+		end
+		-- What soft targeting has picked (plate or not) and the settings it goes by.
+		local okPlate, softPlate = pcall(C_NamePlate.GetNamePlateForUnit, SOFT)
+		local soft = ("soft target: %s dead=%s plate=%s glow=%s | SoftTargetInteract=%s"
+			.. " SoftTargetNameplateInteract=%s SoftTargetIconInteract=%s"):format(Text(UnitName, SOFT),
+			Text(UnitIsDead, SOFT), okPlate and softPlate and tostring(UnitOf(softPlate)) or "no",
+			tostring(glow:IsShown()), tostring(GetCVar("SoftTargetInteract")),
+			tostring(GetCVar("SoftTargetNameplateInteract")), tostring(GetCVar("SoftTargetIconInteract")))
+		if self.lastSoft ~= soft then
+			self.lastSoft = soft
+			Log(soft)
+		end
+		local seen = {}
+		for _, plate in ipairs(C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}) do
+			local frame = IconOf(plate)
+			local unit = UnitOf(plate)
+			if frame then
+				seen[frame] = true
+				local icon = frame.Icon
+				local state = ("%s %s dead=%s soft=%s object=%s | frame shown=%s alpha=%s effective=%s ignoreParent=%s"
+					.. " ours=%s | icon shown=%s alpha=%s | plate alpha=%s"):format(tostring(unit),
+					unit and Text(UnitName, unit) or "-", unit and Text(UnitIsDead, unit) or "-",
+					unit and Text(UnitIsUnit, unit, SOFT) or "-", unit and tostring(IsObject(unit)) or "-",
+					Text(frame.IsShown, frame), Text(frame.GetAlpha, frame), Text(frame.GetEffectiveAlpha, frame),
+					frame.IsIgnoringParentAlpha and Text(frame.IsIgnoringParentAlpha, frame) or "?",
+					tostring(hiddenIcons[frame] or false),
+					icon and Text(icon.IsShown, icon) or "-", icon and Text(icon.GetAlpha, icon) or "-",
+					plate.UnitFrame and Text(plate.UnitFrame.GetAlpha, plate.UnitFrame) or "-")
+				if self.last[frame] ~= state then
+					self.last[frame] = state
+					Log(tostring(frame):sub(-6) .. " " .. state)
+				end
+			end
+		end
+		for frame in pairs(self.last) do
+			if not seen[frame] then
+				self.last[frame] = nil
+				Log(tostring(frame):sub(-6) .. " gone")
+			end
+		end
+	end)
+	watch:Show()
+	Log("start")
+	ns.Print("icon watch: logging nameplate icons for 30 seconds (face a dead mob you can skin)")
+end
 
 -- /cine debug questglow: what soft targeting has picked and why it glows or not.
 function ns.PrintQuestGlowDebug()
@@ -543,6 +709,20 @@ function ns.PrintQuestGlowDebug()
 	end
 	ns.Print(("quest object glow: %s, settings held: %s (%s)"):format(Wanted() and "on" or "off",
 		tostring(CVARS.active or false), table.concat(cvars, ", ")))
+	local questID = NeededFor()
+	local title = questID and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(questID)
+	ns.Print(questID and ("needed for: %s (%s), an object or item objective on this map"):format(
+		tostring(title), questID) or "not needed: no object or item objective left for a quest on this map")
+	if questID then
+		local okDistance, distanceSq, onContinent = pcall(C_QuestLog.GetDistanceSqToQuest or error, questID)
+		ns.Print(("  distance to its area: %s (on this continent: %s)"):format(
+			okDistance and type(distanceSq) == "number" and ("%.0f yards"):format(math.sqrt(distanceSq)) or "unknown",
+			tostring(okDistance and onContinent)))
+		for _, objective in ipairs(C_QuestLog.GetQuestObjectives(questID) or {}) do
+			ns.Print(("  objective: %s, type %s, finished %s"):format(tostring(objective.text), tostring(objective.type),
+				tostring(objective.finished)))
+		end
+	end
 	local x = Position()
 	ns.Print(lock and ("locked for %.1fs (your position %s)"):format(GetTime() - lock.at,
 		x and (lock.x and "known" or "unknown at lock") or "unknown: by time alone") or "not locked")

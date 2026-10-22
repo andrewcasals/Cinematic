@@ -7003,8 +7003,9 @@ local function CreateVisionPanel()
 	local questGlow = Check(content, "questObjectGlow", L["Glow on quest objects"],
 		L["The thing on the ground you pick up or use for a quest objective glows gold, with the quest mark " ..
 		"over it, in CineMode and out. One at a time: the one in front of you that your interact key would " ..
-		"use, up to 20 yards away. Turns on the game's soft targeting for things to interact with (Interact " ..
-		"key on keyboard and mouse too) while it's on; your own settings come back when you untick it."],
+		"use, up to 20 yards away. Only while a quest in this zone still needs something picked up or used. " ..
+		"Then it turns on the game's soft targeting for things to interact with (Interact key on keyboard " ..
+		"and mouse too); your own settings come back after."],
 		function(value)
 			ns.GetDB().questObjectGlow = value
 			if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end

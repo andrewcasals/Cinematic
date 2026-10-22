@@ -1641,12 +1641,14 @@ L["The same mark beside your target frame's health bar while your target is one 
 L["Glow on quest objects"] = "Brillo en objetos de misión"
 L["The thing on the ground you pick up or use for a quest objective glows gold, with the quest mark " ..
 	"over it, in CineMode and out. One at a time: the one in front of you that your interact key would " ..
-	"use, up to 20 yards away. Turns on the game's soft targeting for things to interact with (Interact " ..
-	"key on keyboard and mouse too) while it's on; your own settings come back when you untick it."] = "El " ..
+	"use, up to 20 yards away. Only while a quest in this zone still needs something picked up or used. " ..
+	"Then it turns on the game's soft targeting for things to interact with (Interact key on keyboard " ..
+	"and mouse too); your own settings come back after."] = "El " ..
 	"objeto del suelo que recoges o usas para un objetivo de misión brilla en dorado, con la marca de misión " ..
 	"encima, en CineMode y fuera de él. Uno cada vez: el que tienes delante y que usaría tu tecla de " ..
-	"interactuar, hasta a 20 metros. Activa el objetivo suave del juego para cosas con las que interactuar " ..
-	"(también la tecla de interactuar con teclado y ratón) mientras está activo; tus ajustes vuelven al desmarcarlo."
+	"interactuar, hasta a 20 metros. Solo mientras una misión de esta zona aún necesite algo que recoger o " ..
+	"usar. Entonces activa el objetivo suave del juego para cosas con las que interactuar (también la tecla " ..
+	"de interactuar con teclado y ratón); tus ajustes vuelven después."
 L["Enable"] = "Activar"
 L["Heal Vision"] = "Heal Vision"
 L["The game's party and raid frames show only who needs healing: everyone (pets too) while below full health, and tanks as set below. The group titles hide. The members stay in their places, so there are gaps. Out of combat, the mouse over the frames brings everyone back. Ticked in the grid, it's on there. Always: everywhere. Party and Raid: while you're in one, wherever you are. Members with debuffs can't be shown: the game doesn't let addons see your group's debuffs in fights."] = "Los marcos de grupo y de banda del juego muestran solo a quien necesita sanación: a todos (también las mascotas) mientras tengan menos de la salud completa y a los tanques según lo ajustado abajo. Los títulos de los grupos se ocultan. Los miembros se quedan en su sitio, así que quedan huecos. Fuera de combate, el ratón sobre los marcos los muestra a todos. Marcado en la cuadrícula, está activado allí. Siempre: en todas partes. Grupo y Banda: mientras estés en uno, estés donde estés. No se puede mostrar a los miembros con perjuicios: el juego no deja a los addons ver los perjuicios de tu grupo en combate."
