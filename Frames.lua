@@ -476,11 +476,13 @@ for _, known in ipairs(ns.ADDON_FRAMES) do
 	end
 end
 
--- The options pages' master switches (handle<...>, all on to start with):
--- off, the frames in their groups aren't faded (let go, their own alpha
--- back). The Standard Frames page's covers every built-in group but the chat
--- and gamepad ones (their own pages'); the page switches below it come on
--- top. The Advanced Frames page's covers other addons' and added frames.
+-- The options pages' master switches (handle<...>, all on to start with).
+-- The Standard Frames page's: off, the frames in its groups aren't faded
+-- (let go, their own alpha back). It covers every built-in group but the
+-- chat and gamepad ones, whose own pages' switches do the same for them. The
+-- Advanced Frames page's covers other addons' and added frames. The other
+-- pages' (Minimap, Quest tracker...) only turn that page's extras on or off
+-- (see ns.PageOn): their frames still fade as their Standard Frames rows say.
 local GROUP_SWITCH = {
 	minimap = "handleMinimap", minimapheader = "handleMinimap", minimaptracking = "handleMinimap",
 	minimapcalendar = "handleMinimap", minimapzone = "handleMinimap", minimapclock = "handleMinimap",
@@ -501,10 +503,17 @@ local function GroupHandled(group)
 	if not OWN_PAGE_GROUPS[group] and not db.handleFrames then
 		return false
 	end
-	local switch = GROUP_SWITCH[group]
-	return not switch or (db[switch] and true or false)
+	if not OWN_PAGE_GROUPS[group] then
+		return true
+	end
+	return db[GROUP_SWITCH[group]] and true or false
 end
 ns.GroupHandled = GroupHandled
+
+-- Whether a page's switch is on, for its extras (Keep open, reveals, peeks...).
+function ns.PageOn(switch)
+	return ns.db[switch] ~= false
+end
 
 local function AddFrame(frame, group)
 	if not frame or seen[frame] or not frame.SetAlpha or frame == ns.letterbox then
@@ -1031,7 +1040,13 @@ do
 
 	function ns.FindMinimapHeader()
 		local cluster = type(_G.MinimapCluster) == "table" and _G.MinimapCluster or nil
-		local bar = (cluster and cluster.ZoneTextButton) or _G.MinimapZoneTextButton
+		-- An addon that hides the cluster for good (EllesmereUI's minimap
+		-- keeps it at alpha 0): its parts are left in it, or ignoring its
+		-- alpha would bring them back.
+		if leftAlone.MinimapCluster then
+			cluster = nil
+		end
+		local bar = (cluster and cluster.ZoneTextButton) or (not leftAlone.MinimapCluster and _G.MinimapZoneTextButton)
 		if type(bar) == "table" then
 			AddHeaderArt(bar.StateTexture, bar)
 			AddHeaderArt(bar.AddTexture, bar)
@@ -1046,10 +1061,11 @@ do
 			AddFrame(tracking, "minimaptracking")
 		end
 		-- The zone's name: its button, whose bar art ignores its fade (above).
-		AddFrame((cluster and cluster.ZoneTextButton) or _G.MinimapZoneTextButton, "minimapzone")
+		AddFrame(bar, "minimapzone")
 		AddFrame(cluster and cluster.DielFrame, "minimapdial")
 		local calendar = _G.GameTimeFrame
-		if type(calendar) == "table" and calendar.GetRegions and not IsForbidden(calendar) then
+		if type(calendar) == "table" and calendar.GetRegions and not IsForbidden(calendar)
+			and not leftAlone.GameTimeFrame then
 			for _, region in ipairs({ calendar:GetRegions() }) do
 				local atlas = region.GetAtlas and region:GetAtlas()
 				if type(atlas) == "string" and atlas:lower() == "ui-hud-minimap-button" then
@@ -1544,46 +1560,39 @@ ns.COMBAT_SHOW = {
 	{ key = "flags", label = L["Flag carriers"], default = false, addon = "Blizzard_Deprecated_ArenaUI",
 		page = "bg", frames = { "ArenaEnemyFramesContainer" } },
 	-- morePage: the options page with more settings for it, which can keep it up besides.
-	{ key = "minimap", label = L["Minimap"], default = true, groups = { "minimap" }, morePage = "Minimap",
-		handledBy = "handleMinimap" },
+	{ key = "minimap", label = L["Minimap"], default = true, groups = { "minimap" }, morePage = "Minimap" },
 	-- The bar behind the zone's name (not the name): follows the minimap's
 	-- ticks until set (see ROW_FALLBACK).
 	{ key = "minimapheader", label = L["Minimap header"], default = true, groups = { "minimapheader" },
-		handledBy = "handleMinimap",
 		tip = L["The bar behind the zone's name above the minimap (the name has a row of its own). " ..
 			"Untick it to leave the name floating on its own. Hovering the minimap brings it up with the map: " ..
 			"to keep it hidden then too, take Minimap header out of the Minimap group on the Mouseover groups page."] },
 	-- The buttons on the header: follow the minimap's ticks until set, too.
 	{ key = "minimaptracking", label = L["Tracking button"], default = true, groups = { "minimaptracking" },
-		handledBy = "handleMinimap",
 		tip = L["The tracking button on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
 			"Hovering the minimap brings it up with the map."] },
 	{ key = "minimapcalendar", label = L["Calendar"], default = true, groups = { "minimapcalendar" },
-		handledBy = "handleMinimap",
 		tip = L["The calendar button on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
 			"Hovering the minimap brings it up with the map."] },
 	{ key = "minimapzone", label = L["Zone name"], default = true, groups = { "minimapzone" },
-		handledBy = "handleMinimap",
 		tip = L["The zone's name on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
 			"Hovering the minimap brings it up with the map."] },
 	{ key = "minimapclock", label = L["Clock"], default = true, groups = { "minimapclock" },
-		handledBy = "handleMinimap",
 		tip = L["The clock on the minimap header. Untick it to hide it in CineMode even while the minimap is up. " ..
 			"Hovering the minimap brings it up with the map."] },
-	{ key = "minimapdial", label = L["Day/night dial"], default = true, groups = { "minimapdial" },
-		handledBy = "handleMinimap", retail = false,
+	{ key = "minimapdial", label = L["Day/night dial"], default = true, groups = { "minimapdial" }, retail = false,
 		tip = L["The day and night dial by the minimap. Untick it to hide it in CineMode even while the minimap is up. " ..
 			"Hovering the minimap brings it up with the map."] },
 	-- (groups too: an addon's unnamed tracker parts, found by its scanner.)
 	{ key = "quests", label = L["Quest tracker"], default = false, frames = FRAME_GROUPS.quests, groups = { "quests" },
-		morePage = "Quest tracker", handledBy = "handleQuests" },
+		morePage = "Quest tracker" },
 	-- Retail's quest waypoint: its Always tick is the Minimap page's "Always
 	-- show the quest waypoint" (CINE_SHOW_SETTING).
 	{ key = "waypoint", label = L["Quest waypoint"], default = false, retail = true, groups = { "waypoint" },
-		morePage = "Minimap", handledBy = "handleQuests" },
-	{ key = "buffs", label = L["Buffs and debuffs"], default = true, morePage = "Buffs/debuffs", handledBy = "handleBuffs",
+		morePage = "Minimap" },
+	{ key = "buffs", label = L["Buffs and debuffs"], default = true, morePage = "Buffs/debuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
-	{ key = "swing", label = L["Swing timer"], default = true, retail = false, handledBy = "handleSwing",
+	{ key = "swing", label = L["Swing timer"], default = true, retail = false,
 		tip = L["The Swing timer page can fade out the bars of weapons you aren't using, and the off-hand's."],
 		frames ={ "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" } },
 	-- Always ticked to start with (CINE_SHOW_DEFAULT), as before it had a row,
@@ -1592,9 +1601,8 @@ ns.COMBAT_SHOW = {
 	{ key = "castbar", label = L["Cast bar"], default = false, frames = FRAME_GROUPS.castbar },
 	-- The game's own damage meter (made when first opened).
 	{ key = "meters", label = L["Damage meter (the game's)"], default = false, frames = FRAME_GROUPS.meters },
-	-- (handledBy: a master switch that, off, leaves its frames alone: its row greys out.)
 	{ key = "cooldowns", label = L["Cooldown Manager"], default = false, addon = "Blizzard_CooldownViewer",
-		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager", handledBy = "handleCooldowns" },
+		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager" },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
 	{ key = "mainbar", label = L["Action bar 1"], default = true,
@@ -2334,7 +2342,7 @@ do
 		for _, item in ipairs(ns.COMBAT_SHOW) do
 			local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
 			local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
-				and ns.IsCombatShowOn(item.key)
+				and ns.PageOn("handleQuests") and ns.IsCombatShowOn(item.key)
 			-- (A row's rule, when it has one that reads, decides instead of its ticks.)
 			local ticked = ns.RuleShows(item.key, facts)
 			if ticked == nil then
@@ -3641,7 +3649,7 @@ local function SyncSwitches()
 			RemoveFrame(entry.frame)
 		end
 	end
-	if not GroupHandled("cooldowns") then
+	if not GroupHandled("cooldowns") or not ns.PageOn("handleCooldowns") then
 		ReleaseReadyIcons() -- (the "Only when ready in combat" icons)
 	end
 	if not GroupHandled("prd") then
@@ -3655,7 +3663,7 @@ ns.SyncSwitches = SyncSwitches
 
 local function UpdateReadyOnly(elapsed, now)
 	SyncSwitches()
-	if not GroupHandled("cooldowns") then
+	if not GroupHandled("cooldowns") or not ns.PageOn("handleCooldowns") then
 		return
 	end
 	if now - readyCheckedAt >= 0.1 then
@@ -4497,9 +4505,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local place = ns.GetOptionPlace()
 	local fadeChat = not (place and ns.db[ns.CHAT_IN[place]])
 	local keepForGathering, keepForCreatures = ns.IsKeepingMinimapForTracking(now)
-	local questTimerUp = ns.db.questTimerShow and HasQuestTimer()
+	-- (Quest tracker page, its switch on.)
+	local questTimerUp = ns.PageOn("handleQuests") and ns.db.questTimerShow and HasQuestTimer()
 	-- (Hide in camera modes: not while one is running, it goes with the rest.)
-	local durabilityUp = ns.db.durabilityShow and not (ns.db.durabilityHideInCam and ns.activeCam)
+	local durabilityUp = ns.PageOn("handleQuests") and ns.db.durabilityShow and not (ns.db.durabilityHideInCam and ns.activeCam)
 		and ns.HasDurabilityAlert()
 	local petUnhappyUp = ns.db.petUnhappyShow and not (ns.db.petUnhappyHideInCam and ns.activeCam)
 		and ns.IsPetUnhappy()
@@ -4558,15 +4567,18 @@ function ns.UpdateFrames(cinematic, elapsed)
 	end
 	local events = tickTables.events
 	events.chat, events.whisper, events.typing = dockPeek, whisperUnread, typing
-	events.aura = cinematic and (buffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone))
+	-- (The Minimap, Quest tracker, Buffs/debuffs and Cooldown Manager pages'
+	-- extras: none while their page's switch is off.)
+	local minimapPage = ns.PageOn("handleMinimap")
+	events.aura = cinematic and ns.PageOn("handleBuffs") and (buffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone))
 	-- (Not on flight paths, Minimap page: no pings, reveals or tracking bring it up then.)
-	local taxiHidesMinimap = ns.db.minimapHideOnTaxi and ns.Flag(UnitOnTaxi("player"))
-	events.ping = pingReveal and not taxiHidesMinimap
+	local taxiHidesMinimap = minimapPage and ns.db.minimapHideOnTaxi and ns.Flag(UnitOnTaxi("player"))
+	events.ping = minimapPage and pingReveal and not taxiHidesMinimap
 	-- (Keep open and Reveal, Minimap page: "Except in" is for gathering tracking only.)
-	events.tracking = not taxiHidesMinimap and ((keepForGathering and not trackingPaused) or keepForCreatures
+	events.tracking = minimapPage and not taxiHidesMinimap and ((keepForGathering and not trackingPaused) or keepForCreatures
 		or ns.IsMinimapRevealed(now))
-	events.quest, events.gamepad, events.roster = questReveal, padReveal, rosterReveal
-	events.cooldown = cinematic and ns.db.cooldownWhileRecharging
+	events.quest, events.gamepad, events.roster = ns.PageOn("handleQuests") and questReveal, padReveal, rosterReveal
+	events.cooldown = cinematic and ns.PageOn("handleCooldowns") and ns.db.cooldownWhileRecharging
 		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
 		and AnyCooldownRecharging(now)
 	for _, group in ipairs(hoverGroups) do
@@ -4587,12 +4599,12 @@ function ns.UpdateFrames(cinematic, elapsed)
 
 	-- Hide in camera modes (Minimap page): the camera running now fades the
 	-- minimap and its header, whatever would keep them up. Hovering still shows them.
-	local camHidesMinimap = ns.activeCam and ns.db[ns.activeCam .. "HideMinimap"]
+	local camHidesMinimap = minimapPage and ns.activeCam and ns.db[ns.activeCam .. "HideMinimap"]
 	-- Keep minimap open indoors (Minimap page): see RedrawMinimapWhenShown.
-	local keepIndoors = ns.db.minimapIndoors and IsIndoors and ns.Flag(IsIndoors())
+	local keepIndoors = minimapPage and (ns.db.minimapIndoors and IsIndoors and ns.Flag(IsIndoors())
 		or ns.db.minimapKeepQuest and ns.HasTrackedQuest()
 			-- (Only after progress: 0 is off.)
-			and ((ns.db.minimapKeepQuestFor or 0) <= 0 or now - ns.questActivityAt < ns.db.minimapKeepQuestFor * 60)
+			and ((ns.db.minimapKeepQuestFor or 0) <= 0 or now - ns.questActivityAt < ns.db.minimapKeepQuestFor * 60))
 
 	-- (Up unless their rows' frames are faded below: let go, they're up.)
 	personalPower.health, personalPower.level = 1, 1

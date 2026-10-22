@@ -1468,8 +1468,8 @@ local function CreateBuffsPanel()
 		L["Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on flights."])
 	buffPeek:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -48)
 	PageSwitch(content, "handleBuffs", L["Enable page"],
-		L["On: CineMode fades your buffs and debuffs as this page and their Standard Frames row say. " ..
-		"Off: it leaves them alone, with no peeks."], note)
+		L["On: this page's peeks bring your buffs and debuffs up in CineMode. Off: no peeks; they still " ..
+		"fade as their Standard Frames row says."], note)
 	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
 
 	local BUFF_INDENT = 16
@@ -4173,7 +4173,7 @@ local function ShowTable(content, anchor, rows, ...)
 				local db = ns.GetDB()
 				self:SetChecked(isOn(item.key))
 				-- (A row with a rule that reads: the rule decides, its ticks greyed.)
-				self:SetEnabled((not item.handledBy or db[item.handledBy]) and not ns.RuleTest(item.key) and (c == 1
+				self:SetEnabled(not ns.RuleTest(item.key) and (c == 1
 					or (not ns.IsCineShowOn(item.key) and (not needsStay or db.stayInCombat))))
 			end
 		end
@@ -6057,8 +6057,8 @@ local function CreateMinimapPanel()
 		"Hovering the minimap always shows it. To keep it up all the time, or in fights, " ..
 		"see the Standard Frames page."])
 	local switch = PageSwitch(content, "handleMinimap", L["Enable page"],
-		L["On: CineMode fades and shrinks the minimap as this page and its Standard Frames row say. " ..
-		"Off: it leaves it alone."], subtitle)
+		L["On: this page's settings can bring the minimap up or keep it up in CineMode. Off: they don't; " ..
+		"it still fades as its Standard Frames rows say."], subtitle)
 
 	-- Retail's quest waypoint (the marker in the world showing where to go).
 	local aboveTracking
@@ -6219,8 +6219,8 @@ local function CreateQuestTrackerPanel()
 		"mouseover\" (Mouseover groups page)."])
 	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -48)
 	PageSwitch(content, "handleQuests", L["Enable page"],
-		L["On: CineMode fades the quest tracker (and the quest timer and waypoint) as this page and its " ..
-		"Standard Frames row say. Off: it leaves them alone."], subtitle)
+		L["On: this page's settings can bring the quest tracker, quest timer and durability figure up in " ..
+		"CineMode. Off: they don't; they still fade as their Standard Frames rows say."], subtitle)
 	reveal:HookScript("OnClick", Refresh) -- grey out / enable the option below
 
 	-- Children: each reveal can stay up for the Calm Timer instead.
@@ -6291,11 +6291,11 @@ local function CreateSwingPanel()
 		L["Which of the game's swing timer bars show, in CineMode and out. When they come up in " ..
 		"CineMode is the Swing timer row on the Standard Frames page."])
 
-	-- The page's master switch: off, CineMode leaves the swing timer alone
-	-- (everything below greys out, and its Standard Frames row).
+	-- The page's master switch: off, everything below greys out and does
+	-- nothing; the bars still fade as their Standard Frames row says.
 	local handleCheck = PageSwitch(content, "handleSwing", L["Enable page"],
-		L["On: CineMode fades the swing timer as this page and its Standard Frames row say. Off: it " ..
-		"leaves it alone, and the game shows every bar as usual, in CineMode and out."], subtitle)
+		L["On: this page's settings can fade out the bars you aren't using. Off: they don't; the swing " ..
+		"timer still fades as its Standard Frames row says, every bar alike."], subtitle)
 
 	local smart = Check(content, "swingSmartShow", L["Only show the weapons you're using"],
 		L["The main hand (and off-hand) bars show while you auto-attack, the ranged bar while you " ..
@@ -6339,11 +6339,11 @@ local function CreateCooldownPanel()
 		"it always shows it. To keep it up all the time, or in fights, see the Standard Frames page; " ..
 		"what comes up with it is on the Mouseover groups page."])
 
-	-- The page's master switch: off, CineMode leaves the Cooldown Manager alone
-	-- (everything below greys out, and its Standard Frames row).
+	-- The page's master switch: off, everything below greys out and does
+	-- nothing; the Cooldown Manager still fades as its Standard Frames row says.
 	local handleCheck = PageSwitch(content, "handleCooldowns", L["Enable page"],
-		L["On: CineMode fades the Cooldown Manager as this page and its Standard Frames row say. Off: " ..
-		"it leaves it alone, and the game's own options decide, in CineMode and out."], subtitle)
+		L["On: this page's settings can keep the Cooldown Manager up in CineMode, or show only the icons " ..
+		"you pick. Off: they don't; it still fades as its Standard Frames row says."], subtitle)
 	local function Handled() return ns.GetDB().handleCooldowns end
 
 	local recharging = Check(content, "cooldownWhileRecharging", L["Stay up while a cooldown is recharging"],

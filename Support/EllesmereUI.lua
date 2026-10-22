@@ -317,7 +317,9 @@ ns.WhenAddonLoads("EllesmereUIResourceBars", function()
 	FadeWithRows({ { "swing", "swing", "ERB_SwingTimerFrame" } })
 end)
 
--- It moves the map out of the cluster and keeps the cluster at alpha 0.
+-- It moves the map out of the cluster and keeps the cluster at alpha 0, and
+-- the calendar too (the tracking button and day/night dial, in the cluster,
+-- go with it): it draws its own.
 -- Its zone name bar is sized to the name, measured only when the name
 -- changes: measured while the map is shrunk away (faded), the text reads far
 -- too wide (it's never drawn smaller than a few pixels), and the bar stays
@@ -340,7 +342,7 @@ local function RefitLocationBar()
 end
 
 ns.WhenAddonLoads("EllesmereUIMinimap", function()
-	ns.LeaveAlone({ "MinimapCluster" })
+	ns.LeaveAlone({ "MinimapCluster", "GameTimeFrame" })
 	ns.OnMinimapRestored(function()
 		RefitLocationBar()
 		C_Timer.After(0, RefitLocationBar)
