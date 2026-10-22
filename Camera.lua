@@ -2223,7 +2223,7 @@ function ns.AbandonDeathCamera()
 	end
 	tilt.amount, tilt.from, tilt.target = 0, 0, 0 -- nothing to put back
 	tilt.zoomTo, tilt.zoomSaved = nil, nil
-	ns.DeathTestLog("you moved the camera: it's yours now")
+	ns.DeathTestLog(("you moved the camera (%s): it's yours now"):format(tostring(ns.lastCameraInputWhat)))
 end
 
 -- Still doing something with the camera: dead, or on the way back after.
@@ -2907,12 +2907,23 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		or (vista and ns.db.vistaInputPause) or (fish and ns.db.fishInputPause) or (cozy and ns.db.cozyInputPause) or nil)
 	-- The death camera doesn't pause: camera input since you died (or while it
 	-- goes back after) hands the camera to you for good (AbandonDeathCamera).
+	-- A mouse button already held as you died (steering in the fight) doesn't
+	-- count until it's let go: only a new press, or zooming, after you die.
 	if dead then
-		ns.orbit.deathWatchFrom = ns.orbit.deathWatchFrom or now
+		if not ns.orbit.deathWatchFrom then
+			ns.orbit.deathWatchFrom = now
+			ns.orbit.deathHeldMouse = IsMouseOnCamera()
+		end
 	elseif not ns.DeathCameraBusy() then
-		ns.orbit.deathWatchFrom = nil
+		ns.orbit.deathWatchFrom, ns.orbit.deathHeldMouse = nil, nil
 	end
-	if ns.orbit.deathWatchFrom and ns.GetLastCameraInput() > ns.orbit.deathWatchFrom then
+	if ns.orbit.deathHeldMouse and not IsMouseOnCamera() then
+		ns.orbit.deathHeldMouse = nil
+		ns.orbit.deathWatchFrom = now -- (the held button's input is all before this)
+	end
+	local watchFrom = ns.orbit.deathWatchFrom
+	if watchFrom and (ns.orbit.deathHeldMouse and (ns.lastPlayerZoomAt or 0) > watchFrom
+		or not ns.orbit.deathHeldMouse and ns.GetLastCameraInput() > watchFrom) then
 		ns.AbandonDeathCamera()
 	end
 	if adjusting then

@@ -264,6 +264,7 @@ read_globals = {
 	"UnitIsFriend",
 	"UnitReaction",
 	"UnitIsGhost",
+	"GetAreaSpiritHealerTime",
 	"UnitIsPVP",
 	"UnitIsPVPFreeForAll",
 	"UnitIsCharmed",

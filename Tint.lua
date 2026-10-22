@@ -1,6 +1,6 @@
 -- Cinematic screen tint: colour grading and a vignette over the game world
 -- while cinematic mode is active. Driven from Core.lua's update loop.
-local _, ns = ...
+local ADDON_NAME, ns = ...
 local L = ns.L
 
 local db -- set once saved settings have loaded (ns.CreateTint runs at login)
@@ -206,8 +206,60 @@ local DRIFT_REFRESH = 0.25 -- seconds between drift updates
 
 -- Tint state. Declared before the functions that use it: a Lua local only
 -- exists from its declaration on, so anything above would see a nil global.
-local VIGNETTE_SIZE = 0.25 -- fraction of the screen each edge gradient covers
+local VIGNETTE_SIZE = 0.25 -- fraction of the screen each edge covers
 local tintFrame, tintTexture, vignetteEdges
+
+-- Vignettes: a rounded corner piece in each corner (Media/make_vignette.py,
+-- flipped by its texcoords) and its outer row stretched along each edge between
+-- them, so the darkness eases in with no creases. (Four straight gradients
+-- left a bright cross where they met, and a line where each began.)
+local VIGNETTE_TEXTURE = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\Vignette"
+local VIGNETTE_CORNERS = { -- point, texcoords (left, right, top, bottom)
+	topLeft = { "TOPLEFT", 1, 0, 1, 0 }, topRight = { "TOPRIGHT", 0, 1, 1, 0 },
+	bottomLeft = { "BOTTOMLEFT", 1, 0, 0, 1 }, bottomRight = { "BOTTOMRIGHT", 0, 1, 0, 1 },
+}
+local VIGNETTE_EDGES = { -- between corners (top left, bottom right), texcoords
+	top = { "topLeft", "topRight", 0, 0, 1, 0 }, bottom = { "bottomLeft", "bottomRight", 0, 0, 0, 1 },
+	left = { "topLeft", "bottomLeft", 1, 0, 0, 0 }, right = { "topRight", "bottomRight", 0, 1, 0, 0 },
+}
+
+local function CreateVignette(frame)
+	local pieces = {}
+	for name, corner in pairs(VIGNETTE_CORNERS) do
+		local piece = frame:CreateTexture(nil, "ARTWORK")
+		piece:SetTexture(VIGNETTE_TEXTURE)
+		piece:SetTexCoord(corner[2], corner[3], corner[4], corner[5])
+		piece:SetPoint(corner[1])
+		pieces[name] = piece
+	end
+	for name, edge in pairs(VIGNETTE_EDGES) do
+		local piece = frame:CreateTexture(nil, "ARTWORK")
+		piece:SetTexture(VIGNETTE_TEXTURE)
+		piece:SetTexCoord(edge[3], edge[4], edge[5], edge[6])
+		local from, to = pieces[edge[1]], pieces[edge[2]]
+		if name == "top" or name == "bottom" then
+			piece:SetPoint("TOPLEFT", from, "TOPRIGHT")
+			piece:SetPoint("BOTTOMRIGHT", to, "BOTTOMLEFT")
+		else
+			piece:SetPoint("TOPLEFT", from, "BOTTOMLEFT")
+			piece:SetPoint("BOTTOMRIGHT", to, "TOPRIGHT")
+		end
+		pieces[name] = piece
+	end
+	return pieces
+end
+
+-- size: the fraction of the screen each edge covers; alpha: its darkness.
+local function SetVignette(pieces, size, alpha)
+	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+	for name, piece in pairs(pieces) do
+		piece:SetShown(alpha > 0)
+		piece:SetVertexColor(0, 0, 0, alpha)
+		if VIGNETTE_CORNERS[name] then
+			piece:SetSize(width * size, height * size)
+		end
+	end
+end
 local tintLevel = 0
 -- The vignette's and weather's own levels: they share the tint's overlay but
 -- have their own rows in the Visual Effects page's grid.
@@ -578,21 +630,7 @@ local function CreateTint()
 	weatherTexture:SetBlendMode("MOD")
 	weatherTexture:Hide()
 
-	vignetteEdges = {}
-	for _, side in ipairs({ "top", "bottom", "left", "right" }) do
-		local edge = tintFrame:CreateTexture(nil, "ARTWORK")
-		edge:SetColorTexture(1, 1, 1, 1)
-		edge:SetBlendMode("BLEND")
-		vignetteEdges[side] = edge
-	end
-	vignetteEdges.top:SetPoint("TOPLEFT")
-	vignetteEdges.top:SetPoint("TOPRIGHT")
-	vignetteEdges.bottom:SetPoint("BOTTOMLEFT")
-	vignetteEdges.bottom:SetPoint("BOTTOMRIGHT")
-	vignetteEdges.left:SetPoint("TOPLEFT")
-	vignetteEdges.left:SetPoint("BOTTOMLEFT")
-	vignetteEdges.right:SetPoint("TOPRIGHT")
-	vignetteEdges.right:SetPoint("BOTTOMRIGHT")
+	vignetteEdges = CreateVignette(tintFrame)
 	tintFrame:Hide()
 	-- Keep the letterbox bars above the tint so a glow doesn't tint them.
 	local letterbox = ns.GetLetterbox()
@@ -672,22 +710,7 @@ local function ApplyTint(level, vignetteLevel, weatherLevel)
 		weatherTexture:Hide()
 	end
 
-	local vignetteAlpha = db.vignette and db.vignetteStrength * vignetteLevel or 0
-	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
-	for _, edge in pairs(vignetteEdges) do
-		edge:SetShown(vignetteAlpha > 0)
-	end
-	if vignetteAlpha > 0 then
-		local dark, clear = { 0, 0, 0, vignetteAlpha }, { 0, 0, 0, 0 }
-		vignetteEdges.top:SetHeight(height * VIGNETTE_SIZE)
-		vignetteEdges.bottom:SetHeight(height * VIGNETTE_SIZE)
-		vignetteEdges.left:SetWidth(width * VIGNETTE_SIZE)
-		vignetteEdges.right:SetWidth(width * VIGNETTE_SIZE)
-		SetGradient(vignetteEdges.top, "VERTICAL", clear, dark)
-		SetGradient(vignetteEdges.bottom, "VERTICAL", dark, clear)
-		SetGradient(vignetteEdges.left, "HORIZONTAL", dark, clear)
-		SetGradient(vignetteEdges.right, "HORIZONTAL", clear, dark)
-	end
+	SetVignette(vignetteEdges, VIGNETTE_SIZE, db.vignette and db.vignetteStrength * vignetteLevel or 0)
 
 	tintFrame:SetShown(level > 0 or vignetteLevel > 0 or weatherLevel > 0)
 end
@@ -699,13 +722,13 @@ end
 
 -- Death screen: while the death camera runs, the world goes dim and cold and a
 -- heavy vignette closes in. Its own overlay, beside the tint and under the UI
--- (so the release button stays clear). Fades in slowly, clears quickly.
+-- (so the release button stays clear). Fades in slowly, clears quickly (or,
+-- released to a spirit healer's wave, over the wait).
 local DEATH_COLOR = { 0.6, 0.63, 0.75 } -- multiply: dimmer, drained toward grey-blue
-local DEATH_VIGNETTE = 0.75             -- edge darkness at full strength
-local DEATH_VIGNETTE_SIZE = 0.35        -- fraction of the screen each edge covers, at full
-local DEATH_VIGNETTE_START = 0.1        -- ...and as it starts creeping in
-local DEATH_FADE_IN, DEATH_FADE_OUT = 3, 1 -- seconds (the wash)
-local DEATH_CREEP_TIME = 10             -- seconds for the vignette to creep in
+local DEATH_VIGNETTE = 0.95             -- edge darkness at full strength
+local DEATH_VIGNETTE_START = 0.1        -- fraction of the screen each edge covers as it starts
+                                        -- creeping in (at full: deathVignetteSize)
+local DEATH_FADE_IN, DEATH_FADE_OUT = 3, 1 -- seconds (the wash; the vignette's creep: deathVignetteTime)
 local deathFrame, deathWash, deathEdges
 local deathLevel, deathCreep = 0, 0
 
@@ -720,21 +743,7 @@ local function CreateDeathScreen()
 	deathWash:SetAllPoints()
 	deathWash:SetColorTexture(1, 1, 1, 1)
 	deathWash:SetBlendMode("MOD")
-	deathEdges = {}
-	for _, side in ipairs({ "top", "bottom", "left", "right" }) do
-		local edge = deathFrame:CreateTexture(nil, "ARTWORK")
-		edge:SetColorTexture(1, 1, 1, 1)
-		edge:SetBlendMode("BLEND")
-		deathEdges[side] = edge
-	end
-	deathEdges.top:SetPoint("TOPLEFT")
-	deathEdges.top:SetPoint("TOPRIGHT")
-	deathEdges.bottom:SetPoint("BOTTOMLEFT")
-	deathEdges.bottom:SetPoint("BOTTOMRIGHT")
-	deathEdges.left:SetPoint("TOPLEFT")
-	deathEdges.left:SetPoint("BOTTOMLEFT")
-	deathEdges.right:SetPoint("TOPRIGHT")
-	deathEdges.right:SetPoint("BOTTOMRIGHT")
+	deathEdges = CreateVignette(deathFrame)
 	deathFrame:Hide()
 end
 
@@ -744,20 +753,30 @@ local function ApplyDeathScreen(level, creep)
 	local s = level * db.deathScreenStrength
 	local c = creep * creep * (3 - 2 * creep)
 	local v = c * db.deathScreenStrength
-	local size = DEATH_VIGNETTE_START + (DEATH_VIGNETTE_SIZE - DEATH_VIGNETTE_START) * c
+	local size = DEATH_VIGNETTE_START + (db.deathVignetteSize - DEATH_VIGNETTE_START) * c
 	local wash = { 1 - (1 - DEATH_COLOR[1]) * s, 1 - (1 - DEATH_COLOR[2]) * s, 1 - (1 - DEATH_COLOR[3]) * s, 1 }
 	SetGradient(deathWash, "VERTICAL", wash, wash)
-	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
-	local dark, clear = { 0, 0, 0, DEATH_VIGNETTE * v }, { 0, 0, 0, 0 }
-	deathEdges.top:SetHeight(height * size)
-	deathEdges.bottom:SetHeight(height * size)
-	deathEdges.left:SetWidth(width * size)
-	deathEdges.right:SetWidth(width * size)
-	SetGradient(deathEdges.top, "VERTICAL", clear, dark)
-	SetGradient(deathEdges.bottom, "VERTICAL", dark, clear)
-	SetGradient(deathEdges.left, "HORIZONTAL", dark, clear)
-	SetGradient(deathEdges.right, "HORIZONTAL", clear, dark)
+	SetVignette(deathEdges, size, DEATH_VIGNETTE * v)
 	deathFrame:SetShown(level > 0 or creep > 0)
+end
+
+-- Seconds until the area spirit healer's next wave resurrects you (a ghost in
+-- its circle), or 0.
+local function WaveTimeLeft()
+	if not (GetAreaSpiritHealerTime and ns.Flag(UnitIsGhost("player"))) then
+		return 0
+	end
+	local ok, left = pcall(function()
+		local t = GetAreaSpiritHealerTime()
+		return type(t) == "number" and t > 0 and t or 0
+	end)
+	return ok and left or 0
+end
+
+-- Clearing: waiting on a wave, the screen lifts over the wait, landing as you
+-- come back; otherwise (a res, a corpse run) quickly.
+local function DeathFadeOut(current, wave)
+	return wave > 0 and current > 0 and wave / current or DEATH_FADE_OUT
 end
 
 local function UpdateDeathScreen(elapsed)
@@ -767,8 +786,11 @@ local function UpdateDeathScreen(elapsed)
 	local want = db.enabled and db.deathScreen and ns.IsDeathCinematic and ns.IsDeathCinematic()
 	local target = want and 1 or 0
 	if deathLevel ~= target or deathCreep ~= target then
-		deathLevel = Approach(deathLevel, target, elapsed, target > deathLevel and DEATH_FADE_IN or DEATH_FADE_OUT)
-		deathCreep = Approach(deathCreep, target, elapsed, target > deathCreep and DEATH_CREEP_TIME or DEATH_FADE_OUT)
+		local wave = target == 0 and WaveTimeLeft() or 0
+		deathLevel = Approach(deathLevel, target, elapsed,
+			target > deathLevel and DEATH_FADE_IN or DeathFadeOut(deathLevel, wave))
+		deathCreep = Approach(deathCreep, target, elapsed,
+			target > deathCreep and db.deathVignetteTime or DeathFadeOut(deathCreep, wave))
 		ApplyDeathScreen(deathLevel, deathCreep)
 	end
 end

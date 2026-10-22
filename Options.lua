@@ -2730,6 +2730,16 @@ local function CreateDeathPanel()
 	local screenStrength = rightStack:Add(Slider(content, "deathScreenStrength", L["Strength"], 10, 100, 5,
 		"%d%%", 100), "slider")
 	GreyUnless(screenStrength, function(db) return IfOn(db) and db.deathScreen end)
+	local creep = rightStack:Add(Slider(content, "deathVignetteTime", L["Edges creep in over"], 1, 30, 1,
+		L["%d sec"]), "slider")
+	Tooltip(creep, L["How long the dark edges take to close in after you die, starting gently and " ..
+		"settling at the end."])
+	GreyUnless(creep, function(db) return IfOn(db) and db.deathScreen end)
+	local reach = rightStack:Add(Slider(content, "deathVignetteSize", L["Edges reach in"], 15, 50, 5,
+		"%d%%", 100), "slider")
+	Tooltip(reach, L["How far the dark edges reach in once they've closed in, as a share of the " ..
+		"screen from each side."])
+	GreyUnless(reach, function(db) return IfOn(db) and db.deathScreen end)
 
 	rightStack:Header(content, L["Music"])
 	local song = rightStack:Add(Check(content, "deathSong", L["Play a death song"],
