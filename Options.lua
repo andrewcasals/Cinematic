@@ -1068,6 +1068,7 @@ do
 		{ name = "What's new", pages = {
 			{ "New features", "Interface\\Icons\\INV_Misc_Gift_01" },
 			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11" },
+			{ "Thanks", "Interface\\Icons\\INV_ValentinesCard02" },
 		} },
 	}
 	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.

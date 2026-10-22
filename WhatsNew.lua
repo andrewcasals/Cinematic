@@ -171,9 +171,39 @@ local function CreateCommitsPanel(kit)
 	kit.RegisterSubpage(canvas, "All changes")
 end
 
+-- Thanks: the people who helped make Cinematic, in the order they joined the
+-- list. Names as they gave them (not translated).
+local THANKS = {
+	"Actual_Device2",
+	"kronosbest",
+	"clepp",
+	"Shweepy",
+	"veryclearlydefined",
+	"kosmostic92362",
+	"Maggew",
+	"HCC816",
+	"Gidgiddoni2000",
+	"andygoyap",
+	"sprdrgrllibby",
+}
+
+local function CreateThanksPanel(kit)
+	local canvas, content = kit.CreateScrollPage()
+	local last = Heading(kit, content, L["Thanks"],
+		L["Cinematic is better for the players who tested it, reported bugs and sent ideas. Thank you!"])
+	for i, name in ipairs(THANKS) do
+		local line = kit.Label(content, "GameFontHighlight", name)
+		line:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, i == 1 and -18 or -8)
+		last = line
+	end
+	canvas:Hide()
+	kit.RegisterSubpage(canvas, "Thanks")
+end
+
 ns.CreateWhatsNewPanels = function(kit)
 	CreateFeaturesPanel(kit)
 	CreateCommitsPanel(kit)
+	CreateThanksPanel(kit)
 end
 
 -- After an update with new features, a line in chat at login with a [What's
