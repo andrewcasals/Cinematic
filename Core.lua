@@ -521,6 +521,22 @@ DEFAULTS.deathScreenStrength = 1
 DEFAULTS.deathVignetteTime = 10    -- seconds for its vignette to creep in
 DEFAULTS.deathVignetteSize = 0.35  -- ...and the fraction of the screen each edge covers then
 DEFAULTS.deathBanner = true        -- "YOU DIED" across the screen as it starts
+DEFAULTS.deathCorpseRun = true     -- released with no wave to wait for, the vignette lifts as you near your body
+-- While dead: CineMode stays on and only the parts ticked here stay up (ns.DEATH_SHOW).
+DEFAULTS.deathFadeUI = false
+DEFAULTS.deathFadeGhost = true     -- ...as a ghost too, all the way back
+DEFAULTS.deathShowRelease = true   -- the release window (and soulstone, Reincarnation)
+DEFAULTS.deathShowGhost = true     -- the ghost's Return to graveyard button
+DEFAULTS.deathShowUnits = false
+DEFAULTS.deathShowTarget = false
+DEFAULTS.deathShowGroup = false
+DEFAULTS.deathShowBars = false
+DEFAULTS.deathShowMinimap = false
+DEFAULTS.deathShowBuffs = false
+DEFAULTS.deathShowQuests = false
+DEFAULTS.deathShowCombat = false
+DEFAULTS.deathShowMenus = false
+DEFAULTS.deathShowAddons = false
 DEFAULTS.deathZoom = 4             -- yards it pulls back meanwhile
 DEFAULTS.deathOrbitPause = 0       -- (always one continuous turn)
 -- Auto-run camera: like RP walk, while auto-running (runOrbit*, runZoom*).
@@ -1418,9 +1434,12 @@ local function ShouldBeCinematic(now)
 		or (ns.ActiveEvent and ns.ActiveEvent())
 		or (ns.IsDeathCinematic and ns.IsDeathCinematic())
 		or LongMove()
+	-- (Fading the UI while dead: the corpse run too, walking or not.)
+	local deadFade = ns.IsDeadFading and ns.IsDeadFading()
+	instant = instant or deadFade
 	-- Moving: back once you've moved on, or stood still, for its own time
 	-- (not the "Back into CineMode after" one).
-	if MovingOff() then
+	if MovingOff() and not deadFade then
 		lastMovingOff = now
 		offForMoving = true
 		ns.cineOffWhy = "moving (Off while moving)"

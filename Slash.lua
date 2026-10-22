@@ -115,6 +115,7 @@ local function PrintDebugHelp()
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
+	print("  /cine debug corpse - how far your body is (as a ghost) and the corpse run's vignette")
 	print("  /cine debug flight - the flight route, its known time and when the camera settles")
 	print("  /cine debug orbit - the camera rotation's state")
 	print("  /cine debug flyby - the fly-by's state and the random ones planned")
@@ -776,6 +777,19 @@ local function HandleSlash(msg)
 		ns.PrintPanelsDebug()
 	elseif cmd == "debug" and (arg == "slots" or arg == "slots all") then
 		ns.SlotsDebug(arg == "slots all")
+	elseif cmd == "debug" and arg == "corpse" then
+		local c = ns.GetCorpseDebug()
+		local function yards(d) return d and ("%.1f yards"):format(d) or "unknown" end
+		ns.Print(("corpse: %s (%s); from the map marker: %s (%s)"):format(
+			yards(c.distance), tostring(c.source), yards(c.mapDistance), tostring(c.mapSource)))
+		ns.Print(("ghost %s, wave %.0f sec, position saved at death %s, came back at %s, vignette %s"):format(
+			tostring(c.ghost), c.wave, tostring(c.saved), yards(c.start),
+			c.level and ("%d%%"):format(c.level * 100) or "off"))
+		if c.walked then
+			ns.Print(("body unknown: faking it, %s walked of 1000"):format(yards(c.walked)))
+		end
+		ns.Print(("edge creep %d%% (aiming for %s), edges reach %d%% of the screen, dim wash %d%%"):format(
+			c.creep * 100, c.level and ("%d%%"):format(c.level * 100) or "none", c.edgeSize * 100, c.wash * 100))
 	elseif cmd == "debug" and arg == "cvars" then
 		ns.CVarsDebug()
 	elseif cmd == "debug" and arg:find("^cvars%s") then

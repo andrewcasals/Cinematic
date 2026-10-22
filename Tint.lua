@@ -749,13 +749,25 @@ end
 
 -- level: the wash; creep: the vignette, which darkens and closes in slowly
 -- (eased, so it starts gently and settles).
+-- The edges drift in and out a little meanwhile, on top of the creep: two
+-- slow waves of different lengths, so it never quite repeats. In shares of
+-- the screen, at full creep (less as they clear, none once clear).
+local DEATH_DRIFT = 0.03
+local DEATH_DRIFT_PERIODS = { 7, 11.3 } -- seconds
+local deathWashColor = { 1, 1, 1, 1 }
+
 local function ApplyDeathScreen(level, creep)
 	local s = level * db.deathScreenStrength
 	local c = creep * creep * (3 - 2 * creep)
 	local v = c * db.deathScreenStrength
-	local size = DEATH_VIGNETTE_START + (db.deathVignetteSize - DEATH_VIGNETTE_START) * c
-	local wash = { 1 - (1 - DEATH_COLOR[1]) * s, 1 - (1 - DEATH_COLOR[2]) * s, 1 - (1 - DEATH_COLOR[3]) * s, 1 }
-	SetGradient(deathWash, "VERTICAL", wash, wash)
+	local t = GetTime() * 2 * math.pi
+	local drift = (0.6 * math.sin(t / DEATH_DRIFT_PERIODS[1]) + 0.4 * math.sin(t / DEATH_DRIFT_PERIODS[2]))
+		* DEATH_DRIFT * c
+	local size = DEATH_VIGNETTE_START + (db.deathVignetteSize - DEATH_VIGNETTE_START) * c + drift
+	for i = 1, 3 do
+		deathWashColor[i] = 1 - (1 - DEATH_COLOR[i]) * s
+	end
+	SetGradient(deathWash, "VERTICAL", deathWashColor, deathWashColor)
 	SetVignette(deathEdges, size, DEATH_VIGNETTE * v)
 	deathFrame:SetShown(level > 0 or creep > 0)
 end
@@ -779,30 +791,211 @@ local function DeathFadeOut(current, wave)
 	return wave > 0 and current > 0 and wave / current or DEATH_FADE_OUT
 end
 
+-- Released, the vignette stays (closing all the way in, if you released
+-- before it had) and lifts slowly, then fast at the end: waiting on a wave,
+-- over the wait (fast for its last WAVE_FAST seconds); on a corpse run, as you
+-- near your body (fast within CORPSE_FAST yards, gone by CORPSE_NEAR; full
+-- where you came back, however far that is). Where your body lies: your own
+-- position while dead (saved here), or after a reload the game's corpse
+-- marker on the map.
+local LIFT_KNEE = 0.8       -- share of the dark still there as the fast part starts
+local WAVE_SLOW, WAVE_FAST = 30, 3 -- seconds left: starts lifting, then fast
+local WAVE_LAST = 1         -- seconds left: the wave's bringing you back
+local CORPSE_FAST, CORPSE_NEAR = 50, 30 -- yards: fast from here, gone by here
+                            -- (about where you can come back to life)
+local CORPSE_CHECK = 0.25   -- seconds between checks
+local CORPSE_FOLLOW = 1     -- seconds the vignette takes to follow a change as you walk...
+local CORPSE_CLOSE = 3      -- ...and to close in (released early, or walking away)
+local corpse = { checkedAt = 0 }
+
+-- How much dark is left (0-1) with value (seconds or yards) still to go:
+-- full at far, LIFT_KNEE at knee, none at near.
+local function Lift(value, far, knee, near)
+	if value >= knee then
+		local slow = far > knee and math.min(1, (value - knee) / (far - knee)) or 1
+		return LIFT_KNEE + (1 - LIFT_KNEE) * slow
+	end
+	return LIFT_KNEE * math.max(0, (value - near) / (knee - near))
+end
+
+local function Number(value)
+	if type(value) == "number" and not (issecretvalue and issecretvalue(value)) then
+		return value
+	end
+end
+
+local function PlayerPosition()
+	local ok, y, x, _, instance = pcall(UnitPosition, "player")
+	if ok and Number(y) and Number(x) then
+		return x, y, instance
+	end
+end
+
+-- From the game's corpse marker: both on the map you're on, its size in yards.
+local function CorpseDistanceFromMap()
+	if not (C_DeathInfo and C_DeathInfo.GetCorpseMapPosition and C_Map and C_Map.GetBestMapForUnit) then
+		return nil, "no corpse API"
+	end
+	local ok, distance = pcall(function()
+		local map = C_Map.GetBestMapForUnit("player")
+		local body = map and C_DeathInfo.GetCorpseMapPosition(map)
+		local me = body and C_Map.GetPlayerMapPosition(map, "player")
+		local width, height = C_Map.GetMapWorldSize(map)
+		if not (me and Number(body.x) and Number(body.y) and Number(me.x) and Number(me.y)
+			and Number(width) and Number(height) and width > 0) then
+			return nil
+		end
+		return math.sqrt(((body.x - me.x) * width) ^ 2 + ((body.y - me.y) * height) ^ 2)
+	end)
+	return ok and distance or nil, ok and (distance and "map" or "not on this map") or "error"
+end
+
+-- Yards to your body, and where that came from; nil if unknown.
+local function CorpseDistance()
+	local x, y, instance = PlayerPosition()
+	if corpse.x and x and instance == corpse.instance then
+		return math.sqrt((x - corpse.x) ^ 2 + (y - corpse.y) ^ 2), "saved"
+	end
+	return CorpseDistanceFromMap()
+end
+
+-- Your body's whereabouts unknown (you died in a dungeon, or the game won't
+-- say): it's as if it were FAKE_DISTANCE yards off, the vignette lifting
+-- evenly (no fast part) with the ground you cover; where your position isn't
+-- known either, with time, at a run.
+local FAKE_DISTANCE = 1000 -- yards
+local FAKE_SPEED = 7       -- yards a second, with no position to go by
+local FAKE_JUMP = 30       -- yards in one check: a teleport (the graveyard), not walked
+
+local function FakeCorpseRun()
+	local now = GetTime()
+	local x, y, instance = PlayerPosition()
+	local walked = 0
+	if x and corpse.fakeX and instance == corpse.fakeInstance then
+		walked = math.sqrt((x - corpse.fakeX) ^ 2 + (y - corpse.fakeY) ^ 2)
+		if walked > FAKE_JUMP then walked = 0 end
+	elseif not x and corpse.fakeAt then
+		walked = (now - corpse.fakeAt) * FAKE_SPEED
+	end
+	corpse.fakeX, corpse.fakeY, corpse.fakeInstance, corpse.fakeAt = x, y, instance, now
+	corpse.walked = (corpse.walked or 0) + walked
+	return math.max(0, 1 - corpse.walked / FAKE_DISTANCE)
+end
+
+-- The vignette while waiting on a wave (nil: no wave). The game counts the
+-- wait in whole seconds, so it's counted down smoothly here from each change
+-- of the game's number (read every frame meanwhile, so it's caught at once):
+-- read as is, the edges moved in a step each second.
+local function WaveLevel(now)
+	local wave = WaveTimeLeft()
+	if wave <= 0 then
+		corpse.waveSeen, corpse.waveEnd = nil, nil
+		return nil
+	end
+	if wave ~= corpse.waveSeen then
+		corpse.waveSeen, corpse.waveEnd = wave, now + wave
+	end
+	-- In its last second, no corpse run as it ends (the wave brings you back).
+	-- Before that, a wave gone means you walked out of its circle: the corpse
+	-- run takes over (the edges went with it: tested).
+	corpse.waited = corpse.waveEnd - now < WAVE_LAST
+	return Lift(math.max(0, corpse.waveEnd - now), WAVE_SLOW, WAVE_FAST, 0)
+end
+
+-- Keeps your body's position while dead, and the vignette wanted once
+-- released (0-1; nil when not a ghost or not known).
+local function CorpseRunLevel(elapsed)
+	local ghost = ns.Flag(UnitIsGhost("player"))
+	corpse.checkedAt = corpse.checkedAt + elapsed
+	if corpse.checkedAt < CORPSE_CHECK and ghost == corpse.ghost then -- (released: check now)
+		if corpse.waveEnd then
+			corpse.level = WaveLevel(GetTime()) or corpse.level
+		end
+		return corpse.level
+	end
+	corpse.checkedAt, corpse.ghost = 0, ghost
+	local dead = ns.Flag(UnitIsDead("player"))
+	if dead and not ghost then
+		corpse.x, corpse.y, corpse.instance = PlayerPosition()
+	elseif not ghost then
+		corpse.x, corpse.start, corpse.waited, corpse.waveEnd = nil, nil, nil, nil -- alive again
+		corpse.walked, corpse.fakeX, corpse.fakeAt = nil, nil, nil
+	end
+	corpse.level = nil
+	if not (ghost and db.enabled and db.deathScreen and db.deathOrbit and not ns.IsCameraOffHere("death")) then
+		return nil
+	end
+	local wave = WaveLevel(GetTime())
+	if wave then
+		corpse.level = wave
+	elseif db.deathCorpseRun and not corpse.waited then
+		local distance = CorpseDistance()
+		if distance then
+			-- Full dark as far away as you've been. (The furthest, not the first
+			-- reading: just released, the game can still put you at your body
+			-- before moving you to the graveyard, which left it clear: tested.)
+			corpse.start = math.max(corpse.start or 0, distance)
+			corpse.level = Lift(distance, corpse.start, CORPSE_FAST, CORPSE_NEAR)
+		else
+			corpse.level = FakeCorpseRun()
+		end
+	end
+	return corpse.level
+end
+
+-- For /cine debug corpse.
+function ns.GetCorpseDebug()
+	db = db or ns.GetDB()
+	local distance, source = CorpseDistance()
+	local mapDistance, mapSource = CorpseDistanceFromMap()
+	return {
+		distance = distance, source = source, mapDistance = mapDistance, mapSource = mapSource,
+		saved = corpse.x ~= nil, start = corpse.start, level = corpse.level, walked = corpse.walked,
+		-- The edges as shown now: how far they've crept in (0-1), and the
+		-- share of the screen each covers (see ApplyDeathScreen).
+		creep = deathCreep, wash = deathLevel,
+		edgeSize = DEATH_VIGNETTE_START + (db.deathVignetteSize - DEATH_VIGNETTE_START)
+			* deathCreep * deathCreep * (3 - 2 * deathCreep),
+		ghost = ns.Flag(UnitIsGhost("player")), wave = WaveTimeLeft(),
+	}
+end
+
 local function UpdateDeathScreen(elapsed)
 	if not deathFrame then
 		return
 	end
 	local want = db.enabled and db.deathScreen and ns.IsDeathCinematic and ns.IsDeathCinematic()
 	local target = want and 1 or 0
-	if deathLevel ~= target or deathCreep ~= target then
+	local run = CorpseRunLevel(elapsed)
+	local creepTarget = run or target
+	if deathLevel ~= target or deathCreep ~= creepTarget then
 		local wave = target == 0 and WaveTimeLeft() or 0
 		deathLevel = Approach(deathLevel, target, elapsed,
 			target > deathLevel and DEATH_FADE_IN or DeathFadeOut(deathLevel, wave))
-		deathCreep = Approach(deathCreep, target, elapsed,
-			target > deathCreep and db.deathVignetteTime or DeathFadeOut(deathCreep, wave))
+		local creepTime
+		if run then
+			creepTime = creepTarget > deathCreep and CORPSE_CLOSE or CORPSE_FOLLOW
+		elseif creepTarget > deathCreep then
+			creepTime = db.deathVignetteTime
+		else
+			creepTime = DeathFadeOut(deathCreep, wave)
+		end
+		deathCreep = Approach(deathCreep, creepTarget, elapsed, creepTime)
 		ApplyDeathScreen(deathLevel, deathCreep)
+	elseif deathCreep > 0 then
+		ApplyDeathScreen(deathLevel, deathCreep) -- (settled: still drifting)
 	end
 end
 
--- "YOU DIED" banner (a nod to Elden Ring): as the death camera starts, a dark
+-- "YOU DIED" banner (a nod to Elden Ring): shortly after the death camera starts, a dark
 -- band with soft edges fades in across the middle of the screen, the words in
 -- dull red on it, then it all fades away. Above the letterbox,
 -- under popups (the release button). The text is a game font scaled up with
 -- its frame, so other alphabets keep their letters. It looks worn: faint
 -- offset copies behind it bleed its edges. (A grain texture over it wore the
 -- band round the letters too, and looked dirty: tested.)
-local BANNER_IN, BANNER_HOLD, BANNER_OUT = 1.2, 4, 1.5 -- seconds
+local BANNER_WAIT = 2 -- seconds after the death camera starts
+local BANNER_IN, BANNER_HOLD, BANNER_OUT = 3, 4, 1.5 -- seconds
 local BANNER_HEIGHT, BANNER_EDGE = 0.1, 0.07 -- solid band, and each soft edge (shares of the screen height)
 local BANNER_ALPHA = 0.7
 local BANNER_SCALE = 3.3 -- the text's size (its font's, times this)
@@ -880,14 +1073,14 @@ local function UpdateDeathBanner()
 	if not banner.started then
 		return
 	end
-	local t = GetTime() - banner.started
+	local t = GetTime() - banner.started - BANNER_WAIT -- (below 0: still waiting, unseen)
 	local total = BANNER_IN + BANNER_HOLD + BANNER_OUT
 	if t >= total or not want then
 		banner.started = nil
 		banner.frame:Hide()
 		return
 	end
-	local alpha = math.min(1, t / BANNER_IN, (total - t) / BANNER_OUT)
+	local alpha = math.max(0, math.min(1, t / BANNER_IN, (total - t) / BANNER_OUT))
 	banner.frame:SetAlpha(alpha * alpha * (3 - 2 * alpha))
 end
 

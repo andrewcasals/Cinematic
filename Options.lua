@@ -2699,6 +2699,37 @@ local function CreateDeathPanel()
 		"means \"as high as it goes\". 0 keeps your angle."])
 	GreyUnless(level, IfOn)
 
+	-- Fading the UI while dead (ns.IsDeadFading): what stays up.
+	stack:Header(content, L["While dead"])
+	local fadeUI = stack:Add(Check(content, "deathFadeUI", L["Fade the UI while dead"],
+		L["While you're dead, the UI fades away but for the parts ticked below. The mouse on a faded " ..
+		"part still brings it up, and tooltips still show. Try it with the death camera test."]), "check")
+	fadeUI:HookScript("OnClick", Refresh)
+	GreyUnless(fadeUI, IfOn)
+	local function IfFading(db) return IfOn(db) and db.deathFadeUI end
+	local ghost = stack:Add(Check(content, "deathFadeGhost", L["As a ghost too"],
+		L["Released, it stays faded all the way back to your body, walking or not."]), "check", 24)
+	GreyUnless(ghost, IfFading)
+	stack:Note(content, L["Keep these up:"])
+	local DEATH_SHOW = {
+		{ "deathShowRelease", L["Release window"], L["The window with Release Spirit (and any soulstone or " ..
+			"Reincarnation button). Faded, it still takes clicks: the mouse on it brings it back."] },
+		{ "deathShowGhost", L["Return to graveyard button"], L["The button a ghost gets at the top of the screen."] },
+		{ "deathShowUnits", L["Your frames"], L["Player and pet frames, and your personal health and resource bars."] },
+		{ "deathShowTarget", L["Target and focus"] },
+		{ "deathShowGroup", L["Party and raid frames"] },
+		{ "deathShowBars", L["Action bars"] },
+		{ "deathShowMinimap", L["Minimap"] },
+		{ "deathShowBuffs", L["Buffs and debuffs"] },
+		{ "deathShowQuests", L["Quest tracker"] },
+		{ "deathShowCombat", L["Cast bar, swing timer, meters, cooldowns"] },
+		{ "deathShowMenus", L["Micro menu, bags and XP bar"] },
+		{ "deathShowAddons", L["Other addons' frames"] },
+	}
+	for _, row in ipairs(DEATH_SHOW) do
+		GreyUnless(stack:Add(Check(content, row[1], row[2], row[3]), "check", 24), IfFading)
+	end
+
 	-- Right column: zoom, screen, music
 	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
 	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
@@ -2727,8 +2758,12 @@ local function CreateDeathPanel()
 	Tooltip(reach, L["How far the dark edges reach in once they've closed in, as a share of the " ..
 		"screen from each side."])
 	GreyUnless(reach, function(db) return IfOn(db) and db.deathScreen end)
+	local corpseRun = rightStack:Add(Check(content, "deathCorpseRun", L["Edges lift as you near your body"],
+		L["Released to a graveyard with no spirit healer's countdown, the dark edges stay as you walk " ..
+		"back, and lift the closer you get to your body, gone once you're there."]), "check")
+	GreyUnless(corpseRun, function(db) return IfOn(db) and db.deathScreen end)
 	local banner = rightStack:Add(Check(content, "deathBanner", L["Show \"YOU DIED\""],
-		L["As the death camera starts, \"YOU DIED\" fades in across the middle of the screen on a " ..
+		L["Shortly after the death camera starts, \"YOU DIED\" fades in across the middle of the screen on a " ..
 		"dark band, then fades away after a few seconds."]), "check")
 	GreyUnless(banner, IfOn)
 

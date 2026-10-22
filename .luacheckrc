@@ -54,6 +54,8 @@ read_globals = {
 	"C_GossipInfo",
 	"C_Item",
 	"C_Map",
+	"C_DeathInfo",
+	"GhostFrame",
 	"C_Minimap",
 	"C_TooltipInfo",
 	"C_NamePlate",

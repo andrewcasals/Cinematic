@@ -2307,6 +2307,17 @@ function ns.IsDeathCinematic()
 	return ns.db.deathOrbit and ns.IsDead() and not ns.IsCameraOffHere("death")
 end
 
+-- Death Cam page's "Fade the UI while dead": CineMode stays on while dead
+-- (and as a ghost, walking included, with "As a ghost too"), and only the
+-- parts ticked under it stay up (see ns.DEATH_SHOW).
+function ns.IsDeadFading()
+	local db = ns.db
+	if not (db.deathFadeUI and db.deathOrbit) or ns.IsCameraOffHere("death") then
+		return false
+	end
+	return ns.IsDead() or (db.deathFadeGhost and ns.Flag(UnitIsGhost("player"))) or false
+end
+
 -- Your own zooming: you've picked a distance, so the death camera leaves it.
 function ns.CancelDeathZoom()
 	deathTilt.zoomTo, deathTilt.zoomSaved = nil, nil
