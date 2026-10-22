@@ -38,7 +38,8 @@
 -- back, and it doesn't start again until the next conversation.
 -- The zoom back out waits until you're ZOOM_OUT_DISTANCE yards from where you
 -- started talking (quest givers often stand together: talk to another and
--- that's the new spot, the zoom back out still to come). Then it goes at its
+-- that's the new spot, the zoom back out still to come), or you take a
+-- flight. Then it goes at its
 -- own speed (questCamZoomOutSpeed), but takes ZOOM_HURRY at most.
 -- It isn't queued behind the turn back (walking, the RP walk and auto-run
 -- cameras' own swing behind you held the queue up, and it never came), and
@@ -46,10 +47,12 @@
 -- yourself does.
 -- Moving the camera yourself while talking hands it over: nothing is undone.
 -- It waits questCamDelay seconds after the window opens before starting, so
--- a quest picked up and gone at once gets no camera at all.
+-- a quest picked up and gone at once gets no camera at all. Each new window
+-- after (the next quest's text, the reward) adds WINDOW_EXTRA to the wait.
 local _, ns = ...
 
 local CLOSE_GRACE = 3 -- seconds held after the window closes (going from gossip to a quest closes one window before opening the next)
+local WINDOW_EXTRA = 1 -- seconds each window after the first adds to the wait before starting (questCamDelay)
 -- The swing behind you: the takeoff swing's gentle speeds (a quicker one
 -- showed as a snap), then a moment for it to settle before camera follow is
 -- handed back (switched off while still easing the view, it jolts).
@@ -777,11 +780,22 @@ local function OnEvent(_, event)
 		if not cam.since and not (ns.Flag(UnitExists("npc")) and not ns.Flag(UnitIsPlayer("npc"))) then
 			return -- shared by a player, or from an item: nobody to talk to
 		end
+		-- The wait before starting (questCamDelay), from the first window. Each
+		-- window after adds WINDOW_EXTRA (and leaves at least that): clicking
+		-- through several quests' text, it doesn't start mid-way, but a few
+		-- clicks to get to one doesn't hold it off for long. (Windows opening
+		-- on the same frame count as one.)
+		local now, delay = GetTime(), ns.db and ns.db.questCamDelay or 0
 		if not cam.since then
-			cam.since, cam.cancelled = GetTime(), nil -- a new conversation
+			cam.since, cam.cancelled = now, nil -- a new conversation
 			-- Opened by clicking them (not an interact key): the side they were on.
 			cam.clickSide = cam.since - lastClick.at <= CLICK_WINDOW and lastClick.side or nil
+			cam.startAt = now + delay
+		elseif not cam.active and now > (cam.windowAt or 0) then
+			local extra = math.min(WINDOW_EXTRA, delay)
+			cam.startAt = math.max((cam.startAt or now) + extra, now + extra)
 		end
+		cam.windowAt = now
 		cam.closingAt = nil
 	elseif event == "PLAYER_LOGOUT" then
 		-- No time to glide: everything goes straight back (the zoom isn't saved).
@@ -834,15 +848,20 @@ local function OnUpdate(_, elapsed)
 	end
 	-- The zoom back out, held: it goes once you've walked off from where you
 	-- started talking (not just a few steps to the next quest giver). Zoomed
-	-- yourself meanwhile: it's yours, it stays.
+	-- yourself meanwhile: it's yours, it stays. Took a flight: it goes at once
+	-- (a flight doesn't count as moving, so it was held the whole way, and
+	-- the flight camera's zoom waited on it).
 	local pending = zoomer.pending
+	local onTaxi = pending and UnitOnTaxi("player")
 	if pending and ns.PlayerZoomedSince(pending.since) then
 		Note("you zoomed: no zoom out")
 		zoomer.pending = nil
-	elseif pending and ns.playerMoving then
+	elseif pending and (ns.playerMoving or onTaxi) then
 		local x, y = PlayerPosition()
 		local far
-		if x and pending.x then
+		if onTaxi then
+			far = true
+		elseif x and pending.x then
 			far = (x - pending.x) ^ 2 + (y - pending.y) ^ 2 >= ZOOM_OUT_DISTANCE ^ 2
 		else
 			pending.walked = pending.walked + elapsed
@@ -874,8 +893,8 @@ local function OnUpdate(_, elapsed)
 		Stop() -- walked off: back to normal, and no more until the next conversation
 		cam.cancelled = true
 	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving
-		and now - cam.since >= (ns.db.questCamDelay or 0) and Wanted() then
-		Start() -- (after questCamDelay: a quest picked up and gone sooner gets no camera)
+		and now >= cam.startAt and Wanted() then
+		Start() -- (after the wait: a quest picked up and gone sooner gets no camera)
 	end
 end
 

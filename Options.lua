@@ -2792,8 +2792,9 @@ local function CreateQuestPanel()
 		"they have a quest to offer or take in."]), "check")
 	GreyUnless(gossip, IfOn)
 	local delay = stack:Add(Slider(content, "questCamDelay", L["Wait before starting"], 0, 10, 0.5, L["%.1f sec"]), "slider")
-	Tooltip(delay, L["The camera waits this long after the quest window opens. Accept a quest and go " ..
-		"sooner, and it doesn't move at all; stay to read, and it starts. 0 starts at once."])
+	Tooltip(delay, L["The camera waits this long on a quest window before starting. Accept a quest and go " ..
+		"sooner, and it doesn't move at all; stay to read, and it starts. Clicking through several " ..
+		"quests, each new window adds a second to the wait. 0 starts at once."])
 	GreyUnless(delay, IfOn)
 
 	-- Left column: rotation, height, over the shoulder
