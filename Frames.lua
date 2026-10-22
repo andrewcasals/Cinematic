@@ -168,7 +168,7 @@ local OWN_ALPHA = {
 -- the mouse: hovering the raid frames brings them up (their Mouseover group).
 local PART_GROUPS = {
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true, raiddebuffs = true,
-	raidthreat = true, raidtarget = true, partyroles = true, partynames = true, partystatus = true,
+	raidthreat = true, raidtarget = true, raidready = true, partyroles = true, partynames = true, partystatus = true,
 }
 -- Parts that go only while a row's frames are up (part -> row): the "Party"
 -- title sits in no faded frame (the party members fade one by one), so its
@@ -1537,6 +1537,11 @@ ns.COMBAT_SHOW = {
 	{ key = "raidtarget", label = L["Target highlight"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidtarget" }, part = true,
 		tip = L["The white outline round your target's raid frame."] },
+	-- The ready check's tick, cross or question mark. (It ignores its frame's
+	-- alpha, staying bright on dimmed frames: faded here, it goes with them.)
+	{ key = "raidready", label = L["Ready check"], default = false, addon = "Blizzard_CompactRaidFrames",
+		page = "raid", groups = { "raidready" }, part = true,
+		tip = L["The ready check's tick, cross or question mark on each member's raid frame."] },
 	{ key = "raidnames", label = L["Player names"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", groups = { "raidnames" }, part = true },
 	{ key = "raidpetnames", label = L["Pet names"], default = false, addon = "Blizzard_CompactRaidFrames",
@@ -1755,6 +1760,7 @@ local HOVER_ROW_BY_GROUP = {
 	raidroles = "raidroles", raidnames = "raidnames", raidpetnames = "raidpetnames", raidtitles = "raidtitles",
 	partyroles = "partyroles", partynames = "partynames", partystatus = "partystatus",
 	raidbuffs = "raidbuffs", raiddebuffs = "raiddebuffs", raidthreat = "raidthreat", raidtarget = "raidtarget",
+	raidready = "raidready",
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", castbar = "castbar", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
@@ -1807,8 +1813,8 @@ ns.HOVER_GROUPS_DEFAULT = {
 	-- (Raid-style party frames are the raid frames. The Raid Frame Manager
 	-- comes up with both out of fights only: its own group, below.)
 	{ preset = "raid", icon = "Interface\\Icons\\Spell_Holy_PrayerOfFortitude", name = L["Raid frames"],
-		members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidtarget", "raidnames", "raidpetnames", "raidtitles",
-		"raidbuffs", "raiddebuffs" }, triggers = { roster = true } },
+		members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidtarget", "raidready", "raidnames", "raidpetnames",
+		"raidtitles", "raidbuffs", "raiddebuffs" }, triggers = { roster = true } },
 	-- (The raid-style ones' own rows too: they count once set apart from the raid frames.)
 	{ preset = "party", icon = "Interface\\Icons\\Spell_Holy_PrayerOfHealing02", name = L["Party frames"],
 		members = { "party", "partyroles", "partynames", "partystatus", "rspartyplayers", "rspartypets", "rspartyroles",
@@ -2074,7 +2080,7 @@ ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWa
 local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
-	raiddebuffs = true, raidthreat = true, raidtarget = true, extra = true,
+	raiddebuffs = true, raidthreat = true, raidtarget = true, raidready = true, extra = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
@@ -5197,6 +5203,61 @@ function ns.AddPortraitFrame(name)
 	PORTRAIT_FRAMES[name] = "portraitWhenNotFull"
 end
 
+-- A raid frame's ready check icon: retail's readyCheckIcon texture, WoW
+-- Forever's a frame named after the member's (<name>ReadyCheckIcon). That
+-- frame's alpha is the game's, set (secret) as it dims members out of range,
+-- so its texture inside (Icon) is what fades.
+function ns.RaidReadyCheckIcon(frame)
+	local name = frame.GetName and frame:GetName()
+	local icon = frame.readyCheckIcon or frame.ReadyCheckIcon or (name and _G[name .. "ReadyCheckIcon"])
+	return type(icon) == "table" and icon.Icon or icon
+end
+
+-- /cine debug readycheck: each raid frame's ready check icon, whether it's
+-- faded as the Ready check row (and how far), and whether CineMode is on.
+function ns.ReportRaidReadyCheck()
+	ns.Print(("CineMode=%s, Ready check row Always=%s"):format(tostring(ns.lastCinematic),
+		tostring(ns.IsCineShowOn("raidready"))))
+	local count = 0
+	for _, holderName in ipairs({ "CompactRaidFrameContainer", "CompactPartyFrame" }) do
+		local holder = _G[holderName]
+		local members = {}
+		if holder and not IsForbidden(holder) then
+			for _, child in ipairs({ holder:GetChildren() }) do
+				if not IsForbidden(child) then
+					local name = child:GetName()
+					if name and name:find("^CompactRaidGroup%d+$") then
+						for _, member in ipairs({ child:GetChildren() }) do
+							members[#members + 1] = member
+						end
+					else
+						members[#members + 1] = child
+					end
+				end
+			end
+		end
+		for _, member in ipairs(members) do
+			local icon = not IsForbidden(member) and ns.RaidReadyCheckIcon(member)
+			if icon and ns.Flag(icon:IsVisible()) then
+				count = count + 1
+				local managed = "not faded"
+				for _, entry in ipairs(ns.managed) do
+					if entry.frame == icon then
+						managed = ("group=%s fade=%.2f"):format(entry.group, entry.alpha)
+						break
+					end
+				end
+				local alpha = icon:GetAlpha()
+				ns.Print(("  %s: %s, alpha=%s, %s"):format(icon:GetDebugName(), icon:GetObjectType(),
+					(issecretvalue and issecretvalue(alpha)) and "secret" or ("%.2f"):format(alpha), managed))
+			end
+		end
+	end
+	if count == 0 then
+		ns.Print("  no ready check icons shown (start one with /readycheck)")
+	end
+end
+
 -- The raid frames (and raid-style party frames): each member's frame, or
 -- each group's when groups are kept together, in raidplayers; pets in
 -- raidpets; and their parts (PART_GROUPS) in theirs. The game makes and
@@ -5248,6 +5309,7 @@ do
 		SortRaidPart(frame.aggroHighlight, "raidthreat")
 		-- (The white outline round your target's frame: shown and hidden too.)
 		SortRaidPart(frame.selectionHighlight, "raidtarget")
+		SortRaidPart(ns.RaidReadyCheckIcon(frame), "raidready")
 		SortRaidPart(frame.name, isPet and "raidpetnames" or "raidnames")
 		for _, aura in ipairs(frame.buffFrames or {}) do
 			SortRaidPart(aura, "raidbuffs")

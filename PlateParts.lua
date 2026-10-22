@@ -528,7 +528,7 @@ end
 -- a text's words and a texture's colour. (Not everything can say:
 -- animations, say. Anything that errors is listed bare.)
 local function Entry(name, value)
-	local okType, kind = pcall(value.GetObjectType, value)
+	local okType, kind = pcall(function() return value:GetObjectType() end)
 	local okShown, shown = pcall(function() return value:IsShown() end)
 	local okText, text = pcall(function() return kind == "FontString" and value:GetText() or nil end)
 	if okText and issecretvalue and issecretvalue(text) then
@@ -552,7 +552,9 @@ end
 local function ListFields(frame)
 	local children, named = {}, {}
 	for field, value in pairs(frame) do
-		if type(field) == "string" and type(value) == "table" and value.GetObjectType then
+		-- (Some tables can't even be looked into: a locked one on a group member's plate.)
+		if type(field) == "string" and type(value) == "table"
+			and select(2, pcall(function() return value.GetObjectType ~= nil end)) == true then
 			named[value] = true
 			children[#children + 1] = Entry(field, value)
 		end
@@ -604,7 +606,8 @@ function ns.DescribePlateParts(unitFrame)
 	if type(bar) == "table" and bar.GetObjectType then
 		healthFields[#healthFields + 1] = "healthBar: " .. ListFields(bar)
 		for field, value in pairs(bar) do
-			if type(field) == "string" and type(value) == "table" and value.GetRegions then
+			if type(field) == "string" and type(value) == "table"
+				and select(2, pcall(function() return value.GetRegions ~= nil end)) == true then
 				healthFields[#healthFields + 1] = "healthBar." .. field .. ": " .. ListFields(value)
 			end
 		end

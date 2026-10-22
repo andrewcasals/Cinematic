@@ -2975,6 +2975,24 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.raidTargetRowV1 = true
 		end
+		-- The raid frames' ready check icon got a row: into saved Mouseover
+		-- groups with the target highlight, as the default groups have it.
+		if not ns.db.raidReadyRowV1 then
+			local function AddReadyRow(groups)
+				for _, group in ipairs(groups or {}) do
+					local has = {}
+					for _, key in ipairs(group.members or {}) do has[key] = true end
+					if has.raidtarget and not has.raidready then
+						table.insert(group.members, "raidready")
+					end
+				end
+			end
+			AddReadyRow(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then AddReadyRow(saved.hoverGroups) end
+			end
+			ns.db.raidReadyRowV1 = true
+		end
 		-- The pet portrait got a row apart from yours: into saved Mouseover
 		-- groups with your portrait, as the default groups have it. Once.
 		if not ns.db.petFrameHoverV1 then
