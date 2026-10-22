@@ -242,10 +242,12 @@ local function Parts(frame)
 	return parts
 end
 
+-- (A main tank's target, as the raid frames show beside them ("raid3target"):
+-- goes by its tank, else it would go by the mob's health.)
 local function Unit(frame)
 	local unit = frame.displayedUnit or frame.unit
 	if Secret(unit) or type(unit) ~= "string" then return nil end
-	return unit
+	return unit:match("^(.+)target$") or unit
 end
 
 -- (whole: a raid-style frame, faded itself.)
