@@ -155,6 +155,8 @@ read_globals = {
 	"IsShiftKeyDown",
 	"JumpOrAscendStart",
 	"LootFrame",
+	"LootFrame_Show",
+	"GroupLootContainer",
 	"MenuUtil",
 	"MenuResponse",
 	"Minimap",

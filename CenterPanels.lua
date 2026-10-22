@@ -429,22 +429,78 @@ end
 -- portrait, top left, opens the bag menu: the strip starts after it.
 local BAG_LEFT = 48
 
-local function PlaceBag()
-	local bag = ContainerFrameCombinedBags
-	if not (ns.db and bag and bag.GetPoint) then
+-- The loot window isn't one of them either: the game puts it in its own spot
+-- (or under the mouse, with that option on) each time it opens. It's put back
+-- where it was dropped after that.
+local function PlaceOther(frame, left)
+	if not (ns.db and frame and frame.GetPoint) then
 		return
 	end
 	if ns.Setting("dragPanels") then
-		MakeDraggable(bag, BAG_LEFT)
+		MakeDraggable(frame, left)
 	end
-	if handles[bag] then
-		handles[bag]:SetShown(ns.Setting("dragPanels") and true or false)
+	if handles[frame] then
+		handles[frame]:SetShown(ns.Setting("dragPanels") and true or false)
 	end
-	local spot = Spot(bag)
-	if spot and not Held(bag) and ns.Flag(bag:IsShown()) and not Locked(bag) then
-		bag:ClearAllPoints()
-		bag:SetPoint(spot[1], UIParent, spot[2], spot[3], spot[4])
+	local spot = Spot(frame)
+	if spot and not Held(frame) and ns.Flag(frame:IsShown()) and not Locked(frame) then
+		frame:ClearAllPoints()
+		frame:SetPoint(spot[1], UIParent, spot[2], spot[3], spot[4])
 	end
+end
+
+-- Loot rolls (need, greed, pass) stack up in GroupLootContainer, which the
+-- game lays out with its other frames above the action bars whenever one of
+-- them shows or hides. Dragging any roll moves the whole stack, and it's put
+-- back where it was dropped each time the game lays it out again.
+local placingRolls = false
+
+local function PlaceRolls()
+	local box = GroupLootContainer
+	if placingRolls or not (ns.db and box and box.GetPoint) or Held(box) or Locked(box) then
+		return
+	end
+	local spot = Spot(box)
+	if not spot then
+		return
+	end
+	placingRolls = true
+	box:ClearAllPoints()
+	box:SetPoint(spot[1], UIParent, spot[2], spot[3], spot[4])
+	placingRolls = false
+end
+
+local function HookRolls()
+	local box = GroupLootContainer
+	if not (box and box.GetPoint) or hooked[box] or Locked(box) then
+		return
+	end
+	hooked[box] = true
+	box:SetMovable(true)
+	box:SetClampedToScreen(true)
+	hooksecurefunc(box, "SetPoint", PlaceRolls)
+	for i = 1, 10 do
+		local roll = _G["GroupLootFrame" .. i]
+		if not roll then
+			break
+		end
+		if not roll:IsMouseEnabled() then
+			roll:EnableMouse(true)
+		end
+		roll:RegisterForDrag("LeftButton")
+		roll:HookScript("OnDragStart", function() DragStart(box) end)
+		roll:HookScript("OnDragStop", function() DragStop(box) end)
+		roll:HookScript("OnMouseUp", function() DragStop(box) end)
+	end
+end
+
+local function PlaceBag()
+	PlaceOther(ContainerFrameCombinedBags, BAG_LEFT)
+	PlaceOther(LootFrame)
+	if ns.db and ns.Setting("dragPanels") then
+		HookRolls()
+	end
+	PlaceRolls()
 end
 
 -- Again a frame later: some windows settle their width once shown.
@@ -520,6 +576,25 @@ function ns.PrintPanelsDebug()
 			tostring(ns.Flag(bag:IsShown())), tostring(hooked[bag] or false), tostring(Spot(bag) ~= nil),
 			tostring(point), tostring(relativeName), tostring(relativePoint), tostring(Number(x)), tostring(Number(y))))
 	end
+	if LootFrame and LootFrame.GetPoint then
+		local point, relativeTo, relativePoint, x, y = LootFrame:GetPoint(1)
+		local relativeName = relativeTo and (relativeTo == UIParent and "UIParent"
+			or relativeTo.GetName and relativeTo:GetName()) or tostring(relativeTo)
+		ns.Print(("loot window: shown %s, protected %s, hooked %s, saved spot %s, %s %s %s %s %s"):format(
+			tostring(ns.Flag(LootFrame:IsShown())), tostring(LootFrame:IsProtected()), tostring(hooked[LootFrame] or false),
+			tostring(Spot(LootFrame) ~= nil), tostring(point), tostring(relativeName), tostring(relativePoint),
+			tostring(Number(x)), tostring(Number(y))))
+	end
+	if GroupLootContainer and GroupLootContainer.GetPoint then
+		local box = GroupLootContainer
+		local point, relativeTo, relativePoint, x, y = box:GetPoint(1)
+		local relativeName = relativeTo and (relativeTo == UIParent and "UIParent"
+			or relativeTo.GetName and relativeTo:GetName()) or tostring(relativeTo)
+		ns.Print(("loot rolls: shown %s, protected %s, hooked %s, saved spot %s, %d point(s): %s %s %s %s %s"):format(
+			tostring(ns.Flag(box:IsShown())), tostring(box:IsProtected()), tostring(hooked[box] or false),
+			tostring(Spot(box) ~= nil), box:GetNumPoints(), tostring(point), tostring(relativeName), tostring(relativePoint),
+			tostring(Number(x)), tostring(Number(y))))
+	end
 	local focus
 	if GetMouseFoci then
 		focus = GetMouseFoci()[1]
@@ -577,6 +652,19 @@ if GetUIPanel then
 	end
 	if ContainerFrameCombinedBags then
 		ContainerFrameCombinedBags:HookScript("OnShow", Placed)
+	end
+	if LootFrame then
+		LootFrame:HookScript("OnShow", Placed)
+		-- (the game places it after showing it)
+		if LootFrame.Open then
+			hooksecurefunc(LootFrame, "Open", Placed)
+		end
+		if LootFrame_Show then
+			hooksecurefunc("LootFrame_Show", Placed)
+		end
+	end
+	if GroupLootContainer then
+		GroupLootContainer:HookScript("OnShow", Placed)
 	end
 	local events = CreateFrame("Frame")
 	events:RegisterEvent("PLAYER_REGEN_ENABLED")
