@@ -181,6 +181,28 @@ function ns.SatByButton()
 	end
 end
 
+-- The death camera test from its key or the camera wheel: you lie down as if dead (no
+-- Sleep event of its own), and get up again when the test ends, unless you
+-- moved first (ns.deathTestLying).
+local function PerformEmote(token)
+	if C_ChatInfo and C_ChatInfo.PerformEmote then
+		pcall(C_ChatInfo.PerformEmote, token)
+	elseif DoEmote then
+		pcall(DoEmote, token)
+	end
+end
+function ns.LieDownForDeathTest()
+	PerformEmote("LAYDOWN")
+	emoteEvent = nil
+	ns.deathTestLying = true
+end
+function ns.StandUpFromDeathTest()
+	if ns.deathTestLying then
+		ns.deathTestLying = nil
+		PerformEmote("STAND")
+	end
+end
+
 -- Hearthstone and teleports: casting one counts like an emote until the cast
 -- ends (you're whisked away, or it's interrupted), for the tele camera: the
 -- cozy camera's swing round to face you, quicker so it's round before you go
@@ -849,7 +871,7 @@ function ns.HookCameraInput()
 	if JumpOrAscendStart then
 		hooksecurefunc("JumpOrAscendStart", function() -- jumping stands you up
 			emoteEvent = nil
-			ns.manualCam, ns.deathTestUntil = nil, nil
+			ns.manualCam, ns.deathTestUntil, ns.deathTestLying = nil, nil, nil
 			ns.StopEventsOnMove()
 		end)
 	end
@@ -2774,6 +2796,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		emoteEvent = nil
 		ns.manualCam = nil -- (and a camera started from a key binding)
 		ns.deathTestUntil = nil -- (the death camera test too)
+		ns.deathTestLying = nil -- (and you're up already)
 	end
 	-- An event (Camera Triggers page) for the cozy, vista or AFK camera: no waiting; the
 	-- AFK camera's timer counts as run, for the tint, tooltips and music too.
@@ -2798,6 +2821,9 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- release button), so this runs without it, and in combat too.
 	local dead = ns.IsDead()
 	ns.orbit.deadSince = dead and (ns.orbit.deadSince or now) or nil
+	if not dead then
+		ns.StandUpFromDeathTest() -- (the wheel's test is over)
+	end
 	local deathCam = dead and ns.db.enabled and now - ns.orbit.deadSince >= ns.db.deathOrbitDelay
 		and ns.IsDeathCinematic()
 	-- The game's camera follow is off meanwhile, so it can't pull the view back.

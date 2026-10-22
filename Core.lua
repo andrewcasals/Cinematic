@@ -1977,6 +1977,7 @@ function Cinematic_StartCam(camera, quiet)
 	if camera == "death" then
 		if now < (ns.deathTestUntil or 0) then
 			ns.deathTestUntil = 0
+			ns.StandUpFromDeathTest()
 			Print(L["death camera test stopped"])
 		elseif not ns.db.deathOrbit then
 			Print(L["the death camera is off: turn it on with /cine death first"])
@@ -1985,6 +1986,7 @@ function Cinematic_StartCam(camera, quiet)
 			Print(L["stand still to start the %s"]:format(L["death camera"]))
 		else
 			ns.deathTestUntil, ns.deathTestLoud = now + 30, false
+			ns.LieDownForDeathTest() -- (you lie down as if dead)
 			Print(L["death camera test for 30 seconds: stand still and it starts after %.1f sec. " ..
 				"Press the key again to stop it."]:format(ns.db.deathOrbitDelay))
 		end
