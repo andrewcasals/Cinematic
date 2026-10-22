@@ -501,6 +501,34 @@ if _G.EditModeManagerFrame and C_EditMode and C_EditMode.GetLayouts then
 	_G.EditModeManagerFrame:HookScript("OnHide", AdoptLayout)
 end
 
+-- Bar 1's page arrows (up/down): Classic Era (1.15.9) puts them on its right,
+-- WoW Forever on its left. Moved to the left whenever the game puts them on
+-- the right. (Not in combat if the bar's protected; pcall: an anchor can be
+-- secret on Forever.)
+do
+	local bar = not ns.isRetail and _G.MainActionBar
+	local arrows = bar and bar.ActionBarPageNumber
+	if arrows then
+		local moving
+		local function OnRight()
+			local _, relativeTo, relativePoint = arrows:GetPoint()
+			return relativeTo == bar and relativePoint == "BOTTOMRIGHT"
+		end
+		local function ToLeft()
+			if moving or (InCombatLockdown() and arrows:IsProtected()) then return end
+			local ok, right = pcall(OnRight)
+			if not (ok and right) then return end
+			local _, _, _, x, y = arrows:GetPoint()
+			moving = true
+			arrows:ClearAllPoints()
+			arrows:SetPoint("BOTTOMRIGHT", bar, "BOTTOMLEFT", -(x or 0), y or 0)
+			moving = false
+		end
+		hooksecurefunc(arrows, "SetPoint", ToLeft)
+		ToLeft()
+	end
+end
+
 ns.OnLanguage(function()
 	StaticPopupDialogs.CINEMATIC_LAYOUT_RELOAD = {
 		text = L["Edit Mode keeps its old list of layouts until you reload, and saving there before then " ..

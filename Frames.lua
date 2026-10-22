@@ -1371,6 +1371,27 @@ local function IsInside(frame, ancestor)
 	return false
 end
 
+-- An action bar's empty slots: the game hides a button with nothing on it, so
+-- the mouse there is on the 3D world. Over one's rect counts as over the bar.
+-- (Retail's bars list their buttons; Classic's go by name.)
+function ns.IsOverEmptySlot(frame)
+	local buttons, name = frame.actionButtons, frame:GetName()
+	local x, y = GetCursorPosition()
+	for i = 1, buttons and #buttons or 12 do
+		local button = buttons and buttons[i]
+			or _G[(name == "MainMenuBar" and "ActionButton" or (name or "") .. "Button") .. i]
+		if button and not IsForbidden(button) and not ns.Flag(button:IsShown()) then
+			local left, bottom, width, height = button:GetRect()
+			local scale = button:GetEffectiveScale()
+			if left and scale and scale > 0 and x / scale >= left and x / scale <= left + width
+				and y / scale >= bottom and y / scale <= bottom + height then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- Buff icons are small, so they count as hovered from a little way off, and
 -- across the gaps between them: the cursor within buffHoverPadX/Y (UI units)
 -- of any shown icon. Icons are the mouse-enabled frames up to a few levels down
@@ -1449,9 +1470,11 @@ function ns.IsEntryHovered(entry)
 		return false
 	end
 	-- (The mouse over the 3D world, as it mostly is in CineMode: none of the
-	-- rest can be hovered, so no need to ask each frame.)
+	-- rest can be hovered, so no need to ask each frame. Except an action
+	-- bar's empty slots: see ns.IsOverEmptySlot.)
 	if entry.group ~= "chat" and not MouseFocus() then
-		return false
+		return (entry.group == "bars" or entry.group == "sidebars") and ns.Flag(entry.frame:IsVisible())
+			and ns.IsOverEmptySlot(entry.frame)
 	end
 	-- A chat window's scroll bar and jump-to-bottom button sit outside its
 	-- rect (Classic's button column too), and so does the dark background
@@ -1620,9 +1643,11 @@ ns.COMBAT_SHOW = {
 	{ key = "right2", label = ns.isRetail and L["Action bar 5"] or L["Action bar 5 (right 2)"], default = false,
 		frames = { "MultiBarLeft" } },
 	-- Retail only (the frames don't exist on Classic, so the rows are skipped).
-	{ key = "bar6", label = L["Action bar 6"], default = false, frames = { "MultiBar5" } },
-	{ key = "bar7", label = L["Action bar 7"], default = false, frames = { "MultiBar6" } },
-	{ key = "bar8", label = L["Action bar 8"], default = false, frames = { "MultiBar7" } },
+	-- groupOnly: the mouse on one brings it up only through a mouseover group
+	-- that's on (they sit mid-screen, where the mouse often rests).
+	{ key = "bar6", label = L["Action bar 6"], default = false, groupOnly = true, frames = { "MultiBar5" } },
+	{ key = "bar7", label = L["Action bar 7"], default = false, groupOnly = true, frames = { "MultiBar6" } },
+	{ key = "bar8", label = L["Action bar 8"], default = false, groupOnly = true, frames = { "MultiBar7" } },
 	{ key = "pet", label = L["Pet bar"], default = true, frames = { "PetActionBarFrame", "PetActionBar" } },
 	{ key = "stance", label = L["Stance bar"], default = true, frames = { "StanceBarFrame", "StanceBar" } },
 	{ key = "totems", label = L["Totem bar"], default = true, frames = {
@@ -1739,11 +1764,13 @@ local HOVER_EXTRA_ROWS = {
 	{ key = "waypoint", label = L["Quest waypoint"], frames = { "SuperTrackedFrame" } },
 }
 ns.HOVER_ROWS = {}
+ns.HOVER_GROUP_ONLY = {} -- row key -> true: rows marked groupOnly (above)
 local HOVER_ROW_BY_NAME = {} -- frame name -> row key (the first row listing it)
 for _, list in ipairs({ HOVER_EXTRA_ROWS, ns.COMBAT_SHOW }) do
 	for _, item in ipairs(list) do
 		if item.key ~= "gamepadxp" and not item.noHoverRow then
 			ns.HOVER_ROWS[#ns.HOVER_ROWS + 1] = item
+			ns.HOVER_GROUP_ONLY[item.key] = item.groupOnly
 			for _, name in ipairs(item.frames or {}) do
 				HOVER_ROW_BY_NAME[name] = HOVER_ROW_BY_NAME[name] or item.key
 			end
@@ -1802,8 +1829,9 @@ ns.HOVER_GROUPS_DEFAULT = {
 		members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "micro", "bags", "xp", "extra" } },
 	{ preset = "side", icon = "Interface\\Icons\\Ability_Warrior_DefensiveStance", name = L["Side bars"],
 		members = { "right1", "right2" } },
+	-- (Off: with it off, the mouse on bars 6-8 brings up nothing: groupOnly.)
 	{ preset = "bars68", icon = "Interface\\Icons\\Ability_DualWield", name = L["Action bars 6-8"],
-		members = { "bar6", "bar7", "bar8" } },
+		members = { "bar6", "bar7", "bar8" }, off = true },
 	{ preset = "player", icon = "Interface\\Icons\\INV_Misc_Head_Human_01", name = L["Player"],
 		members = { "player", "petframe", "totemtimers", "castbar" } },
 	{ preset = "prd", icon = "Interface\\Icons\\Spell_Nature_Rejuvenation", name = L["Personal resource bars"],
@@ -4711,6 +4739,18 @@ function ns.UpdateFrames(cinematic, elapsed)
 			entry.row = entry.row or ns.HoverRowFor(entry)
 			if ns.IsEntryHovered(entry) then
 				mouseRows[ownPartyRows and entry.rspGroup or entry.row] = true
+			end
+		end
+		-- (A groupOnly row counts only while a group it's in is on.)
+		for row in pairs(mouseRows) do
+			if ns.HOVER_GROUP_ONLY[row] then
+				local inGroup = false
+				for _, group in ipairs(hoverGroups) do
+					for _, key in ipairs(not group.off and group.when ~= offWhen and group.members or NO_DEFAULTS) do
+						if key == row then inGroup = true end
+					end
+				end
+				if not inGroup then mouseRows[row] = nil end
 			end
 		end
 		-- Rows linger after the mouse leaves. The hold time counts the fade
