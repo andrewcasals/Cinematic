@@ -223,6 +223,21 @@ painter:SetScript("OnUpdate", ns.Profiled("Plate name colours", function(self)
 	end
 end))
 
+-- The game sets the name's colour again as the mouse goes over a unit or the
+-- target changes, after this frame's OnUpdate: shown white for a frame
+-- before the painter caught it. Painted again on those events too.
+local repainter = CreateFrame("Frame")
+for _, event in ipairs({ "UPDATE_MOUSEOVER_UNIT", "CURSOR_CHANGED", "PLAYER_TARGET_CHANGED",
+	"PLAYER_FOCUS_CHANGED", "PLAYER_SOFT_ENEMY_CHANGED", "PLAYER_SOFT_FRIEND_CHANGED",
+	"PLAYER_SOFT_INTERACT_CHANGED", "UNIT_NAME_UPDATE" }) do
+	pcall(repainter.RegisterEvent, repainter, event) -- (not every client has them all)
+end
+repainter:SetScript("OnEvent", function()
+	for name, saved in pairs(tinted) do
+		PaintName(name, saved.unit)
+	end
+end)
+
 local function StyleName(unitFrame, on)
 	local name = unitFrame.name
 	if not (Usable(name) and name.GetFont and name.SetFont and name.SetShadowOffset) then
