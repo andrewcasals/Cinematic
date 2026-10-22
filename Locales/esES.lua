@@ -1588,6 +1588,21 @@ L["you already have %d account layouts in Edit Mode; delete one there first"] = 
 L["the game didn't keep the layout"] = "el juego no guardó la disposición"
 L["couldn't add this profile's Edit Mode layout: %s"] = "no se pudo añadir la disposición del Modo Edición de este perfil: %s"
 L["this profile's Edit Mode layout, %s, isn't there; your layout stays as it is"] = "la disposición del Modo Edición de este perfil, %s, no está; tu disposición se queda como está"
+L["Your own (Cinematic leaves it alone)"] = "La tuya (Cinematic no la toca)"
+L["The game's own (Modern or Classic)"] = "La del juego (Moderna o Clásica)"
+L["%s (not in Edit Mode)"] = "%s (no está en el Modo Edición)"
+L["the %s profile now uses the Edit Mode layout %s"] = "el perfil %s ahora usa la disposición del Modo Edición %s"
+L["Cinematic's retail look"] = "Aspecto retail de Cinematic"
+L["Cinematic's WoW Forever look"] = "Aspecto WoW Forever de Cinematic"
+L["Edit Mode layout:"] = "Disposición del Modo Edición:"
+L["%s (Preset)"] = "%s (Predefinida)"
+L["Add %s to Edit Mode"] = "Añadir %s al Modo Edición"
+L["Regenerate"] = "Regenerar"
+L["Make this layout again as Cinematic has it, undoing any changes you made " ..
+	"to it in Edit Mode, and switch to it. Your own layouts stay as they are."] = "Vuelve a crear esta disposición como la tiene Cinematic, deshaciendo los cambios que le hiciste en el Modo Edición, y cambia a ella. Tus propias disposiciones se quedan como están."
+L["The Edit Mode layout the active profile puts you on when you pick it and " ..
+	"each time you log in, on any character using it. Pick another layout in Edit Mode itself and " ..
+	"the profile takes that one. Your own: Cinematic leaves the layout to you."] = "La disposición del Modo Edición en la que te pone el perfil activo al elegirlo y cada vez que inicias sesión, con cualquier personaje que lo use. Elige otra disposición en el propio Modo Edición y el perfil se queda con esa. La tuya: Cinematic te deja la disposición a ti."
 L["Edit Mode keeps its old list of layouts until you reload, and saving there before then would undo this. Reload now?"] = "El Modo Edición conserva su lista anterior de disposiciones hasta que recargues, y guardar allí antes lo desharía. ¿Recargar ahora?"
 
 -- What's new (WhatsNew.lua, Changelog.lua)

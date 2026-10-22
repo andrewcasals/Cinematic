@@ -60,16 +60,16 @@ local function ActiveName(info)
 end
 
 -- A profile's layout (db.editModeLayout) as the name to go to. A preset
--- (ns.LAYOUT_PRESET): the one the player was on before a profile switched it,
--- or is on now, else the first (Modern); nil: the game has none.
+-- (ns.LAYOUT_PRESET): the one the player is on now, or was on before a
+-- profile switched it, else the first (Modern); nil: the game has none.
 local function Target(info, name)
 	if name ~= ns.LAYOUT_PRESET then return name end
 	local presets = Presets()
+	local active = info.activeLayout
+	if active and presets[active] then return presets[active].layoutName end
 	for _, preset in ipairs(presets) do
 		if preset.layoutName == ns.chardb.layoutOwn then return preset.layoutName end
 	end
-	local active = info.activeLayout
-	if active and presets[active] then return presets[active].layoutName end
 	return presets[1] and presets[1].layoutName
 end
 
@@ -159,11 +159,15 @@ local DESIGN = {
 -- an Edit Mode export string (Share > Copy to Clipboard); without one, design:
 -- changes to the Modern preset (as DESIGN). bars: the action bars it lays
 -- out, switched on with it (SyncBars).
+-- label: its name on the Profiles page's layout menu (listed on client only,
+-- unless it's in Edit Mode already).
 ns.EDIT_MODE_LAYOUTS = {
-	[ns.LAYOUT_NAME] = { export = nil, design = DESIGN, bars = { 2, 3 } },
+	[ns.LAYOUT_NAME] = { export = nil, design = DESIGN, bars = { 2, 3 },
+		label = "Cinematic's retail look", client = "forever" },
 	-- Retail laid out like WoW Forever's default (the retail profile "Forever").
 	-- Not designed yet: a copy of Modern until its export string's in.
-	CINE_RETAIL_FOREVER_LAYOUT = { export = nil, design = {} },
+	CINE_RETAIL_FOREVER_LAYOUT = { export = nil, design = {},
+		label = "Cinematic's WoW Forever look", client = "retail" },
 }
 
 local function ApplyDesign(layout, design)
@@ -238,6 +242,23 @@ function ns.MakeLayout(name)
 	return true
 end
 
+-- One of ours made again from the code (the Profiles page's Regenerate, the
+-- Dev page's buttons), undoing changes made to it in Edit Mode, and switched
+-- to. One that was there already offers a reload (Edit Mode shows its old
+-- copy until then), after which it's switched to again.
+function ns.RegenerateLayout(name)
+	local updating = ns.LayoutState(name) ~= nil
+	local ok, reason = ns.MakeLayout(name)
+	if not ok then
+		ns.Print(reason)
+	elseif updating then
+		-- (the reload puts Edit Mode back on the layout it had: switched again after it)
+		ns.chardb.layoutPending = name
+		StaticPopup_Show("CINEMATIC_LAYOUT_RELOAD")
+	end
+	return ok
+end
+
 -- Whether one of ours is there: nil: no; "active" or "made" (another in use).
 function ns.LayoutState(name)
 	if not (C_EditMode and C_EditMode.GetLayouts) then return nil end
@@ -246,15 +267,23 @@ function ns.LayoutState(name)
 	return ActiveName(info) == name and "active" or "made"
 end
 
--- After a reload, the layout just made, switched to again (once).
-local pending = CreateFrame("Frame")
-pending:RegisterEvent("PLAYER_ENTERING_WORLD")
-pending:SetScript("OnEvent", function(self)
+-- On logging in (or a reload), once Edit Mode has its layouts: the layout
+-- just made (the Dev page's Update), switched to again; otherwise the
+-- profile's, as on switching to it. Edit Mode keeps a layout per character,
+-- so one logged into from a character on another profile can be on the
+-- wrong one (Retail's on a character whose profile isn't Retail).
+local login = CreateFrame("Frame")
+login:RegisterEvent("PLAYER_ENTERING_WORLD")
+login:SetScript("OnEvent", function(self)
 	self:UnregisterAllEvents()
-	local name = ns.chardb and ns.chardb.layoutPending
-	if not name or not (C_EditMode and C_EditMode.GetLayouts) then return end
+	if not (C_EditMode and C_EditMode.GetLayouts) or not ns.chardb then return end
+	local name = ns.chardb.layoutPending
 	ns.chardb.layoutPending = nil
 	C_Timer.After(1, function()
+		if not name then
+			if ns.ProfileChosen() then ns.ApplyProfileLayout() end
+			return
+		end
 		if InCombatLockdown() then return end
 		local info = C_EditMode.GetLayouts()
 		local index = IndexOf(info, name)
@@ -264,11 +293,12 @@ pending:SetScript("OnEvent", function(self)
 	end)
 end)
 
--- The profile's Edit Mode layout (db.editModeLayout, from its layout part):
--- on switching profile (Profiles.lua), Edit Mode goes to it, after the fight
--- if in one; one of ours is made if it isn't there. "": the player's own,
--- the one they were on before a profile switched it (chardb.layoutOwn), back.
--- Logging in never changes the layout.
+-- The profile's Edit Mode layout (db.editModeLayout, from its layout part,
+-- or picked on the Profiles page): on switching profile (Profiles.lua) and
+-- logging in, Edit Mode goes to it, after the fight if in one; one of ours
+-- is made if it isn't there. "": the player's own, the one they were on
+-- before a profile switched it (chardb.layoutOwn), back; on one of ours with
+-- none saved, the first preset (Modern).
 local afterCombat = CreateFrame("Frame")
 afterCombat:SetScript("OnEvent", function(self)
 	self:UnregisterAllEvents()
@@ -288,9 +318,12 @@ function ns.ApplyProfileLayout()
 	local info = C_EditMode.GetLayouts()
 	if name == "" then
 		local own = ns.chardb.layoutOwn
-		if not own then return end
 		ns.chardb.layoutOwn = nil -- (back on it: or, gone, nothing to go back to)
-		local index = IndexOf(info, own)
+		local index = own and IndexOf(info, own)
+		if not index and ns.EDIT_MODE_LAYOUTS[ActiveName(info) or ""] then
+			own = Presets()[1] and Presets()[1].layoutName
+			index = own and IndexOf(info, own)
+		end
 		if index and info.activeLayout ~= index then
 			SetActive(index)
 			ns.Log("state", "edit mode layout back to: " .. own)
@@ -372,6 +405,9 @@ function ns.LayoutWouldChange()
 	local info = C_EditMode.GetLayouts()
 	if name == "" then
 		name = ns.chardb.layoutOwn
+		if not (name and IndexOf(info, name)) and ns.EDIT_MODE_LAYOUTS[ActiveName(info) or ""] then
+			name = Presets()[1] and Presets()[1].layoutName
+		end
 	else
 		name = Target(info, name)
 	end
@@ -402,6 +438,64 @@ function ns.FinishLayoutFade()
 	local pending = ns.pendingPreview
 	ns.pendingPreview = nil
 	if pending then ns.PreviewProfile(pending) end
+end
+
+-- The Profiles page's layout menu ({ value, text } for db.editModeLayout):
+-- leave it, the game's own, then the layouts as Edit Mode lists them (the
+-- saved ones by their names, then the presets; the Gamepad preset only in
+-- gamepad mode), Cinematic's own for this client to add if it isn't made,
+-- and the profile's if it's gone.
+local PRESETS_SHOWN = 2 -- (Modern and Classic; WoW Forever's third is Gamepad)
+function ns.LayoutChoices()
+	local choices = {
+		{ value = "", text = L["Your own (Cinematic leaves it alone)"] },
+		{ value = ns.LAYOUT_PRESET, text = L["The game's own (Modern or Classic)"] },
+	}
+	local info = C_EditMode and C_EditMode.GetLayouts and C_EditMode.GetLayouts()
+	if not (info and info.layouts) then return choices end
+	local listed = { [""] = true, [ns.LAYOUT_PRESET] = true }
+	local function Add(name, text)
+		if not name or listed[name] then return end
+		listed[name] = true
+		choices[#choices + 1] = { value = name, text = text or name }
+	end
+	for _, layout in ipairs(info.layouts) do Add(layout.layoutName) end
+	local gamepad = ns.IsGamePadOn and ns.IsGamePadOn()
+	for i, preset in ipairs(Presets()) do
+		if i <= PRESETS_SHOWN or gamepad or preset.layoutName == (ns.db and ns.db.editModeLayout) then
+			Add(preset.layoutName, L["%s (Preset)"]:format(preset.layoutName))
+		end
+	end
+	for name, def in pairs(ns.EDIT_MODE_LAYOUTS) do
+		if def.client == ns.CLIENT then Add(name, L["Add %s to Edit Mode"]:format(L[def.label])) end
+	end
+	local current = ns.db and ns.db.editModeLayout
+	if current then Add(current, L["%s (not in Edit Mode)"]:format(current)) end
+	return choices
+end
+
+-- Leaving Edit Mode on another layout than the profile's: the profile takes
+-- it (a profile that leaves the layout alone stays so; one on the game's
+-- own stays so while it's a preset), so logging in, or switching back to the
+-- profile, puts the player's own pick back.
+local function AdoptLayout()
+	if not ns.db or not ns.chardb or not ns.ProfileChosen() then return end
+	local want = ns.db.editModeLayout or ""
+	if want == "" then return end
+	local info = C_EditMode.GetLayouts()
+	local active = ActiveName(info)
+	if not active or active == Target(info, want) then return end
+	if want == ns.LAYOUT_PRESET and info.activeLayout <= #Presets() then return end
+	ns.db.editModeLayout = active
+	ns.chardb.layoutOwn = nil -- (the player's pick now: nothing to go back to)
+	SyncBars(active)
+	ns.Print(L["the %s profile now uses the Edit Mode layout %s"]:format(
+		ns.ProfileLabel(ns.ActiveProfile()), active))
+	ns.Log("state", "edit mode layout picked in edit mode: " .. active)
+	if ns.RefreshOptions then ns.RefreshOptions() end
+end
+if _G.EditModeManagerFrame and C_EditMode and C_EditMode.GetLayouts then
+	_G.EditModeManagerFrame:HookScript("OnHide", AdoptLayout)
 end
 
 ns.OnLanguage(function()
@@ -451,15 +545,7 @@ function ns.CreateLayoutPanel(kit)
 	end
 	for _, row in ipairs(rows) do
 		row.button:SetScript("OnClick", function()
-			local updating = ns.LayoutState(row.name) ~= nil
-			local ok, reason = ns.MakeLayout(row.name)
-			if ok and updating then
-				-- (the reload puts Edit Mode back on the layout it had: switched again after it)
-				ns.chardb.layoutPending = row.name
-				StaticPopup_Show("CINEMATIC_LAYOUT_RELOAD")
-			elseif not ok then
-				ns.Print(reason)
-			end
+			ns.RegenerateLayout(row.name)
 			Refresh()
 		end)
 	end

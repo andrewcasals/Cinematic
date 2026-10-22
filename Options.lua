@@ -7801,6 +7801,40 @@ local function CreateProfilesPanel()
 	local shareNote = Label(share, "GameFontHighlightSmall", L["Share a profile with friends."])
 	shareNote:SetPoint("LEFT", import, "RIGHT", 12, 0)
 
+	-- The active profile's Edit Mode layout (Layouts.lua), switched to when
+	-- it's picked and on logging in.
+	if C_EditMode and C_EditMode.GetLayouts then
+		local layoutRow = CreateFrame("Frame", nil, buttons)
+		layoutRow:SetSize(540, 26)
+		layoutRow:SetPoint("TOPLEFT", share, "BOTTOMLEFT", 0, -12)
+		local layoutLabel = Label(layoutRow, "GameFontNormal", L["Edit Mode layout:"])
+		layoutLabel:SetPoint("LEFT", layoutRow, "LEFT", 0, 0)
+		local layoutMenu = Dropdown(layoutRow, "editModeLayout", function() return ns.LayoutChoices() end, 280,
+			function() ns.SwitchProfileLayout() end)
+		if layoutMenu then
+			layoutMenu:SetPoint("LEFT", layoutLabel, "RIGHT", 10, 0)
+			Tooltip(layoutMenu, L["The Edit Mode layout the active profile puts you on when you pick it and " ..
+				"each time you log in, on any character using it. Pick another layout in Edit Mode itself and " ..
+				"the profile takes that one. Your own: Cinematic leaves the layout to you."])
+			-- (Cinematic's own layouts only: they're made from the addon's code.)
+			local regenerate = CreateFrame("Button", nil, layoutRow, "UIPanelButtonTemplate")
+			regenerate:SetSize(110, 22)
+			regenerate:SetText(L["Regenerate"])
+			regenerate:SetPoint("LEFT", layoutMenu, "RIGHT", 8, 0)
+			Tooltip(regenerate, L["Make this layout again as Cinematic has it, undoing any changes you made " ..
+				"to it in Edit Mode, and switch to it. Your own layouts stay as they are."])
+			regenerate:SetScript("OnClick", function()
+				ns.RegenerateLayout(ns.GetDB().editModeLayout)
+				Refresh()
+			end)
+			regenerate.Refresh = function(self)
+				local db = ns.GetDB()
+				self:SetShown(db ~= nil and ns.EDIT_MODE_LAYOUTS[db.editModeLayout or ""] ~= nil)
+			end
+			controls[#controls + 1] = regenerate
+		end
+	end
+
 	function Layout()
 		if not ns.GetDB() then return end
 		-- (None ticked until a new player picks one; Cinematic does nothing till then.)
