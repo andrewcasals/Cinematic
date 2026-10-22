@@ -434,9 +434,42 @@ local function KeepHeld()
 	end
 end
 
+-- "Your own" interact settings saved as exactly ours (lost to an earlier
+-- build, or saved again after one): the game's defaults go back instead, or
+-- unticking would leave soft targeting and its icons on.
+local HEAL = { "SoftTargetInteract", "SoftTargetInteractRange", "SoftTargetInteractArc",
+	"SoftTargetNameplateInteract", "SoftTargetIconGameObject" }
+local healed = false
+
+local function HealSaved()
+	if healed or not CVARS.active then
+		return
+	end
+	healed = true
+	local saved = ns.db.savedCVars
+	local Default = (C_CVar and C_CVar.GetCVarDefault) or GetCVarDefault
+	if not Default then
+		return
+	end
+	for _, cvar in ipairs(HEAL) do
+		if saved[cvar] == nil or tonumber(saved[cvar]) ~= tonumber(CVARS.values[cvar]) then
+			return
+		end
+	end
+	for _, cvar in ipairs(HEAL) do
+		local ok, value = pcall(Default, cvar)
+		if ok and value ~= nil then
+			ns.Log("cvar", ("%s: saved value was the glow's, the game's default (%s) goes back"):format(cvar,
+				tostring(value)))
+			saved[cvar] = value
+		end
+	end
+end
+
 local function Update()
 	local on = Wanted()
 	ns.ApplyCVarSet(CVARS, on)
+	HealSaved()
 	KeepHeld()
 	UpdateCorpsePlate()
 	UpdateIcon()

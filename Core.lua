@@ -1438,6 +1438,7 @@ end
 -- player (or another addon) changes one meanwhile, theirs stands. It's let go
 -- rather than put back later, which would undo their change.
 local heldCVars = {} -- [lowercased cvar] = { name = cvar, value = written }
+local activeCVars = {} -- [cvar] = true while a set (ns.ApplyCVarSet) has it on
 local writingCVar = false
 
 local function SameValue(a, b)
@@ -1545,6 +1546,7 @@ function ns.ApplyCVarSet(set, want)
 	end
 	set.active = want
 	for cvar, value in pairs(set.values) do
+		activeCVars[cvar] = want or nil
 		if want then
 			local original = GetCVar(cvar)
 			if original ~= nil then
@@ -1570,10 +1572,12 @@ end
 
 -- Puts back anything left over from a session that ended without restoring.
 -- Plate and name settings can't change in combat: they wait for it to end.
+-- A set already on again (applied before login) keeps its saved values: put
+-- back and dropped here, its own settings would stay on as "yours".
 local function RestoreSavedCVars()
 	for cvar, value in pairs(ns.db.savedCVars) do
 		local secure = cvar:find("^nameplate") or cvar:find("^UnitName")
-		if not (secure and InCombatLockdown()) then
+		if not (secure and InCombatLockdown()) and not activeCVars[cvar] then
 			-- Skip values that are already right: writing a test_ CVar at all
 			-- brings up Blizzard's experimental-camera warning.
 			local now = GetCVar(cvar)
