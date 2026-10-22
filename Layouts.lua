@@ -140,7 +140,7 @@ local DESIGN = {
 	{ 13, nil, "BOTTOMRIGHT", "UIParent", "BOTTOMRIGHT", -2, 2 },           -- micro menu
 	{ 14, nil, "BOTTOMRIGHT", "MicroMenuContainer", "TOPRIGHT", 0, 4 },     -- bags
 	-- (status bars' setting 3: width, 0 = 50%, 10 = 100%)
-	{ 15, 1, "BOTTOM", "UIParent", "BOTTOM", 0, 2, { [3] = 0 } },           -- status bar 1
+	{ 15, 1, "BOTTOM", "UIParent", "BOTTOM", 0, 0, { [3] = 0 } },           -- status bar 1
 	{ 15, 2, "BOTTOM", "MainStatusTrackingBarContainer", "TOP", 0, 0, { [3] = 0 } }, -- status bar 2
 	{ 20, 1, "BOTTOM", "UtilityCooldownViewer", "TOP", -1, 4 },             -- cooldown viewers
 	{ 20, 2, "CENTER", "UIParent", "CENTER", 0, -149 },
