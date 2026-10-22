@@ -146,6 +146,16 @@ local function IsLootRollLine(text)
 	return false
 end
 
+-- With the loot roll window on (RollWindow.lua), roll lines stay out of chat
+-- (rollWindowChat): the window shows them.
+local function IsHiddenRollLine(text)
+	return ns.hasRollWindow and ns.Setting("rollWindow") and ns.Setting("rollWindowChat") and IsLootRollLine(text)
+end
+
+local function RollLineFilter(_, _, text)
+	return IsHiddenRollLine(text) and true or false
+end
+
 -- Guild members coming online, going offline, joining, leaving, removed,
 -- promoted or demoted: told apart from other system messages the same way.
 -- Coming online and going offline use the same lines as friends', so a name
@@ -376,7 +386,9 @@ local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, 
 		return false
 	end
 	local wanted
-	if ns.db.chatHideOwn and IsFromPlayer(author, guid) then
+	if event == "CHAT_MSG_LOOT" and IsHiddenRollLine(text) then
+		wanted = false -- (left out of chat: nothing to see)
+	elseif ns.db.chatHideOwn and IsFromPlayer(author, guid) then
 		wanted = false
 	elseif event == "CHAT_MSG_CHANNEL" then
 		wanted = ns.IsChannelPeekOn(ChannelBaseName(channelBaseName, channelString))
@@ -539,5 +551,7 @@ function ns.RegisterChatPeek()
 	for _, event in ipairs(CHAT_PEEK_EVENTS) do
 		addFilter(event, ns.Profiled("Chat filter", ChatPeekFilter))
 	end
+	-- (after the peek filter: it sees every line first)
+	addFilter("CHAT_MSG_LOOT", RollLineFilter)
 	WatchServerMessages()
 end

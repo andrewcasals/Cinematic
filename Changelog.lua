@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-22", page = "General", title = "Loot roll window",
+		text = "In a group, a window shows each item being rolled on, with everyone's pick and roll and the " ..
+		"winner on top, so you needn't read the rolls in chat. Turn it on in the General page." },
 	{ date = "2026-10-21", page = "Vision", title = "Quest Vision",
 		text = "Mobs and NPCs you still need for a quest keep their nameplates up, with a golden ! on their " ..
 		"plate and your target frame. Optionally, the quest object in front of you glows so it's easy to spot." },

@@ -45,7 +45,7 @@ local DEFAULTS = {
 	tooltipHideInTele = true,   -- Hearthstone and teleports
 	tooltipHideInDeath = true,  -- the death camera
 	tooltipHideInQuest = false, -- the quest camera
-	hideCombatText = true,    -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
+	hideCombatText = false,   -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
 	hideTargetCircle = false, -- no circle on the ground under your target in cinematic mode out of combat (after the Calm Timer)
 	hideErrorsInCombat = false,    -- no red error text ("Target not in line of sight") in fights (and the Calm Timer after)
 	hideErrorsOutOfCombat = false, -- nor out of them (CineMode or not, either)
@@ -261,6 +261,8 @@ local DEFAULTS = {
 	cooldownManagerOn = false, -- the profile turns the game's Cooldown Manager on if it's off (the CDM part; Profiles.lua)
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
+	rollWindow = false,        -- a window of the group's loot rolls, instead of reading them in chat (RollWindow.lua)
+	rollWindowChat = true,     -- ...and roll lines left out of chat while it's on
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
 	cozyZoomClose = 10,       -- yards: the distance it zooms in to (if you're further out); far side of a fire
 	cozyTentClose = 8,        -- ...closer with a Camp Tent seen nearby (Campfire.lua), and no drifting further out
@@ -790,7 +792,7 @@ DEFAULTS.handleVision = true
 local PAGE_SWITCH = {}
 for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
-		"centerPanels", "dragPanels" },
+		"centerPanels", "dragPanels", "rollWindow", "rollWindowChat" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
 	handleVision = { "duelPlates", "questVision", "plateQuestMobs", "targetQuestIcon", "questObjectGlow" },
 }) do

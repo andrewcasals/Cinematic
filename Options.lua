@@ -4698,6 +4698,7 @@ local function CreateQualityPanel()
 		"when you turn this back on."], subtitle, function()
 		if ns.RefreshTalentLink then ns.RefreshTalentLink() end
 		if ns.RefreshTalentCalc then ns.RefreshTalentCalc() end
+		if ns.RefreshRollWindow then ns.RefreshRollWindow() end
 	end)
 
 	local stack = Stack(switch, "check")
@@ -4780,6 +4781,32 @@ local function CreateQualityPanel()
 		end
 	end)
 	stack:Add(putBack, "label", 24)
+	-- (RollWindow.lua: only where the game has a loot history.)
+	if ns.hasRollWindow then
+		local rolls = stack:Add(Check(content, "rollWindow", L["Loot roll window"],
+			L["In a group, items rolled on show in a window instead of only as lines in chat: each item, a bar " ..
+			"for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. " ..
+			"It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. " ..
+			"/cine rolls shows the latest rolls."],
+			function(value)
+				ns.GetDB().rollWindow = value
+				ns.RefreshRollWindow()
+				Refresh() -- (greys the tick below)
+			end), "check")
+		local test = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+		test:SetSize(80, 22)
+		test:SetText(L["Test"])
+		test:SetPoint("LEFT", rolls.Text or rolls.text, "RIGHT", 12, 0)
+		Tooltip(test, L["Show the window with two made-up items and players picking and rolling, to see how it looks."])
+		test:SetScript("OnClick", function() ns.TestRollWindow() end)
+		test.Refresh = function() end
+		GreyUnless(test, function(db) return db.rollWindow end)
+		controls[#controls + 1] = test
+		local chat = stack:Add(Check(content, "rollWindowChat", L["Leave roll lines out of chat"],
+			L["\"Name selected Need\", \"Need Roll - 87 by Name\" and \"Name won\" lines stay out of the chat " ..
+			"window, as the roll window shows them. Your own \"You receive loot\" line stays."]), "check", 24)
+		GreyUnless(chat, function(db) return db.rollWindow end)
+	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -6768,12 +6795,13 @@ local function CreateVisionPanel()
 
 		-- Your target: hidden no fainter than this (100%: always shown).
 		local TARGET_ICON = "|TInterface\\Cursor\\Crosshairs:16:16|t"
-		local target = Slider(content, "healVisionTargetAlpha", TARGET_ICON .. " " .. L["Target opacity"], 0, 100, 1,
+		local target = Slider(content, "healVisionTargetAlpha", TARGET_ICON .. " " .. L["Target min opacity"], 0, 100, 1,
 			"%d%%", 100, ApplyFrames)
-		target.searchLabel = L["Target opacity"] -- (search: without the icon)
+		target.searchLabel = L["Target min opacity"] -- (search: without the icon)
 		target:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -40)
-		Tooltip(target, L["How much of the member you've targeted still shows while they'd be hidden, if more " ..
-			"than their own opacity above. 100% always shows them, at full health too."])
+		Tooltip(target, L["The least of the member you've targeted that shows while they'd be hidden. It only ever " ..
+			"makes them more visible: a target whose own opacity above is higher (a tank shown always, say) " ..
+			"keeps it. 100% always shows them, at full health too."])
 		GreyUnless(target, IfAny)
 		previous = target
 

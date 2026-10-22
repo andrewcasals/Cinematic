@@ -54,6 +54,7 @@ DragEquip.lua
 TalentLink.lua
 TalentCalc.lua
 CenterPanels.lua
+RollWindow.lua
 CameraWheel.lua
 MenuWheel.lua
 MarkerWheel.lua

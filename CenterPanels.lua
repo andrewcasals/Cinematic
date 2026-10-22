@@ -494,6 +494,21 @@ local function HookRolls()
 	end
 end
 
+-- The loot roll window (RollWindow.lua) sits where these rolls do: dragging
+-- it drags them (true as the drag starts, false as it stops), and it follows.
+function ns.DragRolls(starting)
+	local box = GroupLootContainer
+	if not (box and box.GetPoint and ns.db and ns.Setting("dragPanels")) then
+		return
+	end
+	if starting then
+		HookRolls()
+		DragStart(box)
+	else
+		DragStop(box)
+	end
+end
+
 local function PlaceBag()
 	PlaceOther(ContainerFrameCombinedBags, BAG_LEFT)
 	PlaceOther(LootFrame)

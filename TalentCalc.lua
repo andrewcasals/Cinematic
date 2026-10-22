@@ -233,11 +233,13 @@ local function ReadTalents()
 		end
 		tree.x = x
 	end
-	-- The arrows: each talent's edges lead to the ones it unlocks.
+	-- The arrows: each talent's edges lead to the ones it unlocks. Visual-only
+	-- edges (type 0) aren't rules: Forever has one from Nature's Splendor back
+	-- to Nature's Majesty, which needed each other with it.
 	for nodeID, info in pairs(infos) do
 		for _, edge in ipairs(info.visibleEdges or {}) do
 			local target = talents[edge.targetNode]
-			if target then
+			if target and edge.type ~= 0 then
 				target.needs[#target.needs + 1] = nodeID
 			end
 		end
@@ -1487,6 +1489,32 @@ function ns.PrintTalentCalcDebug()
 				end
 				print(("  row %d, %s: game's spent needed %s, ours %d, needs %d talents"):format(talent.row,
 					tostring(talent.name), table.concat(needs, "/"), talent.row * PER_ROW, #talent.needs))
+			end
+		end
+	end
+	-- Talents on the same spot (one hides the other), and every arrow with
+	-- the game's edge type (0 visual only, 2 sufficient, 3 required, 4 one or
+	-- the other).
+	local spots = {}
+	for _, tree in ipairs(trees) do
+		for _, talent in ipairs(tree.talents) do
+			local key = tree.index .. ":" .. talent.row .. ":" .. talent.col
+			local other = spots[key]
+			if other then
+				print(("  same spot (tree %d, row %d, col %d): %s (%d) and %s (%d)"):format(tree.index, talent.row,
+					talent.col, tostring(other.name), other.nodeID, tostring(talent.name), talent.nodeID))
+			end
+			spots[key] = talent
+		end
+	end
+	for nodeID, talent in pairs(talents) do
+		local info = C_Traits.GetNodeInfo(configID, nodeID)
+		for _, edge in ipairs(info and info.visibleEdges or {}) do
+			local target = talents[edge.targetNode]
+			if target then
+				print(("  arrow %s (tree %d, row %d, col %d) -> %s (tree %d, row %d, col %d): type %s, active %s"):format(
+					tostring(talent.name), talent.tree.index, talent.row, talent.col, tostring(target.name),
+					target.tree.index, target.row, target.col, tostring(edge.type), tostring(edge.isActive)))
 			end
 		end
 	end

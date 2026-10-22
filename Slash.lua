@@ -44,6 +44,9 @@ local function PrintHelp()
 	if ns.ToggleTalentCalc then
 		Command("/cine talents", L["the talent calculator, to plan a build"])
 	end
+	if ns.ToggleRollWindow then
+		Command("/cine rolls", L["the latest loot rolls (/cine rolls test shows made-up ones)"])
+	end
 	Heading(L["Frames (hover over one first)"])
 	Command("/cine add", L["fade it too (or /cine add <FrameName>)"])
 	Command("/cine add mode", L["pick up every frame you hover over, then again to fade them all"])
@@ -1064,6 +1067,14 @@ local function HandleSlash(msg)
 		ns.ShowImport()
 	elseif cmd == "talents" and ns.ToggleTalentCalc then
 		ns.ToggleTalentCalc()
+	elseif (cmd == "rolls" or cmd == "roll") and ns.ToggleRollWindow then
+		if arg == "test" then
+			ns.TestRollWindow()
+		elseif ns.Setting("rollWindow") then
+			ns.ToggleRollWindow()
+		else
+			ns.Print(L["Turn on the loot roll window first."])
+		end
 	elseif cmd == "welcome" then
 		ns.ShowWelcome()
 	elseif cmd == "profile" or cmd == "profiles" then

@@ -101,8 +101,11 @@ local function SyncBars(name)
 	end
 	ns.chardb.layoutBarsOn = next(on) and on or nil
 	if not changed then return end
+	-- (Not MultiActionBar_Update: called from here it taints the bars' buttons,
+	-- and their cooldowns then error on secret values. The game shows the
+	-- bars as toggled on the next reload.)
 	SetActionBarToggles(unpack(toggles))
-	if MultiActionBar_Update then MultiActionBar_Update() end
+	StaticPopup_Show("CINEMATIC_BARS_RELOAD")
 	ns.Log("state", "edit mode layout action bars: " .. (def and "on" or "back off"))
 end
 
@@ -502,6 +505,12 @@ ns.OnLanguage(function()
 	StaticPopupDialogs.CINEMATIC_LAYOUT_RELOAD = {
 		text = L["Edit Mode keeps its old list of layouts until you reload, and saving there before then " ..
 			"would undo this. Reload now?"],
+		button1 = RELOADUI or L["Reload"], button2 = L["Later"],
+		OnAccept = ReloadUI,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+	StaticPopupDialogs.CINEMATIC_BARS_RELOAD = {
+		text = L["This Edit Mode layout's action bars come on or off after a reload. Reload now?"],
 		button1 = RELOADUI or L["Reload"], button2 = L["Later"],
 		OnAccept = ReloadUI,
 		timeout = 0, whileDead = true, hideOnEscape = true,
