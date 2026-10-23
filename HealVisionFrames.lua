@@ -228,6 +228,14 @@ local function Hook(frame)
 	frame:HookScript("OnUpdate", Reassert)
 end
 
+-- (A main tank's target beside them is refreshed every frame from another
+-- frame's OnUpdate (the game's onUpdateFrame), which the script hooks above
+-- miss: the game's range alpha won there between our updates, a flicker.
+-- Followed where the game sets it instead.)
+if type(_G.CompactUnitFrame_UpdateInRange) == "function" then
+	hooksecurefunc("CompactUnitFrame_UpdateInRange", Reassert)
+end
+
 -- A member's parts: its regions and child frames, less the ones that ignore its alpha.
 local function Parts(frame)
 	local parts = {}
