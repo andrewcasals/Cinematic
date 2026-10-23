@@ -2,10 +2,11 @@
 -- window (while the mouse is over it) opens that window's lines as text, to
 -- select and copy with Ctrl+C. Addons can't put text on the clipboard, so a
 -- box to copy from is as close as it gets (chatCopyButton, Quality of life).
-local _, ns = ...
+local ADDON_NAME, ns = ...
 local L = ns.L
 
 local BUTTON_SIZE = 16
+local ICON = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\Quill" -- (Media/make_quill.py)
 local CHECK_INTERVAL = 0.1
 local buttons = {} -- [chat frame] = its copy button
 local window
@@ -135,8 +136,8 @@ local function CreateButton(chatFrame)
 	local button = CreateFrame("Button", nil, chatFrame)
 	button:SetSize(BUTTON_SIZE, BUTTON_SIZE)
 	button:SetFrameLevel(chatFrame:GetFrameLevel() + 10)
-	button:SetNormalTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
-	button:SetPushedTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
+	button:SetNormalTexture(ICON)
+	button:SetPushedTexture(ICON)
 	button:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
 	button:GetPushedTexture():SetVertexColor(0.7, 0.7, 0.7)
 	button:SetScript("OnClick", function() ShowCopy(chatFrame) end)
