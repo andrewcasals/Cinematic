@@ -137,8 +137,8 @@ end
 
 -- And coloured as the game colours names over heads (red hostile, yellow
 -- neutral, green friendly): the plate's own name is white or grey, the
--- health bar giving its colour. Friendly players too (blue), unless the
--- style keeps the game's class colours on them. The game sets the name's colour again on its own updates, so ours
+-- health bar giving its colour. Friendly players too: blue, or white, or
+-- the class colours the game gives them (plateNameFriends). The game sets the name's colour again on its own updates, so ours
 -- is put back every frame; WoW Forever's colours can be secret, so they go
 -- straight from the game to the text. Its text and vertex colours both get
 -- it (on WoW Forever they're one: the game sets both), their alpha left as
@@ -155,12 +155,22 @@ local function Ask(fn, ...)
 	return ok and Known(value) and value and true or false
 end
 
-local Style -- (below, with the rest of the name style)
+-- A name style setting (the Name Style page's, see Core's DEFAULTS).
+local function Style(key)
+	local value = ns.db and ns.db[key]
+	if value == nil then
+		return ns.DEFAULTS[key]
+	end
+	return value
+end
 
+-- Whether a unit's name is ours to colour, and "white" for one in white.
 local function TintUnit(unit)
 	local okGuid, guid = pcall(UnitGUID, unit)
-	if okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-") then
-		return not Style("classColours") or Ask(UnitCanAttack, "player", unit)
+	if okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-")
+		and not Ask(UnitCanAttack, "player", unit) then
+		local friends = Style("plateNameFriends")
+		return friends ~= "class" and (friends == "white" and "white" or true)
 	end
 	return true
 end
@@ -176,8 +186,10 @@ local function SetNameColor(name, r, g, b)
 	painting = nil
 end
 
-local function PaintName(name, unit)
-	if UnitSelectionColor then
+local function PaintName(name, unit, white)
+	if white then
+		SetNameColor(name, 1, 1, 1)
+	elseif UnitSelectionColor then
 		SetNameColor(name, UnitSelectionColor(unit))
 	else
 		local reaction = Ask(UnitReaction, unit, "player") and UnitReaction(unit, "player")
@@ -193,25 +205,9 @@ end
 -- plate (by its font object where it has one: the object may hold other
 -- alphabets than its file). [name text] = { font object, file, size, flags,
 -- shadow colour, shadow offset; base, baseFlags: the game's size and flags
--- ours start from; oursSize, oursFlags: what ours came out as }.
+-- ours start from; oursSize, oursFlags: what ours came out as; points: the
+-- game's anchors, oursY: our first anchor's height }.
 local styled = {}
-
--- How names on name-only plates look. The dev build's Name Style page
--- (NameStyleDev.lua) tries others in ns.db.devNameStyle; everyone else gets these.
--- outline: 0 none, 1 thin, 2 thick. size: times the game's. classColours:
--- friendly players' names left in the class colours the game gives them.
-local NAME_STYLE = { colour = true, classColours = false, outline = 0, size = 1, shadow = true,
-	shadowX = 1, shadowY = -1, shadowAlpha = 1 }
-ns.NAME_STYLE_DEFAULTS = NAME_STYLE
-
-function Style(key)
-	local own = ns.db and ns.db.devNameStyle
-	local value = own and own[key]
-	if value == nil then
-		return NAME_STYLE[key]
-	end
-	return value
-end
 
 local OUTLINES = { [0] = "", "OUTLINE", "THICKOUTLINE" }
 
@@ -222,21 +218,91 @@ local function Outlined(flags, outline)
 	end
 	return (flags:gsub("^,+", ""):gsub(",+$", ""):gsub(",,+", ","))
 end
+ns.OutlinedFlags = Outlined -- (the Name Style page's preview)
+
+-- A font file holds one alphabet: a name set in the plate's file shows
+-- Cyrillic (or Korean, Chinese) letters as boxes. So names get a font family
+-- of our own, like the game's plate font: its font for each alphabet, at our
+-- size and outline. (From the game's font object where it can say which font
+-- each alphabet has; else the game's usual ones.) Kept by size and flags.
+-- nil on clients without font families.
+local ALPHABETS = { "roman", "russian", "korean", "simplifiedchinese", "traditionalchinese" }
+local ALPHABET_FILES = { russian = "Fonts\\FRIZQT___CYR.TTF", korean = "Fonts\\2002.TTF",
+	simplifiedchinese = "Fonts\\ARKai_T.ttf", traditionalchinese = "Fonts\\blei00d.TTF" }
+local families, familyCount = {}, 0
+local ourFamilies = {} -- [font object] = true
+
+-- object: the game's font object for the name (its other alphabets' fonts);
+-- file, size: its roman font as it is; scale: times that size.
+local function NameFamily(object, file, size, scale, flags)
+	if not CreateFontFamily or not (file and size) then
+		return nil
+	end
+	local key = tostring(object) .. "|" .. file .. "|" .. ("%.1f"):format(size * scale) .. "|" .. (flags or "")
+	local family = families[key]
+	if family == nil then
+		local members = {}
+		for _, alphabet in ipairs(ALPHABETS) do
+			local memberFile, memberSize = file, size
+			if alphabet ~= "roman" then
+				memberFile = ALPHABET_FILES[alphabet]
+				local ok, member = pcall(function() return object:GetFontObjectForAlphabet(alphabet) end)
+				local memberFont, height = nil, nil
+				if ok and member then
+					memberFont, height = member:GetFont()
+				end
+				if memberFont then
+					memberFile, memberSize = memberFont, height or size
+				end
+			end
+			members[#members + 1] = { alphabet = alphabet, file = memberFile, height = memberSize * scale,
+				flags = flags or "" }
+		end
+		familyCount = familyCount + 1
+		local ok, made = pcall(CreateFontFamily, "CinematicPlateName" .. familyCount, members)
+		family = ok and made or false
+		families[key] = family
+		if family then
+			ourFamilies[family] = true
+		end
+	end
+	return family or nil
+end
+ns.PlateNameFamily = NameFamily
+
+-- Sets a text's font, every alphabet's letters drawn (a family where the
+-- client has them), its words set again so they take it.
+local function SetNameFont(text, object, file, size, scale, flags)
+	local family = NameFamily(object, file, size, scale, flags)
+	if family then
+		text:SetFontObject(family)
+	else
+		pcall(text.SetFont, text, file, size * scale, flags)
+	end
+	pcall(function() text:SetText(text:GetText()) end)
+end
+ns.SetPlateNameFont = SetNameFont
 
 local function KeepStyle(name, saved)
 	local file, size, flags = name:GetFont()
 	if file and (saved.dirty or flags ~= saved.oursFlags or size ~= saved.oursSize) then
 		if not saved.dirty or not saved.base then
-			saved.base, saved.baseFlags = size, flags -- (the game's own, set again)
+			-- (The game's own, set again: its font object too, unless it's ours.)
+			saved.base, saved.baseFile, saved.baseFlags = size, file, flags
+			local object = name.GetFontObject and name:GetFontObject()
+			if object and not ourFamilies[object] then
+				saved.object = object
+			end
 		end
 		saved.dirty = nil
-		pcall(name.SetFont, name, file, saved.base * Style("size"), Outlined(saved.baseFlags, Style("outline")))
+		SetNameFont(name, saved.object, saved.baseFile, saved.base, Style("plateNameSize"),
+			Outlined(saved.baseFlags, Style("plateNameOutline")))
 		local _
 		_, saved.oursSize, saved.oursFlags = name:GetFont()
 	end
 	local x, y, alpha = 0, 0, 0
-	if Style("shadow") then
-		x, y, alpha = Style("shadowX"), Style("shadowY"), Style("shadowAlpha")
+	if Style("plateNameShadow") then
+		x, y, alpha = Style("plateNameShadowX"), Style("plateNameShadowY"), Style("plateNameShadowAlpha")
 	end
 	local nowX, nowY = name:GetShadowOffset()
 	local nowAlpha = select(4, name:GetShadowColor())
@@ -244,13 +310,56 @@ local function KeepStyle(name, saved)
 		name:SetShadowOffset(x, y)
 		name:SetShadowColor(0, 0, 0, alpha)
 	end
+	-- Its size at any distance: the plate's scale undone.
+	if name.SetScale then
+		local scale = 1
+		local parent = name:GetParent()
+		if Style("plateNameFixedSize") and parent and parent.GetEffectiveScale then
+			local plateScale, uiScale = parent:GetEffectiveScale(), UIParent:GetEffectiveScale()
+			if Known(plateScale) and Known(uiScale) and plateScale > 0 then
+				scale = uiScale / plateScale
+			end
+		end
+		local now = name:GetScale()
+		if not Known(now) or math.abs(now - scale) > 0.001 then
+			name:SetScale(scale)
+		end
+	end
+	-- Its height: the game's anchors, moved. (Anchored anew by the game: those
+	-- are its anchors now. Where the game won't say, left as it is.)
+	-- (A restricted plate's name can't be measured: GetPoint errors.)
+	local count = name:GetNumPoints()
+	local ok, _, _, _, _, firstY = pcall(name.GetPoint, name, 1)
+	if not ok or count == 0 or not Known(firstY)
+		or (firstY == saved.oursY and not saved.dirtyPoints) then
+		return
+	end
+	if not (saved.dirtyPoints and saved.points) then
+		local points = {}
+		for i = 1, count do
+			local point = { pcall(name.GetPoint, name, i) }
+			if not table.remove(point, 1) then
+				return
+			end
+			points[i] = point
+		end
+		saved.points = points
+	end
+	saved.dirtyPoints = nil
+	local shift = Style("plateNameY")
+	name:ClearAllPoints()
+	for _, point in ipairs(saved.points) do
+		name:SetPoint(point[1], point[2], point[3], point[4], point[5] + shift)
+	end
+	ok, _, _, _, _, firstY = pcall(name.GetPoint, name, 1)
+	saved.oursY = ok and firstY or nil
 end
 
 local painter = CreateFrame("Frame")
 painter:Hide()
 painter:SetScript("OnUpdate", ns.Profiled("Plate name colours", function(self)
 	for name, saved in pairs(tinted) do
-		PaintName(name, saved.unit)
+		PaintName(name, saved.unit, saved.white)
 	end
 	for name, saved in pairs(styled) do
 		KeepStyle(name, saved)
@@ -271,7 +380,7 @@ for _, event in ipairs({ "UPDATE_MOUSEOVER_UNIT", "CURSOR_CHANGED", "PLAYER_TARG
 end
 repainter:SetScript("OnEvent", function()
 	for name, saved in pairs(tinted) do
-		PaintName(name, saved.unit)
+		PaintName(name, saved.unit, saved.white)
 	end
 end)
 
@@ -283,7 +392,7 @@ local hookedNames = {}
 local function Repaint(name)
 	local saved = tinted[name]
 	if saved and not painting then
-		pcall(PaintName, name, saved.unit)
+		pcall(PaintName, name, saved.unit, saved.white)
 	end
 end
 
@@ -325,6 +434,15 @@ local function StyleName(unitFrame, on)
 		end
 		pcall(name.SetShadowColor, name, unpack(saved.shadow))
 		pcall(name.SetShadowOffset, name, unpack(saved.offset))
+		if name.SetScale then
+			name:SetScale(1)
+		end
+		if saved.points then
+			name:ClearAllPoints()
+			for _, point in ipairs(saved.points) do
+				name:SetPoint(unpack(point))
+			end
+		end
 	end
 end
 
@@ -334,7 +452,8 @@ local function TintName(unitFrame, on)
 		return
 	end
 	local unit = unitFrame.unit
-	if on and unit and Style("colour") and TintUnit(unit) then
+	local tint = on and unit and Style("plateNameColour") and TintUnit(unit)
+	if tint then
 		local saved = tinted[name]
 		if not saved then
 			saved = { text = { name:GetTextColor() } }
@@ -343,9 +462,9 @@ local function TintName(unitFrame, on)
 			end
 			tinted[name] = saved
 		end
-		saved.unit = unit
+		saved.unit, saved.white = unit, tint == "white"
 		HookName(name)
-		PaintName(name, unit)
+		PaintName(name, unit, saved.white)
 		painter:Show()
 	elseif tinted[name] then
 		local saved = tinted[name]
@@ -365,13 +484,19 @@ local function ApplyPlate(plate, personal)
 		return
 	end
 	local body = bodyShare[plate] or 1
-	CentreName(unitFrame, nameShare[plate] ~= nil and body < 1)
-	TintName(unitFrame, nameShare[plate] ~= nil and body < 1)
-	StyleName(unitFrame, nameShare[plate] ~= nil and body < 1)
+	local nameOnly = nameShare[plate] ~= nil and body < 1
+	-- (Styled as the Name Style page says, with the Nameplates page's tick.)
+	local styledName = nameOnly and Style("plateNameStyle")
+	CentreName(unitFrame, nameOnly)
+	TintName(unitFrame, styledName)
+	StyleName(unitFrame, styledName)
 	for _, part in ipairs(ns.PLATE_PARTS) do
 		local level = plate ~= personal and levels[part] or 1
 		if part == "Name" then
 			level = math.max(level * body, nameShare[plate] or 0)
+			if styledName then
+				level = level * Style("plateNameAlpha")
+			end
 		else
 			level = level * body
 		end
@@ -393,11 +518,11 @@ local function ApplyAll()
 end
 ApplyAll = ns.Profiled("Plate parts", ApplyAll)
 
--- After a name style change (the dev Name Style page): every name-only
+-- After a name style change (the Name Style page): every name-only
 -- plate's name drawn again from the game's.
 function ns.RefreshPlateNameStyle()
 	for _, saved in pairs(styled) do
-		saved.dirty = true
+		saved.dirty, saved.dirtyPoints = true, true
 	end
 	ApplyAll()
 end
@@ -462,7 +587,7 @@ local function RefreshClass(plate)
 	end
 	local info = plateClass[plate]
 	local level = info and plate ~= PersonalPlate() and not ns.DuelBadgeShown(plate)
-		and levels[info.part] * (bodyShare[plate] or 1) or 0
+		and (levels[info.part] or 0) * (bodyShare[plate] or 1) or 0
 	local icon = icons[plate]
 	if level <= 0 then
 		if icon then
@@ -528,7 +653,7 @@ local function RefreshRoleIcon(plate)
 		plateRole[plate] = ReadRole(plate)
 	end
 	local role = plateRole[plate]
-	local level = role and plate ~= PersonalPlate() and levels[role.part] * (bodyShare[plate] or 1) or 0
+	local level = role and plate ~= PersonalPlate() and (levels[role.part] or 0) * (bodyShare[plate] or 1) or 0
 	local icon = roleIcons[plate]
 	if level <= 0 then
 		if icon then

@@ -594,6 +594,20 @@ DEFAULTS.plateInstanceFriendlyMinions = "hide"
 DEFAULTS.plateInstanceFriendlyNPCs = "target"
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
+-- Names on plates showing just their name (CineMode), drawn like the game's
+-- names over heads (Nameplates page's tick, the Name Style page; see PlateParts).
+DEFAULTS.plateNameStyle = true
+DEFAULTS.plateNameColour = true -- red hostile, yellow neutral, green friendly
+DEFAULTS.plateNameFriends = "blue" -- friendly players: "blue" (as over their heads), "class" or "white"
+DEFAULTS.plateNameOutline = 0 -- 0 none, 1 thin, 2 thick
+DEFAULTS.plateNameSize = 1 -- times the game's
+DEFAULTS.plateNameAlpha = 1
+DEFAULTS.plateNameY = 0 -- up from where the game puts it
+DEFAULTS.plateNameFixedSize = true -- one size at any distance
+DEFAULTS.plateNameShadow = true
+DEFAULTS.plateNameShadowX = 1
+DEFAULTS.plateNameShadowY = -1
+DEFAULTS.plateNameShadowAlpha = 1
 DEFAULTS.questVision = true -- the Quest Vision page's switch: off, none of the four below works
 DEFAULTS.plateQuestMobs = true -- in CineMode, plates of units for a quest objective you haven't finished show (see Effects)
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)

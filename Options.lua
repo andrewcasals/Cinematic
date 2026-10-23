@@ -1028,6 +1028,7 @@ do
 			end },
 			{ "Advanced Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
 			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot" },
+			{ "Name Style", "Interface\\Icons\\INV_Scroll_05" },
 			{ "Unit Frames", "Interface\\Icons\\INV_Misc_Head_Dwarf_01" },
 			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision" },
 			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01" },
@@ -5614,6 +5615,25 @@ local function CreatePlatesPanel()
 		"Unticked, they fade with the plates (the Plate Parts row decides them on the plates that are up)."]
 		.. markerRangeTip
 	AddPlateRow(namesTop, #ns.NAME_GROUPS + 1, { "PartMarker", L["Raid Marker"], rulePath = "Raid markers" })
+	-- Names kept up over faded plates, drawn like the game's own names (the
+	-- Name Style page has the rest: see PlateParts).
+	local nameStyleCheck = Check(content, "plateNameStyle", L["Style names like the game's"],
+		L["In CineMode a name kept up over a faded nameplate is drawn by the nameplate, not by the game's " ..
+		"names over heads. Ticked, it looks like those: red, yellow or green by how the unit sees you, with " ..
+		"a soft shadow, and one size at any distance. Unticked, it's as the nameplate draws it: white or grey " ..
+		"for every unit, with a heavy black outline, growing and shrinking with distance."],
+		function(value)
+			ns.GetDB().plateNameStyle = value
+			ns.RefreshPlateNameStyle()
+			Refresh()
+		end)
+	nameStyleCheck:SetPoint("TOPLEFT", lastLabel, "BOTTOMLEFT", -(lastLabel.indentX or 0) - 2, -12)
+	local adjustNames = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	adjustNames:SetSize(100, 22)
+	adjustNames:SetText(L["Adjust..."])
+	adjustNames:SetPoint("LEFT", nameStyleCheck.Text or nameStyleCheck.text, "RIGHT", 12, 0)
+	Tooltip(adjustNames, L["These names' colours, size, outline, height and shadow, with a preview: the Name Style page."])
+	adjustNames:SetScript("OnClick", function() ns.OpenOptions("Name Style") end)
 
 	-- Laid out top to bottom: the master switch, then the grids (friendly
 	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
@@ -5632,6 +5652,239 @@ local function CreatePlatesPanel()
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Nameplates")
+end
+
+-- Sub-page: how names look on nameplates showing just the name (CineMode),
+-- with a preview of them at the top. The Nameplates page's tick turns it on
+-- (PlateParts draws them; settings in Core's DEFAULTS).
+local function CreateNameStylePanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Name Style"])
+	title:SetPoint("TOPLEFT", 16, -16)
+	local subtitle = PageIntro(content, title,
+		L["How names look on nameplates showing just the name: in CineMode, away from dungeons and raids, " ..
+		"a name kept up over a faded plate is drawn by the plate. Changes show at once, here and on the " ..
+		"plates around you."])
+
+	local preview -- (below: drawn again as each setting changes)
+	local function Changed()
+		if ns.RefreshPlateNameStyle then ns.RefreshPlateNameStyle() end
+		if preview then preview:Refresh() end
+	end
+	local function StyleCheck(key, label, tip)
+		local check = Check(content, key, label, tip, function(value)
+			ns.GetDB()[key] = value
+			Changed()
+			Refresh() -- grey out / enable what hangs off it
+		end)
+		return check
+	end
+	local function On(db) return db.plateNameStyle end
+
+	local stack = Stack(subtitle, "label")
+	stack:Add(StyleCheck("plateNameStyle", L["Style names like the game's"],
+		L["Ticked, these names look as this page says. Unticked, as the nameplate draws them: white or grey " ..
+		"for every unit, with a heavy black outline, growing and shrinking with distance (the preview shows " ..
+		"that too)."]), "check")
+
+	-- The preview: a strip of names on a dark ground, one of each colour and
+	-- your own name for a friendly player, drawn as the plates would draw them.
+	local SAMPLES = {
+		{ text = L["Hostile"], color = { 1, 0, 0 } },
+		{ text = L["Neutral"], color = { 1, 1, 0 } },
+		{ text = L["Friendly NPC"], color = { 0, 1, 0 } },
+		{ player = true },
+	}
+	local PREVIEW_W, PREVIEW_H = 520, 84
+	preview = CreateFrame("Frame", nil, content)
+	preview:SetSize(PREVIEW_W, PREVIEW_H)
+	stack:Add(preview, "label")
+	local ground = preview:CreateTexture(nil, "BACKGROUND")
+	ground:SetAllPoints()
+	ground:SetColorTexture(0.11, 0.14, 0.18, 0.95)
+	local edges = {}
+	for i = 1, 4 do
+		edges[i] = preview:CreateTexture(nil, "BORDER")
+		edges[i]:SetColorTexture(0.35, 0.35, 0.35, 1)
+	end
+	edges[1]:SetPoint("TOPLEFT") edges[1]:SetPoint("TOPRIGHT") edges[1]:SetHeight(1)
+	edges[2]:SetPoint("BOTTOMLEFT") edges[2]:SetPoint("BOTTOMRIGHT") edges[2]:SetHeight(1)
+	edges[3]:SetPoint("TOPLEFT") edges[3]:SetPoint("BOTTOMLEFT") edges[3]:SetWidth(1)
+	edges[4]:SetPoint("TOPRIGHT") edges[4]:SetPoint("BOTTOMRIGHT") edges[4]:SetWidth(1)
+	local caption = Label(preview, "GameFontDisableSmall", L["Preview"])
+	caption:SetPoint("TOPLEFT", 6, -5)
+	caption.searchSkip = true
+	local texts = {}
+	for i in ipairs(SAMPLES) do
+		local text = preview:CreateFontString(nil, "ARTWORK")
+		text:SetFontObject("GameFontNormal")
+		text:SetPoint("CENTER", preview, "LEFT", PREVIEW_W * (i - 0.5) / #SAMPLES, -4)
+		text.searchSkip = true
+		texts[i] = text
+	end
+	-- The plates' own font, as the game sets it up (or the usual one).
+	local function PlateFont()
+		local object = _G.SystemFont_NamePlate or _G.SystemFont_NamePlateFixed or _G.GameFontNormal
+		local file, size, flags = object:GetFont()
+		if not file then
+			object = _G.GameFontNormal
+			file, size, flags = object:GetFont()
+		end
+		return object, file, size, flags
+	end
+	function preview:Refresh()
+		local db = ns.GetDB()
+		local styledNames = db.plateNameStyle
+		local object, file, size, flags = PlateFont()
+		local _, class = UnitClass("player")
+		local classColor = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+		for i, sample in ipairs(SAMPLES) do
+			local text = texts[i]
+			-- (The plates' own colours: white, players in their class colours.)
+			local r, g, b = 1, 1, 1
+			local ours = styledNames and db.plateNameColour
+			if sample.player then
+				if ours and db.plateNameFriends == "blue" then
+					r, g, b = 0, 0, 1
+				elseif classColor and not (ours and db.plateNameFriends == "white") then
+					r, g, b = classColor.r, classColor.g, classColor.b
+				end
+			elseif ours then
+				r, g, b = unpack(sample.color)
+			end
+			if styledNames then
+				ns.SetPlateNameFont(text, object, file, size, db.plateNameSize,
+					ns.OutlinedFlags(flags, db.plateNameOutline))
+				if db.plateNameShadow then
+					text:SetShadowOffset(db.plateNameShadowX, db.plateNameShadowY)
+					text:SetShadowColor(0, 0, 0, db.plateNameShadowAlpha)
+				else
+					text:SetShadowOffset(0, 0)
+				end
+				text:SetAlpha(db.plateNameAlpha)
+			else
+				text:SetFontObject(object)
+				text:SetShadowOffset(0, 0)
+				text:SetAlpha(1)
+			end
+			text:SetTextColor(r, g, b)
+			-- (Set after the font, so it takes the font's alphabet for its letters.)
+			text:SetText(sample.player and (UnitName("player") or L["Friendly player"]) or sample.text)
+			text:SetPoint("CENTER", preview, "LEFT", PREVIEW_W * (i - 0.5) / #SAMPLES,
+				-4 + (styledNames and db.plateNameY or 0))
+		end
+	end
+	controls[#controls + 1] = preview
+
+	-- Presets: a few looks to start from.
+	local PRESETS = {
+		{ L["Like the game's names"], L["Coloured, with a soft shadow, one size at any distance (the defaults)."], {} },
+		{ L["Bold"], L["Coloured, with a thin black outline and no shadow, a little bigger."],
+			{ plateNameOutline = 1, plateNameShadow = false, plateNameSize = 1.1 } },
+		{ L["Subtle"], L["Coloured, a little smaller and see-through, with a lighter shadow."],
+			{ plateNameSize = 0.9, plateNameAlpha = 0.75, plateNameShadowAlpha = 0.6 } },
+	}
+	local PRESET_KEYS = { "plateNameColour", "plateNameFriends", "plateNameOutline", "plateNameSize",
+		"plateNameAlpha", "plateNameY", "plateNameFixedSize", "plateNameShadow", "plateNameShadowX",
+		"plateNameShadowY", "plateNameShadowAlpha" }
+	local presetRow = CreateFrame("Frame", nil, content)
+	presetRow:SetSize(PREVIEW_W, 24)
+	stack:Add(presetRow, "label")
+	local lastButton
+	for _, preset in ipairs(PRESETS) do
+		local button = CreateFrame("Button", nil, presetRow, "UIPanelButtonTemplate")
+		button:SetText(preset[1])
+		button:SetSize(math.max(110, button:GetFontString():GetStringWidth() + 24), 22)
+		if lastButton then
+			button:SetPoint("LEFT", lastButton, "RIGHT", 8, 0)
+		else
+			button:SetPoint("LEFT", presetRow, "LEFT", 0, 0)
+		end
+		Tooltip(button, preset[2])
+		button:SetScript("OnClick", function()
+			local db = ns.GetDB()
+			db.plateNameStyle = true
+			for _, key in ipairs(PRESET_KEYS) do
+				local value = preset[3][key]
+				if value == nil then value = ns.DEFAULTS[key] end
+				db[key] = value
+			end
+			Changed()
+			Refresh()
+		end)
+		button.Refresh = function() end
+		GreyUnless(button, On)
+		controls[#controls + 1] = button
+		lastButton = button
+	end
+
+	local function StyleSlider(key, label, minV, maxV, step, fmt, scale, tip)
+		local slider = stack:Add(Slider(content, key, label, minV, maxV, step, fmt, scale, Changed), "slider")
+		if tip then Tooltip(slider, tip) end
+		GreyUnless(slider, On)
+		return slider
+	end
+
+	stack:Header(content, L["Colour"])
+	local colour = stack:Add(StyleCheck("plateNameColour", L["Colour by how the unit sees you"],
+		L["Red for hostile units, yellow for neutral ones and green for friendly ones, as over their heads. " ..
+		"Unticked: the plate's own colour, white or grey."]), "check")
+	GreyUnless(colour, On)
+	local friendsLabel = stack:Add(Label(content, "GameFontHighlight", L["Friendly players:"]), "label", 28)
+	local FRIENDS = {
+		{ "blue", L["Blue"], L["Blue, as the game's names over their heads."] },
+		{ "class", L["Class colours"], L["Their class's colour, as the plates draw them."] },
+		{ "white", L["White"], nil },
+	}
+	local lastChoice
+	for _, info in ipairs(FRIENDS) do
+		local choice = Choice(content, "plateNameFriends", info[1], info[2], info[3])
+		choice:HookScript("OnClick", Changed)
+		if lastChoice then
+			choice:SetPoint("LEFT", lastChoice.Text or lastChoice.text, "RIGHT", 16, 0)
+		else
+			choice:SetPoint("LEFT", friendsLabel, "RIGHT", 10, 0)
+		end
+		GreyUnless(choice, function(db) return db.plateNameStyle and db.plateNameColour end)
+		lastChoice = choice
+	end
+
+	stack:Header(content, L["Text"])
+	local OUTLINE_NAMES = { [0] = L["None"], L["Thin"], L["Thick"] }
+	StyleSlider("plateNameSize", L["Size"], 50, 200, 5, "%d%%", 100,
+		L["How big the names are, next to the plates' own."])
+	StyleSlider("plateNameOutline", L["Outline"], 0, 2, 1,
+		function(value) return OUTLINE_NAMES[value] or "" end, 1,
+		L["A black border round the letters. The game's names over heads have none, just the shadow."])
+	StyleSlider("plateNameAlpha", L["Opacity"], 20, 100, 5, "%d%%", 100,
+		L["How see-through the names are, on top of their fades."])
+	local fixed = stack:Add(StyleCheck("plateNameFixedSize", L["Same size at any distance"],
+		L["Like the game's names over heads. Unticked, a name grows as its unit comes nearer and shrinks " ..
+		"as it goes, with its plate."]), "check")
+	GreyUnless(fixed, On)
+
+	stack:Header(content, L["Position"])
+	StyleSlider("plateNameY", L["Height"], -30, 30, 1, "%d", 1,
+		L["Moves the names up (or down, below 0) from where the plates put them."])
+
+	stack:Header(content, L["Shadow"])
+	local shadow = stack:Add(StyleCheck("plateNameShadow", L["Drop shadow"],
+		L["A soft shadow behind the letters, as the game's names over heads have."]), "check")
+	GreyUnless(shadow, On)
+	local function ShadowOn(db) return db.plateNameStyle and db.plateNameShadow end
+	for _, info in ipairs({
+		{ "plateNameShadowX", L["Across"], -4, 4, 0.5, "%.1f", 1, L["How far right of the letters the shadow falls (left, below 0)."] },
+		{ "plateNameShadowY", L["Up/down"], -4, 4, 0.5, "%.1f", 1, L["How far below the letters the shadow falls (above, over 0)."] },
+		{ "plateNameShadowAlpha", L["Darkness"], 0, 100, 5, "%d%%", 100, nil },
+	}) do
+		local slider = StyleSlider(unpack(info))
+		GreyUnless(slider, ShadowOn)
+	end
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Name Style")
 end
 
 -- Sub-page for everything chat: fading, new-message peeks (by message type and
@@ -9075,6 +9328,7 @@ ns.OnLanguage(function()
 	CreateVisionPanel()
 	CreateBuffsPanel()
 	CreatePlatesPanel()
+	CreateNameStylePanel()
 	CreateChatPanel()
 	CreateBubblesPanel()
 	CreateFishingPanel()
@@ -9093,7 +9347,7 @@ ns.OnLanguage(function()
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
-	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua, NameStyleDev.lua).
+	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua).
 	if ns.isDev and ns.CreateProfileBuilder then
 		ns.CreateProfileBuilder({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
@@ -9101,10 +9355,6 @@ ns.OnLanguage(function()
 	if ns.isDev and ns.CreateLayoutPanel and C_EditMode and C_EditMode.GetLayouts then
 		ns.CreateLayoutPanel({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage })
-	end
-	if ns.isDev and ns.CreateNameStylePanel then
-		ns.CreateNameStylePanel({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
-			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip, Check = Check, Slider = Slider })
 	end
 	GuardGamepadClose()
 end)

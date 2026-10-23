@@ -268,6 +268,7 @@ read_globals = {
 	"UnitIsFriend",
 	"UnitReaction",
 	"UnitSelectionColor",
+	"CreateFontFamily",
 	"FACTION_BAR_COLORS",
 	"UnitIsGhost",
 	"GetAreaSpiritHealerTime",
