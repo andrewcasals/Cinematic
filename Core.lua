@@ -196,6 +196,7 @@ local DEFAULTS = {
 	tooltipHideCombatEnemy = false,   -- ...units you can attack
 	tooltipHideCombatFriendly = true, -- ...units you can't
 	tooltipHideCombatElse = true,     -- ...everything else: objects, action bars, bags, menus
+	tooltipHideStill = 10,    -- seconds a world or unit tooltip stays up with the mouse still (0: off)
 	musicFadeTime = 3,        -- seconds for music to fade in or out
 	musicFatigue = 0,         -- minutes: don't start music again within this long of the last start
 	-- Which cameras can start music as they start (when music fatigue allows).

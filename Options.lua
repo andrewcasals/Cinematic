@@ -7713,11 +7713,18 @@ local function CreateTooltipPanel()
 	local switch = PageSwitch(content, "handleTooltips", L["Enable page"],
 		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], note)
 
+	local still = Slider(content, "tooltipHideStill", L["Hide when the mouse is still"], 0, 30, 1, function(value)
+		return value <= 0 and L["Off"] or L["%d sec"]:format(value)
+	end)
+	still:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 6, -30)
+	Tooltip(still, L["A tooltip in the world or on a unit frame hides once it's been up this long with the " ..
+		"mouse still. Move the mouse and it comes back. Off leaves it up."])
+
 	-- A header, then its ticks under it, each on a line of its own.
-	local previous = switch
+	local previous = still
 	local function Section(text)
 		local header = Label(content, "GameFontNormal", text)
-		header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == switch and 2 or -10, -14)
+		header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == still and -4 or -10, previous == still and -22 or -14)
 		previous = header
 		return header
 	end

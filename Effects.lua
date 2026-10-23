@@ -3438,7 +3438,7 @@ end
 
 local function CheckTooltip(tooltip)
 	local hide, why = Hides(tooltip)
-	checked = { owner = tooltip:GetOwner(), name = TooltipName(), state = CheckState() }
+	checked = { owner = tooltip:GetOwner(), name = TooltipName(), state = CheckState(), at = GetTime() }
 	return hide, why
 end
 
@@ -3626,19 +3626,55 @@ function ns.OnTooltipHide()
 	checked = nil
 end
 
+-- When the cursor last moved (turning the camera with the mouse counts: the
+-- cursor stays put then).
+local stillX, stillY, stillSince = nil, nil, 0
+
+local function NoteCursor()
+	local x, y = GetCursorPosition()
+	if x ~= stillX or y ~= stillY or IsMouselooking() then
+		stillX, stillY, stillSince = x, y, GetTime()
+	end
+end
+
+-- A world or unit tooltip that's been up tooltipHideStill seconds with the
+-- mouse still (counted from whichever came later, it showing or the mouse
+-- stopping). Not on the minimap, nor with the key held.
+local function StillTooLong(tooltip)
+	local wait = ns.db.tooltipHideStill
+	if not (wait and wait > 0 and checked and ns.lastCinematic)
+		or GetTime() - math.max(stillSince, checked.at) < wait or ShowKeyDown() then
+		return false
+	end
+	if checked.stillKind == nil then -- (once per tooltip: a UI one can stay up a while)
+		local world = WorldOwned()
+		checked.stillKind = (world and not OverMinimap()) or (not world and TooltipHasUnit(tooltip)) or false
+	end
+	return checked.stillKind
+end
+
 -- Runs on the tick: hides a tooltip that was already up as hiding starts (or
--- as the key's let go, or the game reused it for something else), and shows
--- a hidden one again while the key's down.
+-- as the key's let go, or the game reused it for something else, or the mouse
+-- has stayed still too long), and shows a hidden one again while the key's
+-- down (one hidden for the mouse staying still, once it moves again).
 function ns.UpdateTooltip()
 	if not Handling() then
-		hid = nil
+		hid, stillX = nil, nil
 		return
 	end
+	NoteCursor()
 	if ns.Flag(GameTooltip:IsShown()) then
 		if not StillChecked(GameTooltip) then
 			local hide, why = CheckTooltip(GameTooltip)
 			if hide then
 				HideTooltip(GameTooltip, why)
+				return
+			end
+		end
+		if StillTooLong(GameTooltip) then
+			HideTooltip(GameTooltip, "mouse still")
+			if hid then
+				hid.still = GetTime()
 			end
 		end
 		return
@@ -3646,7 +3682,7 @@ function ns.UpdateTooltip()
 	if hid then
 		if not ns.lastCinematic or not StillOver(hid) then
 			hid = nil
-		elseif ShowKeyDown() then
+		elseif ShowKeyDown() or (hid.still and stillSince > hid.still) then
 			ShowAgain(hid)
 		end
 	end
