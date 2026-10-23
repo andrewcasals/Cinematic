@@ -3687,6 +3687,26 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			if (ns.db.liveProfile or ns.db.profile) == "Immersive (CDM)" then BarsOff(ns.db) end
 			ns.db.cdmBarsV1 = true
 		end
+		-- The Raid Frame Manager's default Mouseover group held the raid and
+		-- party frames too, so hovering them brought it up: just the manager now. Once.
+		if not ns.db.raidManagerAloneV1 then
+			local OUT = { raidplayers = true, raidpets = true, party = true, rspartyplayers = true, rspartypets = true }
+			local function ManagerAlone(groups)
+				for _, group in ipairs(groups or {}) do
+					local preset = ns.HoverGroupPreset(group)
+					if preset and preset.preset == "raidmanager" and group.members then
+						for i = #group.members, 1, -1 do
+							if OUT[group.members[i]] then table.remove(group.members, i) end
+						end
+					end
+				end
+			end
+			ManagerAlone(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then ManagerAlone(saved.hoverGroups) end
+			end
+			ns.db.raidManagerAloneV1 = true
+		end
 		-- "Keep raid markers up as nameplates fade" (keepRaidMarkers) is now the
 		-- Raid Markers grid: unticked, neither side's markers are kept.
 		local function MarkersOff(t)

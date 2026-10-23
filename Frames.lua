@@ -1846,7 +1846,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "target", icon = "Interface\\Icons\\Ability_Hunter_SniperShot", name = L["Target and focus"],
 		members = { "target", "tot", "focus" } },
 	-- (Raid-style party frames are the raid frames. The Raid Frame Manager
-	-- comes up with both out of fights only: its own group, below.)
+	-- has its own group, below: hovering them doesn't bring it up.)
 	{ preset = "raid", icon = "Interface\\Icons\\Spell_Holy_PrayerOfFortitude", name = L["Raid frames"],
 		members = { "raidplayers", "raidpets", "raidroles", "raidthreat", "raidtarget", "raidready", "raidnames", "raidpetnames",
 		"raidtitles", "raidbuffs", "raiddebuffs" }, triggers = { roster = true } },
@@ -1856,8 +1856,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 		"rspartythreat", "rspartynames", "rspartypetnames", "rspartytitles", "rspartybuffs", "rspartydebuffs" },
 		triggers = { roster = true } },
 	{ preset = "raidmanager", icon = "Interface\\Icons\\Ability_Warrior_RallyingCry", name = L["Raid Frame Manager"],
-		members = { "raidmanager", "raidplayers", "raidpets", "party", "rspartyplayers", "rspartypets" },
-		triggers = { roster = true }, when = "calm" },
+		members = { "raidmanager" }, triggers = { roster = true }, when = "calm" },
 	{ preset = "minimap", icon = "Interface\\Icons\\INV_Misc_Map_01", name = L["Minimap"],
 		members = { "minimap", "minimapheader", "minimapzone", "minimaptracking", "minimapcalendar", "minimapclock",
 			"minimapdial" },
