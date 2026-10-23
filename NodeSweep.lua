@@ -106,6 +106,14 @@ local function ReadLists()
 		local name = Plain(UnitName(unit))
 		if name then groupNames[name] = true end
 	end
+	-- (The raid roster too, in case a unit's name comes back secret.)
+	if raid and GetRaidRosterInfo then
+		for i = 1, GetNumGroupMembers() do
+			local ok, name = pcall(GetRaidRosterInfo, i)
+			name = ok and Plain(name)
+			if name then groupNames[name] = true end
+		end
+	end
 	pcall(ReadQuestLog)
 end
 
@@ -126,7 +134,9 @@ end
 function ns.NodeKind(name)
 	if listsChanged then ReadLists() end
 	if herbsMissing then LoadHerbNames() end
-	if groupNames[name] then return "group" end
+	-- (Forever's players have a surname: "Sapo Corto" on the minimap, just
+	-- "Sapo" from UnitName.)
+	if groupNames[name] or groupNames[name:match("^(%S+) ") or ""] then return "group" end
 	-- (Under a quest area's title, its objectives: "- 0/12 Kobold Laborer slain", tested.)
 	if name:sub(1, 2) == "- " then return "line" end
 	local done = questTitles[name]
