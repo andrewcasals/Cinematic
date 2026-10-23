@@ -175,7 +175,9 @@ local DEFAULTS = {
 	plateCinematicFriendlyMinions = false,
 	plateCinematicFriendlyNPCs = false,
 	nameKeepSelf = false,     -- keep these names up in cinematic mode in the open world (see nameIn<place><key>)
-	nameKeepNPCs = false,
+	nameKeepHostileNPCs = false,
+	nameKeepNeutralNPCs = false,
+	nameKeepFriendlyNPCs = false,
 	nameKeepCritters = false,
 	nameKeepFriends = false,
 	nameKeepFriendlyMinions = false,
@@ -883,7 +885,8 @@ for _, part in ipairs(ns.PLATE_ICONS_ALWAYS) do
 	DEFAULTS["plateAlwaysPart" .. part] = true
 end
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
-for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions", "Guild", "Target" }) do
+for _, key in ipairs({ "Self", "HostileNPCs", "NeutralNPCs", "FriendlyNPCs", "Critters", "Friends", "FriendlyMinions",
+	"Enemies", "EnemyMinions", "Guild", "Target" }) do
 	DEFAULTS["nameCombat" .. key], DEFAULTS["nameCombatPvP" .. key] = false, false
 	for _, suffix in ipairs(ns.PLATE_PLACES) do
 		DEFAULTS["nameIn" .. suffix .. key] = false
@@ -900,7 +903,8 @@ for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateGroup" .. kind] = kind == "Friends" or kind == "FriendlyMinions"
 	DEFAULTS["plateAlways" .. kind] = false
 end
-for _, key in ipairs({ "Self", "NPCs", "Critters", "Friends", "FriendlyMinions", "Enemies", "EnemyMinions", "Guild", "Target" }) do
+for _, key in ipairs({ "Self", "HostileNPCs", "NeutralNPCs", "FriendlyNPCs", "Critters", "Friends", "FriendlyMinions",
+	"Enemies", "EnemyMinions", "Guild", "Target" }) do
 	DEFAULTS["nameGroup" .. key] = false
 	DEFAULTS["nameAlways" .. key] = false
 end
@@ -3540,12 +3544,40 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				t.plateTargetRowsV1 = true
 			end
 		end
+		-- The Names grid's NPC Names row split into Hostile NPCs and Friendly
+		-- NPCs, then Neutral NPCs apart from hostile ones: each starts out ticked
+		-- wherever the row it came from was. In every profile too.
+		local NAME_ROW_PREFIXES = { "nameAlways", "nameGroup", "nameCombat", "nameCombatPvP", "nameKeep",
+			"nameInInstances", "nameInPvP", "nameInBGs" }
+		local function NPCNamesSplit(t)
+			if not t.nameNPCsSplitV1 then
+				for _, prefix in ipairs(NAME_ROW_PREFIXES) do
+					if t[prefix .. "NPCs"] ~= nil then
+						for _, row in ipairs({ "HostileNPCs", "NeutralNPCs", "FriendlyNPCs" }) do
+							if t[prefix .. row] == nil then t[prefix .. row] = t[prefix .. "NPCs"] end
+						end
+						t[prefix .. "NPCs"] = nil
+					end
+				end
+				t.nameNPCsSplitV1, t.nameNeutralNPCsV1 = true, true
+			end
+			if not t.nameNeutralNPCsV1 then
+				for _, prefix in ipairs(NAME_ROW_PREFIXES) do
+					if t[prefix .. "HostileNPCs"] ~= nil and t[prefix .. "NeutralNPCs"] == nil then
+						t[prefix .. "NeutralNPCs"] = t[prefix .. "HostileNPCs"]
+					end
+				end
+				t.nameNeutralNPCsV1 = true
+			end
+		end
 		NeutralFromHostile(ns.db)
 		TargetRowsFromMyTarget(ns.db)
+		NPCNamesSplit(ns.db)
 		for _, saved in pairs(ns.db.profiles or {}) do
 			if type(saved) == "table" then
 				NeutralFromHostile(saved)
 				TargetRowsFromMyTarget(saved)
+				NPCNamesSplit(saved)
 			end
 		end
 		-- LocalDefense attacks now show as a title on the screen (Show attacks

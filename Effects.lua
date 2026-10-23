@@ -22,10 +22,24 @@ ns.letterboxDirty = false
 -- say. Your own name and critters' have no plate.
 ns.NAME_GROUPS = {
 	{ key = "Self", label = L["My Name"], cvars = { "UnitNameOwn" } },
-	-- The game's NPC Names choice (None, quest NPCs... all NPCs) is these
-	-- together; switched on, it only changes from None (to all).
-	{ key = "NPCs", label = L["NPC Names"], anyOn = true, plate = true,
-		cvars = { "UnitNameNPC", "UnitNameHostleNPC", "UnitNameInteractiveNPC", "UnitNameFriendlySpecialNPCName" } },
+	-- The game's NPC Names choice (None, quest NPCs... all NPCs) split three
+	-- ways: hostile, neutral and friendly NPCs. On plates (CineMode, near
+	-- enough) each row decides its own; beyond them, and in dungeons and raids,
+	-- the game's settings do: hostile ones have one of their own, friendly ones
+	-- only quest and interactive NPCs', neutral ones none. Its All NPCs setting
+	-- (UnitNameNPC: the only one with neutral NPCs, and friendly ones you can't
+	-- talk to, guards say) shows them all: up only while all three rows are
+	-- (see the AllNPCs set, SyncNameRow).
+	{ key = "HostileNPCs", label = L["Hostile NPCs"], plate = true, npcs = true,
+		cvars = { "UnitNameHostleNPC" } },
+	{ key = "NeutralNPCs", label = L["Neutral NPCs"], plate = true, npcs = true, cvars = {},
+		tip = L[" Beyond nameplate range, and in dungeons and raids, the game has no setting for neutral NPCs' " ..
+			"names alone: they show there while all three NPC rows do."] },
+	{ key = "FriendlyNPCs", label = L["Friendly NPCs"], plate = true, npcs = true,
+		cvars = { "UnitNameInteractiveNPC", "UnitNameFriendlySpecialNPCName" },
+		tip = L[" Beyond nameplate range, and in dungeons and raids, the game only shows friendly NPCs with " ..
+			"something for you (quest givers, vendors, flight masters...) unless all three NPC rows show: then " ..
+			"all of them, guards too."] },
 	{ key = "Critters", label = L["Critters and Companions"], cvars = { "UnitNameNonCombatCreatureName" } },
 	{ key = "Friends", label = L["Friendly Players"], plate = true, cvars = { "UnitNameFriendlyPlayerName" } },
 	{ key = "FriendlyMinions", label = L["Minions"], indent = true, plate = true,
@@ -59,6 +73,9 @@ for _, group in ipairs(ns.NAME_GROUPS) do
 	-- names are set just before it starts (ns.UpdateCVarsForFight).
 	CVAR_SETS[#CVAR_SETS + 1] = { key = group.key, values = values, secure = true, playerWins = true }
 end
+-- The game's All NPCs names: off unless all three NPC rows are kept up here.
+local NPC_ALL = "UnitNameNPC"
+CVAR_SETS[#CVAR_SETS + 1] = { key = "AllNPCs", values = { [NPC_ALL] = "0" }, secure = true, playerWins = true }
 
 -- Whether CineMode keeps every nameplate switched on (see FORCED_PLATE_CVARS),
 -- leaving what shows to the plates' fades: everywhere but dungeons and raids,
@@ -74,7 +91,7 @@ function ns.HasNameSettings(group)
 			return true
 		end
 	end
-	return false
+	return group.npcs and GetCVar(NPC_ALL) ~= nil or false
 end
 
 -- The player's own value for a game setting: what comes back after cinematic
@@ -118,19 +135,62 @@ end
 
 -- A names row and the game's own option for it go together: anything ticked
 -- in the row switches the game's names on (only names the game shows can stay
--- up), nothing ticked switches them off.
-function ns.SyncNameRow(group)
-	local on = NameRowTicked(group)
-	if on and group.anyOn then
-		for _, cvar in ipairs(group.cvars) do
-			local value = OwnValue(cvar)
-			if value ~= nil and value ~= "0" then
-				return
-			end
+-- up), nothing ticked switches them off. The NPC rows share the game's All
+-- NPCs: a row ticked from nothing leaves the game's own choice if it shows
+-- them already, and with the others ticked too comes to All NPCs (as the one
+-- row it was did); one unticked takes All NPCs away, the others' own settings
+-- on in its place.
+local function AllNPCRowsTicked()
+	for _, other in ipairs(ns.NAME_GROUPS) do
+		if other.npcs and not NameRowTicked(other) then
+			return false
 		end
 	end
+	return true
+end
+
+local function OwnOn(cvars)
+	for _, cvar in ipairs(cvars) do
+		local value = OwnValue(cvar)
+		if value ~= nil and value ~= "0" then
+			return true
+		end
+	end
+	return false
+end
+
+function ns.SyncNameRow(group)
+	local on = NameRowTicked(group)
+	if not group.npcs then
+		for _, cvar in ipairs(group.cvars) do
+			SetOwnValue(cvar, on and "1" or "0")
+		end
+		return
+	end
+	local all = OwnValue(NPC_ALL) == "1"
+	if on then
+		if not (all or OwnOn(group.cvars)) then
+			for _, cvar in ipairs(group.cvars) do
+				SetOwnValue(cvar, "1")
+			end
+			if AllNPCRowsTicked() then
+				SetOwnValue(NPC_ALL, "1")
+			end
+		end
+		return
+	end
 	for _, cvar in ipairs(group.cvars) do
-		SetOwnValue(cvar, on and "1" or "0")
+		SetOwnValue(cvar, "0")
+	end
+	SetOwnValue(NPC_ALL, "0")
+	if all then
+		for _, other in ipairs(ns.NAME_GROUPS) do
+			if other.npcs and other ~= group and NameRowTicked(other) then
+				for _, cvar in ipairs(other.cvars) do
+					SetOwnValue(cvar, "1")
+				end
+			end
+		end
 	end
 end
 
@@ -178,6 +238,10 @@ local pvpNamesFight = false
 -- (Always on the Nameplates page keeps a row up everywhere, and Grouped in a
 -- party or raid, whatever its other boxes say.)
 local function NameKeptHere(key, inCombat)
+	if key == "AllNPCs" then
+		return NameKeptHere("HostileNPCs", inCombat) and NameKeptHere("NeutralNPCs", inCombat)
+			and NameKeptHere("FriendlyNPCs", inCombat)
+	end
 	if ns.db["nameAlways" .. key] or (ns.db["nameGroup" .. key] and ns.InGroup()) then
 		return true
 	end
@@ -1232,7 +1296,8 @@ local FORCED_PLATE_CVARS
 local nameLevel = {}
 local KIND_NAME_GROUP = {
 	Friends = "Friends", FriendlyMinions = "FriendlyMinions", Enemies = "Enemies", EnemyMinions = "EnemyMinions",
-	EnemyNPCs = "NPCs", NeutralNPCs = "NPCs", EnemyMinor = "NPCs", NeutralMinor = "NPCs", FriendlyNPCs = "NPCs",
+	EnemyNPCs = "HostileNPCs", NeutralNPCs = "NeutralNPCs", EnemyMinor = "HostileNPCs", NeutralMinor = "NeutralNPCs",
+	FriendlyNPCs = "FriendlyNPCs",
 }
 
 local function NamesOnPlates()
@@ -2143,6 +2208,9 @@ local function GameNameShown(unit)
 				if GetCVar(cvar) == "1" and (cvar ~= "UnitNameHostleNPC" or Ask(UnitCanAttack, "player", unit)) then
 					return true
 				end
+			end
+			if info.npcs and GetCVar(NPC_ALL) == "1" then
+				return true
 			end
 		end
 	end
