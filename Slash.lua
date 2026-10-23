@@ -110,6 +110,7 @@ local function PrintDebugHelp()
 	print("  /cine debug raidparts - log every part of the party and raid frames and how each is faded, print shown icons that aren't")
 	print("  /cine debug auras - whether your group's debuffs can be seen, and how (run in and out of combat, in different places)")
 	print("  /cine debug combatlog - log the Combat Log tab's lines, readable or not; stays on across reloads (again to stop)")
+	print("  /cine debug healwatch [seconds] - log each raid frame's alpha as it changes and who set it (5 seconds; /reload after)")
 	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
@@ -802,6 +803,8 @@ local function HandleSlash(msg)
 		ns.CVarsFind(arg:match("^cvars%s+(.+)"))
 	elseif cmd == "debug" and arg == "raidparts" then
 		ns.LogRaidFrames()
+	elseif cmd == "debug" and arg:find("^healwatch") then
+		ns.HealWatchDebug(arg:match("^healwatch%s+(%S+)"))
 	elseif cmd == "debug" and arg == "health" then
 		ns.HealthDebug()
 	elseif cmd == "debug" and arg == "auras" then

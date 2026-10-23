@@ -230,10 +230,12 @@ end
 
 -- (A main tank's target beside them is refreshed every frame from another
 -- frame's OnUpdate (the game's onUpdateFrame), which the script hooks above
--- miss: the game's range alpha won there between our updates, a flicker.
--- Followed where the game sets it instead.)
-if type(_G.CompactUnitFrame_UpdateInRange) == "function" then
-	hooksecurefunc("CompactUnitFrame_UpdateInRange", Reassert)
+-- miss: the game's alpha won there between our updates, a flicker. Followed
+-- where the game sets it instead: its range, and on WoW Forever its centre
+-- status icon too, after the range (seen with /cine debug healwatch).)
+for _, name in ipairs({ "CompactUnitFrame_UpdateInRange", "CompactUnitFrame_UpdateCenterStatusIcon",
+	"CompactUnitFrame_UpdateAll" }) do
+	if type(_G[name]) == "function" then hooksecurefunc(name, Reassert) end
 end
 
 -- A member's parts: its regions and child frames, less the ones that ignore its alpha.
@@ -251,20 +253,24 @@ local function Parts(frame)
 end
 
 -- (A main tank's target, as the raid frames show beside them ("raid3target"):
--- goes by its tank, else it would go by the mob's health.)
+-- goes by its tank, else it would go by the mob's health. The second value:
+-- true for these.)
 local function Unit(frame)
 	local unit = frame.displayedUnit or frame.unit
 	if Secret(unit) or type(unit) ~= "string" then return nil end
-	return unit:match("^(.+)target$") or unit
+	-- (Its target's target too, beside that: "raid3targettarget".)
+	local tank = unit:match("^(.-)target")
+	if tank and tank ~= "" then return tank, true end
+	return unit, false
 end
 
 -- (whole: a raid-style frame, faded itself.)
 local function AddMember(frame, kind, found, whole)
 	if not frame or Forbidden(frame) or not Wanted(kind) then return end
-	local unit = Unit(frame)
+	local unit, beside = Unit(frame)
 	if not unit then return end
 	-- (Found afresh each time: the game adds parts as it needs them.)
-	found[frame] = { unit = unit, parts = Parts(frame), whole = whole }
+	found[frame] = { unit = unit, parts = Parts(frame), whole = whole, beside = beside }
 	if whole then Hook(frame) end
 end
 
@@ -479,13 +485,15 @@ end
 local function IsTarget(unit)
 	return Plain(UnitIsUnit(unit, "target")) == true
 end
-local function Rule(unit)
+-- (beside: a tank's target beside them, not kept up with the tank: their
+-- health, as everyone else's.)
+local function Rule(unit, beside)
 	local db = ns.db
 	if (tonumber(db.healVisionTargetAlpha) or 1) >= 1 and IsTarget(unit) then return "target" end
 	if UnitIsConnected and Plain(UnitIsConnected(unit)) == false then return "offline", OFFLINE end
 	if UnitIsDeadOrGhost and Plain(UnitIsDeadOrGhost(unit)) == true then return "dead", DEAD end
 	if (tonumber(db.healVisionFarAlpha) or 1) < 1 and Far(unit) then return "far", FAR end
-	if ShownAnyway(unit) then return "shown" end
+	if not beside and ShownAnyway(unit) then return "shown" end
 	return "health"
 end
 
@@ -547,12 +555,13 @@ local function Update(frame)
 	local member = members[frame]
 	if not member then return end
 	local unit = member.unit
-	local kind = KindOf(unit)
+	-- (A tank's target: everyone else's settings, by the tank's health.)
+	local kind = member.beside and OTHERS or KindOf(unit)
 	local fade = Curve(revealStep, kind)
 	if not fade then return end
 	local alpha, gone, rule = 1, nil, nil
 	if revealStep < STEPS and UnitExists(unit) then
-		rule, gone = Rule(unit)
+		rule, gone = Rule(unit, member.beside)
 		if rule == "health" and IsTarget(unit) then
 			fade = Curve(revealStep, TargetOf(kind)) or fade
 		end
@@ -658,3 +667,107 @@ watcher:SetScript("OnUpdate", function(_, elapsed)
 	end
 	UpdateAll()
 end)
+
+-- /cine debug healwatch [seconds]: logs every frame, for a while, each raid
+-- and party member frame's alpha when it changes (and its health bar's),
+-- with who set it (a SetAlpha hook on each, so /reload afterwards: that also
+-- writes the log). To find a member frame flickering.
+local watching
+function ns.HealWatchDebug(seconds)
+	if watching then
+		ns.Print("healwatch: already running")
+		return
+	end
+	seconds = tonumber(seconds) or 5
+	local start = GetTime()
+	local last, hookedSet, lastSet = {}, {}, {}
+	local function Show(value)
+		if Secret(value) then return "secret" end
+		if type(value) == "number" then return ("%.2f"):format(value) end
+		return tostring(value)
+	end
+	local function Describe(frame)
+		local unit = frame.displayedUnit or frame.unit
+		return ("%s (%s)"):format(tostring(frame:GetName()), Secret(unit) and "secret unit" or tostring(unit))
+	end
+	local function Log(text)
+		ns.Log("healwatch", ("%.3f %s"):format(GetTime() - start, text))
+	end
+	local function Frames()
+		local list = {}
+		for frame in pairs(members) do list[frame] = true end
+		local container = _G.CompactRaidFrameContainer
+		if container and not Forbidden(container) then
+			for _, child in ipairs({ container:GetChildren() }) do
+				if not Forbidden(child) then
+					local name = child:GetName()
+					if name and name:find("^CompactRaidGroup%d+$") then
+						for _, member in ipairs({ child:GetChildren() }) do
+							if not Forbidden(member) then list[member] = true end
+						end
+					else
+						list[child] = true
+					end
+				end
+			end
+		end
+		return list
+	end
+	local function Watch(frame)
+		if hookedSet[frame] then return end
+		hookedSet[frame] = true
+		hooksecurefunc(frame, "SetAlpha", function(self, alpha)
+			if not watching then return end
+			-- (The stack can come back secret, from code the game ran with secrets.)
+			local stack = debugstack(3, 2, 0)
+			if Secret(stack) or type(stack) ~= "string" then
+				stack = "a secret stack"
+			else
+				stack = stack:gsub("Interface[/\\]AddOns[/\\]", ""):gsub("\n", " < ")
+			end
+			-- (Only when the value or the caller changes: the log keeps 500 lines.)
+			local call = Show(alpha) .. " from " .. stack
+			local seen = lastSet[self]
+			if seen and seen.call == call then
+				seen.count = seen.count + 1
+				return
+			end
+			Log(("SetAlpha %s on %s%s"):format(call, Describe(self),
+				seen and (" (the one before %d times)"):format(seen.count) or ""))
+			lastSet[self] = { call = call, count = 1 }
+		end)
+	end
+	watching = CreateFrame("Frame")
+	Log(("start, %d seconds, %d heal vision members, hover step %d"):format(seconds, (function()
+		local n = 0
+		for _ in pairs(members) do n = n + 1 end
+		return n
+	end)(), revealStep))
+	watching:SetScript("OnUpdate", function(self)
+		if GetTime() - start > seconds then
+			self:SetScript("OnUpdate", nil)
+			watching = nil
+			Log("stop")
+			ns.Print("healwatch: done, /reload to write the log")
+			return
+		end
+		for frame in pairs(Frames()) do
+			Watch(frame)
+			local member = members[frame]
+			local okShown, shown = pcall(frame.IsVisible, frame)
+			local okAlpha, alpha = pcall(frame.GetAlpha, frame)
+			local bar = frame.healthBar or frame.HealthBar
+			local okBar, barAlpha = false, nil
+			if bar and bar.GetAlpha then okBar, barAlpha = pcall(bar.GetAlpha, bar) end
+			local state = ("shown %s alpha %s bar %s ours %s%s"):format(okShown and Show(shown) or "?",
+				okAlpha and Show(alpha) or "?", okBar and Show(barAlpha) or "-",
+				member and Show(member.alpha) or "not a member",
+				member and (" unit " .. member.unit .. " free " .. tostring(Free(frame))) or "")
+			if last[frame] ~= state then
+				last[frame] = state
+				Log(Describe(frame) .. ": " .. state)
+			end
+		end
+	end)
+	ns.Print(("healwatch: logging the raid frames' alpha for %d seconds"):format(seconds))
+end
