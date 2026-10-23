@@ -9041,6 +9041,17 @@ local function CreateMouseoverPanel()
 		results:Show()
 	end
 
+	-- Each group's heading is a band that opens and closes it, as on the
+	-- Standard Frames page: closed until clicked open (remembered by its
+	-- default's key, or its name). A new group opens, to add its frames.
+	local function GroupSection(group)
+		local preset = ns.HoverGroupPreset(group)
+		return { id = "Mouseover groups/" .. (preset and "preset:" .. preset.preset or "name:" .. (group.name or "")) }
+	end
+	local function IsOpen(group)
+		return SectionState.Saved(GroupSection(group).id, false)
+	end
+
 	local newGroup = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	newGroup:SetSize(120, 22)
 	newGroup:SetText(L["New group"])
@@ -9048,6 +9059,7 @@ local function CreateMouseoverPanel()
 		local groups = Writable()
 		groups[#groups + 1] = { name = L["Group %d"]:format(#groups + 1), members = {}, triggers = {},
 			icon = ns.UnusedHoverGroupIcon() }
+		SectionState.Save(GroupSection(groups[#groups]), true)
 		Layout()
 	end)
 
@@ -9092,17 +9104,6 @@ local function CreateMouseoverPanel()
 		end)
 		tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		return tile
-	end
-
-	-- Each group's heading is a band that opens and closes it, as on the
-	-- Standard Frames page: open while the group's on, closed while it's off,
-	-- unless clicked since (remembered by its default's key, or its name).
-	local function GroupSection(group)
-		local preset = ns.HoverGroupPreset(group)
-		return { id = "Mouseover groups/" .. (preset and "preset:" .. preset.preset or "name:" .. (group.name or "")) }
-	end
-	local function IsOpen(group)
-		return SectionState.Saved(GroupSection(group).id, not group.off)
 	end
 
 	-- Scrolls the page to a group's heading.
@@ -9327,7 +9328,6 @@ local function CreateMouseoverPanel()
 			onOff:SetScript("OnClick", function()
 				local editable = Writable()[index]
 				editable.off = not editable.off or nil
-				SectionState.Save(GroupSection(group), nil) -- (opens or closes with it)
 				Layout()
 			end)
 			icon.icon:SetDesaturated(group.off and true or false)
