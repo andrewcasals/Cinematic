@@ -39,11 +39,14 @@ Support\CooldownManagerCentered.lua
 Support\ForeverEnhancedCooldownManager.lua
 Support\EllesmereUI.lua
 Support\Bartender4.lua
+Support\ElvUI.lua
 Support\Plater.lua
 Support\HorizonSuite.lua
 Support\FlareUI.lua
 Support\WeakAuras.lua
+Support\DBM.lua
 Support\Questie.lua
+Support\RestedXP.lua
 Frames.lua
 HealVisionFrames.lua
 Chat.lua
@@ -62,6 +65,7 @@ QuestMobs.lua
 QuestGlow.lua
 Effects.lua
 PlateParts.lua
+PlateGuild.lua
 Camera.lua
 QuestCam.lua
 Tint.lua

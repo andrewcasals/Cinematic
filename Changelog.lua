@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-23", page = "Advanced Frames", title = "ElvUI, DBM and RestedXP support",
+		text = "ElvUI's frames, Deadly Boss Mods' timer bars and RestedXP's guide window now fade in CineMode: " ..
+		"ElvUI's following the Standard Frames rows of the frames they replace, RestedXP's with the Quest " ..
+		"tracker row." },
 	{ date = "2026-10-23", page = "Name Style", title = "Name Style",
 		text = "Names kept up over faded nameplates in CineMode now look like the game's own names over " ..
 		"heads: coloured, with a soft shadow, the same size at any distance. Fine-tune them, with a preview, " ..

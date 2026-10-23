@@ -524,6 +524,8 @@ local function ApplyPlate(plate, personal)
 		end
 		EachPartFrame(unitFrame, part, Fade, level)
 	end
+	-- (And the guild line under a name shown alone: PlateGuild.lua.)
+	ns.SetPlateGuild(plate, plate ~= personal and nameOnly and kept * nameFade or 0)
 	if next(held) then
 		keeper:Show()
 	end
@@ -1023,4 +1025,47 @@ function ns.DescribePlateParts(unitFrame)
 	end
 	healthFields = #healthFields > 0 and table.concat(healthFields, " | ") or "NONE"
 	return table.concat(found, ", "), ListFields(unitFrame), healthFields
+end
+
+-- /cine debug range: what the game says about how far a unit is, for sizing
+-- names on name-only plates like the game's names over heads (which shrink
+-- with distance). Your target, the unit under the mouse, then the plates
+-- showing just a name: each check's answer (true, false, nil, secret, error).
+local function Answer(ok, value)
+	if not ok then
+		return "error"
+	elseif issecretvalue and issecretvalue(value) then
+		return "secret"
+	end
+	return tostring(value)
+end
+
+function ns.PrintRangeDebug()
+	local function Describe(unit)
+		local parts = {}
+		for i = 1, 4 do
+			parts[#parts + 1] = "interact" .. i .. "=" .. Answer(pcall(CheckInteractDistance, unit, i))
+		end
+		parts[#parts + 1] = "distance=" .. Answer(pcall(function()
+			local squared, checked = UnitDistanceSquared(unit)
+			return checked and squared and ("%.0f"):format(math.sqrt(squared)) or nil
+		end))
+		local isItem = C_Item and C_Item.IsItemInRange or IsItemInRange
+		parts[#parts + 1] = "bandage=" .. Answer(pcall(isItem, 1251, unit))
+		local isSpell = C_Spell and C_Spell.IsSpellInRange or IsSpellInRange
+		parts[#parts + 1] = "autoattack=" .. Answer(pcall(isSpell, 6603, unit))
+		return table.concat(parts, " ")
+	end
+	for _, unit in ipairs({ "target", "mouseover" }) do
+		if UnitExists(unit) then
+			ns.Print(unit .. " " .. tostring(UnitName(unit)) .. ": " .. Describe(unit))
+		end
+	end
+	for plate in pairs(nameShare) do
+		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+		if unit and (bodyShare[plate] or 1) < 1 then
+			local okName, name = pcall(UnitName, unit)
+			ns.Print(unit .. " " .. Answer(okName, name) .. ": " .. Describe(unit))
+		end
+	end
 end

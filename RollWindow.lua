@@ -22,7 +22,8 @@ ns.hasRollWindow = true
 local WIDTH = 280
 local ICON = 34
 local ROW = 16
-local MAX_CARDS = 4    -- newest first; older ones drop off the bottom
+local MAX_CARDS = 8    -- newest first; older ones drop off the end (rollMaxPanels, up to this)
+local PER_COLUMN = 4   -- ...this many down, the rest in a second column to the right
 local MAX_PASSED = 4   -- names on the "Passed:" line; more (a raid), and it's only the count
 local LINGER = 3       -- seconds a roll's panel stays once it's won (or all passed), the mouse off them
 
@@ -163,10 +164,45 @@ local function ItemQuality(link)
 	end
 end
 
--- Good enough for a panel (rollMinQuality); an item not known yet is.
+local function Panels()
+	return math.max(1, math.min(MAX_CARDS, ns.Setting("rollMaxPanels") or MAX_CARDS))
+end
+
+-- Its tooltip has a line in red (the armour or weapon type you can't wear,
+-- another class's, a level you're not): you can't use it. Nil while the
+-- game can't say (not loaded yet, or no tooltip data on this client).
+local function Red(color)
+	local r, g, b = color and color.r, color and color.g, color and color.b
+	return type(r) == "number" and type(g) == "number" and type(b) == "number"
+		and not (Secret(r) or Secret(g) or Secret(b)) and r > 0.99 and g < 0.2 and b < 0.2
+end
+local function Unusable(link)
+	if type(link) ~= "string" or Secret(link) or link:find("|Hitem:0|h", 1, true)
+		or not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) then
+		return nil
+	end
+	local ok, data = pcall(C_TooltipInfo.GetHyperlink, link)
+	local lines = ok and type(data) == "table" and data.lines
+	if type(lines) ~= "table" or #lines < 2 then
+		return nil
+	end
+	for i = 2, #lines do -- (not the name)
+		local line = lines[i]
+		if type(line) == "table" and (Red(line.leftColor) or Red(line.rightColor)) then
+			return true
+		end
+	end
+	return false
+end
+
+-- Good enough for a panel (rollMinQuality; rollUsableOnly, ones you can
+-- use); an item not known yet is.
 local function Wanted(info)
 	local quality = ItemQuality(info.itemHyperlink)
-	return not quality or quality >= (ns.Setting("rollMinQuality") or 0)
+	if quality and quality < (ns.Setting("rollMinQuality") or 0) then
+		return false
+	end
+	return not (ns.Setting("rollUsableOnly") and Unusable(info.itemHyperlink))
 end
 
 -- The item's quality colour, from its link (either way links colour it), else white.
@@ -391,6 +427,12 @@ local function NewCard(index)
 	card.item:SetPoint("RIGHT", card, "RIGHT", -(INSET + 20), 0)
 	card.item:SetJustifyH("LEFT")
 	card.item:SetWordWrap(false)
+	-- (compact, under the game's roll frame: just the name, small, to tell which one it is)
+	card.itemSmall = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	card.itemSmall:SetPoint("TOPLEFT", INSET + 2, -INSET)
+	card.itemSmall:SetPoint("RIGHT", card, "RIGHT", -(INSET + 20), 0)
+	card.itemSmall:SetJustifyH("LEFT")
+	card.itemSmall:SetWordWrap(false)
 	card.status = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	card.status:SetPoint("TOPLEFT", card.item, "BOTTOMLEFT", 0, -5)
 	card.status:SetPoint("RIGHT", card, "RIGHT", -INSET, 0)
@@ -575,14 +617,16 @@ local function FillCard(card, drop)
 	card.frame:SetShown(not compact)
 	card.hover:SetShown(not compact)
 	card.item:SetShown(not compact)
+	card.itemSmall:SetShown(compact)
 	card.status:ClearAllPoints()
 	if compact then
-		card.status:SetPoint("TOPLEFT", INSET + 2, -INSET)
+		card.status:SetPoint("TOPLEFT", card.itemSmall, "BOTTOMLEFT", 0, -3)
 	else
 		card.status:SetPoint("TOPLEFT", card.item, "BOTTOMLEFT", 0, -5)
 	end
 	card.status:SetPoint("RIGHT", card, "RIGHT", -(INSET + 20), 0)
 	card.item:SetText(ItemText(info.itemHyperlink) or "")
+	card.itemSmall:SetText(ItemText(info.itemHyperlink) or "")
 	card.frame:SetColorTexture(r, g, b, 0.9)
 	card.border:SetBackdropBorderColor(r, g, b, done and 0.5 or 1)
 	Gradient(card.wash, r, g, b, done and 0.1 or 0.2, 0)
@@ -618,6 +662,25 @@ local function FillCard(card, drop)
 		end
 		return SortRolls(a, b)
 	end)
+	-- (rollTopPick: only the best pick anyone's made counts, need over greed:
+	-- the lower ones can't win, so they're only counted; those still choosing stay)
+	local lower = 0
+	if ns.Setting("rollTopPick") and not drop.expanded then
+		local best
+		for _, roll in ipairs(rolls) do
+			if roll.state ~= NO_ROLL then
+				best = math.min(best or 9, ORDER[roll.state] or 9)
+			end
+		end
+		for i = #rolls, 1, -1 do
+			local roll = rolls[i]
+			if best and roll.state ~= NO_ROLL and (ORDER[roll.state] or 9) > best and not roll.isWinner
+				and not (roll.isSelf and ns.Setting("rollShowSelf")) then
+				table.remove(rolls, i)
+				lower = lower + 1
+			end
+		end
+	end
 	if info.winner and not winner then
 		card.status:SetText("|cffffd100" .. L["Rolling..."] .. "|r")
 	else
@@ -632,8 +695,18 @@ local function FillCard(card, drop)
 		card.bar:SetWidth(math.max(1, (CARD_W - 2 * INSET - 2) * (1 - gone)))
 	end
 
-	local y = compact and -(INSET + 18) or -(HEAD + 6)
+	local y = compact and -(INSET + 32) or -(HEAD + 6)
 	local maxRows = drop.expanded and #rolls or MaxRows()
+	-- (rollShowSelf: yours always listed, one row more under the few if it's further down)
+	if ns.Setting("rollShowSelf") and maxRows < #rolls then
+		for i = maxRows + 1, #rolls do
+			if rolls[i].isSelf then
+				table.insert(rolls, maxRows + 1, table.remove(rolls, i))
+				maxRows = maxRows + 1
+				break
+			end
+		end
+	end
 	local more = #rolls - maxRows
 	for i = 1, math.max(#rolls, #card.rows) do
 		local row = card.rows[i]
@@ -681,18 +754,21 @@ local function FillCard(card, drop)
 	if more > 0 then
 		lines[#lines + 1] = L["and %d more"]:format(more)
 	end
+	if lower > 0 then
+		lines[#lines + 1] = L["Lower picks: %d"]:format(lower)
+	end
 	if #passed > MAX_PASSED and not drop.expanded then
 		lines[#lines + 1] = L["Passed: %s"]:format(#passed)
 	elseif #passed > 0 then
 		lines[#lines + 1] = L["Passed: %s"]:format(table.concat(passed, ", "))
 	end
 	-- (something left out: a click lists it all; listed, a click goes back)
-	card.cut = more > 0 or #passed > MAX_PASSED
+	card.cut = more > 0 or lower > 0 or #passed > MAX_PASSED
 	if card.cut or drop.expanded then
 		lines[#lines + 1] = "|cff808080" .. (drop.expanded and L["Click to show fewer"]
 			or L["Click to list everyone"]) .. "|r"
 	end
-	if #lines > 0 then
+	if #lines > 0 and ns.Setting("rollFooter") then -- (the lines can be turned off; a click still works)
 		card.passed:SetText(table.concat(lines, "\n"))
 		card.passed:ClearAllPoints()
 		card.passed:SetPoint("TOPLEFT", INSET, y - 4)
@@ -708,26 +784,36 @@ Layout = function()
 	if not window then
 		return
 	end
-	local y = 0
+	-- (the window is the first column's width, so it stays put under the
+	-- game's roll frames; the second column hangs off its right)
+	local y, lowest = 0, 0
 	for i = 1, math.max(#shown, #cards) do
 		local card = cards[i]
 		local drop = shown[i]
+		if i == PER_COLUMN + 1 then
+			y = 0
+		end
 		if drop then
 			card = card or NewCard(i)
 			card:ClearAllPoints()
-			card:SetPoint("TOPLEFT", 0, y)
+			card:SetPoint("TOPLEFT", i > PER_COLUMN and CARD_W + GAP or 0, y)
 			card:SetHeight(FillCard(card, drop))
 			if card.key ~= drop.key then
 				card.fadeOut:Stop() -- (a panel moving up to fill a gap isn't the one that faded)
 				card.key = drop.key
 			end
-			card:SetAlpha(1)
+			-- (not while it's fading in or out: Layout runs ten times a second while
+			-- a roll's on, and that would flash it full each time)
+			if not (card.fade:IsPlaying() or card.fadeOut:IsPlaying()) then
+				card:SetAlpha(1)
+			end
 			if not drop.appeared then -- (fades in once, not again when it moves up)
 				drop.appeared = true
 				card.fade:Play()
 			end
 			card:Show()
 			y = y - card:GetHeight() - GAP
+			lowest = math.min(lowest, y)
 		elseif card then
 			card.key = nil
 			card:Hide()
@@ -736,9 +822,9 @@ Layout = function()
 	-- (nothing to show, from /cine rolls: a panel saying so)
 	window.empty:SetShown(#shown == 0)
 	if #shown == 0 then
-		y = -window.empty:GetHeight()
+		lowest = -window.empty:GetHeight()
 	end
-	window:SetHeight(math.max(1, -y))
+	window:SetHeight(math.max(1, -lowest))
 end
 
 -- Where our panels go, in UIParent's units (top centre): just under the
@@ -799,22 +885,41 @@ end
 -- How far the game's roll frames sat from their container's top centre, last
 -- seen (they don't sit inside it): their place once they've gone.
 local offsetX, offsetY = 0, 0
+local halfWidth -- half the game's roll frames' width, last seen
+
+-- How far right of the game's roll frames' centre ours sit with rollBeside
+-- on (their tops level, ours just past their right edge); else 0.
+local function BesideShift()
+	if not ns.Setting("rollBeside") then
+		return 0
+	end
+	local half = halfWidth
+	if not half then
+		local width = GroupLootContainer and Number(GroupLootContainer:GetWidth())
+		half = width and width > 0 and width / 2 or CARD_W / 2
+	end
+	return half + GAP + CARD_W / 2
+end
 
 local function RollsTop()
 	local boxX, boxTop = ContainerTop()
-	-- (the game's frames up: just under the lowest, and their place remembered)
+	-- (the game's frames up: just under the lowest, or beside them, and their place remembered)
 	local left, right, top, bottom = RollFramesBox()
 	if left then
 		lastX, lastTop = (left + right) / 2, top
+		halfWidth = (right - left) / 2
 		if boxX then
 			offsetX, offsetY = lastX - boxX, lastTop - boxTop
+		end
+		if ns.Setting("rollBeside") then
+			return lastX + BesideShift(), top
 		end
 		return lastX, bottom - GAP
 	end
 	if boxX then
 		lastX, lastTop = boxX + offsetX, boxTop + offsetY
 	end
-	return lastX, lastTop
+	return lastX and lastX + BesideShift(), lastTop
 end
 
 local ownDrag = false -- dragging our panels on their own (the game's frames have no place yet)
@@ -914,6 +1019,9 @@ local function OnUpdate(self, delta)
 	elapsed = 0
 	local now = GetTime()
 	local busy, hovered = false, self:IsMouseOver()
+	for _, card in ipairs(cards) do -- (the second column's outside the window)
+		hovered = hovered or (card:IsShown() and card:IsMouseOver())
+	end
 	for _, drop in ipairs(shown) do
 		CheckOverdue(drop, now)
 		if Settled(drop) then
@@ -960,8 +1068,9 @@ local function DragStop()
 	end
 	local uiScale = UIParent:GetEffectiveScale()
 	local scale = box:GetEffectiveScale() / (uiScale > 0 and uiScale or 1)
-	-- (the container sits off from its frames: by as much the other way)
-	local centre = left + window:GetWidth() / 2
+	-- (the container sits off from its frames: by as much the other way; and
+	-- beside them, ours are off to their right)
+	local centre = left + window:GetWidth() / 2 - BesideShift()
 	local x = (centre - offsetX) / scale - box:GetWidth() / 2
 	if ns.SavePanelSpot then
 		ns.SavePanelSpot("GroupLootContainer", { "TOPLEFT", "BOTTOMLEFT", x, (top - offsetY) / scale })
@@ -1073,7 +1182,9 @@ local function Seen(encounterID, lootListID, info)
 		drop.info = info
 	elseif not Done(info) and not dismissed[key] and Wanted(info) then
 		table.insert(shown, 1, { key = key, encounterID = encounterID, lootListID = lootListID, info = info })
-		shown[MAX_CARDS + 1] = nil
+		for i = #shown, Panels() + 1, -1 do
+			shown[i] = nil
+		end
 	else
 		return
 	end
@@ -1141,7 +1252,7 @@ function ns.ToggleRollWindow()
 			end
 		end
 	end
-	for i = #shown, MAX_CARDS + 1, -1 do
+	for i = #shown, Panels() + 1, -1 do
 		shown[i] = nil
 	end
 	pinned = true
@@ -1152,6 +1263,8 @@ end
 function ns.RefreshRollWindow()
 	if not Enabled() then
 		Close()
+	elseif window then
+		window.placedX = nil -- (put again: under or beside the game's frames)
 	end
 end
 

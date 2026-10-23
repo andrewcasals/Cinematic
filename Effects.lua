@@ -39,10 +39,11 @@ ns.NAME_GROUPS = {
 			"UnitNameEnemyMinionName", "UnitNameEnemyPetName", "UnitNameEnemyGuardianName",
 			"UnitNameEnemyTotemName",
 		} },
-	-- Players' guilds (<Guild>) under their names, wherever their names show
-	-- over their heads (never on a plate).
+	-- Players' guilds (<Guild>) under their names, wherever their names show:
+	-- over their heads, and on plates showing just the name (PlateGuild.lua).
 	{ key = "Guild", label = L["Guild Names"], cvars = { "UnitNamePlayerGuild" },
-		tip = L[" Players' guilds, under their names wherever their names show over their heads (not on nameplates)."] },
+		tip = L[" Players' guilds, under their names wherever their names show: over their heads, and in CineMode " ..
+			"on nameplates showing just the name."] },
 	-- Not in the game's menu: whatever you've targeted shows its name
 	-- even with its kind's names off, unless this is off too. (On a plate:
 	-- your target's, whatever its kind's row says.)
@@ -2973,6 +2974,13 @@ function ns.UpdatePlates(cinematic, elapsed)
 				changed = true
 			end
 		end
+	end
+	-- The Guild Names row likewise, for the guild line under those names (PlateGuild.lua).
+	local guildTarget = platesForced and NameKeptHere("Guild", inCombat) and 1 or 0
+	if ns.plateGuildLevel ~= guildTarget then
+		ns.plateGuildLevel = ns.plateGuildLevel and ns.Approach(ns.plateGuildLevel, guildTarget, elapsed,
+			guildTarget > ns.plateGuildLevel and ns.FadeInTime() or ns.FadeOutTime()) or guildTarget
+		ns.RefreshPlateGuilds()
 	end
 	-- One more pass after filtering stops, to put every plate back. (Filtered
 	-- with nothing moving: see FilteredInputsChanged.)

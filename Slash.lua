@@ -95,6 +95,7 @@ local function PrintDebugHelp()
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
 	print("  /cine debug unitframes - log every part of the player, pet, target and focus frames (names, textures, sizes, held hidden) to the saved log")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
+	print("  /cine debug range - what the game says about how far your target and units with name-only plates are")
 	print("  /cine debug readycheck - the raid frames' ready check icons and whether they fade (Ready check row)")
 	print("  /cine debug marker [across up size] - where the kept raid markers sit over faded plates")
 	print("  /cine debug platewatch - log how faded nameplates are drawn each time it changes, to find one flashing up")
@@ -752,6 +753,8 @@ local function HandleSlash(msg)
 		ns.LogUnitFrames()
 	elseif cmd == "debug" and arg == "plates" then
 		ns.PrintPlatesDebug()
+	elseif cmd == "debug" and arg == "range" then
+		ns.PrintRangeDebug()
 	elseif cmd == "debug" and arg == "readycheck" then
 		ns.ReportRaidReadyCheck()
 	elseif cmd == "debug" and arg:find("^marker") then

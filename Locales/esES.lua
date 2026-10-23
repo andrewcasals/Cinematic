@@ -118,7 +118,7 @@ L["Friendly Players"] = "Jugadores amistosos"
 L["Minions"] = "Esbirros"
 L["Enemy Players"] = "Jugadores enemigos"
 L["Guild Names"] = "Nombres de hermandad"
-L[" Players' guilds, under their names wherever their names show over their heads (not on nameplates)."] = " La hermandad de los jugadores, bajo su nombre donde su nombre se muestre sobre su cabeza (no en las placas de nombre)."
+L[" Players' guilds, under their names wherever their names show: over their heads, and in CineMode on nameplates showing just the name."] = " La hermandad de los jugadores, bajo su nombre dondequiera que se muestre: sobre su cabeza y, en CineMode, en las placas de nombre que solo muestran el nombre."
 L["your game music volume is 0, so cinematic music can't be heard. Turn Music up in the game's Sound settings."] = "el volumen de música del juego está a 0, así que no se oye la música cinemática. Sube la música en las opciones de sonido del juego."
 L["tooltip hiding on"] = "ocultación de tooltips activada"
 L["tooltip hiding off"] = "ocultación de tooltips desactivada"
@@ -1406,6 +1406,12 @@ L["Plater's nameplates fade in CineMode and follow the Nameplates page's rows. P
 L["Follows the Quest tracker row"] = "Sigue la fila Seguimiento de misiones"
 L["Horizon Suite's quest tracker (Focus), its dungeon banner and its floating quest item button fade with the Quest tracker row on the Standard Frames page."] = "El seguimiento de misiones de Horizon Suite (Focus), su rótulo de mazmorra y su botón flotante de objeto de misión se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
 
+-- Support/ElvUI.lua
+L["its action bars 2 and 7 to 10"] = "sus barras de acción 2 y 7 a 10"
+L["Its other bars, pet, stance, totem, micro, bag and data bars are rows on the Standard Frames page, with its unit frames, buffs and chat panels."] = "Sus otras barras, de mascota, actitudes, tótems, micromenú, bolsas y datos, son filas en la página Marcos estándar, junto con sus marcos de unidad, beneficios y paneles de chat."
+L["its panels along the top and bottom of the screen"] = "sus paneles a lo largo de la parte superior e inferior de la pantalla"
+L["its threat bar"] = "su barra de amenaza"
+
 -- Support/FlareUI.lua
 L["its boss frames"] = "sus marcos de jefe"
 L["Its unit frames, cast bar, resource bars, buffs, quest tracker, party and raid frames, XP bar and totems are rows on the Standard Frames page."] = "Sus marcos de unidad, barra de lanzamiento, barras de recursos, beneficios, seguimiento de misiones, marcos de grupo y banda, barra de experiencia y tótems son filas de la página Marcos estándar."
@@ -1414,8 +1420,15 @@ L["Its unit frames, cast bar, resource bars, buffs, quest tracker, party and rai
 L["its auras"] = "sus auras"
 L["Auras anchored to another frame fade with that frame."] = "Las auras ancladas a otro marco se desvanecen con ese marco."
 
+-- Support/DBM.lua
+L["its timer bars, info frame, range check, arrow and battle res timer"] = "sus barras de temporizador, marco de información, comprobación de alcance, flecha y temporizador de resurrección en combate"
+L["Its warnings aren't faded, like the game's raid warnings."] = "Sus avisos no se desvanecen, igual que los avisos de banda del juego."
+
 -- Support/Questie.lua
 L["Questie's quest tracker and its quest item buttons fade with the Quest tracker row on the Standard Frames page."] = "El seguimiento de misiones de Questie y sus botones de objetos de misión se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
+
+-- Support/RestedXP.lua
+L["RestedXP's guide window, waypoint arrow, quest item and target buttons and level splits fade with the Quest tracker row on the Standard Frames page."] = "La ventana de guía de RestedXP, su flecha de ruta, sus botones de objetos de misión y de objetivos y sus tiempos por nivel se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
 
 -- Tint.lua
 L["None"] = "Ninguno"
@@ -1563,6 +1576,40 @@ L["%d of %d chosen"] = "%d de %d han elegido"
 L["and %d more"] = "y %d más"
 L["Passed: %s"] = "Han pasado: %s"
 L["Click to list everyone"] = "Clic para verlos a todos"
+L["Lower picks: %d"] = "Elecciones menores: %d"
+L["Only items you can use"] = "Solo objetos que puedes usar"
+L["Items you can't use (armour or weapons you can't wear, another class's, or a level you're not " ..
+	"yet: anything in red on its tooltip) don't get a panel. Their rolls are only in chat."] =
+	"Los objetos que no puedes usar (armadura o armas que no puedes llevar, de otra clase o de un nivel " ..
+	"que aún no tienes: lo que salga en rojo en su descripción) no tienen panel. Sus tiradas solo salen en el chat."
+L["Items shown at once"] = "Objetos mostrados a la vez"
+L["The window shows this many items at once, newest at the top: four down, the " ..
+	"rest in a second column. When another drops, the oldest goes."] =
+	"La ventana muestra tantos objetos a la vez, el más nuevo arriba: cuatro hacia abajo y el resto en " ..
+	"una segunda columna. Cuando cae otro, se va el más antiguo."
+L["Always list your own roll"] = "Mostrar siempre tu propia tirada"
+L["Your own pick and number are always on an item's panel, even when it lists only the top few " ..
+	"players or only the best pick."] =
+	"Tu elección y tu número salen siempre en el panel de un objeto, aunque solo muestre a los primeros " ..
+	"jugadores o solo la mejor elección."
+L["Beside the game's roll frames"] = "Junto a los marcos de tirada del juego"
+L["The window sits to the right of the game's roll frames, level with their top, instead of under " ..
+	"them, so a long list of drops doesn't push it down the screen. It stays there once you've chosen."] =
+	"La ventana se coloca a la derecha de los marcos de tirada del juego, a la altura de su parte superior, " ..
+	"en vez de debajo, para que una lista larga de botín no la empuje hacia abajo. Se queda ahí después de elegir."
+L["Show the counts under each item"] = "Mostrar los recuentos bajo cada objeto"
+L["The lines under an item's players: \"and N more\", \"Lower picks\", who passed, and " ..
+	"\"Click to list everyone\". Off: just the players. Clicking an item's panel still lists everyone."] =
+	"Las líneas bajo los jugadores de un objeto: \"y N más\", \"Elecciones menores\", quién ha pasado y " ..
+	"\"Clic para verlos a todos\". Desactivado: solo los jugadores. Al hacer clic en el panel de un objeto " ..
+	"se siguen viendo todos."
+L["Only show the best pick"] = "Mostrar solo la mejor elección"
+L["Once anyone picks need, players on greed or transmog for that item aren't listed (they can't " ..
+	"win it), only counted on a \"Lower picks\" line. Players still choosing stay listed. Click an " ..
+	"item's panel to list everyone on it."] =
+	"Cuando alguien elige necesidad, los jugadores en codicia o transfiguración para ese objeto no se " ..
+	"listan (no pueden ganarlo), solo se cuentan en una línea \"Elecciones menores\". Los que aún eligen " ..
+	"siguen en la lista. Haz clic en el panel de un objeto para verlos a todos."
 L["Click to show fewer"] = "Clic para ver menos"
 L["Show rolls on"] = "Mostrar tiradas de"
 L["Uncommon and up"] = "Poco común y mejor"
@@ -1633,9 +1680,9 @@ L["Ground clutter changes show as the ground around you loads again: move on a l
 -- Options.lua: the Vision hub's pages (and HealVisionFrames.lua)
 L["Vision"] = "Visión"
 L["Visions"] = "Visiones"
-L["Ways of showing just what matters: the health of a duel near you, and the group's loot rolls. " ..
-	"Heal Vision and Quest Vision have pages of their own."] = "Formas de mostrar solo lo que importa: la salud de " ..
-	"un duelo cerca de ti y las tiradas de botín del grupo. Heal Vision y la Visión de misión tienen sus propias páginas."
+L["Ways of showing just what matters: the health of a duel near you. Heal Vision, Quest Vision and " ..
+	"Roll Vision have pages of their own."] = "Formas de mostrar solo lo que importa: la salud de " ..
+	"un duelo cerca de ti. Heal Vision, la Visión de misión y la Visión de tiradas tienen sus propias páginas."
 L["Roll Vision"] = "Visión de tiradas"
 L["Quest Vision"] = "Visión de misión"
 L["Mobs and NPCs you still need for a quest objective keep their nameplates up, with a quest mark on " ..
@@ -1891,3 +1938,5 @@ L["Mobs and NPCs you still need for a quest keep their nameplates up, with a gol
 L["In a group, a window shows each item being rolled on, with everyone's pick and roll and the winner on top, so you needn't read the rolls in chat. Turn it off in the Visions page."] = "En grupo, una ventana muestra cada objeto que se sortea, con lo que eligió y sacó cada uno y el ganador arriba, para que no tengas que leer las tiradas en el chat. Desactívala en la página Visiones."
 L["Hold a key to bring up a wheel of the visions and turn Heal, Quest, Duel or Roll Vision on or off, even in a fight. It's on the master wheel too, and each vision has a toggle key of its own on the Keybinds page."] = "Mantén pulsada una tecla para abrir una rueda de las visiones y activar o desactivar Heal Vision, la visión de misión, de duelo o de tiradas, también en combate. También está en la rueda de ruedas, y cada visión tiene su propia tecla para activarla o desactivarla en la página Teclas."
 L["Names kept up over faded nameplates in CineMode now look like the game's own names over heads: coloured, with a soft shadow, the same size at any distance. Fine-tune them, with a preview, on the new Name Style page."] = "Los nombres que se mantienen sobre las placas de nombre desvanecidas en CineMode ahora se ven como los nombres del juego sobre las cabezas: con color, con una sombra suave y del mismo tamaño a cualquier distancia. Ajústalos, con una vista previa, en la nueva página Estilo de nombres."
+L["ElvUI, DBM and RestedXP support"] = "Compatibilidad con ElvUI, DBM y RestedXP"
+L["ElvUI's frames, Deadly Boss Mods' timer bars and RestedXP's guide window now fade in CineMode: ElvUI's following the Standard Frames rows of the frames they replace, RestedXP's with the Quest tracker row."] = "Los marcos de ElvUI, las barras de temporizador de Deadly Boss Mods y la ventana de guía de RestedXP ahora se desvanecen en CineMode: los de ElvUI siguiendo las filas de Marcos estándar de los marcos que sustituyen, y la de RestedXP con la fila Seguimiento de misiones."

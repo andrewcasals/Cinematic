@@ -263,8 +263,14 @@ local DEFAULTS = {
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	rollWindow = true,         -- a window of the group's loot rolls, instead of reading them in chat (RollWindow.lua)
-	rollMinQuality = 2,        -- ...only items of this quality and up (2 uncommon, 3 rare, 4 epic)
+	rollMinQuality = 3,        -- ...only items of this quality and up (2 uncommon, 3 rare, 4 epic)
 	rollRaidRows = 3,          -- ...in a raid, the top this many players' rolls per item (a party: all)
+	rollTopPick = true,        -- ...only players on the best pick made (need over greed); the rest counted
+	rollUsableOnly = true,     -- ...only items you can use (no red line on their tooltip)
+	rollShowSelf = true,       -- ...your own roll always listed, whatever's cut
+	rollMaxPanels = 4,         -- ...this many items at once, newest first (4 a column)
+	rollBeside = false,        -- ...to the right of the game's roll frames, not under them
+	rollFooter = false,        -- ...the lines under a panel's players ("and N more", passes, "Click to...")
 	cozyInputPause = 2,       -- seconds after you move the camera before it carries on
 	cozyZoomClose = 10,       -- yards: the distance it zooms in to (if you're further out); far side of a fire
 	cozyTentClose = 8,        -- ...closer with a Camp Tent seen nearby (Campfire.lua), and no drifting further out
@@ -831,7 +837,7 @@ for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
 		"centerPanels", "dragPanels" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
-	handleVision = { "duelPlates", "rollWindow" }, -- Vision > General
+	handleVision = { "duelPlates" }, -- Vision > General (Roll Vision has its own page: rollWindow)
 }) do
 	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end
 end

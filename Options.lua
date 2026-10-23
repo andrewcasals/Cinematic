@@ -1056,6 +1056,7 @@ do
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
 			{ "Heal Vision", "Interface\\Icons\\Spell_Holy_FlashHeal" },
 			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01" },
+			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01" },
 		} },
 		{ name = "Audio", pages = {
 			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01" },
@@ -7143,7 +7144,7 @@ end
 
 -- Sub-pages: the visions, each a way of showing just what matters, in a hub
 -- of their own. General: Duel Vision, the plates of two players dueling near
--- you (see Effects), and Roll Vision, a window of the group's loot rolls
+-- you (see Effects). Roll Vision: a window of the group's loot rolls
 -- (RollWindow.lua). Heal Vision: the party and raid frames show only who
 -- needs healing (HealVisionFrames.lua). Quest Vision: what you still need for
 -- your quests (QuestMobs.lua, QuestGlow.lua).
@@ -7154,8 +7155,8 @@ local function CreateVisionPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local note = PageIntro(content, title,
-		L["Ways of showing just what matters: the health of a duel near you, and the group's loot rolls. " ..
-		"Heal Vision and Quest Vision have pages of their own."])
+		L["Ways of showing just what matters: the health of a duel near you. Heal Vision, Quest Vision and " ..
+		"Roll Vision have pages of their own."])
 
 	local switch = PageSwitch(content, "handleVision", L["Enable page"],
 		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
@@ -7172,45 +7173,6 @@ local function CreateVisionPanel()
 		"and loser show when it ends. Needs the Nameplates page enabled."]), "check")
 	GreyUnless(duelCheck, function(db) return db.handlePlates end)
 
-	-- (Only where the game has a loot history.)
-	if ns.hasRollWindow then
-		stack:Header(content, L["Roll Vision"])
-		stack:Add(Check(content, "rollWindow", L["Enable"],
-			L["In a group, items rolled on show in a window instead of only as lines in chat: each item, a bar " ..
-			"for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. " ..
-			"It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. " ..
-			"/cine rolls shows the latest rolls."],
-			function(value)
-				ns.GetDB().rollWindow = value
-				ns.RefreshRollWindow()
-			end), "check")
-		local function RollsOn(db) return db.rollWindow end
-		local QUALITIES = {
-			{ value = 2, text = L["Uncommon and up"] },
-			{ value = 3, text = L["Rare and up"] },
-			{ value = 4, text = L["Epic and up"] },
-		}
-		local QUALITY_TIP = L["Only items of this quality and better get a panel in the window. Rolls on the " ..
-			"rest are only in chat. The test (/cine rolls test) goes by it too."]
-		stack:Add(Label(content, "GameFontHighlight", L["Show rolls on"]), "label")
-		local quality = Dropdown(content, "rollMinQuality", QUALITIES, 200)
-		if quality then
-			stack:Add(quality, "dropdown")
-			Tooltip(quality, QUALITY_TIP)
-			GreyUnless(quality, RollsOn)
-		else
-			for _, choice in ipairs(QUALITIES) do
-				local check = stack:Add(Choice(content, "rollMinQuality", choice.value, choice.text, QUALITY_TIP), "check")
-				GreyUnless(check, RollsOn)
-			end
-		end
-		local raidRows = stack:Add(Slider(content, "rollRaidRows", L["Players shown per item in a raid"], 1, 10, 1, "%d"),
-			"slider")
-		Tooltip(raidRows, L["In a raid, each item lists only this many players' rolls: the winner, then need " ..
-			"before greed, the highest numbers first. The rest are counted on an \"and N more\" line. " ..
-			"In a party, everyone is listed. Click an item's panel to list everyone on it."])
-		GreyUnless(raidRows, RollsOn)
-	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -7267,6 +7229,84 @@ local function CreateVisionPanel()
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Quest Vision")
+
+	-- Roll Vision: a window of the group's loot rolls (RollWindow.lua). Only
+	-- where the game has a loot history. (Its switch: rollWindow, its Enable
+	-- before it had a page.)
+	if ns.hasRollWindow then
+		canvas, content = CreateScrollPage()
+		title = Label(content, "GameFontNormalLarge", L["Roll Vision"])
+		title:SetPoint("TOPLEFT", 16, -16)
+		note = PageIntro(content, title,
+			L["In a group, items rolled on show in a window instead of only as lines in chat: each item, a bar " ..
+			"for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. " ..
+			"It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. " ..
+			"/cine rolls shows the latest rolls."])
+		local rollSwitch = PageSwitch(content, "rollWindow", L["Enable page"],
+			L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
+			"when you turn this back on."], note, function() ns.RefreshRollWindow() end)
+		stack = Stack(rollSwitch, "check")
+		local function RollsOn(db) return db.rollWindow end
+		local QUALITIES = {
+			{ value = 2, text = L["Uncommon and up"] },
+			{ value = 3, text = L["Rare and up"] },
+			{ value = 4, text = L["Epic and up"] },
+		}
+		local QUALITY_TIP = L["Only items of this quality and better get a panel in the window. Rolls on the " ..
+			"rest are only in chat. The test (/cine rolls test) goes by it too."]
+		stack:Add(Label(content, "GameFontHighlight", L["Show rolls on"]), "label")
+		local quality = Dropdown(content, "rollMinQuality", QUALITIES, 200)
+		if quality then
+			stack:Add(quality, "dropdown")
+			Tooltip(quality, QUALITY_TIP)
+			GreyUnless(quality, RollsOn)
+		else
+			for _, choice in ipairs(QUALITIES) do
+				local check = stack:Add(Choice(content, "rollMinQuality", choice.value, choice.text, QUALITY_TIP), "check")
+				GreyUnless(check, RollsOn)
+			end
+		end
+		local usable = stack:Add(Check(content, "rollUsableOnly", L["Only items you can use"],
+			L["Items you can't use (armour or weapons you can't wear, another class's, or a level you're not " ..
+			"yet: anything in red on its tooltip) don't get a panel. Their rolls are only in chat."]), "check")
+		GreyUnless(usable, RollsOn)
+		local panels = stack:Add(Slider(content, "rollMaxPanels", L["Items shown at once"], 1, 8, 1, "%d"),
+			"slider")
+		Tooltip(panels, L["The window shows this many items at once, newest at the top: four down, the " ..
+			"rest in a second column. When another drops, the oldest goes."])
+		GreyUnless(panels, RollsOn)
+		local raidRows = stack:Add(Slider(content, "rollRaidRows", L["Players shown per item in a raid"], 1, 10, 1, "%d"),
+			"slider")
+		Tooltip(raidRows, L["In a raid, each item lists only this many players' rolls: the winner, then need " ..
+			"before greed, the highest numbers first. The rest are counted on an \"and N more\" line. " ..
+			"In a party, everyone is listed. Click an item's panel to list everyone on it."])
+		GreyUnless(raidRows, RollsOn)
+		local ownRoll = stack:Add(Check(content, "rollShowSelf", L["Always list your own roll"],
+			L["Your own pick and number are always on an item's panel, even when it lists only the top few " ..
+			"players or only the best pick."]), "check")
+		GreyUnless(ownRoll, RollsOn)
+		local topPick = stack:Add(Check(content, "rollTopPick", L["Only show the best pick"],
+			L["Once anyone picks need, players on greed or transmog for that item aren't listed (they can't " ..
+			"win it), only counted on a \"Lower picks\" line. Players still choosing stay listed. Click an " ..
+			"item's panel to list everyone on it."]), "check")
+		GreyUnless(topPick, RollsOn)
+		local beside = stack:Add(Check(content, "rollBeside", L["Beside the game's roll frames"],
+			L["The window sits to the right of the game's roll frames, level with their top, instead of under " ..
+			"them, so a long list of drops doesn't push it down the screen. It stays there once you've chosen."],
+			function(value)
+				ns.GetDB().rollBeside = value
+				ns.RefreshRollWindow()
+			end), "check")
+		GreyUnless(beside, RollsOn)
+		local footer = stack:Add(Check(content, "rollFooter", L["Show the counts under each item"],
+			L["The lines under an item's players: \"and N more\", \"Lower picks\", who passed, and " ..
+			"\"Click to list everyone\". Off: just the players. Clicking an item's panel still lists everyone."]),
+			"check")
+		GreyUnless(footer, RollsOn)
+		canvas:SetScript("OnShow", PageShown(Refresh, content))
+		canvas:Hide()
+		RegisterSubpage(canvas, "Roll Vision")
+	end
 
 	-- Heal Vision.
 	canvas, content = CreateScrollPage()
