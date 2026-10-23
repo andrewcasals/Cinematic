@@ -114,7 +114,9 @@ local OPEN_SNIPPET = [[
 -- Cant() (why it can't be used now, or nil), Active(slot) (true: shows its
 -- ring), Title() (the middle's text with nothing picked), activeText (under a
 -- picked slot that's active), inactiveText (under one that isn't),
--- dimInactive (true: slots that aren't active are greyed), linger (seconds
+-- dimInactive (true: slots that aren't active are greyed), onColor and
+-- offColor (r, g, b, a: the ring always shows, in these, not just while
+-- active), linger (seconds
 -- the wheel stays up after a slot that calls wheel.Linger(index) is picked,
 -- showing it turn on or off), OnOpen() (as the key goes down, before the
 -- snippet: out of a fight our code may still change the buttons). Text is
@@ -197,7 +199,14 @@ local function MakeWheel(spec)
 		for _, slot in ipairs(slots) do
 			slot.ringLit = elapsed and ns.Approach(slot.ringLit, slot.ringTo, elapsed, TURN_TIME) or slot.ringTo
 			slot.colorLit = elapsed and ns.Approach(slot.colorLit, slot.colorTo, elapsed, TURN_TIME) or slot.colorTo
-			slot.ring:SetAlpha(slot.ringLit)
+			local on, off, lit = spec.onColor, spec.offColor, slot.ringLit
+			if on and off then
+				slot.ring:SetVertexColor(off[1] + (on[1] - off[1]) * lit, off[2] + (on[2] - off[2]) * lit,
+					off[3] + (on[3] - off[3]) * lit)
+				slot.ring:SetAlpha(off[4] + (on[4] - off[4]) * lit)
+			else
+				slot.ring:SetAlpha(lit)
+			end
 			if slot.icon.SetDesaturation then
 				slot.icon:SetDesaturation(1 - slot.colorLit)
 			else
@@ -321,7 +330,11 @@ local function MakeWheel(spec)
 		glow:Hide()
 		local ring = art:CreateTexture(nil, "BORDER") -- active (theirs now, or down)
 		ring:SetPoint("CENTER")
-		ring:SetColorTexture(1, 1, 1, 0.3)
+		if spec.onColor then
+			ring:SetColorTexture(1, 1, 1) -- (coloured as it turns)
+		else
+			ring:SetColorTexture(1, 1, 1, 0.3)
+		end
 		ring:SetAlpha(0)
 		local icon = art:CreateTexture(nil, "ARTWORK")
 		icon:SetAllPoints()
@@ -331,6 +344,9 @@ local function MakeWheel(spec)
 		end
 		Round(art, glow)
 		Round(art, ring)
+		if entry.trim then
+			Round(art, icon) -- (a spell's square icon, cut to a circle like its ring)
+		end
 		slot.art, slot.glow, slot.ring, slot.icon = art, glow, ring, icon
 		slot.ringLit, slot.ringTo, slot.colorLit, slot.colorTo = 0, 0, 1, 1
 		slots[i] = slot
@@ -734,7 +750,8 @@ end
 SetVisionBindingNames()
 ns.OnLanguage(SetVisionBindingNames)
 
--- The vision wheel: an icon for each vision, ringed while it's on; picking
+-- The vision wheel: an icon for each vision, ringed green while it's on and
+-- grey while it's off; picking
 -- one turns it on or off. Each slot clicks a plain button of ours (no size:
 -- never seen) that does it, in a fight too.
 local visionSlots = {}
@@ -756,6 +773,7 @@ visionWheel = MakeWheel({
 	activeText = "on: pick it to turn it off",
 	inactiveText = "off: pick it to turn it on",
 	dimInactive = true, -- (the ones off greyed, so they stand out from the ones on)
+	onColor = { 0.2, 0.8, 0.3, 0.9 }, offColor = { 0.45, 0.45, 0.45, 0.6 },
 	linger = 1, -- (up a second after a pick, showing it turn on or off)
 	Active = function(entry) return VisionOn(entry.vision) end,
 })
