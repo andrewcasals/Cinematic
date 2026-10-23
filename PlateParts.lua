@@ -652,7 +652,6 @@ end
 -- players' class icons go (quest mobs aren't players). Shown like the class
 -- icons, its one box (Always) ticked on the Vision page's Quest Vision, whose
 -- Enable and page switch it follows.
-local QUEST_TEXTURE = ns.QUEST_MOB_TEXTURE
 local questIcons = {} -- [plate] = icon frame
 
 local function QuestIcon(plate)
@@ -668,7 +667,7 @@ local function QuestIcon(plate)
 	icon:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
 	icon.texture = icon:CreateTexture(nil, "OVERLAY")
 	icon.texture:SetAllPoints()
-	icon.texture:SetTexture(QUEST_TEXTURE)
+	ns.SetQuestMark(icon.texture)
 	questIcons[plate] = icon
 	return icon
 end

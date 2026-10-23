@@ -117,6 +117,7 @@ local function PrintDebugHelp()
 	print("  /cine debug slots [all] - profile slots and parts: anything with no slot or in the wrong one (in the log; all: also how each shared list is split)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
+	print("  /cine debug settings <words> - list every option in the game's Settings panel named like the words, with the variable behind it and its value")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
 	print("  /cine debug corpse - how far your body is (as a ghost) and the corpse run's vignette")
 	print("  /cine debug flight - the flight route, its known time and when the camera settles")
@@ -801,6 +802,8 @@ local function HandleSlash(msg)
 		ns.CVarsDebug()
 	elseif cmd == "debug" and arg:find("^cvars%s") then
 		ns.CVarsFind(arg:match("^cvars%s+(.+)"))
+	elseif cmd == "debug" and arg:find("^settings%s") then
+		ns.SettingsFind(arg:match("^settings%s+(.+)"))
 	elseif cmd == "debug" and arg == "raidparts" then
 		ns.LogRaidFrames()
 	elseif cmd == "debug" and arg:find("^healwatch") then

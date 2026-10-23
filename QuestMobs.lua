@@ -124,9 +124,43 @@ watcher:SetScript("OnEvent", function()
 	wipe(answers)
 end)
 
--- The golden exclamation mark shown for them (plates' Quest Icon row, and the
--- target frame's, below).
+-- The golden exclamation mark shown for them (plates' Quest Icon row, the
+-- target frame's, below, and Quest Glow's): the map's sharp quest mark, or the
+-- old gossip one with Forever's Character Models on Standard Definition (its
+-- proxy setting is true then) or where a client lacks that atlas. Marks follow
+-- the setting as it changes.
 ns.QUEST_MOB_TEXTURE = "Interface\\GossipFrame\\AvailableQuestIcon"
+local MODELS_SETTING = "PROXY_CHARACTER_MODELS_TOGGLE"
+local marks = setmetatable({}, { __mode = "k" })
+
+local function StandardModels()
+	local ok, value = pcall(function()
+		return Settings.GetSetting(MODELS_SETTING):GetValue()
+	end)
+	return ok and value == true
+end
+
+local function PaintMark(texture)
+	if StandardModels() or not (texture.SetAtlas and C_Texture and C_Texture.GetAtlasInfo
+		and C_Texture.GetAtlasInfo("QuestNormal") and pcall(texture.SetAtlas, texture, "QuestNormal")) then
+		texture:SetTexture(ns.QUEST_MOB_TEXTURE)
+		texture:SetTexCoord(0, 1, 0, 1) -- undo the atlas's, if it had one
+	end
+end
+
+local watching
+function ns.SetQuestMark(texture)
+	marks[texture] = true
+	PaintMark(texture)
+	if not watching and Settings and Settings.SetOnValueChangedCallback then
+		watching = true
+		pcall(Settings.SetOnValueChangedCallback, MODELS_SETTING, function()
+			for mark in pairs(marks) do
+				PaintMark(mark)
+			end
+		end)
+	end
+end
 
 -- The target frame's quest icon (targetQuestIcon, Vision page's Quest Vision): the
 -- same mark left of the target frame's health bar while your target is a
@@ -150,7 +184,7 @@ local function TargetIcon()
 	targetIcon:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
 	local texture = targetIcon:CreateTexture(nil, "OVERLAY")
 	texture:SetAllPoints()
-	texture:SetTexture(ns.QUEST_MOB_TEXTURE)
+	ns.SetQuestMark(texture)
 	return targetIcon
 end
 

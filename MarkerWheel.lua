@@ -692,7 +692,7 @@ local VISIONS = {
 -- (Only where the game has a loot history.)
 if ns.hasRollWindow then
 	VISIONS[#VISIONS + 1] = { key = "roll", setting = "rollWindow", page = "handleVision", label = "Roll Vision",
-		icon = "Interface\\Buttons\\UI-GroupLoot-Dice-Up", color = { 0.45, 0.7, 1 },
+		icon = "Interface\\Icons\\INV_Misc_Dice_01", trim = true, color = { 0.45, 0.7, 1 },
 		Apply = function()
 			if ns.RefreshRollWindow then ns.RefreshRollWindow() end
 		end }

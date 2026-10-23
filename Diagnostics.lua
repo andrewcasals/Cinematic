@@ -504,6 +504,42 @@ do
 	end
 end
 
+-- /cine debug settings <words>: every option in the game's Settings panel whose
+-- shown name has any of the words in it, with the variable behind it and its
+-- value, for settings that aren't plain CVars (like Forever's Character Models).
+function ns.SettingsFind(words)
+	local panel = _G.SettingsPanel
+	local ok, categories = pcall(function() return panel:GetAllCategories() end)
+	if not (ok and type(categories) == "table") then
+		ns.Print("settings: no Settings panel here")
+		return
+	end
+	local count = 0
+	for _, category in ipairs(categories) do
+		local _, layout = pcall(panel.GetLayout, panel, category)
+		local _, initializers = pcall(function() return layout:GetInitializers() end)
+		for _, initializer in ipairs(type(initializers) == "table" and initializers or {}) do
+			local _, setting = pcall(function() return initializer:GetSetting() end)
+			local _, name = pcall(function() return setting:GetName() end)
+			if type(name) == "string" then
+				local lower = name:lower()
+				for word in words:lower():gmatch("%S+") do
+					if lower:find(word, 1, true) then
+						local _, variable = pcall(setting.GetVariable, setting)
+						local _, value = pcall(setting.GetValue, setting)
+						local line = ("settings: %s: variable %s = %s"):format(name, tostring(variable), tostring(value))
+						ns.Print(line)
+						ns.Log("settings", line)
+						count = count + 1
+						break
+					end
+				end
+			end
+		end
+	end
+	ns.Print(("settings: %d named like \"%s\""):format(count, words))
+end
+
 -- Group health (/cine debug health) -------------------------------------------
 -- For a possible healer list (the tank plus whoever's most hurt): whether this
 -- client hands addons the group's health as plain numbers it can compare and

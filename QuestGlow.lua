@@ -246,7 +246,7 @@ do
 	local mark = glow:CreateTexture(nil, "OVERLAY")
 	mark:SetSize(24, 24)
 	mark:SetPoint("BOTTOM", glow, "TOP", 0, -30)
-	mark:SetTexture(ns.QUEST_MOB_TEXTURE)
+	ns.SetQuestMark(mark)
 	local pulse = light:CreateAnimationGroup()
 	pulse:SetLooping("BOUNCE")
 	local fade = pulse:CreateAnimation("Alpha")
