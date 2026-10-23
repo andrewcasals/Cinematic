@@ -16,7 +16,11 @@ table.insert(ns.ADDON_FRAMES, {
 	names = { "DBMInfoFrame", "DBMRangeCheck", "DBMRangeCheckRadar", "DBMArrow", "DBMBattleRezTimerFrame" },
 	match = function(frame)
 		local first = frame:GetChildren()
-		local name = first and first:GetName()
+		-- (an unnamed frame of the game's can hold a forbidden one first)
+		if not first or (first.IsForbidden and first:IsForbidden()) then
+			return false
+		end
+		local name = first:GetName()
 		return name and name:find("^DBT_Bar_%d+$") and true or false
 	end,
 })
