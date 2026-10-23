@@ -1954,3 +1954,17 @@ L["ElvUI's frames, Deadly Boss Mods' timer bars and RestedXP's guide window now 
 L["The minimap button glows while a vision is doing something, and its menu lists the visions in use with a link to each one's page."] = "El botón del minimapa brilla mientras una visión está haciendo algo, y su menú muestra las visiones en uso con un enlace a la página de cada una."
 L["Naowh Forever support"] = "Compatibilidad con Naowh Forever"
 L["Naowh Forever's top bar now fades in CineMode (a row on the Advanced Frames page), and its RestedXP guide window fades with the Quest tracker row."] = "La barra superior de Naowh Forever ahora se desvanece en CineMode (una fila en la página Marcos avanzados), y su ventana de guía de RestedXP se desvanece con la fila Seguimiento de misiones."
+
+-- ChatCopy.lua
+L["Drag over the lines you want (or Select all), then press Ctrl+C to copy them."] = "Arrastra sobre las líneas que quieras (o Seleccionar todo) y pulsa Ctrl+C para copiarlas."
+L["Copy chat: %s"] = "Copiar chat: %s"
+L["Copy chat"] = "Copiar chat"
+L["Opens this chat window's lines to copy."] = "Abre las líneas de esta ventana de chat para copiarlas."
+L["Copy chat button"] = "Botón de copiar chat"
+L["A small icon in the bottom right of a chat window, while your mouse is over it, opens " ..
+	"that window's lines as text you can select and copy with Ctrl+C."] =
+	"Un pequeño icono abajo a la derecha de una ventana de chat, mientras el ratón está sobre ella, abre " ..
+	"sus líneas como texto que puedes seleccionar y copiar con Ctrl+C."
+
+-- What's new: Copy chat
+L["Tick Copy chat button on the Quality of life page and a small icon in a chat window's corner opens its lines, ready to select and copy with Ctrl+C."] = "Marca Botón de copiar chat en la página Comodidades y un pequeño icono en la esquina de una ventana de chat abre sus líneas, listas para seleccionar y copiar con Ctrl+C."

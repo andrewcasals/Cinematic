@@ -51,6 +51,7 @@ Support\NaowhForever.lua
 Frames.lua
 HealVisionFrames.lua
 Chat.lua
+ChatCopy.lua
 Bubbles.lua
 Campfire.lua
 HunterAmmo.lua

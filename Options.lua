@@ -4989,6 +4989,10 @@ local function CreateQualityPanel()
 		end
 	end)
 	stack:Add(putBack, "label", 24)
+	-- (ChatCopy.lua.)
+	stack:Add(Check(content, "chatCopyButton", L["Copy chat button"],
+		L["A small icon in the bottom right of a chat window, while your mouse is over it, opens " ..
+		"that window's lines as text you can select and copy with Ctrl+C."]), "check")
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	-- (Quality of life's first page: "General" there.)

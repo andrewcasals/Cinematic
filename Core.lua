@@ -265,6 +265,7 @@ local DEFAULTS = {
 	cooldownManagerOn = false, -- the profile turns the game's Cooldown Manager on if it's off (the CDM part; Profiles.lua)
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
+	chatCopyButton = false,    -- an icon on each chat window opens its lines to copy (ChatCopy.lua)
 	rollWindow = true,         -- a window of the group's loot rolls, instead of reading them in chat (RollWindow.lua)
 	rollMinQuality = 3,        -- ...only items of this quality and up (2 uncommon, 3 rare, 4 epic)
 	rollRaidRows = 3,          -- ...in a raid, the top this many players' rolls per item (a party: all)
@@ -831,7 +832,7 @@ DEFAULTS.handleHealVision = true -- (read by ns.HealVisionHere; Quest Vision's s
 local PAGE_SWITCH = {}
 for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
-		"centerPanels", "dragPanels" },
+		"centerPanels", "dragPanels", "chatCopyButton" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
 	handleVision = { "duelPlates", "minimapVisions" }, -- Vision > General (Roll Vision has its own page: rollWindow)
 }) do

@@ -304,6 +304,8 @@ read_globals = {
 	"hooksecurefunc",
 	"DEFAULT_CHAT_FRAME",
 	"FCF_StartAlertFlash",
+	"FCF_GetChatWindowInfo",
+	"CHAT_FRAMES",
 	"FCF_StopAlertFlash",
 	"debugprofilestop",
 	"issecretvalue",

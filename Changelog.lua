@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-23", page = "General", title = "Copy chat",
+		text = "Tick Copy chat button on the Quality of life page and a small icon in a chat window's corner " ..
+		"opens its lines, ready to select and copy with Ctrl+C." },
 	{ date = "2026-10-23", page = "Advanced Frames", client = "forever", title = "Naowh Forever support",
 		text = "Naowh Forever's top bar now fades in CineMode (a row on the Advanced Frames page), and its " ..
 		"RestedXP guide window fades with the Quest tracker row." },
