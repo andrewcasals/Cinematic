@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-23", page = "Vision", title = "Vision Helper",
+		text = "The minimap button glows while a vision is doing something, and its menu lists the visions in " ..
+		"use with a link to each one's page." },
 	{ date = "2026-10-23", page = "Advanced Frames", title = "ElvUI, DBM and RestedXP support",
 		text = "ElvUI's frames, Deadly Boss Mods' timer bars and RestedXP's guide window now fade in CineMode: " ..
 		"ElvUI's following the Standard Frames rows of the frames they replace, RestedXP's with the Quest " ..

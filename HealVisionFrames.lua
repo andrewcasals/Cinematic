@@ -621,6 +621,11 @@ function ns.ApplyHealVisionFrames()
 	UpdateAll()
 end
 
+-- Whether it's handling any frames now (the minimap button's glow).
+function ns.HealVisionActive()
+	return next(members) ~= nil
+end
+
 local watcher = CreateFrame("Frame")
 for _, event in ipairs({ "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_IN_RANGE_UPDATE",
 	"UNIT_AURA", "PLAYER_SPECIALIZATION_CHANGED", "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",

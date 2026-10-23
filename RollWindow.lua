@@ -1282,6 +1282,11 @@ function ns.ToggleRollWindow()
 	Show()
 end
 
+-- Whether the window is up now (the minimap button's glow).
+function ns.RollVisionActive()
+	return window and window:IsShown() and true or false
+end
+
 -- The setting turned off: away it goes.
 function ns.RefreshRollWindow()
 	if not Enabled() then

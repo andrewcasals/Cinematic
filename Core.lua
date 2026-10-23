@@ -614,6 +614,7 @@ DEFAULTS.plateQuestMobs = true -- in CineMode, plates of units for a quest objec
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
 DEFAULTS.questObjectGlow = true -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
+DEFAULTS.minimapVisions = true -- the minimap button glows and lists the visions in use (see MinimapButton)
 DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
 -- The other pages' master switches likewise (see ns.HANDLE_SWITCHES): off,
 -- CineMode leaves that part of the UI to the game.
@@ -832,7 +833,7 @@ for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
 		"centerPanels", "dragPanels" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
-	handleVision = { "duelPlates" }, -- Vision > General (Roll Vision has its own page: rollWindow)
+	handleVision = { "duelPlates", "minimapVisions" }, -- Vision > General (Roll Vision has its own page: rollWindow)
 }) do
 	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end
 end

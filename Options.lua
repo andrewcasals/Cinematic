@@ -7261,6 +7261,10 @@ local function CreateVisionPanel()
 	end)
 
 	local stack = Stack(switch, "check")
+	stack:Add(Check(content, "minimapVisions", L["Vision Helper"],
+		L["While a vision is doing something (Heal Vision fading frames, a duel being watched, the roll " ..
+		"window up...), the minimap button glows in its colour, and its menu and tooltip list it with a " ..
+		"link to its page."]), "check")
 	stack:Header(content, L["Duel Vision"])
 	local duelCheck = stack:Add(Check(content, "duelPlates", L["Enable"],
 		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..

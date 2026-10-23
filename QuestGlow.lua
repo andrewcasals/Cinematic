@@ -294,6 +294,11 @@ local function GlowOff()
 	glow:SetParent(nil)
 end
 
+-- Whether an object glows now (Quest Vision's part of the minimap button's glow).
+function ns.QuestGlowShown()
+	return glow:IsShown() and true or false
+end
+
 local function Wanted()
 	return ns.db and ns.QuestVisionSetting("questObjectGlow") and NeededFor() and true or false
 end

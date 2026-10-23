@@ -20,6 +20,62 @@ local function Print(msg)
 	ns.Print(msg)
 end
 
+-- The visions: while one is in use (doing something now, not just switched
+-- on), the button glows in its colour, and the menu and tooltip list it with
+-- a link to its page, with its icon (as the vision wheel has them). Not
+-- with the Vision page's Vision Helper (minimapVisions) unticked.
+-- active: its file's ns function saying so. trim: an icon's edge cut off.
+local VISIONS = {
+	{ label = "Heal Vision", page = "Heal Vision", active = "HealVisionActive", color = { 0.35, 1, 0.45 },
+		icon = "Interface\\Icons\\Spell_Holy_FlashHeal", trim = true },
+	{ label = "Quest Vision", page = "Quest Vision", active = "QuestVisionActive", color = { 1, 0.82, 0 },
+		icon = "Interface\\Icons\\INV_Misc_Head_Dragon_01", trim = true },
+	{ label = "Duel Vision", page = "Vision", active = "DuelVisionActive", color = { 1, 0.35, 0.3 },
+		icon = "Interface\\Icons\\Ability_DualWield", trim = true },
+	{ label = "Roll Vision", page = "Roll Vision", active = "RollVisionActive", color = { 0.45, 0.7, 1 },
+		icon = "Interface\\Buttons\\UI-GroupLoot-Dice-Up" },
+}
+local GLOW_EVERY = 0.5 -- seconds between looks at which are in use
+local inUse = {} -- the visions in use at the last look
+
+-- A vision's line in the menu and tooltip (text: its label, or a line with
+-- it): its icon, then the text in its colour.
+local function VisionText(vision, text)
+	local icon = vision.trim and "|T%s:16:16:0:0:64:64:5:59:5:59|t " or "|T%s:16:16|t "
+	local function Byte(value) return math.floor(value * 255 + 0.5) end
+	local color = vision.color
+	return icon:format(vision.icon) .. ("|cff%02x%02x%02x%s|r"):format(Byte(color[1]), Byte(color[2]),
+		Byte(color[3]), text)
+end
+
+local function UpdateInUse()
+	wipe(inUse)
+	for _, vision in ipairs(ns.Setting("minimapVisions") and VISIONS or {}) do
+		local Active = ns[vision.active]
+		if Active then
+			local ok, active = pcall(Active)
+			if ok and active then
+				inUse[#inUse + 1] = vision
+			end
+		end
+	end
+	local glow = button.glow
+	local first = inUse[1]
+	if first then
+		if glow.vision ~= first then
+			glow.vision = first
+			glow.texture:SetVertexColor(first.color[1], first.color[2], first.color[3])
+		end
+		if not glow:IsShown() then
+			glow:Show()
+			glow.pulse:Play()
+		end
+	elseif glow:IsShown() then
+		glow.pulse:Stop()
+		glow:Hide()
+	end
+end
+
 local function UpdatePosition()
 	local db = ns.GetDB()
 	if not button or not db then
@@ -155,6 +211,23 @@ local function ShowMenu(owner)
 	end
 	local menu = MenuUtil.CreateContextMenu(owner, function(_, root)
 		local db = ns.GetDB()
+		-- (The visions in use first, each a link to its page.)
+		UpdateInUse()
+		if inUse[1] then
+			root:CreateTitle(L["Visions in use"])
+			for _, vision in ipairs(inUse) do
+				local page = vision.page
+				root:CreateButton(VisionText(vision, L[vision.label]), function() ns.OpenOptions(page) end)
+			end
+			-- (Ticked whenever it shows: unticking turns this all off.)
+			root:CreateCheckbox(L["Vision Helper"], function() return ns.Setting("minimapVisions") end, function()
+				ns.GetDB().minimapVisions = false
+				UpdateInUse()
+				if ns.RefreshOptions then ns.RefreshOptions() end
+				Print(L["Vision Helper off. Turn it back on on the Vision page."])
+			end)
+			root:CreateDivider()
+		end
 		root:CreateTitle("Cinematic")
 		root:CreateCheckbox(L["Enable Cinematic"], function() return db.enabled end, function()
 			ns.SetEnabled(not db.enabled)
@@ -204,6 +277,9 @@ local function OnEnter(self)
 		GameTooltip:AddLine(L["Paused, %s"]:format(FormatTime(left)), 1, 0.8, 0.2)
 	else
 		GameTooltip:AddLine(L["On"], 0.3, 1, 0.3)
+	end
+	for _, vision in ipairs(inUse) do
+		GameTooltip:AddLine(VisionText(vision, L["%s in use"]:format(L[vision.label])))
 	end
 	GameTooltip:AddLine(L["Left-click: options"], 1, 1, 1)
 	GameTooltip:AddLine(L["Right-click: settings"], 1, 1, 1)
@@ -255,6 +331,26 @@ local function Create()
 	border:SetSize(53, 53)
 	border:SetPoint("TOPLEFT")
 
+	-- The glow while a vision is in use: a pulsing light over the icon and
+	-- rim, in the vision's colour. (The pulse is on a frame of its own: a
+	-- texture's vertex colour alpha is its alpha.)
+	local glow = CreateFrame("Frame", nil, button)
+	glow:SetAllPoints()
+	glow:Hide()
+	glow.texture = glow:CreateTexture(nil, "OVERLAY")
+	glow.texture:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+	glow.texture:SetBlendMode("ADD")
+	glow.texture:SetSize(38, 38)
+	glow.texture:SetPoint("CENTER", button.icon, "CENTER")
+	glow.pulse = glow:CreateAnimationGroup()
+	glow.pulse:SetLooping("BOUNCE")
+	local fade = glow.pulse:CreateAnimation("Alpha")
+	fade:SetFromAlpha(1)
+	fade:SetToAlpha(0.25)
+	fade:SetDuration(0.9)
+	fade:SetSmoothing("IN_OUT")
+	button.glow = glow
+
 	button:SetScript("OnClick", function(self, mouseButton)
 		GameTooltip:Hide()
 		if not ns.ProfileChosen() then
@@ -272,6 +368,12 @@ local function Create()
 	end)
 	button:SetScript("OnDragStop", function(self)
 		self:SetScript("OnUpdate", nil)
+	end)
+	-- (A timer of its own: the drag has the button's OnUpdate.)
+	C_Timer.NewTicker(GLOW_EVERY, function()
+		if button:IsVisible() or glow:IsShown() then
+			UpdateInUse()
+		end
 	end)
 
 	UpdatePosition()

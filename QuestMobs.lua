@@ -169,6 +169,27 @@ function ns.RefreshTargetQuestIcon()
 	end
 end
 
+-- Whether Quest Vision is showing anything now (the minimap button's glow):
+-- the target frame's icon, an object's glow, or a quest mob's plate.
+function ns.QuestVisionActive()
+	if not ns.Setting("questVision") then
+		return false
+	end
+	if (targetIcon and ns.Flag(targetIcon:IsShown())) or (ns.QuestGlowShown and ns.QuestGlowShown()) then
+		return true
+	end
+	if not (ns.QuestVisionSetting("plateQuestMobs") and C_NamePlate and C_NamePlate.GetNamePlates) then
+		return false
+	end
+	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+		if unit and ns.IsQuestMob(unit) then
+			return true
+		end
+	end
+	return false
+end
+
 local TARGET_EVERY = 0.5
 local targetWatcher = CreateFrame("Frame")
 targetWatcher.at = 0

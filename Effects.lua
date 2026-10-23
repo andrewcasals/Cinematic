@@ -1587,6 +1587,11 @@ do
 	end
 	duels.NotWatchingWhy = NotWatchingWhy
 
+	-- Whether a duel near you is being watched now (the minimap button's glow).
+	function ns.DuelVisionActive()
+		return (duels.watching and next(duels.pairs) ~= nil) or false
+	end
+
 	local function SetClickThrough(on)
 		local set = C_NamePlate and C_NamePlate.SetNamePlateFriendlyClickThrough
 		local get = C_NamePlate and C_NamePlate.GetNamePlateFriendlyClickThrough
