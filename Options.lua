@@ -6103,7 +6103,7 @@ do
 
 		local chatPeek = Check(chatPanel, "chatPeek", L["Show chat when a message arrives"],
 			L["While the UI is faded, a new message briefly shows just the chat window it " ..
-			"arrived in, with its tabs. Choose which messages below."], function(value)
+			"arrived in. Choose which messages below, and what of the window comes up with them under Chat window."], function(value)
 				ns.GetDB().chatPeek = value
 				Refresh() -- grey out / enable the time and the messages below
 			end)
@@ -6208,6 +6208,22 @@ do
 		}) do
 			local check = Check(windowBody, place[1], place[2], place[3] .. CHAT_TIP)
 			check:SetPoint("TOPLEFT", keepLabel, "BOTTOMLEFT", -2 + (i - 1) * 110, -4)
+		end
+		-- What of the window a new message brings up with it (hovering,
+		-- typing and unread whispers still bring it all).
+		local partsLabel = Label(windowBody, "GameFontHighlight", L["A message shows"])
+		partsLabel:SetPoint("TOPLEFT", keepLabel, "BOTTOMLEFT", 0, -34)
+		local PARTS_TIP = L["Hovering the chat, typing or a whisper to read still brings it all up."]
+		for i, part in ipairs({
+			{ "chatPeekBackground", L["Background"], L["The chat window's dark background comes up with a new " ..
+				"message. Untick for just the lines of text."] },
+			{ "chatPeekTabs", L["Tabs"], L["The chat window's tabs (General, Combat Log...) come up with a new message."] },
+			{ "chatPeekButtons", L["Buttons"], L["The buttons beside the chat window (chat menu, channels, voice...) " ..
+				"come up with a new message."] },
+		}) do
+			local check = Check(windowBody, part[1], part[2], part[3] .. " " .. PARTS_TIP)
+			check:SetPoint("TOPLEFT", partsLabel, "BOTTOMLEFT", -2 + (i - 1) * 110, -4)
+			GreyUnless(check, IfPeek)
 		end
 
 		-- The message types that show chat: people's, then the game's.

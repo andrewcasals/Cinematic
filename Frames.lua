@@ -327,6 +327,29 @@ local function ReapplyIfChanged(entry)
 end
 ReapplyIfChanged = ns.Profiled("ReapplyIfChanged", ReapplyIfChanged)
 
+-- A part of a frame (a chat window's background, its button column) faded
+-- relative to its own alpha, which Blizzard may fade too, and put back to it
+-- once alpha is 1 again.
+function ns.FadeRelative(part, alpha)
+	if alpha < 1 then
+		local own = part:GetAlpha()
+		if issecretvalue and issecretvalue(own) then
+			own = nil
+		end
+		if not part.cinematicOwnAlpha or (own and math.abs(own - part.cinematicSetAlpha) > ALPHA_SLACK) then
+			-- (First time, or Blizzard set its own since.)
+			part.cinematicOwnAlpha = own or 1
+		end
+		part.cinematicSetAlpha = alpha * part.cinematicOwnAlpha
+		if not own or math.abs(own - part.cinematicSetAlpha) > ALPHA_SLACK then
+			part:SetAlpha(part.cinematicSetAlpha)
+		end
+	elseif part.cinematicOwnAlpha then
+		part:SetAlpha(part.cinematicOwnAlpha)
+		part.cinematicOwnAlpha, part.cinematicSetAlpha = nil, nil
+	end
+end
+
 local function SyncOwnAlpha(entry)
 	if TakeOwnAlpha(entry) then
 		ApplyAlpha(entry)
@@ -1445,6 +1468,14 @@ do
 end
 
 ns.CHAT_SCROLL_PARTS = { "ScrollBar", "ScrollToBottomButton", "buttonFrame", "Background" }
+-- A chat window's background: Blizzard's own list (the window's name plus
+-- each), its button column's strip included.
+ns.CHAT_BACKGROUND_TEXTURES = CHAT_FRAME_TEXTURES or { "Background", "TopLeftTexture", "BottomLeftTexture",
+	"TopRightTexture", "BottomRightTexture", "LeftTexture", "RightTexture", "BottomTexture", "TopTexture" }
+ns.CHAT_BUTTON_COLUMNS = {}
+for i = 1, (NUM_CHAT_WINDOWS or 10) do
+	ns.CHAT_BUTTON_COLUMNS[i] = "ChatFrame" .. i .. "ButtonFrame"
+end
 function ns.IsEntryHovered(entry)
 	if PART_GROUPS[entry.group] then
 		return false
@@ -4627,8 +4658,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- and all, so it can be clicked (Chat page).
 	local whisperUnread = cinematic and ns.db.chatUntilWhisperRead and ns.HasUnreadWhisper()
 	ns.HoldScrolledChat(now)
-	-- A docked chat window peeking: just the window comes up, its tabs and
-	-- buttons only for Mouseover groups with "Chat message" ticked.
+	-- A docked chat window peeking: the window comes up, with its background,
+	-- tabs and buttons as the Chat page ticks them (and for Mouseover groups
+	-- with "Chat message" ticked).
 	local dockPeek = false
 	for chatFrame, untilTime in pairs(ns.chatPeekUntil) do
 		if untilTime > now and (chatFrame.isDocked or chatFrame == DEFAULT_CHAT_FRAME) then
@@ -4759,6 +4791,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 
 	-- (Up unless their rows' frames are faded below: let go, they're up.)
 	personalPower.health, personalPower.level = 1, 1
+	local chatButtonsAlpha
 	for _, entry in ipairs(ns.managed) do
 		if entry.ownAlpha then
 			SyncOwnAlpha(entry)
@@ -4771,6 +4804,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 			-- (An unread whisper brings up the Mouseover groups with it ticked,
 			-- chat by default.)
 			or typingShown
+			-- (A docked window peeking brings its tabs and buttons too where the
+			-- Chat page ticks them.)
+			or (dockPeek and (entry.name == "GeneralDockManager" and ns.db.chatPeekTabs
+				or entry.group == "chat" and NEVER_NESTED[entry.name] and ns.db.chatPeekButtons))
 		entry.row = entry.row or ns.HoverRowFor(entry)
 		-- (Its own row's group is its row too: see ns.RAID_STYLE_PARTY.)
 		local ownRow = ownPartyRows and entry.rspGroup
@@ -4854,6 +4891,39 @@ function ns.UpdateFrames(cinematic, elapsed)
 			end
 			ns.SetEntryAlpha(entry, ns.Approach(entry.alpha, target, elapsed, duration))
 		end
+		if NEVER_NESTED[entry.name] and entry.group == "chat" then
+			chatButtonsAlpha = math.max(chatButtonsAlpha or 0, entry.alpha)
+		end
+		-- A chat window up just for a message: its background only where the
+		-- Chat page's "Background" is ticked. (Held while the window fades out,
+		-- so it doesn't come back for the fade.)
+		if entry.isChatWindow == nil then
+			entry.isChatWindow = entry.group == "chat" and type(entry.name) == "string"
+				and entry.name:match("^ChatFrame%d+$") ~= nil
+		end
+		if entry.isChatWindow then
+			if target > 0 then
+				local peekOnly = cinematic and (ns.chatPeekUntil[entry.frame] or 0) > now and fadeChat
+					and not hovered[row] and not typingShown and not tracking and not fightingShown
+				entry.backgroundAlpha = ns.Approach(entry.backgroundAlpha or 1,
+					(peekOnly and not ns.db.chatPeekBackground) and 0 or 1, elapsed, GroupFadeTime(entry.group, false))
+			end
+			if (entry.backgroundAlpha or 1) < 1 or entry.backgroundFaded then
+				entry.backgroundFaded = entry.backgroundAlpha < 1
+				if not entry.backgroundTextures then
+					entry.backgroundTextures = {}
+					for _, key in ipairs(ns.CHAT_BACKGROUND_TEXTURES) do
+						local texture = _G[entry.name .. key]
+						if texture and texture.SetAlpha then
+							entry.backgroundTextures[#entry.backgroundTextures + 1] = texture
+						end
+					end
+				end
+				for _, texture in ipairs(entry.backgroundTextures) do
+					ns.FadeRelative(texture, entry.backgroundAlpha)
+				end
+			end
+		end
 		if entry.frame == personalPower.healthStandIn then
 			ns.SetPersonalPlateAlpha(entry.alpha)
 		end
@@ -4865,6 +4935,15 @@ function ns.UpdateFrames(cinematic, elapsed)
 	end
 	if personalPower.standIn then
 		personalPower.Apply()
+	end
+	-- A chat window's button column (inside the window on Classic clients)
+	-- draws a strip of the window's dark background: it comes and goes with
+	-- the chat buttons, so a window peeking for a message has no empty strip.
+	for _, name in ipairs(ns.CHAT_BUTTON_COLUMNS) do
+		local column = _G[name]
+		if column and not IsForbidden(column) then
+			ns.FadeRelative(column, chatButtonsAlpha or 1)
+		end
 	end
 end
 
