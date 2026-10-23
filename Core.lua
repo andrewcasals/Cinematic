@@ -625,7 +625,11 @@ DEFAULTS.plateNameShadowX = 1
 DEFAULTS.plateNameShadowY = -1
 DEFAULTS.plateNameShadowAlpha = 1
 DEFAULTS.questVision = true -- the Quest Vision page's switch: off, none of the four below works
-DEFAULTS.plateQuestMobs = true -- in CineMode, plates of units for a quest objective you haven't finished show (see Effects)
+-- What units for a quest objective you haven't finished show in CineMode (see
+-- Effects): "plate" (their nameplates), "name" (just their names, on their
+-- plates), "mark" (a quest mark: added to a plate or name the Nameplates page
+-- shows, else alone) or "none" (as the Nameplates page's rows say).
+DEFAULTS.questMobsShow = "plate"
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
 DEFAULTS.questObjectGlow = true -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
@@ -860,6 +864,12 @@ end
 -- A Quest Vision tick as its Enable leaves it.
 function ns.QuestVisionSetting(key)
 	return ns.Setting("questVision") and ns.Setting(key) or false
+end
+
+-- What Quest Vision shows of quest mobs now: "plate", "name", "mark" or nil.
+function ns.QuestMobsShow()
+	local show = ns.QuestVisionSetting("questMobsShow")
+	return (show == "plate" or show == "name" or show == "mark") and show or nil
 end
 DEFAULTS.unitPartsFocusSame = true
 DEFAULTS.unitPartsToTSame = true
@@ -3761,6 +3771,18 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		MarkersJoined(ns.db)
 		for _, profile in pairs(ns.db.profiles or {}) do
 			MarkersJoined(profile)
+		end
+		-- Quest Vision's "Always show their nameplates" tick is now a choice of
+		-- Nameplate, Name or No action (questMobsShow): unticked is No action.
+		local function QuestMobsChoice(settings)
+			if settings.plateQuestMobs == false and settings.questMobsShow == nil then
+				settings.questMobsShow = "none"
+			end
+			settings.plateQuestMobs = nil
+		end
+		QuestMobsChoice(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then QuestMobsChoice(saved) end
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.

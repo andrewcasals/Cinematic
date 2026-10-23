@@ -34,8 +34,9 @@ local levels = {}
 
 -- A plate held up only for its name (see ns.SetPlateBody): how much of its
 -- alpha the rest of it gets ([plate] = 0 to 1, nil for all of it), and the
--- name ([plate] = 0 to 1, nil for none of its own).
-local bodyShare, nameShare = {}, {}
+-- name ([plate] = 0 to 1, nil for none of its own). And one held up for a
+-- quest mark alone (Quest Vision's ! only): the mark's ([plate] = 0 to 1).
+local bodyShare, nameShare, markShare = {}, {}, {}
 
 local function Usable(frame)
 	return type(frame) == "table" and frame.SetAlpha and not (frame.IsForbidden and frame:IsForbidden())
@@ -504,6 +505,8 @@ function ns.PlateNameText(plate)
 	return text and text:IsShown() and text or nil
 end
 
+local RefreshQuestIcon -- (below: its quest mark goes by the name shown alone)
+
 local function ApplyPlate(plate, personal)
 	local unitFrame = plate and plate.UnitFrame
 	if not Usable(unitFrame) or (plate.IsForbidden and plate:IsForbidden()) then
@@ -543,6 +546,9 @@ local function ApplyPlate(plate, personal)
 	-- (And the guild line under a name shown alone: PlateGuild.lua. It sits
 	-- under our text, so it fades in with its new look.)
 	ns.SetPlateGuild(plate, plate ~= personal and nameAlpha * (ours and (SwapShares(SwapFade(plate))) or 1) or 0)
+	if nameOnly or crossfading then
+		RefreshQuestIcon(plate)
+	end
 	if next(held) then
 		keeper:Show()
 	end
@@ -720,7 +726,10 @@ end
 -- unit for a quest objective you haven't finished (ns.IsQuestMob), where
 -- players' class icons go (quest mobs aren't players). Shown like the class
 -- icons, its one box (Always) ticked on the Vision page's Quest Vision, whose
--- Enable and page switch it follows.
+-- Enable and page switch it follows. On a plate showing just its name (Quest
+-- Vision's Name), it's left of the name instead, fading with it. Quest
+-- Vision's ! only shows it whatever the row says, and alone (no plate or
+-- name to go by) on the middle of where the plate is.
 local questIcons = {} -- [plate] = icon frame
 
 local function QuestIcon(plate)
@@ -732,7 +741,7 @@ local function QuestIcon(plate)
 	local bar = unitFrame.HealthBarsContainer or unitFrame.healthBar or unitFrame
 	icon = CreateFrame("Frame", nil, unitFrame)
 	icon:SetSize(20, 20)
-	icon:SetPoint("RIGHT", bar, "LEFT", -3, 0)
+	icon.bar = bar
 	icon:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
 	icon.texture = icon:CreateTexture(nil, "OVERLAY")
 	icon.texture:SetAllPoints()
@@ -741,11 +750,101 @@ local function QuestIcon(plate)
 	return icon
 end
 
-local function RefreshQuestIcon(plate)
+-- A number a frame's method gives, if the game will say.
+local function Measure(frame, method)
+	local ok, a, b = pcall(frame[method], frame)
+	if ok and type(a) == "number" and Known(a) and (b == nil or (type(b) == "number" and Known(b))) then
+		return a, b
+	end
+end
+
+-- Where a quest mark goes, its middle from the health bar's middle. Left of
+-- the bar; left of the name shown alone (ours, else the game's: its middle
+-- less half its words' width); alone, the bar's middle. Moving between them
+-- as the plate does: with a kept name, from the name's spot to the bar's as
+-- the rest of the plate (body) fills in; with a mark alone, from the middle
+-- as the plate or name (shown, of mark) fades in. Each move takes the first
+-- QUEST_MOVE of the fade (half: of 1.5 seconds, 0.75), eased, the
+-- plate still fading in round it after. nil when the game won't say where
+-- the bar or the name is.
+local QUEST_MOVE = 0.5
+
+local function QuestMove(share)
+	local t = math.min(1, math.max(0, share / QUEST_MOVE))
+	return t * t * (3 - 2 * t)
+end
+
+local function QuestIconSpot(icon, plate, body, kept, shown, mark)
+	local half = icon:GetWidth() / 2
+	local width = Measure(icon.bar, "GetWidth")
+	if not width then
+		return nil
+	end
+	local x, y = -(width / 2 + 3 + half), 0
+	if kept and body < 1 then
+		local barX, barY = Measure(icon.bar, "GetCenter")
+		local unitFrame = plate.UnitFrame
+		local text = texts[unitFrame]
+		local left, nameY
+		if text and text:IsShown() then
+			left = Measure(text, "GetLeft")
+			nameY = select(2, Measure(text, "GetCenter"))
+		elseif Usable(unitFrame.name) then
+			local nameX, centreY = Measure(unitFrame.name, "GetCenter")
+			local words = Measure(unitFrame.name, "GetStringWidth")
+			left, nameY = nameX and words and nameX - words / 2, centreY
+		end
+		if not (barX and left and nameY) then
+			return nil
+		end
+		local nameX = left - 2 - half - barX
+		local t = QuestMove(body)
+		x, y = nameX + (x - nameX) * t, (nameY - barY) * (1 - t)
+	end
+	if mark > 0 then
+		local t = QuestMove(shown / mark)
+		x, y = x * t, y * t
+	end
+	return x, y
+end
+
+-- Puts a quest mark in its spot. (Where the game won't say where things
+-- are: anchored to them, so it jumps between them.)
+local function PlaceQuestIcon(icon, plate, body, kept, shown, mark)
+	local x, y = QuestIconSpot(icon, plate, body, kept, shown, mark)
+	local anchor
+	if x then
+		x, y, anchor = math.floor(x + 0.5), math.floor(y + 0.5), icon.bar
+	else
+		local text = kept and body < 0.5 and texts[plate.UnitFrame]
+		anchor = (text and text:IsShown()) and text or icon.bar
+		x, y = mark > shown and "alone" or "left", 0
+	end
+	if icon.anchor == anchor and icon.x == x and icon.y == y then
+		return
+	end
+	icon.anchor, icon.x, icon.y = anchor, x, y
+	icon:ClearAllPoints()
+	if x == "alone" then
+		icon:SetPoint("CENTER", icon.bar, "CENTER")
+	elseif x == "left" then
+		icon:SetPoint("RIGHT", anchor, "LEFT", anchor == icon.bar and -3 or -2, 0)
+	else
+		icon:SetPoint("CENTER", anchor, "CENTER", x, y)
+	end
+end
+
+function RefreshQuestIcon(plate)
 	if not plate or (plate.IsForbidden and plate:IsForbidden()) then
 		return
 	end
-	local level = (levels.QuestIcon or 0) * (bodyShare[plate] or 1)
+	-- (Showing just its name: as far as the name shows. See ApplyPlate.)
+	local body, kept = bodyShare[plate] or 1, nameShare[plate]
+	local nameOnly = kept ~= nil and body < 0.5
+	local share = nameOnly and kept * (1 - 2 * body) * (sight[plate] or 1) or body
+	local mark = markShare[plate] or 0
+	local level = math.max(levels.QuestIcon or 0, ns.QuestMarkLevel and ns.QuestMarkLevel() or 0)
+		* math.max(share, mark)
 	local icon = questIcons[plate]
 	if level > 0 and plate ~= PersonalPlate() then
 		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
@@ -761,6 +860,7 @@ local function RefreshQuestIcon(plate)
 	end
 	icon = QuestIcon(plate)
 	if icon then
+		PlaceQuestIcon(icon, plate, body, kept, share, mark)
 		icon:SetAlpha(level)
 		icon:Show()
 	end
@@ -819,7 +919,7 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 	end
 	if event == "NAME_PLATE_UNIT_REMOVED" then
 		plateClass[plate], plateRole[plate] = nil, nil
-		bodyShare[plate], nameShare[plate] = nil, nil
+		bodyShare[plate], nameShare[plate], markShare[plate] = nil, nil, nil
 		bandOf[plate], farChecked[plate], farSince[plate], swaps[plate] = nil, nil, nil, nil
 		sight[plate] = nil
 		if Usable(plate.UnitFrame) then
@@ -849,16 +949,17 @@ end)
 -- From Effects, with each plate's alpha: how much of it the plate's parts
 -- other than the name get (body, 0 to 1) and the name at least (name), for a
 -- plate held up for its name alone (Names rows: see Effects' nameLevel).
-function ns.SetPlateBody(plate, body, name)
+function ns.SetPlateBody(plate, body, name, mark)
 	if not plate then
 		return
 	end
 	body = body < 1 and body or nil
 	name = name > 0 and name or nil
-	if bodyShare[plate] == body and nameShare[plate] == name then
+	mark = mark and mark > 0 and mark or nil
+	if bodyShare[plate] == body and nameShare[plate] == name and markShare[plate] == mark then
 		return
 	end
-	bodyShare[plate], nameShare[plate] = body, name
+	bodyShare[plate], nameShare[plate], markShare[plate] = body, name, mark
 	-- (A name first kept up: its band straight away, no swap.)
 	if FAR_USED and name and not farChecked[plate] then
 		farChecked[plate] = true
@@ -868,7 +969,8 @@ function ns.SetPlateBody(plate, body, name)
 		ns.WatchFarNames()
 	end
 	ApplyPlate(plate, PersonalPlate())
-	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] then
+	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] or mark
+		or (ns.QuestMarkLevel and ns.QuestMarkLevel() > 0) then
 		ns.RefreshClassIcon(plate)
 	end
 end
@@ -1028,7 +1130,7 @@ function ns.UpdatePlateParts(active, elapsed)
 	end
 	if iconsChanged then
 		RefreshClassIcons()
-	elseif (levels.QuestIcon or 0) > 0 and GetTime() >= questIconsAt then
+	elseif ((levels.QuestIcon or 0) > 0 or ns.QuestMarkLevel() > 0 or next(markShare)) and GetTime() >= questIconsAt then
 		-- (Quest progress comes and goes without the row changing: looked at again now and then.)
 		questIconsAt = GetTime() + QUEST_ICONS_EVERY
 		for _, plate in ipairs(C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}) do

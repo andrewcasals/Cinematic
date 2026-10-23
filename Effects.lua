@@ -1358,11 +1358,13 @@ end
 ns.PlateRowWanted = UnitRowWanted -- (the Plate Parts rows go by the same columns: see PlateParts)
 
 -- Whether a unit row has anyone to show now (your target's has its own fade, below).
--- Quest mobs (plateQuestMobs, the Vision page's Quest Vision): units that count
--- for a quest objective you haven't finished, everywhere in CineMode, fights included.
+-- Quest mobs (questMobsShow, the Vision page's Quest Vision): units that count
+-- for a quest objective you haven't finished, everywhere in CineMode, fights
+-- included. Their plates, or (Name) just the names on them, or (! only) a
+-- quest mark: see PlateAlphas.
 local function UnitRowActive(row)
 	if row == "QuestMobs" then
-		return ns.QuestVisionSetting("plateQuestMobs") and true or false
+		return ns.QuestMobsShow() ~= nil
 	end
 	if not UnitRowWanted(row) then
 		return false
@@ -1393,8 +1395,9 @@ local unitRowLevel = { MyPet = 0, GroupMembers = 0, GroupMinions = 0, QuestMobs 
 
 local function UnitRowAlpha(unit, kind)
 	local alpha = 0
+	local questPlates = ns.QuestMobsShow() == "plate"
 	for row, level in pairs(unitRowLevel) do
-		if level > alpha and InUnitRow(row, unit, kind) then
+		if level > alpha and (questPlates or row ~= "QuestMobs") and InUnitRow(row, unit, kind) then
 			alpha = level
 		end
 	end
@@ -2252,8 +2255,14 @@ local function GameNameShown(unit)
 	return false
 end
 
+-- How far Quest Vision's ! only shows quest marks (0 to 1), for PlateParts.
+function ns.QuestMarkLevel()
+	return ns.QuestMobsShow() == "mark" and unitRowLevel.QuestMobs or 0
+end
+
 -- The plate's alpha with its name kept (see nameLevel), and how much of that
--- the rest of the plate gets (body) and the name (name), for PlateParts.
+-- the rest of the plate gets (body), the name (name) and a quest mark on its
+-- own (mark: Quest Vision's ! only), for PlateParts.
 local function PlateAlphas(unit, plate)
 	local body = PlateAlpha(unit, plate)
 	local name = 0
@@ -2267,11 +2276,25 @@ local function PlateAlphas(unit, plate)
 			name = nameLevel.Target
 		end
 	end
-	local alpha = math.max(body, name)
-	if alpha <= 0 then
-		return 0, 1, 0
+	-- Quest Vision's Name: a quest mob's name kept on its plate. Its ! only:
+	-- the plate kept up for a quest mark.
+	local mark = 0
+	local quest = unitRowLevel.QuestMobs > 0 and unit and plate ~= PersonalPlate() and ns.QuestMobsShow()
+	if quest == "name" or quest == "mark" then
+		local kind = PlateKind(unit)
+		if kind and InUnitRow("QuestMobs", unit, kind) then
+			if quest == "name" then
+				name = math.max(name, unitRowLevel.QuestMobs)
+			else
+				mark = unitRowLevel.QuestMobs
+			end
+		end
 	end
-	return alpha, body / alpha, name / alpha
+	local alpha = math.max(body, name, mark)
+	if alpha <= 0 then
+		return 0, 1, 0, 0
+	end
+	return alpha, body / alpha, name / alpha, mark / alpha
 end
 
 -- (For /cine debug names: why a plate's name is kept or not.)
@@ -2282,8 +2305,8 @@ function ns.DescribePlateNameKept(unit, plate)
 		tostring(unit and ns.SoftPlateHidden(unit)), tostring(platesForced), PlateAlpha(unit, plate))
 end
 
-local function SetPlateAlphas(plate, alpha, body, name)
-	ns.SetPlateBody(plate, body, name)
+local function SetPlateAlphas(plate, alpha, body, name, mark)
+	ns.SetPlateBody(plate, body, name, mark)
 	ns.SetPlateAlpha(plate, alpha, alpha * body)
 end
 
@@ -2313,9 +2336,9 @@ function ns.RefreshPlate(plate, unit)
 	ForgetTargetFade(plate) -- only called for a plate given a new unit
 	duels.Forget(plate)
 	duels.Attach(plate, unit)
-	local alpha, body, name = PlateAlphas(unit, plate)
+	local alpha, body, name, mark = PlateAlphas(unit, plate)
 	if alpha < 1 or body < 1 or PlatesFiltered() then
-		SetPlateAlphas(plate, alpha, body, name)
+		SetPlateAlphas(plate, alpha, body, name, mark)
 	else
 		ns.SetPlateBody(plate, 1, 0)
 		LetGoOfPlate(plate) -- a reused plate: let go of its last unit's alpha

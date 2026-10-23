@@ -7382,16 +7382,36 @@ local function CreateVisionPanel()
 		"when you turn this back on."], note, ApplyQuest)
 	local questStack = Stack(questSwitch, "check")
 	local function QuestPlatesOn(db) return db.handlePlates end
-	local questPlates = Check(content, "plateQuestMobs", L["Always show their nameplates"],
-		L["In CineMode, the nameplates of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
-		"an NPC to talk to) show, in fights and out, whatever the Nameplates page's grids say. Once the " ..
-		"objective is done, they fade with the rest. Needs the Nameplates page enabled."])
-	GreyUnless(questPlates, QuestPlatesOn)
-	questStack:Add(questPlates, "check")
+	local QUEST_SHOWS = {
+		{ value = "plate", text = L["Nameplate"] },
+		{ value = "name", text = L["Name"] },
+		{ value = "mark", text = L["Quest mark (!)"] },
+		{ value = "none", text = L["No action"] },
+	}
+	local QUEST_SHOWS_TIP = L["In CineMode, what shows of mobs and NPCs you still need for a quest objective (a mob " ..
+		"to kill, an NPC to talk to), in fights and out, whatever the Nameplates page's grids say. Nameplate: " ..
+		"their whole nameplates. Name: just their names, on their nameplates. Quest mark: a golden ! added to " ..
+		"the nameplate or name the Nameplates page shows them with, else the ! alone. No action: as the " ..
+		"Nameplates page's settings say. Once the objective is done, they fade with the rest. Needs the " ..
+		"Nameplates page enabled."]
+	questStack:Add(Label(content, "GameFontHighlight", L["Always show their"]), "label")
+	local questShows = Dropdown(content, "questMobsShow", QUEST_SHOWS, 200)
+	if questShows then
+		questStack:Add(questShows, "dropdown")
+		Tooltip(questShows, QUEST_SHOWS_TIP)
+		GreyUnless(questShows, QuestPlatesOn)
+	else
+		for _, choice in ipairs(QUEST_SHOWS) do
+			local check = questStack:Add(Choice(content, "questMobsShow", choice.value, choice.text, QUEST_SHOWS_TIP),
+				"check")
+			GreyUnless(check, QuestPlatesOn)
+		end
+	end
 	local questIcon = Check(content, "plateAlwaysPartQuestIcon", L["Quest icon on their nameplates"],
-		L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show. " ..
-		"Needs the Nameplates page enabled."])
-	GreyUnless(questIcon, QuestPlatesOn)
+		L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show " ..
+		"(beside their names when just their names show). Always on with Quest mark above. Needs the " ..
+		"Nameplates page enabled."])
+	GreyUnless(questIcon, function(db) return db.handlePlates and db.questMobsShow ~= "mark" end)
 	questStack:Add(questIcon, "check")
 	local questTarget = Check(content, "targetQuestIcon", L["Quest icon on your target frame"],
 		L["The same mark beside your target frame's health bar while your target is one of them. " ..

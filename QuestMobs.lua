@@ -212,7 +212,7 @@ function ns.QuestVisionActive()
 	if (targetIcon and ns.Flag(targetIcon:IsShown())) or (ns.QuestGlowShown and ns.QuestGlowShown()) then
 		return true
 	end
-	if not (ns.QuestVisionSetting("plateQuestMobs") and C_NamePlate and C_NamePlate.GetNamePlates) then
+	if not (ns.QuestMobsShow() and C_NamePlate and C_NamePlate.GetNamePlates) then
 		return false
 	end
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do

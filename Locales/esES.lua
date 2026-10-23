@@ -1732,18 +1732,27 @@ L["Mobs and NPCs you still need for a quest objective keep their nameplates up, 
 L["On: Heal Vision works as ticked below. Off: it doesn't, and each keeps its tick for " ..
 	"when you turn this back on."] = "Activado: Heal Vision funciona como esté marcado abajo. Desactivado: no funciona, " ..
 	"y cada opción conserva su marca para cuando lo vuelvas a activar."
-L["Always show their nameplates"] = "Mostrar siempre sus placas de nombre"
-L["In CineMode, the nameplates of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
-	"an NPC to talk to) show, in fights and out, whatever the Nameplates page's grids say. Once the " ..
-	"objective is done, they fade with the rest. Needs the Nameplates page enabled."] = "En CineMode, se muestran " ..
-	"las placas de nombre de los enemigos y PNJ que aún necesitas para un objetivo de misión (un enemigo que " ..
-	"matar, un PNJ con quien hablar), en combate y fuera de él, digan lo que digan las tablas de la página " ..
-	"Placas de nombre. Una vez cumplido el objetivo, se desvanecen con las demás. Necesita la página Placas de " ..
-	"nombre activada."
+L["Always show their"] = "Mostrar siempre su"
+L["Nameplate"] = "Placa de nombre"
+L["No action"] = "Nada"
+L["Quest mark (!)"] = "Marca de misión (!)"
+L["In CineMode, what shows of mobs and NPCs you still need for a quest objective (a mob " ..
+	"to kill, an NPC to talk to), in fights and out, whatever the Nameplates page's grids say. Nameplate: " ..
+	"their whole nameplates. Name: just their names, on their nameplates. Quest mark: a golden ! added to " ..
+	"the nameplate or name the Nameplates page shows them with, else the ! alone. No action: as the " ..
+	"Nameplates page's settings say. Once the objective is done, they fade with the rest. Needs the " ..
+	"Nameplates page enabled."] = "En CineMode, lo que se muestra de los enemigos y PNJ que aún necesitas para un objetivo " ..
+	"de misión (un enemigo que matar, un PNJ con quien hablar), en combate y fuera de él, digan lo que digan " ..
+	"las tablas de la página Placas de nombre. Placa de nombre: sus placas de nombre enteras. Nombre: solo " ..
+	"sus nombres, en sus placas. Marca de misión: un ! dorado junto a la placa o el nombre con que " ..
+	"los muestre la página Placas de nombre, o el ! solo si no. Nada: lo que diga la configuración de la página Placas de nombre. Una vez " ..
+	"cumplido el objetivo, se desvanecen con las demás. Necesita la página Placas de nombre activada."
 L["Quest icon on their nameplates"] = "Icono de misión en sus placas de nombre"
-L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show. " ..
-	"Needs the Nameplates page enabled."] = "Un signo de exclamación dorado junto a la barra de salud de sus " ..
-	"placas de nombre, dondequiera que se muestren. Necesita la página Placas de nombre activada."
+L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show " ..
+	"(beside their names when just their names show). Always on with Quest mark above. Needs the " ..
+	"Nameplates page enabled."] = "Un signo de " ..
+	"exclamación dorado junto a la barra de salud de sus placas de nombre, dondequiera que se muestren (junto " ..
+	"a sus nombres cuando solo se muestran sus nombres). Siempre activo con Marca de misión arriba. Necesita la página Placas de nombre activada."
 L["Quest icon on your target frame"] = "Icono de misión en el marco de tu objetivo"
 L["The same mark beside your target frame's health bar while your target is one of them. " ..
 	"In CineMode and out."] = "La misma marca junto a la barra de salud del marco de tu objetivo mientras tu " ..
