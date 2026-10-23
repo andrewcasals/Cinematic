@@ -5879,14 +5879,15 @@ local function CreateNameStylePanel()
 	-- Presets: a few looks to start from.
 	local PRESETS = {
 		{ L["Like the game's names"], L["Coloured, no outline or shadow (the defaults)."], {} },
-		{ L["Bold"], L["Coloured, with a thin black outline and no shadow, a little bigger."],
+		{ L["Bold"], L["Coloured, with a thin black outline, a little bigger."],
 			{ plateNameOutline = 1, plateNameShadow = false, plateNameSize = 1.1 } },
-		{ L["Subtle"], L["Coloured, a little smaller and see-through, with a lighter shadow."],
-			{ plateNameSize = 0.9, plateNameAlpha = 0.75, plateNameShadowAlpha = 0.6 } },
+		{ L["Subtle"], L["Coloured, a little smaller and see-through."],
+			{ plateNameSize = 0.9, plateNameAlpha = 0.75 } },
 	}
 	local PRESET_KEYS = { "plateNameColour", "plateNameFriends", "plateNameOutline", "plateNameSize",
 		"plateNameAlpha", "plateNameY", "plateNameFixedSize", "plateNameShadow", "plateNameShadowX",
-		"plateNameShadowY", "plateNameShadowAlpha", "plateNameFarSize", "plateNameFarY" }
+		"plateNameShadowY", "plateNameShadowAlpha", "plateNameCloseSize", "plateNameCloseY", "plateNameFarSize",
+		"plateNameFarY" }
 	local presetRow = CreateFrame("Frame", nil, content)
 	presetRow:SetSize(PREVIEW_W, 24)
 	stack:Add(presetRow, "label")
@@ -5951,19 +5952,9 @@ local function CreateNameStylePanel()
 
 	stack:Header(content, L["Text"])
 	local OUTLINE_NAMES = { [0] = L["None"], L["Thin"], L["Thick"] }
-	StyleSlider("plateNameSize", L["Size"], 50, 200, 5, "%d%%", 100,
-		L["How big the names are, next to the plates' own."])
-	-- (WoW Forever: its plates don't scale with distance, so names beyond 28
-	-- yards take a far size instead. Retail's plates scale themselves.)
-	if not ns.isRetail then
-		StyleSlider("plateNameFarSize", L["Far size"], 30, 100, 5, "%d%%", 100,
-			L["Their size beyond about 28 yards (Size is for nearer), as the game's names over heads shrink " ..
-			"with distance: about the same size as the game's where those take over, at the edge of " ..
-			"nameplate range. (Not changed in fights.)"])
-	end
 	StyleSlider("plateNameOutline", L["Outline"], 0, 2, 1,
 		function(value) return OUTLINE_NAMES[value] or "" end, 1,
-		L["A black border round the letters. The game's names over heads have none, just the shadow."])
+		L["A black border round the letters. The game's names over heads have none."])
 	StyleSlider("plateNameAlpha", L["Opacity"], 20, 100, 5, "%d%%", 100,
 		L["How see-through the names are, on top of their fades."])
 	if ns.isRetail then
@@ -5973,27 +5964,45 @@ local function CreateNameStylePanel()
 		GreyUnless(fixed, On)
 	end
 
-	stack:Header(content, L["Position"])
-	StyleSlider("plateNameY", L["Height"], -30, 30, 1, "%d", 1,
-		L["Moves the names up (or down, below 0) from where the plates put them."])
-	if not ns.isRetail then
-		StyleSlider("plateNameFarY", L["Far height"], -60, 10, 1, "%d", 1,
-			L["Their height beyond about 28 yards (Height is for nearer), as the game's names over heads sit " ..
-			"closer to the head further off."])
-	end
-
-	stack:Header(content, L["Shadow"])
-	local shadow = stack:Add(StyleCheck("plateNameShadow", L["Drop shadow"],
-		L["A soft shadow behind the letters, as the game's names over heads have."]), "check")
-	GreyUnless(shadow, On)
-	local function ShadowOn(db) return db.plateNameStyle and db.plateNameShadow end
-	for _, info in ipairs({
-		{ "plateNameShadowX", L["Across"], -4, 4, 0.5, "%.1f", 1, L["How far right of the letters the shadow falls (left, below 0)."] },
-		{ "plateNameShadowY", L["Up/down"], -4, 4, 0.5, "%.1f", 1, L["How far below the letters the shadow falls (above, over 0)."] },
-		{ "plateNameShadowAlpha", L["Darkness"], 0, 100, 5, "%d%%", 100, nil },
-	}) do
-		local slider = StyleSlider(unpack(info))
-		GreyUnless(slider, ShadowOn)
+	-- Size and height by distance. Retail's plates scale themselves: one of
+	-- each. WoW Forever's don't, so names are sized and placed by how far they
+	-- are from the camera (PlateParts' Look): set at two points, close and far,
+	-- and following perspective between and beyond them. The camera's distance
+	-- now shows under them, to set each with the camera there.
+	if ns.isRetail then
+		stack:Header(content, L["Size and height"])
+		StyleSlider("plateNameSize", L["Size"], 50, 200, 5, "%d%%", 100,
+			L["How big the names are, next to the plates' own."])
+		StyleSlider("plateNameY", L["Height"], -30, 30, 1, "%d", 1,
+			L["Moves the names up (or down, below 0) from where the plates put them."])
+	else
+		stack:Header(content, L["Close (a unit about 10 yards from the camera)"])
+		StyleSlider("plateNameCloseSize", L["Size"], 50, 300, 5, "%d%%", 100,
+			L["How big a name is with its unit about 10 yards from the camera, next to the plates' own. " ..
+			"Nearer, bigger still; further, smaller, as the game's names over heads."])
+		StyleSlider("plateNameCloseY", L["Height"], -40, 60, 1, "%d", 1,
+			L["Moves a name up (or down, below 0) from where the plates put it, with its unit about 10 yards " ..
+			"from the camera."])
+		stack:Header(content, L["Far (about 50 yards from the camera)"])
+		StyleSlider("plateNameFarSize", L["Size"], 20, 100, 5, "%d%%", 100,
+			L["How big a name is with its unit about 50 yards from the camera: about the size of the game's " ..
+			"names where those take over, at the edge of nameplate range."])
+		StyleSlider("plateNameFarY", L["Height"], -60, 10, 1, "%d", 1,
+			L["Moves a name up (or down, below 0) with its unit about 50 yards from the camera, as the " ..
+			"game's names over heads sit closer to the head further off."])
+		-- (A unit's own distance from you comes in bands: under 11, 28 and 41 yards.)
+		local cameraNote = stack:Note(content, "", 460)
+		cameraNote.searchSkip = true
+		local noteAt = 0
+		canvas:HookScript("OnUpdate", function()
+			if GetTime() < noteAt then
+				return
+			end
+			noteAt = GetTime() + 0.2
+			local zoom = math.floor((GetCameraZoom and GetCameraZoom() or 0) + 0.5)
+			cameraNote:SetText((L["The camera is %d yards from you: a unit next to you is about %d yards from it, " ..
+				"one at 20 yards about %d, one at 35 about %d."]):format(zoom, zoom + 4, zoom + 16, zoom + 35))
+		end)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

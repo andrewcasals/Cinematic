@@ -269,21 +269,28 @@ local function SetNameFont(text, object, file, size, scale, flags)
 end
 ns.SetPlateNameFont = SetNameFont
 
--- Further off, smaller: the game's names over heads shrink with distance,
--- and take over from the plate's at the edge of nameplate range. WoW Forever
--- won't say how far a unit is, nor scale its plates, but says whether it's
--- within 28 yards (the follow distance, for any unit): beyond that a name
--- takes the Name Style page's far size and height in place of its own
--- (Size and Height are for nearer than that), so the handover at the
--- edge is a small step. A unit has to stay over the line a moment first, and
--- its name then swaps behind a quick crossfade (a size can't fade smoothly).
--- Not looked at in fights (the game may not allow it), nor on retail, whose
--- plates scale with distance themselves. [plate] = true while far.
+-- Further off, smaller and lower: the game's names over heads are drawn in
+-- the world, so they shrink with their distance from the camera (and take
+-- over from the plate's at the edge of nameplate range). WoW Forever's
+-- plates don't scale, so ours are sized and placed by that distance, as
+-- near as it can be told: the camera's from you (exact), plus the unit's
+-- from you in bands, the game only saying whether it's within about 11
+-- yards (trade range) and 28 (follow range). Size and height follow
+-- perspective (one over the distance) through the Name Style page's two
+-- points, close and far, and on past them. A unit has to stay in a new band
+-- a moment first, and its name then swaps behind a quick crossfade (a size
+-- can't fade smoothly); zooming changes them in small steps. Bands aren't
+-- looked at in fights (the game may not allow it). Not on retail, whose
+-- plates scale with distance themselves. [plate] = band, 1 to 3 (nil: 2).
 local FAR_USED = not ns.isRetail
 local FAR_CHECK, FAR_HOLD, FAR_SWAP = 0.25, 0.5, 0.35 -- seconds
-local farOf, farChecked = {}, {}
-local farSince = {} -- [plate] = when it was first seen over the line
-local swaps = {} -- [plate] = { started = time, to = far }
+local BAND_YARDS = { 4, 16, 35 } -- a unit's rough distance from you, by band
+local CLOSE_YARDS, FAR_YARDS = 10, 50 -- from the camera: the page's two points
+local SIZE_STEP = 0.05 -- size changes in steps (text sized smoothly wobbles)
+local bandOf, farChecked = {}, {}
+local farSince = {} -- [plate] = when it was first seen in another band
+local swaps = {} -- [plate] = { started = time, to = band }
+local zoom = 0 -- the camera's distance from you, this frame
 
 -- Out of sight, gone: the game's names over heads hide behind walls, a
 -- plate shows through them. The game dims a plate whose unit is out of
@@ -294,8 +301,9 @@ local swaps = {} -- [plate] = { started = time, to = far }
 local sight = {}
 local SIGHT_FADE = 0.4 -- seconds
 
--- Whether a unit is within 28 yards: true, false, or nil when the game won't say.
-local function Near(unit)
+-- A unit's band: 1 within about 11 yards, 2 within 28, 3 beyond; nil when
+-- the game won't say.
+local function Band(unit)
 	if not unit or InCombatLockdown() then
 		return nil
 	end
@@ -303,7 +311,25 @@ local function Near(unit)
 	if not ok or not Known(near) or near == nil then
 		return nil
 	end
-	return near and true or false
+	if not near then
+		return 3
+	end
+	local okClose, close = pcall(CheckInteractDistance, unit, 2)
+	return (okClose and Known(close) and close) and 1 or 2
+end
+
+-- A name's size (times the plate's) and height for its band, at the
+-- camera's distance now (see bandOf); retail's, as the page says.
+local function Look(band)
+	if not FAR_USED then
+		return Style("plateNameSize"), Style("plateNameY")
+	end
+	local yards = math.max(1, zoom + BAND_YARDS[band or 2])
+	local t = (1 / yards - 1 / FAR_YARDS) / (1 / CLOSE_YARDS - 1 / FAR_YARDS)
+	local size = Style("plateNameFarSize") + t * (Style("plateNameCloseSize") - Style("plateNameFarSize"))
+	local y = Style("plateNameFarY") + t * (Style("plateNameCloseY") - Style("plateNameFarY"))
+	size = math.min(3, math.max(0.2, size))
+	return math.floor(size / SIZE_STEP + 0.5) * SIZE_STEP, math.floor(math.min(80, math.max(-80, y)) + 0.5)
 end
 
 -- How far a plate's name shows as it swaps size: out to the swap, then back in.
@@ -334,20 +360,17 @@ local function DrawName(text, name, unit)
 			object = _G.SystemFont_NamePlate or _G.GameFontNormal
 			file, size, flags = object:GetFont()
 		end
-		SetNameFont(text, object, file, size,
-			Style(text.far and "plateNameFarSize" or "plateNameSize"),
-			Outlined(flags, Style("plateNameOutline")))
+		SetNameFont(text, object, file, size, text.size, Outlined(flags, Style("plateNameOutline")))
 		if Style("plateNameShadow") then
 			text:SetShadowOffset(Style("plateNameShadowX"), Style("plateNameShadowY"))
 			text:SetShadowColor(0, 0, 0, Style("plateNameShadowAlpha"))
 		else
 			text:SetShadowOffset(0, 0)
 		end
-		-- (Far off, a height of its own: a plate's name sits a fixed height over
-		-- the unit's head, and the game's names over heads come down closer to it
-		-- with distance.)
+		-- (Further off, lower: a plate's name sits a fixed height over the unit's
+		-- head, and the game's names over heads come down closer to it with distance.)
 		text:ClearAllPoints()
-		text:SetPoint("BOTTOM", name, "BOTTOM", 0, Style(text.far and "plateNameFarY" or "plateNameY"))
+		text:SetPoint("BOTTOM", name, "BOTTOM", 0, text.y)
 	end
 	-- (The game's own words: a secret name shows all the same.)
 	local ok, words = pcall(name.GetText, name)
@@ -377,6 +400,15 @@ local function DrawName(text, name, unit)
 	end
 end
 
+-- A text's size and height as its band and the camera have them now
+-- (dirty when they changed).
+local function UpdateLook(text, band)
+	local size, y = Look(band)
+	if text.size ~= size or text.y ~= y then
+		text.size, text.y, text.dirty = size, y, true
+	end
+end
+
 -- Shows or hides our text for a plate, at alpha (nil: hidden).
 local function OwnName(plate, alpha)
 	local unitFrame = plate.UnitFrame
@@ -394,10 +426,8 @@ local function OwnName(plate, alpha)
 		text.dirty = true
 		texts[unitFrame] = text
 	end
-	local far = farOf[plate] or false
-	if text.far ~= far then
-		text.far, text.dirty = far, true
-	end
+	text.band = bandOf[plate] or 2
+	UpdateLook(text, text.band)
 	DrawName(text, name, unit)
 	text:SetAlpha(alpha)
 	text:Show()
@@ -722,7 +752,7 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 	if event == "NAME_PLATE_UNIT_REMOVED" then
 		plateClass[plate], plateRole[plate] = nil, nil
 		bodyShare[plate], nameShare[plate] = nil, nil
-		farOf[plate], farChecked[plate], farSince[plate], swaps[plate] = nil, nil, nil, nil
+		bandOf[plate], farChecked[plate], farSince[plate], swaps[plate] = nil, nil, nil, nil
 		sight[plate] = nil
 		if Usable(plate.UnitFrame) then
 			CentreName(plate.UnitFrame, false)
@@ -761,10 +791,10 @@ function ns.SetPlateBody(plate, body, name)
 		return
 	end
 	bodyShare[plate], nameShare[plate] = body, name
-	-- (A name first kept up: far or not straight away, no swap.)
+	-- (A name first kept up: its band straight away, no swap.)
 	if FAR_USED and name and not farChecked[plate] then
 		farChecked[plate] = true
-		farOf[plate] = Near(plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)) == false or nil
+		bandOf[plate] = Band(plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
 	end
 	if name then
 		ns.WatchFarNames()
@@ -776,9 +806,9 @@ function ns.SetPlateBody(plate, body, name)
 end
 
 -- Each frame while names show alone: names out of sight faded, swaps
--- under way faded, and every FAR_CHECK our texts' words and colours looked
--- at again (a unit changing sides, a name read late) and, on Forever, each
--- name-only plate's 28 yards.
+-- under way faded, names sized anew as the camera zooms (Forever), and every
+-- FAR_CHECK our texts' words and colours looked at again (a unit changing
+-- sides, a name read late) and, on Forever, each name-only plate's band.
 -- Only plates showing nothing but the name (a target's filling in has its
 -- own crossfade).
 local farWatch = CreateFrame("Frame")
@@ -787,6 +817,19 @@ local farCheckAt = 0
 farWatch:SetScript("OnUpdate", ns.Profiled("Plate names", function(self, elapsed)
 	local now = GetTime()
 	local personal
+	-- (The camera moved in or out: see Look.)
+	local nowZoom = FAR_USED and GetCameraZoom and GetCameraZoom() or 0
+	if type(nowZoom) == "number" and Known(nowZoom) and nowZoom ~= zoom then
+		zoom = nowZoom
+		for unitFrame, text in pairs(texts) do
+			if text:IsShown() and Usable(unitFrame.name) and unitFrame.unit then
+				UpdateLook(text, text.band)
+				if text.dirty then
+					DrawName(text, unitFrame.name, unitFrame.unit)
+				end
+			end
+		end
+	end
 	-- (In sight or not: see sight. Plates showing just a name.)
 	for plate in pairs(nameShare) do
 		local level = sight[plate] or 1
@@ -802,8 +845,8 @@ farWatch:SetScript("OnUpdate", ns.Profiled("Plate names", function(self, elapsed
 	for plate, swap in pairs(swaps) do
 		personal = personal or PersonalPlate()
 		local t = (now - swap.started) / FAR_SWAP
-		if t >= 0.5 and (farOf[plate] or false) ~= swap.to then
-			farOf[plate] = swap.to or nil -- (at the swap's darkest)
+		if t >= 0.5 and (bandOf[plate] or 2) ~= swap.to then
+			bandOf[plate] = swap.to -- (at the swap's darkest)
 		end
 		if t >= 1 then
 			swaps[plate] = nil
@@ -819,15 +862,14 @@ farWatch:SetScript("OnUpdate", ns.Profiled("Plate names", function(self, elapsed
 		end
 		for plate in pairs(FAR_USED and nameShare or {}) do
 			if (bodyShare[plate] or 1) <= 0 and not swaps[plate] then
-				local near = Near(plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
-				local far = near == false
-				if near == nil or far == (farOf[plate] or false) then
+				local band = Band(plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
+				if band == nil or band == (bandOf[plate] or 2) then
 					farSince[plate] = nil
 				elseif not farSince[plate] then
 					farSince[plate] = now
 				elseif now - farSince[plate] >= FAR_HOLD then
 					farSince[plate] = nil
-					swaps[plate] = { started = now, to = far }
+					swaps[plate] = { started = now, to = band }
 				end
 			end
 		end
@@ -965,9 +1007,10 @@ function ns.DescribePlateName(unitFrame)
 	local okGame, game = pcall(function()
 		return UnitSelectionColor and Rgb(UnitSelectionColor(unit)) or "no UnitSelectionColor"
 	end)
-	return ("%s, game %s, ours=%s far=%s unit=%s tint unit=%s body=%s name=%s"):format(
+	return ("%s, game %s, ours=%s band=%s size=%s height=%s unit=%s tint unit=%s body=%s name=%s"):format(
 		ok and colours or ("error " .. tostring(colours)), okGame and game or ("error " .. tostring(game)),
-		tostring(text ~= nil and text:IsShown()), tostring(farOf[plate] or false), tostring(unit),
+		tostring(text ~= nil and text:IsShown()), tostring(bandOf[plate] or 2), tostring(text and text.size),
+		tostring(text and text.y), tostring(unit),
 		tostring(unit and TintUnit(unit)), tostring(bodyShare[plate]), tostring(nameShare[plate]))
 end
 

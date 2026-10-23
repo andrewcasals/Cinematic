@@ -606,12 +606,16 @@ DEFAULTS.plateNameStyle = true
 DEFAULTS.plateNameColour = true -- red hostile, yellow neutral, green friendly
 DEFAULTS.plateNameFriends = "class" -- friendly players: "class" (as their plates' bars), "blue" (as over their heads) or "white"
 DEFAULTS.plateNameOutline = 0 -- 0 none, 1 thin, 2 thick
-DEFAULTS.plateNameSize = 1 -- times the game's
+DEFAULTS.plateNameSize = 1 -- times the game's (retail)
 DEFAULTS.plateNameAlpha = 1
-DEFAULTS.plateNameY = 0 -- up from where the game puts it
+DEFAULTS.plateNameY = 0 -- up from where the game puts it (retail)
 DEFAULTS.plateNameFixedSize = true -- one size at any distance (retail: Forever's plates don't scale)
-DEFAULTS.plateNameFarSize = 0.55 -- beyond 28 yards (Forever), in place of plateNameSize
-DEFAULTS.plateNameFarY = -40 -- ...and in place of plateNameY
+-- Forever: size and height with a unit about 10 yards from the camera, and
+-- about 50 (see PlateParts' Look)
+DEFAULTS.plateNameCloseSize = 1.6
+DEFAULTS.plateNameCloseY = -9
+DEFAULTS.plateNameFarSize = 0.3
+DEFAULTS.plateNameFarY = -35
 DEFAULTS.plateNameShadow = false -- (barely shows: off)
 DEFAULTS.plateNameShadowX = 1
 DEFAULTS.plateNameShadowY = -1
