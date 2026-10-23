@@ -1,6 +1,6 @@
 # Cinematic
 
-Cinematic helps you immerse yourself in the world instead of staring at UI elements. Between fights it fades your UI away, adds letterbox bars and a colour tint that shifts with the time of day, and controls your cameras for flights, campfires, quest givers, going AFK and more. The music fades in as a camera starts, and the moment you're in a fight or need something, your UI comes right back.
+Cinematic helps you immerse yourself in the world instead of staring at UI elements. Between fights it fades your UI away, adds letterbox bars and a colour tint that shifts with the time of day, and controls your cameras for flights, campfires, quest givers, going AFK and more. The music fades in as a camera starts, and the moment you're in a fight or need something, your UI comes right back. Here and there it also swaps a clunky part of the default UI for something simpler, like wheels you hold a key for to pick a camera or open a game window, a button at your cursor to sit by a campfire, and speech from behind you shown as a bubble instead of in chat.
 
 ## The UI gets out of the way
 
