@@ -516,6 +516,34 @@ local function PageShown(refresh, content)
 	end
 end
 
+-- The pages' sections that open and close with a click remember it across
+-- reloads (ns.db.sectionsOpen: section.id -> true or false); one never
+-- clicked opens as its page says. Pages are built before the settings load,
+-- so Restore takes what was saved at the first layout after they have.
+local SectionState = {}
+-- What was saved for id, or default.
+function SectionState.Saved(id, default)
+	local saved = ns.db and ns.db.sectionsOpen and ns.db.sectionsOpen[id]
+	if saved == nil then
+		return default
+	end
+	return saved
+end
+-- section: { id, open }. (open nil: back to what its page says.)
+function SectionState.Save(section, open)
+	section.open = open
+	if ns.db and ns.db.sectionsOpen then
+		ns.db.sectionsOpen[section.id] = open
+	end
+end
+function SectionState.Restore(section)
+	if not section.restored and ns.db and ns.db.sectionsOpen then
+		section.restored = true
+		section.open = SectionState.Saved(section.id, section.open)
+	end
+	return section.open
+end
+
 -- Search (on the main page): finds a setting on any page by its label,
 -- tooltip or note, and opens its page with it highlighted. (The game's own
 -- search box can't see inside pages drawn like these.)
@@ -1961,6 +1989,7 @@ local function LayoutCameraSections()
 	cameraSettingsTop.title:SetShown(not focus)
 	local above
 	for _, section in ipairs(cameraSections) do
+		SectionState.Restore(section)
 		local shown, open = not focus or focus == section, section.open or focus == section
 		section.frame:SetShown(shown)
 		if shown then
@@ -2007,9 +2036,10 @@ StaticPopupDialogs.CINEMATIC_RESET_SECTION = {
 
 -- A new section at the bottom of the Camera Settings page: its body (where
 -- the camera's settings go) and an anchor where its title used to be (the
--- title itself is in the name row).
-local function CameraSection(name)
-	local section = { open = false }
+-- title itself is in the name row). key: its name in English, for what's
+-- remembered of it.
+local function CameraSection(name, key)
+	local section = { open = false, id = "Camera Settings/" .. key }
 	local frame = CreateFrame("Frame", nil, cameraSettingsContent)
 	local previous = cameraSections[#cameraSections]
 	if previous then
@@ -2046,7 +2076,7 @@ local function CameraSection(name)
 	title:SetPoint("LEFT", header, "LEFT", 18, 0)
 	header:SetScript("OnClick", function()
 		if cameraSections.focus then return end
-		section.open = not section.open
+		SectionState.Save(section, not section.open)
 		RelayoutCameraSections()
 	end)
 
@@ -2067,7 +2097,7 @@ local function CameraSection(name)
 		if section.selectTab then
 			section.selectTab()
 		elseif not section.open then
-			section.open = true
+			SectionState.Save(section, true)
 			RelayoutCameraSections()
 		end
 	end
@@ -2095,7 +2125,7 @@ local INPUT_PAUSE_TIP = L["After you drag the camera, use camera keys or zoom, t
 	"this long, then carries on from your new view."]
 
 local function CreateCameraModePanel(opts)
-	local content, top, title = CameraSection(L[opts.name])
+	local content, top, title = CameraSection(L[opts.name], opts.name)
 
 	local subtitle = PageIntro(content, title, opts.description, top)
 
@@ -2665,7 +2695,7 @@ end
 -- Not a CreateCameraModePanel page (no sway, zoom profile or music switch of
 -- its own), but laid out the same way.
 local function CreateDeathPanel()
-	local content, top, title = CameraSection(L["Death Cam"])
+	local content, top, title = CameraSection(L["Death Cam"], "Death Cam")
 	local subtitle = PageIntro(content, title, L["When you die, the camera turns " ..
 		"slowly round your body until you release or are resurrected. CineMode stays on " ..
 		"(straight away), with the release button (and any soulstone or Reincarnation " ..
@@ -2806,7 +2836,7 @@ local QUEST_SIDES = {
 	{ value = "left", text = L["Your left"] },
 }
 local function CreateQuestPanel()
-	local content, top, title = CameraSection(L["Quest Cam"])
+	local content, top, title = CameraSection(L["Quest Cam"], "Quest Cam")
 	local subtitle = PageIntro(content, title, L["Talking to a quest giver, the " ..
 		"camera zooms in and swings round behind you, looking past you at them. It goes back " ..
 		"once you close the window or move off (your zoom stays if you zoomed yourself meanwhile). Works " ..
@@ -2915,7 +2945,7 @@ local function CreateQuestPanel()
 end
 
 local function CreateTelePanel()
-	local content, sectionTop, title = CameraSection(L["Tele Cam"])
+	local content, sectionTop, title = CameraSection(L["Tele Cam"], "Tele Cam")
 	local subtitle = PageIntro(content, title, L["Casting your Hearthstone or a " ..
 		"teleport, the camera swings round in front of you, quickly enough to be there before you " ..
 		"go, then spins round you faster and faster as it zooms in. Cancel the cast and it goes " ..
@@ -4401,6 +4431,7 @@ local function CreateCombatPanel()
 			else
 				section.frame:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
 			end
+			SectionState.Restore(section)
 			for _, widget in ipairs(section.widgets) do
 				widget:SetShown(section.open)
 			end
@@ -4425,9 +4456,9 @@ local function CreateCombatPanel()
 	local function OpenPartySection()
 		for _, section in ipairs(sections) do
 			if section.page == "rsparty" then
-				section.open = OwnPartyRows()
+				section.open = SectionState.Saved(section.id, OwnPartyRows())
 			elseif section.page == "extrabars" then
-				section.open = ns.GetDB() ~= nil and AnyTicked(section.rows)
+				section.open = SectionState.Saved(section.id, ns.GetDB() ~= nil and AnyTicked(section.rows))
 			end
 		end
 		Layout()
@@ -4479,7 +4510,8 @@ local function CreateCombatPanel()
 		if #sectionRows == 0 then
 			return
 		end
-		local section = { page = page, open = page ~= "rsparty" or OwnPartyRows(), widgets = {}, rows = sectionRows }
+		local section = { page = page, open = page ~= "rsparty" or OwnPartyRows(), widgets = {}, rows = sectionRows,
+			id = "Standard Frames/" .. (page or "other") }
 		if page == "extrabars" then
 			section.open = ns.GetDB() ~= nil and AnyTicked(sectionRows)
 		end
@@ -4495,13 +4527,13 @@ local function CreateCombatPanel()
 				if not value then
 					CopyRaidRows()
 				end
-				section.open = not value
+				SectionState.Save(section, not value)
 				Refresh()
 				Layout()
 			end)
 		end
 		section.nameRow = SectionBand(frame, heading, function()
-			section.open = not section.open
+			SectionState.Save(section, not section.open)
 			Layout()
 		end, same)
 		local before = Widgets()
@@ -4663,7 +4695,7 @@ local function CreatePortraitsPanel()
 			-- (The page is built before the settings load: the defaults then.)
 			local db = ns.GetDB()
 			for _, section in ipairs(SECTIONS) do
-				section.open = not section.same or db ~= nil and db[section.same] == false
+				section.open = SectionState.Saved(section.id, not section.same or db ~= nil and db[section.same] == false)
 			end
 			Layout()
 		end
@@ -4706,6 +4738,7 @@ local function CreatePortraitsPanel()
 
 		for _, section in ipairs(SECTIONS) do
 			section.widgets = {}
+			section.id = "Unit Frames/" .. (section.prefix ~= "" and section.prefix or section.rows[1][1])
 			local frame = CreateFrame("Frame", nil, content)
 			frame:SetWidth(LABEL_WIDTH + most * COLUMN_WIDTH)
 			section.frame = frame
@@ -4721,14 +4754,14 @@ local function CreatePortraitsPanel()
 					if not value then
 						CopyTarget(section)
 					end
-					section.open = not value
+					SectionState.Save(section, not value)
 					ns.ApplyUnitFrameParts()
 					Refresh()
 					Layout()
 				end)
 			end
 			section.nameRow = SectionBand(frame, section.title, function()
-				section.open = not section.open
+				SectionState.Save(section, not section.open)
 				Layout()
 			end, check)
 
@@ -5301,13 +5334,80 @@ local function CreatePlatesPanel()
 	local COMBAT_TIP = L["Show in fights, and for the Calm Timer after."]
 	local PVP_COMBAT_TIP = L["Show in fights while you're PvP flagged, and for the Calm Timer after."]
 	local GROUP_TIP = L["Always show while you're in a party or raid."]
+	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 10
 
-	local showHeader = Header(content, L["Friendly Nameplates"], subtitle, -18)
+	-- Each grid a band that opens and closes with a click, as on the Standard
+	-- Frames page (all open to start with). What a section adds between
+	-- BeginSection and EndSection goes in its body, hidden while it's closed
+	-- (search still finds it, and opens it). section.last: its last row's
+	-- label, to place the next section below.
+	local sections = {}
+	local function LayoutSections()
+		local above
+		for _, section in ipairs(sections) do
+			section.frame:ClearAllPoints()
+			local last = above and above.open and above.last
+			if last then
+				section.frame:SetPoint("TOPLEFT", last, "BOTTOMLEFT", -(last.indentX or 0), -16)
+			elseif above then
+				section.frame:SetPoint("TOPLEFT", above.frame, "BOTTOMLEFT", 0, -6)
+			else
+				section.frame:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
+			end
+			SectionState.Restore(section)
+			section.body:SetShown(section.open)
+			section.nameRow:SetOpen(section.open)
+			above = section
+		end
+		FitContentHeight(content)
+	end
+	-- What's on the page, to tell what a section adds.
+	local function Widgets()
+		local set = {}
+		for _, object in ipairs({ content:GetChildren() }) do set[object] = true end
+		for _, object in ipairs({ content:GetRegions() }) do set[object] = true end
+		return set
+	end
+	-- (Eight columns and the Role one.)
+	local SECTION_WIDTH = GRID_LABEL + 9 * GRID_COLUMN + GRID_GAP
+	local function Section(heading, key)
+		local section = { open = true, id = "Nameplates/" .. key }
+		section.frame = CreateFrame("Frame", nil, content)
+		section.frame:SetSize(SECTION_WIDTH, BAND_HEIGHT)
+		section.nameRow = SectionBand(section.frame, heading, function()
+			SectionState.Save(section, not section.open)
+			LayoutSections()
+		end)
+		section.body = CreateFrame("Frame", nil, content)
+		section.body:SetPoint("TOPLEFT", section.frame, "BOTTOMLEFT")
+		section.body:SetSize(1, 1)
+		section.body.searchAlways = true
+		section.body.openSection = function()
+			SectionState.Save(section, true)
+			LayoutSections()
+		end
+		sections[#sections + 1] = section
+		return section
+	end
+	local function BeginSection(section)
+		section.before = Widgets()
+	end
+	local function EndSection(section, last)
+		section.last = last
+		for object in pairs(Widgets()) do
+			if not section.before[object] then
+				object:SetParent(section.body)
+			end
+		end
+		section.before = nil
+	end
+
+	local friendlySection = Section(L["Friendly Nameplates"], "Friendly")
 	-- The grid can't keep plates up out of fights while the game's own
 	-- "Always Show Nameplates" is off: say so beside it (checked as the page shows).
 	local showAllWarning = Label(content, "GameFontRedSmall",
 		L["Blizzard's Always Show Nameplates is off, so nameplates only show in combat."])
-	showAllWarning:SetPoint("LEFT", showHeader, "RIGHT", 10, 0)
+	showAllWarning:SetPoint("LEFT", friendlySection.nameRow.title, "RIGHT", 10, 0)
 	showAllWarning.Refresh = function(self)
 		self:SetShown(GetCVar("nameplateShowAll") == "0")
 	end
@@ -5330,7 +5430,6 @@ local function CreatePlatesPanel()
 		headings[#headings + 1] = (place.always and L["Always"]) or (place.combat and L["In Combat"]) or (place.pvpCombat and L["In PvP Combat"])
 			or (place.group and L["Grouped"]) or place[2]
 	end
-	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 10
 	-- (The friendly grid has no Instances column: Friendly Plates in Dungeons
 	-- and Raids, below it, stands in for it.)
 	local friendlyHeadings = {}
@@ -5339,7 +5438,8 @@ local function CreatePlatesPanel()
 			friendlyHeadings[#friendlyHeadings + 1] = heading
 		end
 	end
-	local columnTop = TableTop(showHeader, friendlyHeadings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
+	BeginSection(friendlySection)
+	local columnTop = TableTop(friendlySection.frame, friendlyHeadings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
 
 	-- Two grids: friendly units, then enemy and neutral ones (below Friendly
 	-- Plates in Dungeons and Raids). Rows for particular units (your pet first,
@@ -5465,13 +5565,13 @@ local function CreatePlatesPanel()
 	for r, kind in ipairs(FRIENDLY_KINDS) do
 		AddPlateRow(columnTop, r, kind)
 	end
-	local lastPlateRow = lastLabel
+	EndSection(friendlySection, lastLabel)
 
 	-- Friendly plates in dungeons and raids: the game won't let addons fade
 	-- them there, so each kind is just on or off (see Effects). The grids
 	-- have no Instances boxes for them (INSTANCE_LOCKED, AddPlateRow).
-	local instanceHeader = Header(content, L["Friendly Plates in Dungeons and Raids"], lastLabel, -24)
-	local instanceAnchor = PageIntro(content, instanceHeader,
+	local instanceSection = Section(L["Friendly Plates in Dungeons and Raids"], "Instances")
+	local instanceAnchor = PageIntro(content, instanceSection.nameRow.title,
 		L["In dungeons and raids the game won't let addons fade friendly nameplates, so each kind below is " ..
 		"either all on or all off there, in CineMode. The grids' friendly rows (your target's included) have no " ..
 		"Instances box: these take its place.\n\nWith a friendly target: on while you have one of that kind " ..
@@ -5483,6 +5583,7 @@ local function CreatePlatesPanel()
 		{ "FriendlyMinions", L["Pets and Minions"] },
 		{ "FriendlyNPCs", L["Friendly NPCs"], target = true },
 	}
+	BeginSection(instanceSection)
 	local lastInstanceRow = instanceAnchor
 	for i, row in ipairs(INSTANCE_CHOICES) do
 		local key = "plateInstance" .. row[1]
@@ -5491,7 +5592,7 @@ local function CreatePlatesPanel()
 			choices[3] = { value = "target", text = L["With a friendly target"] }
 		end
 		local rowLabel = Label(content, "GameFontHighlight", row[2])
-		rowLabel:SetPoint("TOPLEFT", lastInstanceRow, "BOTTOMLEFT", 0, i == 1 and -12 or -14)
+		rowLabel:SetPoint("TOPLEFT", lastInstanceRow, "BOTTOMLEFT", 0, i == 1 and -18 or -14)
 		local dropdown = Dropdown(content, key, choices, 200, function(value)
 			if value ~= "hide" then
 				ns.EnablePlateRow(row[1])
@@ -5502,22 +5603,25 @@ local function CreatePlatesPanel()
 		end
 		lastInstanceRow = rowLabel
 	end
+	EndSection(instanceSection, lastInstanceRow)
 
 	-- Enemy and neutral units, laid out the same way.
-	local enemyHeader = Header(content, L["Enemy Nameplates"], lastInstanceRow, -24)
-	local enemyTop = TableTop(enemyHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
+	local enemySection = Section(L["Enemy Nameplates"], "Enemy")
+	BeginSection(enemySection)
+	local enemyTop = TableTop(enemySection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
 	for r, kind in ipairs(ENEMY_KINDS) do
 		AddPlateRow(enemyTop, r, kind)
 	end
-	local lastEnemyRow = lastLabel
+	EndSection(enemySection, lastLabel)
 
 	-- Your target's plate, laid out the same way.
-	local targetHeader = Header(content, L["Target Nameplate"], lastLabel, -24)
-	local targetTop = TableTop(targetHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
+	local targetSection = Section(L["Target Nameplate"], "Target")
+	BeginSection(targetSection)
+	local targetTop = TableTop(targetSection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
 	for r, kind in ipairs(TARGET_KINDS) do
 		AddPlateRow(targetTop, r, kind)
 	end
-	local lastTargetRow = lastLabel
+	EndSection(targetSection, lastLabel)
 
 	-- The parts of the plates that are up (see PlateParts), laid out the same
 	-- way. Retail's plates have no level.
@@ -5547,8 +5651,9 @@ local function CreatePlatesPanel()
 	-- (The class and role icons are the addon's own: off unless ticked, and outside
 	-- CineMode shown only with Always ticked.)
 	local iconTip = L[" Off unless ticked. In CineMode, on the nameplates that are up; outside it, only with Always ticked."]
-	local partsHeader = Header(content, L["Plate Parts"], lastLabel, -24)
-	local partsTop = TableTop(partsHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
+	local partsSection = Section(L["Plate Parts"], "Parts")
+	BeginSection(partsSection)
+	local partsTop = TableTop(partsSection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
 	local r = 0
 	for _, part in ipairs(PARTS) do
 		if not (part[1] == "Level" and ns.isRetail) then
@@ -5557,14 +5662,16 @@ local function CreatePlatesPanel()
 			AddPlateRow(partsTop, r, { "Part" .. part[1], part[2] })
 		end
 	end
-	local lastPartRow = lastLabel
+	EndSection(partsSection, lastLabel)
 
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
-	local namesHeader = Header(content, L["Names"], lastLabel, -24)
+	local namesSection = Section(L["Names"], "Names")
+	local namesHeader = namesSection.nameRow.title
 	-- (A warning beside it: on faded plates the names are ours. See PlateParts.)
 	local namesNote = CreateFrame("Button", nil, content)
 	namesNote:SetSize(16, 16)
+	namesNote:SetFrameLevel(namesSection.nameRow:GetFrameLevel() + 2) -- (above its band, for its tooltip)
 	namesNote:SetPoint("LEFT", namesHeader, "RIGHT", 6, 0)
 	local namesNoteIcon = namesNote:CreateTexture(nil, "ARTWORK")
 	namesNoteIcon:SetAllPoints()
@@ -5577,7 +5684,8 @@ local function CreatePlatesPanel()
 	Tooltip(namesNote, namesNoteText)
 	namesNote.searchNote = namesNoteText
 	namesNote.searchEdges = { top = namesHeader, bottom = namesHeader, left = namesHeader, right = namesNote }
-	local namesTop = TableTop(namesHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	BeginSection(namesSection)
+	local namesTop = TableTop(namesSection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 	local nameTip = L[" Ticking any box turns these names on in the game's options. Ticking none turns them off."]
 	-- (Units with plates show a kept name on theirs in CineMode: see Effects.)
 	local plateNameTip = L[" In CineMode, away from dungeons and raids, the name shows on the unit's nameplate instead, with the rest of the plate hidden."]
@@ -5630,22 +5738,17 @@ local function CreatePlatesPanel()
 		"Unticked, they fade with the plates (the Plate Parts row decides them on the plates that are up)."]
 		.. markerRangeTip
 	AddPlateRow(namesTop, #ns.NAME_GROUPS + 1, { "PartMarker", L["Raid Marker"], rulePath = "Raid markers" })
+	EndSection(namesSection, lastLabel)
 
-	-- Laid out top to bottom: the master switch, then the grids (friendly
+	-- Laid out top to bottom: the master switch, then the sections (friendly
 	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
 	-- your target's, their parts, then names and raid markers).
-	showHeader:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
-	-- (Lined up with the nameplate grid, so the grids' columns match.)
-	local function Below(header, row)
-		header:SetPoint("TOPLEFT", row, "BOTTOMLEFT", -(row.indentX or 0), -24)
-	end
-	Below(instanceHeader, lastPlateRow)
-	Below(enemyHeader, lastInstanceRow)
-	Below(targetHeader, lastEnemyRow)
-	Below(partsHeader, lastTargetRow)
-	Below(namesHeader, lastPartRow)
+	LayoutSections()
 
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:SetScript("OnShow", PageShown(function()
+		Refresh()
+		LayoutSections() -- (as last left, once the settings have loaded)
+	end, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Nameplates")
 end
@@ -6056,6 +6159,7 @@ do
 					frame:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
 				end
 				frame:SetPoint("RIGHT", chatPanel, "RIGHT", -16, 0)
+				SectionState.Restore(section)
 				section.body:SetShown(section.open)
 				section.nameRow:SetOpen(section.open)
 				frame:SetHeight(BAND_HEIGHT + (section.open and (ContentDepth(section.body) or 0) + 10 or 0))
@@ -6069,7 +6173,7 @@ do
 			C_Timer.After(0, LayoutNow)
 		end
 		chatPanel.layoutSections = Layout
-		local function Section(heading)
+		local function Section(heading, key)
 			local frame = CreateFrame("Frame", nil, chatPanel)
 			frame:SetHeight(BAND_HEIGHT)
 			local body = CreateFrame("Frame", nil, frame)
@@ -6077,14 +6181,14 @@ do
 			body:SetPoint("TOPRIGHT", 0, -BAND_HEIGHT)
 			body:SetHeight(1)
 			body.searchAlways = true
-			local section = { frame = frame, body = body, open = true }
+			local section = { frame = frame, body = body, open = true, id = "Chat/" .. key }
 			section.nameRow = SectionBand(frame, heading, function()
-				section.open = not section.open
+				SectionState.Save(section, not section.open)
 				Layout()
 			end)
 			function body.openSection()
 				if not section.open then
-					section.open = true
+					SectionState.Save(section, true)
 					Layout()
 				end
 			end
@@ -6100,7 +6204,7 @@ do
 		end
 
 		-- Chat window: plain ticks, the places it stays up in a line.
-		local windowBody = Section(L["Chat window"])
+		local windowBody = Section(L["Chat window"], "Chat window")
 		local untilRead = Check(windowBody, "chatUntilWhisperRead", L["Keep chat up until whispers are read"],
 			L["When a whisper arrives in its own tab, the whole chat window stays up in CineMode " ..
 			"while that tab flashes, until you click it. Whispers that land in the tab you're " ..
@@ -6122,7 +6226,7 @@ do
 
 		-- The message types that show chat: people's, then the game's.
 		local function TypeSection(heading, game)
-			local body = Section(heading)
+			local body = Section(heading, game and "Game messages" or "Conversation")
 			local rows = MessageRows()
 			for _, peekType in ipairs(ns.CHAT_PEEK_TYPES) do
 				if (peekType.section == "game") == game then
@@ -6162,7 +6266,7 @@ do
 
 		-- Channels the player has joined, a row each (ChannelHolder), listed
 		-- again each time the page opens.
-		local channelBody, channelBand = Section(L["Channels"])
+		local channelBody, channelBand = Section(L["Channels"], "Channels")
 		chatPanel.channelBody = channelBody
 		local headings = CreateFrame("Frame", nil, channelBody)
 		headings:SetSize(1, 1)
@@ -6176,7 +6280,7 @@ do
 		chatPanel.noChannels:SetPoint("TOPLEFT", channelBody, "TOPLEFT", 0, -10)
 
 		-- Other: chat lines of Cinematic's own.
-		local otherBody = Section(L["Other"])
+		local otherBody = Section(L["Other"], "Other")
 		local attackAlert = Check(otherBody, "chatAttackAlert", L["Show attacks on the screen"],
 			L["When the LocalDefense channel says a place is under attack (\"Dun Algaz is under attack!\"), " ..
 			"it also shows in red where the zone name appears, with your faction's city bell. The same " ..
@@ -7710,18 +7814,35 @@ local function CreateExtrasPanel()
 		end
 	end
 
-	local sectionTitles, suiteHeaders = {}, {}
+	local sectionBands, suiteHeaders = {}, {}
+	-- Which sections are open, as on the Standard Frames page: a band each,
+	-- clicked to open or close it (Not installed starts closed).
+	local bandSections = {
+		loaded = { id = "Advanced Frames/loaded", open = true },
+		installed = { id = "Advanced Frames/installed", open = true },
+		missing = { id = "Advanced Frames/missing", open = false },
+	}
 	local missingNote = Label(box, "GameFontHighlightSmall", "")
 	missingNote:SetWidth(560)
 	missingNote:SetJustifyH("LEFT")
 	missingNote:SetJustifyV("TOP")
 	local Layout
 
-	local function SectionTitle(text)
-		if not sectionTitles[text] then
-			sectionTitles[text] = Label(box, "GameFontNormal", text)
+	local function SectionBandFor(key, title)
+		local holder = sectionBands[key]
+		if not holder then
+			holder = CreateFrame("Frame", nil, box)
+			holder:SetSize(box:GetWidth(), BAND_HEIGHT)
+			holder.nameRow = SectionBand(holder, title, function()
+				SectionState.Save(bandSections[key], not bandSections[key].open)
+				Layout()
+				FitContentHeight(content)
+			end)
+			sectionBands[key] = holder
 		end
-		return sectionTitles[text]
+		holder.nameRow.title:SetText(title) -- (translated once the language is known)
+		holder.nameRow:SetOpen(SectionState.Restore(bandSections[key]))
+		return holder
 	end
 
 	-- A suite's header: + or - and its name, with how many parts it has.
@@ -7758,8 +7879,10 @@ local function CreateExtrasPanel()
 			region:Show()
 			y = y + height
 		end
-		for _, region in pairs(sectionTitles) do region:Hide() end
+		for _, holder in pairs(sectionBands) do holder:Hide() end
 		for _, header in pairs(suiteHeaders) do header:Hide() end
+		for _, heading in ipairs(headings) do heading:Hide() end
+		if rolesHeading then rolesHeading:Hide() end
 		for _, row in ipairs(rows) do
 			row.label:Hide()
 			for _, check in ipairs(row.checks) do check:Hide() end
@@ -7786,8 +7909,19 @@ local function CreateExtrasPanel()
 			y = y + ROW_HEIGHT
 		end
 
-		-- One section: its addons in the page's order, a suite's together under its header.
-		local function Section(title, wanted)
+		-- One section: its addons in the page's order, a suite's together under
+		-- its header. The columns' headings go under the first open one with rows.
+		local headingsPlaced, lastOpen
+		local function Band(key, title)
+			y = y + (y > 0 and (lastOpen and 12 or 6) or 0)
+			Place(SectionBandFor(key, title), 0, BAND_HEIGHT)
+			lastOpen = bandSections[key].open
+			if lastOpen then
+				y = y + 6
+			end
+			return lastOpen
+		end
+		local function Section(key, title, wanted)
 			local list, noteList = {}, {}
 			for _, row in ipairs(rows) do
 				if wanted(row.known) then
@@ -7799,11 +7933,17 @@ local function CreateExtrasPanel()
 					noteList[#noteList + 1] = row
 				end
 			end
-			if #list + #noteList == 0 then
+			if #list + #noteList == 0 or not Band(key, title) then
 				return
 			end
-			y = y + (y > 16 and 12 or 0)
-			Place(SectionTitle(title), 0, 20)
+			if #list > 0 and not headingsPlaced then
+				headingsPlaced = true
+				for c, heading in ipairs(headings) do
+					Place(heading, LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
+				end
+				if rolesHeading then Place(rolesHeading, LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0) end
+				y = y + FRAME_HEADING_HEIGHT + 4
+			end
 			-- (Texts read now: they're translated once the language is known.)
 			for _, row in ipairs(noteList) do
 				row.label:SetText(row.note.label)
@@ -7839,18 +7979,8 @@ local function CreateExtrasPanel()
 			end
 		end
 
-		if #rows + #notes > 0 then
-			for c, heading in ipairs(headings) do
-				Place(heading, LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
-			end
-			if rolesHeading then Place(rolesHeading, LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0) end
-			y = FRAME_HEADING_HEIGHT + 4
-		else
-			for _, heading in ipairs(headings) do heading:Hide() end
-			if rolesHeading then rolesHeading:Hide() end
-		end
-		Section(L["Loaded"], function(known) return ns.AddOnLoaded(known.addon) end)
-		Section(L["Installed, not loaded"], function(known) return not ns.AddOnLoaded(known.addon) end)
+		Section("loaded", L["Loaded"], function(known) return ns.AddOnLoaded(known.addon) end)
+		Section("installed", L["Installed, not loaded"], function(known) return not ns.AddOnLoaded(known.addon) end)
 
 		-- The rest supported, by name (a suite once).
 		local missing, listed = {}, {}
@@ -7866,9 +7996,7 @@ local function CreateExtrasPanel()
 				missing[#missing + 1] = note.label
 			end
 		end
-		if #missing > 0 then
-			y = y + (y > 0 and 12 or 0)
-			Place(SectionTitle(L["Not installed"]), 0, 20)
+		if #missing > 0 and Band("missing", L["Not installed"]) then
 			missingNote:SetText("|cff808080" .. L["Also supported, when installed: %s"]:format(table.concat(missing, ", ")) .. "|r")
 			Place(missingNote, 0, missingNote:GetStringHeight() + 4)
 		else
@@ -8966,6 +9094,17 @@ local function CreateMouseoverPanel()
 		return tile
 	end
 
+	-- Each group's heading is a band that opens and closes it, as on the
+	-- Standard Frames page: open while the group's on, closed while it's off,
+	-- unless clicked since (remembered by its default's key, or its name).
+	local function GroupSection(group)
+		local preset = ns.HoverGroupPreset(group)
+		return { id = "Mouseover groups/" .. (preset and "preset:" .. preset.preset or "name:" .. (group.name or "")) }
+	end
+	local function IsOpen(group)
+		return SectionState.Saved(GroupSection(group).id, not group.off)
+	end
+
 	-- Scrolls the page to a group's heading.
 	local headingY = {}
 	local function JumpTo(index)
@@ -9066,7 +9205,16 @@ local function CreateMouseoverPanel()
 			end
 			tile.tipLines = { #names > 0 and table.concat(names, ", ") or L["No frames yet."],
 				"|cff808080" .. L["Click to go to it."] .. "|r" }
-			tile:SetScript("OnClick", function() JumpTo(index) end)
+			tile:SetScript("OnClick", function()
+				if IsOpen(group) then
+					JumpTo(index)
+				else
+					SectionState.Save(GroupSection(group), true)
+					Layout()
+					-- (Once the page has grown to fit it.)
+					C_Timer.After(0, function() JumpTo(index) end)
+				end
+			end)
 		end
 		local add = Take("tile", function() return IconTile(TILE) end)
 		TileAt(add, #groups + 1)
@@ -9082,18 +9230,27 @@ local function CreateMouseoverPanel()
 
 		wipe(headingY)
 		for index, group in ipairs(groups) do
-			-- Divider and heading: name box, delete.
+			-- Heading, on its band: icon, name box, when, on/off, delete.
 			dim = 1
-			local line = Take("line", function()
-				local t = content:CreateTexture(nil, "ARTWORK")
-				t:SetColorTexture(1, 1, 1, 0.15)
-				t:SetHeight(1)
-				return t
-			end)
-			At(line, LEFT)
-			line:SetWidth(WIDTH)
 			headingY[index] = y
-			y = y + 20
+			y = y + 4
+			local open = IsOpen(group)
+			local band = Take("band", function()
+				local holder = CreateFrame("Frame", nil, content)
+				holder:SetSize(WIDTH - 2, BAND_HEIGHT)
+				holder.nameRow = SectionBand(holder, "")
+				return holder
+			end)
+			At(band, LEFT + 2, -3)
+			band.nameRow:SetOpen(open)
+			band.nameRow:SetScript("OnClick", function()
+				SectionState.Save(GroupSection(group), not open)
+				Layout()
+			end)
+			-- (The heading's buttons above the band, to take their own clicks.)
+			local function Raise(widget)
+				widget:SetFrameLevel(band.nameRow:GetFrameLevel() + 2)
+			end
 			-- (An off group is greyed out, all but its On/Off and Delete buttons.)
 			dim = group.off and 0.4 or 1
 
@@ -9101,6 +9258,7 @@ local function CreateMouseoverPanel()
 			local preset = ns.HoverGroupPreset(group)
 			local icon = Take("headIcon", function() return IconTile(26) end)
 			At(icon, LEFT + 4, -3)
+			Raise(icon)
 			icon.icon:SetTexture(ns.HoverGroupIcon(group))
 			icon:SetEnabled(not preset)
 			if preset then
@@ -9121,6 +9279,7 @@ local function CreateMouseoverPanel()
 				return box
 			end)
 			At(nameBox, LEFT + 40)
+			Raise(nameBox)
 			nameBox:SetText(group.name or "")
 			nameBox:SetScript("OnEditFocusLost", function(self)
 				local text = self:GetText()
@@ -9144,6 +9303,7 @@ local function CreateMouseoverPanel()
 				return button
 			end)
 			At(when, LEFT + 224, -1)
+			Raise(when)
 			when:SetText(group.when == "calm" and L["Only out of combat"]
 				or group.when == "combat" and L["Only in combat"] or L["Any time"])
 			when:SetScript("OnClick", function()
@@ -9161,11 +9321,13 @@ local function CreateMouseoverPanel()
 				return button
 			end)
 			At(onOff, LEFT + 372, -1)
+			Raise(onOff)
 			onOff:SetAlpha(1)
 			onOff:SetText(group.off and L["Off"] or L["On"])
 			onOff:SetScript("OnClick", function()
 				local editable = Writable()[index]
 				editable.off = not editable.off or nil
+				SectionState.Save(GroupSection(group), nil) -- (opens or closes with it)
 				Layout()
 			end)
 			icon.icon:SetDesaturated(group.off and true or false)
@@ -9178,69 +9340,72 @@ local function CreateMouseoverPanel()
 				return button
 			end)
 			At(delete, LEFT + WIDTH - 100, -1)
+			Raise(delete)
 			delete:SetAlpha(1)
 			delete:SetScript("OnClick", function()
+				SectionState.Save(GroupSection(group), nil)
 				table.remove(Writable(), index)
 				Layout()
 			end)
 			y = y + 28
-
-			-- Members: label, other groups it's in, remove. (Frames this client
-			-- doesn't have stay in the group, unlisted.)
-			local listed = 0
-			for _, key in ipairs(group.members) do
-				local item = byKey[key]
-				if item or key:find("^extra:") then
-					listed = listed + 1
-					local row = Take("member", MemberRow)
-					At(row, LEFT + 4)
-					row.text:SetText(item and item.label or key:gsub("^extra:", ""))
-					local others = GroupsWith(key, index)
-					row.also:SetText(#others > 0 and L["also in %s"]:format(table.concat(others, ", "))
-						or (item and item.tag) or (item and "" or L["custom"]))
-					row.remove:SetScript("OnClick", function()
-						local members = Writable()[index].members
-						for i, member in ipairs(members) do
-							if member == key then table.remove(members, i) break end
-						end
-						Layout()
-					end)
+			if open then
+				-- Members: label, other groups it's in, remove. (Frames this client
+				-- doesn't have stay in the group, unlisted.)
+				local listed = 0
+				for _, key in ipairs(group.members) do
+					local item = byKey[key]
+					if item or key:find("^extra:") then
+						listed = listed + 1
+						local row = Take("member", MemberRow)
+						At(row, LEFT + 4)
+						row.text:SetText(item and item.label or key:gsub("^extra:", ""))
+						local others = GroupsWith(key, index)
+						row.also:SetText(#others > 0 and L["also in %s"]:format(table.concat(others, ", "))
+							or (item and item.tag) or (item and "" or L["custom"]))
+						row.remove:SetScript("OnClick", function()
+							local members = Writable()[index].members
+							for i, member in ipairs(members) do
+								if member == key then table.remove(members, i) break end
+							end
+							Layout()
+						end)
+						y = y + ROW
+					end
+				end
+				if listed == 0 then
+					local empty = Take("empty", function() return Label(content, "GameFontDisable", L["No frames yet."]) end)
+					At(empty, LEFT + 10, 4)
 					y = y + ROW
 				end
-			end
-			if listed == 0 then
-				local empty = Take("empty", function() return Label(content, "GameFontDisable", L["No frames yet."]) end)
-				At(empty, LEFT + 10, 4)
-				y = y + ROW
-			end
 
-			-- Add a frame: type to search the list.
-			At(AddBox("add", L["Add a frame: type to search..."], index), LEFT + 34, 4)
-			y = y + 30
+				-- Add a frame: type to search the list.
+				At(AddBox("add", L["Add a frame: type to search..."], index), LEFT + 34, 4)
+				y = y + 30
 
-			-- The events that bring the group up besides the mouse: one row
-			-- each, then a box to add more.
-			local alsoLabel = Take("alsoLabel", function()
-				return Label(content, "GameFontNormalSmall", L["Also bring this group up for:"])
-			end)
-			At(alsoLabel, LEFT + 10, 2)
-			y = y + 18
-			for _, trigger in ipairs(triggers) do
-				if group.triggers and group.triggers[trigger.key] then
-					local row = Take("member", MemberRow)
-					At(row, LEFT + 4)
-					row.text:SetText(trigger.label)
-					row.also:SetText("")
-					row.remove:SetScript("OnClick", function()
-						local editable = Writable()[index]
-						if editable.triggers then editable.triggers[trigger.key] = nil end
-						Layout()
-					end)
-					y = y + ROW
+				-- The events that bring the group up besides the mouse: one row
+				-- each, then a box to add more.
+				local alsoLabel = Take("alsoLabel", function()
+					return Label(content, "GameFontNormalSmall", L["Also bring this group up for:"])
+				end)
+				At(alsoLabel, LEFT + 10, 2)
+				y = y + 18
+				for _, trigger in ipairs(triggers) do
+					if group.triggers and group.triggers[trigger.key] then
+						local row = Take("member", MemberRow)
+						At(row, LEFT + 4)
+						row.text:SetText(trigger.label)
+						row.also:SetText("")
+						row.remove:SetScript("OnClick", function()
+							local editable = Writable()[index]
+							if editable.triggers then editable.triggers[trigger.key] = nil end
+							Layout()
+						end)
+						y = y + ROW
+					end
 				end
+				At(AddBox("addEvent", L["Add an event: type to search..."], index, true), LEFT + 34, 4)
+				y = y + 48
 			end
-			At(AddBox("addEvent", L["Add an event: type to search..."], index, true), LEFT + 34, 4)
-			y = y + 48
 		end
 		dim = 1
 

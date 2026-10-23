@@ -2091,6 +2091,8 @@ function ns.EnsureTables()
 	-- Advanced Frames page: suite -> true when opened (they start collapsed).
 	ns.db.addonSuitesOpen = ns.db.addonSuitesOpen or {}
 	ns.db.addonSuitesClosed = nil -- (a test build's: they started open then)
+	-- Options pages' sections opened or closed with a click: "page/section" -> true or false.
+	ns.db.sectionsOpen = ns.db.sectionsOpen or {}
 	ns.db.savedCVars = ns.db.savedCVars or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
 	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = false, LocalDefense = false }
