@@ -31,6 +31,10 @@ local BUTTONS = {
 	{ name = "HousingMicroButton", icon = "Interface\\Icons\\INV_Misc_Key_03" },
 	{ name = "SocialsMicroButton", icon = "Interface\\Icons\\INV_Misc_GroupNeedMore" },
 	{ name = "GuildMicroButton", icon = "Interface\\Icons\\INV_Shirt_GuildTabard_01" },
+	-- (Not on the bar here, but by the chat: our own button stands in, beside
+	-- the one before it. Left out where the bar has a Social button.)
+	{ name = "FriendsMicroButton", friends = true, unless = "SocialsMicroButton",
+		icon = { "Interface\\Icons\\Achievement_GuildPerk_EverybodysFriend", "Interface\\Icons\\INV_Misc_GroupNeedMore" } },
 	{ name = "LFDMicroButton", icon = "Interface\\Icons\\INV_Misc_GroupLooking" },
 	{ name = "LFGMicroButton", icon = "Interface\\Icons\\INV_Misc_GroupLooking" },
 	{ name = "PVPMicroButton", icon = "Interface\\Icons\\INV_BannerPVP_02" },
@@ -65,6 +69,23 @@ local openButtons = {}   -- by slot: what it clicks for a button with no OnClick
 local radius = MIN_RADIUS
 local picked             -- the slot the cursor points at, or nil
 
+-- The Friends slot's button: opens the Friends window, and looks pushed in
+-- while it's open, like the bar's buttons.
+local friendsButton
+if ToggleFriendsFrame and FriendsFrame then
+	friendsButton = CreateFrame("Button") -- (no size: never seen)
+	friendsButton.tooltipText = FRIENDS
+	friendsButton:SetScript("OnClick", function()
+		if FriendsFrame:IsShown() then
+			HideUIPanel(FriendsFrame)
+		else
+			ToggleFriendsFrame(1)
+		end
+	end)
+	FriendsFrame:HookScript("OnShow", function() friendsButton:SetButtonState("PUSHED", true) end)
+	FriendsFrame:HookScript("OnHide", function() friendsButton:SetButtonState("NORMAL") end)
+end
+
 -- The disc's edge: a click past it picks nothing.
 local function OuterRadius()
 	return radius + ICON_SIZE * 0.85
@@ -88,22 +109,30 @@ local function BarButtons()
 	local numbered = false
 	for i, entry in ipairs(BUTTONS) do
 		local button = _G[entry.name]
+		if entry.friends then
+			local social = _G[entry.unless]
+			button = not (type(social) == "table" and social.IsShown and ns.Flag(social:IsShown())) and friendsButton
+		end
 		if type(button) == "table" and button.IsShown and ns.Flag(button:IsShown()) then
 			local index = button.layoutIndex
 			numbered = numbered or type(index) == "number"
 			list[#list + 1] = { entry = entry, button = button, order = type(index) == "number" and index or nil, i = i }
 		end
 	end
-	for i = #list, 1, -1 do
-		local item = list[i]
-		if numbered and not item.order then
-			table.remove(list, i)
-		else
-			item.order = item.order or item.i
+	local kept, last = {}, 0
+	for _, item in ipairs(list) do
+		if item.entry.friends then
+			item.order = numbered and last + 0.5 or item.i -- (just after the one before it)
+		elseif not numbered then
+			item.order = item.i
+		end
+		if item.order then
+			last = item.order
+			kept[#kept + 1] = item
 		end
 	end
-	table.sort(list, function(a, b) return a.order < b.order end)
-	return list
+	table.sort(kept, function(a, b) return a.order < b.order end)
+	return kept
 end
 
 -- The button's name as its tooltip gives it, in the game's language (less
@@ -209,12 +238,20 @@ local function SetIcon(slot, entry, button)
 	elseif type(file) == "number" or (type(file) == "string" and file ~= "") then
 		icon:SetTexture(file)
 		icon:SetTexCoord(normal:GetTexCoord())
-	-- (SetTexture says false for a file this client doesn't have.)
-	elseif entry.icon and icon:SetTexture(entry.icon) ~= false then
-		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) -- (trims the icon's own edge)
 	else
-		icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
-		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		-- (SetTexture says false for a file this client doesn't have: the next.)
+		local files = type(entry.icon) == "table" and entry.icon or { entry.icon }
+		local set = false
+		for _, path in ipairs(files) do
+			if icon:SetTexture(path) ~= false then
+				set = true
+				break
+			end
+		end
+		if not set then
+			icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+		end
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) -- (trims the icon's own edge)
 	end
 end
 

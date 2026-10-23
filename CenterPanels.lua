@@ -663,6 +663,7 @@ end
 function ns.ForgetPanelSpots()
 	if ns.db then
 		ns.db.panelSpots = nil
+		ns.db.rollSpot = nil -- (the roll window's, dragged apart from the game's roll frames)
 	end
 	wipe(dropped)
 end

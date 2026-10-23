@@ -2387,26 +2387,6 @@ ns.OnCalmEnd(function(cut) lastCombatAt = math.min(lastCombatAt, cut) end)
 local GetCombatShownFrames
 do
 	local CALM_ROW_SETTING = { quests = "questCombatCalm" }
-	-- Fading the UI while dead (Death Cam page): each row goes with one of its
-	-- ticks (ns.IsDeadFading), by its key, else its section; the rest fade.
-	local DEATH_ROW_SETTING = {
-		player = "deathShowUnits", petframe = "deathShowUnits", prd = "deathShowUnits", prdpower = "deathShowUnits",
-		target = "deathShowTarget", tot = "deathShowTarget", focus = "deathShowTarget", focustot = "deathShowTarget",
-		buffs = "deathShowBuffs", quests = "deathShowQuests", waypoint = "deathShowQuests",
-		swing = "deathShowCombat", castbar = "deathShowCombat", meters = "deathShowCombat", cooldowns = "deathShowCombat",
-		micro = "deathShowMenus", bags = "deathShowMenus", xp = "deathShowMenus",
-	}
-	local DEATH_PAGE_SETTING = {
-		party = "deathShowGroup", raid = "deathShowGroup", rsparty = "deathShowGroup", bg = "deathShowGroup",
-		bars = "deathShowBars", extrabars = "deathShowBars", gamepad = "deathShowBars", minimap = "deathShowMinimap",
-	}
-	local function DeadRowShown(item)
-		if item.deathSetting == nil then
-			item.deathSetting = DEATH_ROW_SETTING[item.key]
-				or (item.key:find("^addon:") and "deathShowAddons") or DEATH_PAGE_SETTING[item.page or ""] or false
-		end
-		return item.deathSetting and ns.db[item.deathSetting] or false
-	end
 	-- Whether a row is ticked in one of the place columns that apply here.
 	-- (Kept out of GetCombatShownFrames: a closure made each tick was garbage.)
 	local function KeptHere(placeLists, key)
@@ -2441,24 +2421,17 @@ do
 		local facts = ns.RuleFacts(inCombat)
 		-- The rows kept hidden while you're the role you are (their roles buttons), ticks or rule.
 		local roleHide = ns.RoleHides(facts)
-		-- (Dead with the UI fading: only the Death Cam page's ticks count.)
-		local dead = ns.IsDeadFading and ns.IsDeadFading()
 		for _, item in ipairs(ns.COMBAT_SHOW) do
 			local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
-			local ticked
-			if dead then
-				ticked = DeadRowShown(item)
-			else
-				local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
-					and ns.PageOn("handleQuests") and ns.IsCombatShowOn(item.key)
-				-- (A row's rule, when it has one that reads, decides instead of its ticks.)
-				ticked = ns.RuleShows(item.key, facts)
-				if ticked == nil then
-					ticked = ns.IsCineShowOn(item.key) or KeptHere(placeLists, item.key) or (isOn and isOn(item.key))
-						or calmRow
-				end
-				if roleHide[item.key] then ticked = false end
+			local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
+				and ns.PageOn("handleQuests") and ns.IsCombatShowOn(item.key)
+			-- (A row's rule, when it has one that reads, decides instead of its ticks.)
+			local ticked = ns.RuleShows(item.key, facts)
+			if ticked == nil then
+				ticked = ns.IsCineShowOn(item.key) or KeptHere(placeLists, item.key) or (isOn and isOn(item.key))
+					or calmRow
 			end
+			if roleHide[item.key] then ticked = false end
 			if applies and ticked then
 				for _, name in ipairs(item.frames or NO_DEFAULTS) do
 					shown[name] = true
@@ -2471,16 +2444,11 @@ do
 		-- Added frames, by their rows on the Advanced Frames page.
 		for name in pairs(ns.db.extraFrames) do
 			local key = "extra:" .. name
-			local ticked
-			if dead then
-				ticked = ns.db.deathShowAddons
-			else
-				ticked = ns.RuleShows(key, facts)
-				if ticked == nil then
-					ticked = KeptHere(placeLists, key) or (isOn and isOn(key))
-				end
-				ticked = ticked and not roleHide[key]
+			local ticked = ns.RuleShows(key, facts)
+			if ticked == nil then
+				ticked = KeptHere(placeLists, key) or (isOn and isOn(key))
 			end
+			ticked = ticked and not roleHide[key]
 			if ticked then
 				shown[GROUP_KEY[key]] = true
 			end
@@ -4608,64 +4576,8 @@ do
 	end
 end
 
--- Fading the UI while dead: the release window and the ghost's Return to
--- graveyard button too, unless ticked to stay (Death Cam page). The mouse on
--- one brings it up (held as long as the mouseover groups are). They still
--- take clicks while faded. The window can be reused for another popup, so
--- whatever isn't one of them now gets its alpha back at once.
-do
-	local faded = {} -- frame -> { alpha, heldUntil }
-	local wanted = {}
-
-	local function Fade(frame, keep, elapsed, now)
-		local state = faded[frame]
-		if not state then
-			state = { alpha = frame:GetAlpha(), heldUntil = 0 }
-			faded[frame] = state
-		end
-		if ns.Flag(frame:IsMouseOver()) then
-			state.heldUntil = now + ns.HoldTime("mouseoverHold")
-		end
-		local target = (keep or state.heldUntil > now) and 1 or 0
-		if state.alpha ~= target then
-			local duration = target > state.alpha and ns.FadeInTime() or ns.FadeOutTime()
-			local step = duration > 0 and elapsed / duration or 1
-			state.alpha = target > state.alpha and math.min(target, state.alpha + step)
-				or math.max(target, state.alpha - step)
-			frame:SetAlpha(state.alpha)
-		end
-	end
-
-	function ns.UpdateDeathPopups(elapsed)
-		wipe(wanted)
-		if ns.IsDeadFading and ns.IsDeadFading() then
-			local ok, release = false, nil
-			if StaticPopup_FindVisible then
-				ok, release = pcall(StaticPopup_FindVisible, "DEATH")
-			end
-			if ok and type(release) == "table" then
-				wanted[release] = ns.db.deathShowRelease
-			end
-			if GhostFrame and ns.Flag(GhostFrame:IsShown()) then
-				wanted[GhostFrame] = ns.db.deathShowGhost
-			end
-		end
-		local now = GetTime()
-		for frame, keep in pairs(wanted) do
-			Fade(frame, keep, elapsed, now)
-		end
-		for frame in pairs(faded) do
-			if wanted[frame] == nil then
-				frame:SetAlpha(1)
-				faded[frame] = nil
-			end
-		end
-	end
-end
-
 function ns.UpdateFrames(cinematic, elapsed)
 	local now = GetTime()
-	ns.UpdateDeathPopups(elapsed)
 	UpdateReadyOnly(elapsed, now)
 	if not ns.isRetail then
 		ns.UpdateSwingOrder()

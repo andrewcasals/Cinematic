@@ -924,13 +924,26 @@ end
 
 local ownDrag = false -- dragging our panels on their own (the game's frames have no place yet)
 
+-- With rollSeparate on, our panels have a place of their own, apart from the
+-- game's roll frames: where last dropped (rollSpot, their top centre in
+-- UIParent's units). Never dropped, they come up by the game's frames as usual.
+local function OwnSpot()
+	local spot = ns.Setting("rollSeparate") and ns.db and ns.db.rollSpot
+	if type(spot) == "table" and type(spot[1]) == "number" and type(spot[2]) == "number" then
+		return spot[1], spot[2]
+	end
+end
+
 -- Where the game's roll frames are (their top, centred), so its frame and
 -- then our panel come up in the same spot; else a spot of our own.
 local function Place()
 	if ownDrag then
 		return
 	end
-	local x, top = RollsTop()
+	local x, top = OwnSpot()
+	if not x then
+		x, top = RollsTop()
+	end
 	if x and (x ~= window.placedX or top ~= window.placedTop) then
 		window.placedX, window.placedTop = x, top
 		window:ClearAllPoints()
@@ -1061,6 +1074,15 @@ local function DragStop()
 	window:StopMovingOrSizing()
 	window:SetUserPlaced(false)
 	ownDrag = false
+	if ns.Setting("rollSeparate") then -- (apart: only ours moves, and keeps its spot)
+		local left, top = Number(window:GetLeft()), Number(window:GetTop())
+		if left and top and ns.db then
+			ns.db.rollSpot = { left + window:GetWidth() / 2, top }
+		end
+		window.placedX = nil
+		Place()
+		return
+	end
 	local box = GroupLootContainer
 	local left, top = window:GetLeft(), window:GetTop()
 	if not (box and type(left) == "number" and type(top) == "number") then
@@ -1082,11 +1104,12 @@ end
 DragStack = function(card)
 	card:RegisterForDrag("LeftButton")
 	-- (tied to the game's roll frames: dragging moves those, and this follows;
-	-- while they have no place, this moves and they're put with it)
+	-- while they have no place, this moves and they're put with it. With
+	-- rollSeparate on, only this moves)
 	local withRolls = false
 	card:SetScript("OnDragStart", function()
 		local box = GroupLootContainer
-		withRolls = ns.DragRolls and box and type(box:GetLeft()) == "number" and not Secret(box:GetLeft()) or false
+		withRolls = not ns.Setting("rollSeparate") and ns.DragRolls and box and type(box:GetLeft()) == "number" and not Secret(box:GetLeft()) or false
 		if withRolls then
 			ns.DragRolls(true)
 		else

@@ -2730,37 +2730,6 @@ local function CreateDeathPanel()
 		"means \"as high as it goes\". 0 keeps your angle."])
 	GreyUnless(level, IfOn)
 
-	-- Fading the UI while dead (ns.IsDeadFading): what stays up.
-	stack:Header(content, L["While dead"])
-	local fadeUI = stack:Add(Check(content, "deathFadeUI", L["Fade the UI while dead"],
-		L["While you're dead, the UI fades away but for the parts ticked below. The mouse on a faded " ..
-		"part still brings it up, and tooltips still show. Try it with the death camera test."]), "check")
-	fadeUI:HookScript("OnClick", Refresh)
-	GreyUnless(fadeUI, IfOn)
-	local function IfFading(db) return IfOn(db) and db.deathFadeUI end
-	local ghost = stack:Add(Check(content, "deathFadeGhost", L["As a ghost too"],
-		L["Released, it stays faded all the way back to your body, walking or not."]), "check", 24)
-	GreyUnless(ghost, IfFading)
-	stack:Note(content, L["Keep these up:"])
-	local DEATH_SHOW = {
-		{ "deathShowRelease", L["Release window"], L["The window with Release Spirit (and any soulstone or " ..
-			"Reincarnation button). Faded, it still takes clicks: the mouse on it brings it back."] },
-		{ "deathShowGhost", L["Return to graveyard button"], L["The button a ghost gets at the top of the screen."] },
-		{ "deathShowUnits", L["Your frames"], L["Player and pet frames, and your personal health and resource bars."] },
-		{ "deathShowTarget", L["Target and focus"] },
-		{ "deathShowGroup", L["Party and raid frames"] },
-		{ "deathShowBars", L["Action bars"] },
-		{ "deathShowMinimap", L["Minimap"] },
-		{ "deathShowBuffs", L["Buffs and debuffs"] },
-		{ "deathShowQuests", L["Quest tracker"] },
-		{ "deathShowCombat", L["Cast bar, swing timer, meters, cooldowns"] },
-		{ "deathShowMenus", L["Micro menu, bags and XP bar"] },
-		{ "deathShowAddons", L["Other addons' frames"] },
-	}
-	for _, row in ipairs(DEATH_SHOW) do
-		GreyUnless(stack:Add(Check(content, row[1], row[2], row[3]), "check", 24), IfFading)
-	end
-
 	-- Right column: zoom, screen, music
 	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
 	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
@@ -7420,7 +7389,18 @@ local function CreateVisionPanel()
 				ns.GetDB().rollBeside = value
 				ns.RefreshRollWindow()
 			end), "check")
-		GreyUnless(beside, RollsOn)
+		GreyUnless(beside, function(db) return db.rollWindow and not db.rollSeparate end)
+		local separate = stack:Add(Check(content, "rollSeparate", L["Move apart from the game's roll frames"],
+			L["Dragging the window moves only it, not the game's roll frames, and dragging those moves only " ..
+			"them, so the two can sit anywhere on the screen. The window comes up where you last dropped it. " ..
+			"Until you've dragged it, it comes up by the game's roll frames as usual. Its dragging works even " ..
+			"with \"Drag windows to move them\" off."],
+			function(value)
+				ns.GetDB().rollSeparate = value
+				ns.RefreshRollWindow()
+				Refresh() -- ("Beside the game's roll frames" greys out)
+			end), "check")
+		GreyUnless(separate, RollsOn)
 		local footer = stack:Add(Check(content, "rollFooter", L["Show the counts under each item"],
 			L["The lines under an item's players: \"and N more\", \"Lower picks\", who passed, and " ..
 			"\"Click to list everyone\". Off: just the players. Clicking an item's panel still lists everyone."]),

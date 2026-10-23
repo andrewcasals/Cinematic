@@ -1216,22 +1216,6 @@ L["Edges reach in"] = "Alcance de los bordes"
 L["How far the dark edges reach in once they've closed in, as a share of the screen from each side."] = "Hasta dónde llegan los bordes oscuros una vez cerrados, como parte de la pantalla desde cada lado."
 L["Edges lift as you near your body"] = "Los bordes se aclaran al acercarte a tu cuerpo"
 L["Released to a graveyard with no spirit healer's countdown, the dark edges stay as you walk back, and lift the closer you get to your body, gone once you're there."] = "Al liberar el espíritu en un cementerio sin cuenta atrás del ángel de la resurrección, los bordes oscuros siguen mientras vuelves andando y se aclaran cuanto más te acercas a tu cuerpo, hasta desaparecer al llegar."
-L["While dead"] = "Al morir"
-L["Fade the UI while dead"] = "Desvanecer la interfaz al morir"
-L["While you're dead, the UI fades away but for the parts ticked below. The mouse on a faded part still brings it up, and tooltips still show. Try it with the death camera test."] = "Mientras estás muerto, la interfaz se desvanece salvo las partes marcadas abajo. El ratón sobre una parte desvanecida aún la muestra, y los tooltips siguen apareciendo. Pruébalo con la prueba de la cámara de muerte."
-L["As a ghost too"] = "También como fantasma"
-L["Released, it stays faded all the way back to your body, walking or not."] = "Al liberar el espíritu, sigue desvanecida todo el camino de vuelta a tu cuerpo, andes o no."
-L["Keep these up:"] = "Mantener visibles:"
-L["Release window"] = "Ventana de liberar espíritu"
-L["The window with Release Spirit (and any soulstone or Reincarnation button). Faded, it still takes clicks: the mouse on it brings it back."] = "La ventana con Liberar espíritu (y cualquier botón de piedra de alma o Reencarnación). Desvanecida, aún recibe clics: el ratón encima la vuelve a mostrar."
-L["Return to graveyard button"] = "Botón de volver al cementerio"
-L["The button a ghost gets at the top of the screen."] = "El botón que tiene un fantasma en la parte superior de la pantalla."
-L["Your frames"] = "Tus marcos"
-L["Player and pet frames, and your personal health and resource bars."] = "Los marcos de jugador y mascota, y tus barras personales de salud y recursos."
-L["Party and raid frames"] = "Marcos de grupo y banda"
-L["Cast bar, swing timer, meters, cooldowns"] = "Barra de lanzamiento, temporizador de golpe, medidores, reutilizaciones"
-L["Micro menu, bags and XP bar"] = "Micromenú, bolsas y barra de experiencia"
-L["Other addons' frames"] = "Marcos de otros addons"
 L["Show \"YOU DIED\""] = "Mostrar \"HAS MUERTO\""
 L["Shortly after the death camera starts, \"YOU DIED\" fades in across the middle of the screen on a dark band, then fades away after a few seconds."] = "Poco después de empezar la cámara de muerte, \"HAS MUERTO\" aparece en el centro de la pantalla sobre una franja oscura y se desvanece a los pocos segundos."
 L["YOU DIED"] = "HAS MUERTO"
@@ -1601,6 +1585,15 @@ L["The window sits to the right of the game's roll frames, level with their top,
 	"them, so a long list of drops doesn't push it down the screen. It stays there once you've chosen."] =
 	"La ventana se coloca a la derecha de los marcos de tirada del juego, a la altura de su parte superior, " ..
 	"en vez de debajo, para que una lista larga de botín no la empuje hacia abajo. Se queda ahí después de elegir."
+L["Move apart from the game's roll frames"] = "Separar de los marcos de tirada del juego"
+L["Dragging the window moves only it, not the game's roll frames, and dragging those moves only " ..
+	"them, so the two can sit anywhere on the screen. The window comes up where you last dropped it. " ..
+	"Until you've dragged it, it comes up by the game's roll frames as usual. Its dragging works even " ..
+	"with \"Drag windows to move them\" off."] =
+	"Arrastrar la ventana solo la mueve a ella, no los marcos de tirada del juego, y arrastrar esos solo " ..
+	"los mueve a ellos, así que cada uno puede ir en cualquier parte de la pantalla. La ventana aparece " ..
+	"donde la soltaste por última vez. Hasta que la arrastres, aparece junto a los marcos de tirada del " ..
+	"juego como siempre. Se puede arrastrar aunque \"Arrastrar ventanas para moverlas\" esté desactivado."
 L["Show the counts under each item"] = "Mostrar los recuentos bajo cada objeto"
 L["The lines under an item's players: \"and N more\", \"Lower picks\", who passed, and " ..
 	"\"Click to list everyone\". Off: just the players. Clicking an item's panel still lists everyone."] =
