@@ -7674,6 +7674,20 @@ local KEYBINDS = {
 		tip = L["Hold to bring up a wheel of the ground markers (the coloured lights you drop on the floor): " ..
 			"point at one and let go, and it drops under the cursor. Picking one that's down moves it; Clear " ..
 			"all takes them all up. Tap it instead and the wheel stays up for you to click one. Only in a group."] },
+	{ action = "CLICK CinematicVisionWheelButton:LeftButton", label = L["Vision wheel"],
+		tip = L["Hold to bring up a wheel of the visions (Heal, Quest, Duel...), ringed while they're on: " ..
+			"point at one and let go to turn it on or off, in a fight too. Tap it instead and the wheel stays " ..
+			"up for you to click one."] },
+	{ action = "CINEMATIC_VISION_HEAL", label = L["Toggle Heal Vision"],
+		tip = L["Turns Heal Vision on or off (its Enable page switch), in a fight too: off, the party and " ..
+			"raid frames all show again."] },
+	{ action = "CINEMATIC_VISION_QUEST", label = L["Toggle Quest Vision"],
+		tip = L["Turns Quest Vision on or off (its Enable page switch)."] },
+	{ action = "CINEMATIC_VISION_DUEL", label = L["Toggle Duel Vision"],
+		tip = L["Turns Duel Vision on or off."] },
+	{ action = "CINEMATIC_VISION_ROLL", label = L["Toggle Roll Vision"],
+		show = function() return ns.hasRollWindow end,
+		tip = L["Turns Roll Vision on or off."] },
 	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"],
 		tip = L["Starts the AFK camera now, without waiting out its delay. " ..
 			"Press again, move or jump to stop it."] },

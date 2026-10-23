@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-23", page = "Keybinds", title = "Vision wheel",
+		text = "Hold a key to bring up a wheel of the visions and turn Heal, Quest, Duel or Roll Vision on or " ..
+		"off, even in a fight. It's on the master wheel too, and each vision has a toggle key of its own on " ..
+		"the Keybinds page." },
 	{ date = "2026-10-22", page = "Vision", title = "Roll Vision",
 		text = "In a group, a window shows each item being rolled on, with everyone's pick and roll and the " ..
 		"winner on top, so you needn't read the rolls in chat. Turn it off in the Visions page." },

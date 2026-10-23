@@ -131,7 +131,8 @@ end
 local function Open()
 	-- (One wheel at a time. It only opens out of a fight, so ours may hide
 	-- the secure ones.)
-	for _, other in ipairs({ CinematicMenuWheel, CinematicMarkerWheel, CinematicMasterWheel, CinematicWorldMarkerWheel }) do
+	for _, other in ipairs({ CinematicMenuWheel, CinematicMarkerWheel, CinematicMasterWheel, CinematicVisionWheel,
+		CinematicWorldMarkerWheel }) do -- (last: not on every client)
 		if other:IsShown() and not InCombatLockdown() then
 			other:Hide()
 		end

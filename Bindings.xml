@@ -16,6 +16,20 @@
 	</Binding>
 	<Binding name="CLICK CinematicWorldMarkerWheelButton:LeftButton" category="ADDONS">
 	</Binding>
+	<Binding name="CLICK CinematicVisionWheelButton:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CINEMATIC_VISION_HEAL" category="ADDONS">
+		Cinematic_ToggleVision("heal")
+	</Binding>
+	<Binding name="CINEMATIC_VISION_QUEST" category="ADDONS">
+		Cinematic_ToggleVision("quest")
+	</Binding>
+	<Binding name="CINEMATIC_VISION_DUEL" category="ADDONS">
+		Cinematic_ToggleVision("duel")
+	</Binding>
+	<Binding name="CINEMATIC_VISION_ROLL" category="ADDONS">
+		Cinematic_ToggleVision("roll")
+	</Binding>
 	<Binding name="CINEMATIC_CAM_IDLE" category="ADDONS">
 		Cinematic_StartCam("idle")
 	</Binding>

@@ -111,7 +111,7 @@ local OPEN_SNIPPET = [[
 -- Cant(), why that slot can't be used now), and these, all optional:
 -- Cant() (why it can't be used now, or nil), Active(slot) (true: shows its
 -- ring), Title() (the middle's text with nothing picked), activeText (under a
--- picked slot that's active), OnOpen() (as the key goes down, before the
+-- picked slot that's active), inactiveText (under one that isn't), OnOpen() (as the key goes down, before the
 -- snippet: out of a fight our code may still change the buttons). Text is
 -- English, translated as it's shown (the language is only known later).
 local function MakeWheel(spec)
@@ -163,6 +163,8 @@ local function MakeWheel(spec)
 			stateText:SetText(cant)
 		elseif entry and spec.activeText and spec.Active and spec.Active(entry) then
 			stateText:SetText(L[spec.activeText])
+		elseif entry and spec.inactiveText and spec.Active and spec.Active(entry) == false then
+			stateText:SetText(L[spec.inactiveText])
 		else
 			stateText:SetText("")
 		end
@@ -569,6 +571,106 @@ end
 -- For the keybinds page: whether this client has the ground marker wheel.
 ns.hasWorldMarkerWheel = CinematicWorldMarkerWheel ~= nil
 
+-- The visions: each one's switch, turned on and off by its keybind and the
+-- vision wheel. Duel and Roll Vision's ticks are on the Vision page, under
+-- its Enable page switch (page): turning one on turns that on too. Apply()
+-- puts the change into effect, as the options pages do.
+local VISIONS = {
+	{ key = "heal", setting = "handleHealVision", label = "Heal Vision",
+		icon = "Interface\\Icons\\Spell_Holy_FlashHeal", trim = true, color = { 0.35, 1, 0.45 },
+		Apply = function()
+			if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
+		end },
+	{ key = "quest", setting = "questVision", label = "Quest Vision",
+		icon = "Interface\\Icons\\INV_Misc_Head_Dragon_01", trim = true, color = { 1, 0.82, 0 },
+		Apply = function()
+			if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
+			if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
+		end },
+	{ key = "duel", setting = "duelPlates", page = "handleVision", label = "Duel Vision",
+		icon = "Interface\\Icons\\Ability_DualWield", trim = true, color = { 1, 0.35, 0.3 } },
+}
+-- (Only where the game has a loot history.)
+if ns.hasRollWindow then
+	VISIONS[#VISIONS + 1] = { key = "roll", setting = "rollWindow", page = "handleVision", label = "Roll Vision",
+		icon = "Interface\\Buttons\\UI-GroupLoot-Dice-Up", color = { 0.45, 0.7, 1 },
+		Apply = function()
+			if ns.RefreshRollWindow then ns.RefreshRollWindow() end
+		end }
+end
+local visionByKey = {}
+for _, vision in ipairs(VISIONS) do
+	visionByKey[vision.key] = vision
+end
+
+local function VisionOn(vision)
+	return ns.Setting(vision.setting) and true or false
+end
+
+-- Turns a vision on or off. quiet: no message in chat (the wheel shows it).
+local function ToggleVision(vision, quiet)
+	local db = ns.db
+	if not db then
+		return
+	end
+	if VisionOn(vision) then
+		db[vision.setting] = false
+	else
+		db[vision.setting] = true
+		if vision.page then
+			db[vision.page] = true
+		end
+	end
+	if vision.Apply then
+		vision.Apply()
+	end
+	if not quiet then
+		ns.Print((VisionOn(vision) and L["%s on"] or L["%s off"]):format(L[vision.label]))
+	end
+	if ns.RefreshOptions then
+		ns.RefreshOptions()
+	end
+end
+
+-- The Toggle Heal Vision (Quest, Duel, Roll) keybinds (Bindings.xml).
+function Cinematic_ToggleVision(key)
+	local vision = visionByKey[key]
+	if not vision then
+		ns.Print(L["this game has no Roll Vision"])
+		return
+	end
+	ToggleVision(vision)
+end
+
+local function SetVisionBindingNames()
+	BINDING_NAME_CINEMATIC_VISION_HEAL = "Cinematic: " .. L["Toggle Heal Vision"]
+	BINDING_NAME_CINEMATIC_VISION_QUEST = "Cinematic: " .. L["Toggle Quest Vision"]
+	BINDING_NAME_CINEMATIC_VISION_DUEL = "Cinematic: " .. L["Toggle Duel Vision"]
+	BINDING_NAME_CINEMATIC_VISION_ROLL = "Cinematic: " .. L["Toggle Roll Vision"]
+end
+SetVisionBindingNames()
+ns.OnLanguage(SetVisionBindingNames)
+
+-- The vision wheel: an icon for each vision, ringed while it's on; picking
+-- one turns it on or off. Each slot clicks a plain button of ours (no size:
+-- never seen) that does it, in a fight too.
+local visionSlots = {}
+for _, vision in ipairs(VISIONS) do
+	local toggler = CreateFrame("Button")
+	toggler:SetScript("OnClick", function() ToggleVision(vision, true) end)
+	visionSlots[#visionSlots + 1] = { icon = vision.icon, trim = vision.trim, color = vision.color,
+		label = vision.label, vision = vision, attributes = { type = "click", clickbutton = toggler } }
+end
+local visionWheel = MakeWheel({
+	name = "CinematicVisionWheel",
+	title = "Vision wheel",
+	binding = "Vision wheel (hold)",
+	slots = visionSlots,
+	activeText = "on: pick it to turn it off",
+	inactiveText = "off: pick it to turn it on",
+	Active = function(entry) return VisionOn(entry.vision) end,
+})
+
 -- The master wheel: one icon for each of the other wheels. Picking one opens
 -- it round the cursor, waiting for a click. The camera wheel isn't secure:
 -- its slot clicks a plain button of ours (no size: never seen) that opens
@@ -582,6 +684,8 @@ local masterSlots = {
 	{ icon = "Interface\\Icons\\INV_Misc_Gear_01", trim = true, color = { 1, 0.82, 0.3 }, label = "Menu wheel",
 		opens = CinematicMenuWheel },
 	{ icon = ICON .. 8, color = COLORS[8], label = "Marker wheel", opens = markerWheel },
+	{ icon = "Interface\\Icons\\Ability_EyeOfTheOwl", trim = true, color = { 0.35, 1, 0.45 }, label = "Vision wheel",
+		opens = visionWheel },
 }
 if CinematicWorldMarkerWheel then
 	masterSlots[#masterSlots + 1] = { icon = ICON .. 6, color = COLORS[6], label = "Ground marker wheel",
