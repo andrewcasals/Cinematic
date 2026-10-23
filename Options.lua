@@ -8073,6 +8073,9 @@ local KEYBINDS = {
 			"and time-of-day title. Press again (or Blizzard's key) to bring it back."] },
 	{ action = "CINEMATIC_TOGGLE", label = L["Toggle CineMode"],
 		tip = L["Turns CineMode on or off, like /cine."] },
+	{ action = "CINEMATIC_TOGGLEEFFECTS", label = L["Toggle visual effects"],
+		tip = L["Turns the Visual Effects page on or off (its Enable page switch): the letterbox, tint, " ..
+			"vignette, weather and the rest."] },
 	{ action = "CLICK CinematicMasterWheelButton:LeftButton", label = L["Master wheel"], section = L["Wheels"],
 		tip = L["Hold to bring up a wheel of the wheels below (camera, menu, marker...): point at one and " ..
 			"let go to open it, then click what you want on it. Tap it instead and the wheel stays up for you " ..

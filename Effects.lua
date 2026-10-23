@@ -3135,6 +3135,23 @@ function Cinematic_ToggleTooltips()
 	end
 end
 
+-- The Toggle visual effects keybind: the Visual Effects page's master switch
+-- (visualEffects), as its Enable page box does.
+function Cinematic_ToggleVisualEffects()
+	if not ns.db then
+		return
+	end
+	ns.db.visualEffects = not ns.db.visualEffects
+	ns.letterboxDirty = true
+	if ns.RefreshTint then
+		ns.RefreshTint()
+	end
+	ns.Print(ns.db.visualEffects and L["visual effects on"] or L["visual effects off"])
+	if ns.RefreshOptions then
+		ns.RefreshOptions()
+	end
+end
+
 local function ShowKeyDown()
 	return bindHeld
 end

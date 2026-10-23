@@ -5,6 +5,9 @@
 	<Binding name="CINEMATIC_HIDEUI" category="ADDONS">
 		Cinematic_ToggleUI()
 	</Binding>
+	<Binding name="CINEMATIC_TOGGLEEFFECTS" category="ADDONS">
+		Cinematic_ToggleVisualEffects()
+	</Binding>
 	<Binding name="CLICK CinematicMasterWheelButton:LeftButton" category="ADDONS">
 	</Binding>
 	<Binding name="CINEMATIC_CAMWHEEL" category="ADDONS" runOnUp="true">
