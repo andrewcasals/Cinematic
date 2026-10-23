@@ -145,6 +145,9 @@ end
 -- them (plateNameFriends). WoW Forever's colours and names can be secret: they
 -- go straight from the game to our text. [unit frame] = our text.
 local texts = {}
+-- [unit frame] = a copy of our text in its last band's look, fading out
+-- while the text fades in at the new one (see swaps).
+local ghosts = {}
 
 local function Known(value)
 	return not (issecretvalue and issecretvalue(value))
@@ -278,12 +281,14 @@ ns.SetPlateNameFont = SetNameFont
 -- yards (trade range) and 28 (follow range). Size and height follow
 -- perspective (one over the distance) through the Name Style page's two
 -- points, close and far, and on past them. A unit has to stay in a new band
--- a moment first, and its name then swaps behind a quick crossfade (a size
--- can't fade smoothly); zooming changes them in small steps. Bands aren't
+-- a moment first, and its name then swaps: a copy in the old look fading out
+-- as the new fades in, both sliding to the new height (a size can't change
+-- smoothly, a place can: see ghosts and SwapShares);
+-- zooming changes them in small steps. Bands aren't
 -- looked at in fights (the game may not allow it). Not on retail, whose
 -- plates scale with distance themselves. [plate] = band, 1 to 3 (nil: 2).
 local FAR_USED = not ns.isRetail
-local FAR_CHECK, FAR_HOLD, FAR_SWAP = 0.25, 0.5, 0.35 -- seconds
+local FAR_CHECK, FAR_HOLD, FAR_SWAP = 0.25, 0.5, 0.6 -- seconds
 local BAND_YARDS = { 4, 16, 35 } -- a unit's rough distance from you, by band
 local CLOSE_YARDS, FAR_YARDS = 10, 50 -- from the camera: the page's two points
 local SIZE_STEP = 0.05 -- size changes in steps (text sized smoothly wobbles)
@@ -332,17 +337,25 @@ local function Look(band)
 	return math.floor(size / SIZE_STEP + 0.5) * SIZE_STEP, math.floor(math.min(80, math.max(-80, y)) + 0.5)
 end
 
--- How far a plate's name shows as it swaps size: out to the swap, then back in.
+-- How far a plate's name is through swapping to its new look: 0 to 1 (1:
+-- none under way).
 local function SwapFade(plate)
 	local swap = swaps[plate]
 	if not swap then
 		return 1
 	end
-	local t = (GetTime() - swap.started) / FAR_SWAP
-	if t >= 1 then
-		return 1
-	end
-	return t < 0.5 and 1 - 2 * t or 2 * t - 1
+	return math.min(1, (GetTime() - swap.started) / FAR_SWAP)
+end
+
+-- How much shows of the new look (in) and the old (out) that far through:
+-- the old fading out over the first half, the new in over the second, with
+-- only a sliver of overlap (two sizes over each other read as a double image).
+local SWAP_OVERLAP = 0.1
+local function SwapShares(t)
+	local half = (1 + SWAP_OVERLAP) / 2
+	local out = math.max(0, 1 - t / half)
+	local into = math.min(1, math.max(0, (t - (1 - half)) / half))
+	return into, out
 end
 
 local function UnitOf(plate)
@@ -424,15 +437,19 @@ local function UpdateLook(text, band)
 	end
 end
 
--- Shows or hides our text for a plate, at alpha (nil: hidden).
+-- Shows or hides our text for a plate, at alpha (nil: hidden), and while
+-- its band swaps, its copy in the old look fading out under it.
 local function OwnName(plate, alpha)
 	local unitFrame = plate.UnitFrame
-	local text = texts[unitFrame]
+	local text, ghost = texts[unitFrame], ghosts[unitFrame]
 	local name = unitFrame.name
 	local unit = UnitOf(plate)
 	if not (alpha and alpha > 0 and unit and Usable(name)) then
 		if text then
 			text:Hide()
+		end
+		if ghost then
+			ghost:Hide()
 		end
 		return
 	end
@@ -441,11 +458,44 @@ local function OwnName(plate, alpha)
 		text.dirty = true
 		texts[unitFrame] = text
 	end
+	local share = SwapFade(plate)
+	local into, out = SwapShares(share)
 	text.band = bandOf[plate] or 2
 	UpdateLook(text, text.band)
 	DrawName(text, name, unit)
-	text:SetAlpha(alpha)
+	text:SetAlpha(alpha * into)
 	text:Show()
+	local swap = swaps[plate]
+	if swap and share < 1 then
+		if not ghost then
+			ghost = unitFrame:CreateFontString(nil, "OVERLAY")
+			ghost.dirty = true
+			ghosts[unitFrame] = ghost
+		end
+		ghost.band = swap.from
+		UpdateLook(ghost, ghost.band)
+		DrawName(ghost, name, unit)
+		ghost:SetAlpha(alpha * out)
+		ghost:Show()
+		-- (Both slide from the old height to the new together, so they sit on
+		-- one line and only the size blends: a place moves smoothly, a size
+		-- doesn't.)
+		local y = ghost.y + (text.y - ghost.y) * share
+		for _, each in ipairs({ text, ghost }) do
+			each:ClearAllPoints()
+			each:SetPoint("BOTTOM", name, "BOTTOM", 0, y)
+		end
+		text.slid = true
+	else
+		if ghost then
+			ghost:Hide()
+		end
+		if text.slid then
+			text.slid = nil
+			text:ClearAllPoints()
+			text:SetPoint("BOTTOM", name, "BOTTOM", 0, text.y)
+		end
+	end
 end
 
 -- Our text for a plate while it shows (the guild line goes under it).
@@ -468,7 +518,7 @@ local function ApplyPlate(plate, personal)
 	local crossfading = kept ~= nil and body < 1
 	local nameOnly = crossfading and body < 0.5
 	local nameFade = crossfading and (nameOnly and 1 - 2 * body or 2 * body - 1) or 1
-	local nameAlpha = nameOnly and kept * nameFade * SwapFade(plate) * (sight[plate] or 1) or 0
+	local nameAlpha = nameOnly and kept * nameFade * (sight[plate] or 1) or 0
 	-- (Our own text in its place, with the Nameplates page's tick: see texts.)
 	local ours = nameOnly and plate ~= personal and Style("plateNameStyle")
 	CentreName(unitFrame, nameOnly and not ours)
@@ -490,8 +540,9 @@ local function ApplyPlate(plate, personal)
 		end
 		EachPartFrame(unitFrame, part, Fade, level)
 	end
-	-- (And the guild line under a name shown alone: PlateGuild.lua.)
-	ns.SetPlateGuild(plate, plate ~= personal and nameAlpha or 0)
+	-- (And the guild line under a name shown alone: PlateGuild.lua. It sits
+	-- under our text, so it fades in with its new look.)
+	ns.SetPlateGuild(plate, plate ~= personal and nameAlpha * (ours and (SwapShares(SwapFade(plate))) or 1) or 0)
 	if next(held) then
 		keeper:Show()
 	end
@@ -512,6 +563,9 @@ ApplyAll = ns.Profiled("Plate parts", ApplyAll)
 function ns.RefreshPlateNameStyle()
 	for _, text in pairs(texts) do
 		text.dirty = true
+	end
+	for _, ghost in pairs(ghosts) do
+		ghost.dirty = true
 	end
 	ApplyAll()
 end
@@ -858,11 +912,7 @@ farWatch:SetScript("OnUpdate", ns.Profiled("Plate names", function(self, elapsed
 	end
 	for plate, swap in pairs(swaps) do
 		personal = personal or PersonalPlate()
-		local t = (now - swap.started) / FAR_SWAP
-		if t >= 0.5 and (bandOf[plate] or 2) ~= swap.to then
-			bandOf[plate] = swap.to -- (at the swap's darkest)
-		end
-		if t >= 1 then
+		if now - swap.started >= FAR_SWAP then
 			swaps[plate] = nil
 		end
 		ApplyPlate(plate, personal)
@@ -883,7 +933,9 @@ farWatch:SetScript("OnUpdate", ns.Profiled("Plate names", function(self, elapsed
 					farSince[plate] = now
 				elseif now - farSince[plate] >= FAR_HOLD then
 					farSince[plate] = nil
-					swaps[plate] = { started = now, to = band }
+					-- (The text takes the new look at once, fading in over a copy in the old.)
+					swaps[plate] = { started = now, from = bandOf[plate] or 2, to = band }
+					bandOf[plate] = band
 				end
 			end
 		end
