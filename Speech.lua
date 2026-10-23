@@ -1,7 +1,8 @@
 -- Cinematic: speech from behind you. With "Hide speech you can see as a
 -- bubble", a say or yell whose bubble doesn't show on screen (its speaker is
--- behind you, or out of view) shows as a line of text low in the middle of
--- the screen instead of bringing up a faded chat window (db.chatSpeechBehind):
+-- behind you, or out of view) shows as a line of text beside the chat window
+-- (or where it's moved to) instead of bringing up a faded chat window
+-- (db.chatSpeechBehind):
 -- "Name says: ..." in the chat's own colour, looking like the chat bubbles
 -- do: in a bubble of its own, or just the text (outlined, if ticked) with the
 -- Chat bubbles page's Text only, and at its text size. Newer lines push older
@@ -18,8 +19,15 @@ local FADE_IN, FADE_OUT = 0.2, 0.6 -- seconds
 local SLIDE_RATE = 10 -- how fast a line slides up into its place (higher: quicker)
 local BASE_TIME, PER_LETTER, MOST_TIME = 3, 0.06, 12 -- seconds a line stays up
 local SAME_LINE = 1 -- seconds: the same line again (another chat window's copy) is skipped
+local BOX_W, BOX_H = 360, 48 -- the Move box
+local BESIDE_CHAT_X, BESIDE_CHAT_Y = 12, -30 -- the box's corner from the chat window's top corner
 
-local holder, spot -- spot: the newest line's bottom middle (db.speechBehindX/Y)
+-- spot: the Move box's place (db.speechBehindLeft/Bottom; nil: beside the
+-- chat window); the lines line up with its left edge, middle or right edge
+-- (side) as it's on the left, middle or right of the screen.
+local holder, spot
+local side, spotBottom = "LEFT", 0
+local ANCHOR = { LEFT = "BOTTOMLEFT", CENTER = "BOTTOM", RIGHT = "BOTTOMRIGHT" }
 local lines = {} -- newest first: { frame, text, born, life, y }
 local spare = {}
 local recent = {} -- [event .. text] = when shown
@@ -136,7 +144,14 @@ local function SetLook(line, words)
 	line.boxed = boxed and line.bubble and true or false
 	local tailTop = select(4, Behind())
 	-- (The tail's room is under the bubble, or over it with the tail on top.)
-	text:SetPoint("BOTTOM", line.frame, "BOTTOM", 0, line.boxed and PAD_Y + (tailTop and 0 or TAIL_SPACE) or 0)
+	-- (Lined up with the Move box's side; a bubble's edge, not its words', on it.)
+	local point = ANCHOR[side]
+	local inset = side == "LEFT" and PAD_X or side == "RIGHT" and -PAD_X or 0
+	text:SetJustifyH(side)
+	text:ClearAllPoints()
+	text:SetPoint(point, line.frame, point, line.boxed and inset or 0,
+		line.boxed and PAD_Y + (tailTop and 0 or TAIL_SPACE) or 0)
+	line.point = point
 	if line.bubble then
 		TailAt(line.bubble, tailTop)
 		line.bubble:ClearAllPoints()
@@ -159,7 +174,6 @@ local function NewLine()
 	words:SetFrameLevel(frame:GetFrameLevel() + 5)
 	local text = words:CreateFontString(nil, "OVERLAY")
 	text:SetFontObject(Font())
-	text:SetJustifyH("CENTER")
 	text:SetJustifyV("BOTTOM")
 	text:SetWordWrap(true)
 	return { frame = frame, text = text }
@@ -194,7 +208,8 @@ local function OnUpdate(_, elapsed)
 		-- (Slides up into its place as newer lines come in under it: quick at
 		-- first, settling into place.)
 		line.y = math.abs(y - line.y) < 0.5 and y or line.y + (y - line.y) * math.min(1, elapsed * SLIDE_RATE)
-		line.frame:SetPoint("BOTTOM", spot, "BOTTOM", 0, line.y)
+		line.frame:ClearAllPoints()
+		line.frame:SetPoint(line.point, spot, line.point, 0, line.y)
 		y = y + line.text:GetStringHeight() + (line.boxed and PAD_Y * 2 + TAIL_SPACE or 0) + GAP
 	end
 	if #lines == 0 then
@@ -203,10 +218,46 @@ local function OnUpdate(_, elapsed)
 end
 local OnHolderUpdate = ns.Profiled("Speech behind", OnUpdate)
 
--- Where the lines go: across from the middle of the screen's bottom, and up.
+-- A frame's edges in the holder's units (nil if they can't be read).
+local function Edges(frame)
+	local left, right, top = frame:GetLeft(), frame:GetRight(), frame:GetTop()
+	for _, value in ipairs({ left, right, top }) do
+		if type(value) ~= "number" or (issecretvalue and issecretvalue(value)) then
+			return nil
+		end
+	end
+	local scale = frame:GetEffectiveScale() / holder:GetEffectiveScale()
+	return left * scale, right * scale, top * scale
+end
+
+-- Where the Move box is: where it was put, else beside the main chat window
+-- (on its right; on its left if chat is on the right of the screen), else
+-- low in the middle of the screen.
 local function PlaceSpot()
+	local width = holder:GetWidth()
+	local left, bottom = tonumber(ns.db.speechBehindLeft), tonumber(ns.db.speechBehindBottom)
+	if not (left and bottom) then
+		local chatLeft, chatRight, chatTop
+		if _G.ChatFrame1 then
+			chatLeft, chatRight, chatTop = Edges(_G.ChatFrame1)
+		end
+		if chatLeft then
+			if (chatLeft + chatRight) / 2 > width / 2 then
+				left = chatLeft - BESIDE_CHAT_X - BOX_W
+			else
+				left = chatRight + BESIDE_CHAT_X
+			end
+			bottom = chatTop + BESIDE_CHAT_Y
+		else
+			left, bottom = (width - BOX_W) / 2, 170
+		end
+	end
+	local middle = left + BOX_W / 2
+	side = middle < width / 3 and "LEFT" or middle > width * 2 / 3 and "RIGHT" or "CENTER"
+	spotBottom = bottom
 	spot:ClearAllPoints()
-	spot:SetPoint("BOTTOM", holder, "BOTTOM", tonumber(ns.db.speechBehindX) or 0, tonumber(ns.db.speechBehindY) or 170)
+	spot:SetSize(BOX_W, 1)
+	spot:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", left, bottom)
 end
 
 local function Holder()
@@ -219,57 +270,61 @@ local function Holder()
 			ns.AddOverlay(holder) -- (stays up with the UI hidden, like the bubbles)
 		end
 		spot = CreateFrame("Frame", nil, holder)
-		spot:SetSize(1, 1)
 	end
 	PlaceSpot()
 	return holder
 end
 
 -- The Chat page's Move button: a box standing in for the lines, dragged to
--- where they should show. Letting go saves the spot and closes it, a line
--- showing there to see; right-click puts it back.
+-- where they should show (saved as it's let go). A left click sets it there
+-- and closes it, a line showing there to see; right-click puts it back.
 local mover
 function ns.MoveSpeechBehind()
 	Holder()
 	if not mover then
 		mover = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
-		mover:SetSize(WIDTH / 2, 48)
+		mover:SetSize(BOX_W, BOX_H)
 		mover:SetFrameStrata("FULLSCREEN_DIALOG")
 		mover:SetClampedToScreen(true)
 		mover:SetMovable(true)
 		mover:RegisterForDrag("LeftButton")
-		mover:RegisterForClicks("RightButtonUp")
+		mover:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		mover:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
 		mover:SetBackdropColor(0, 0, 0, 0.6)
 		mover:SetBackdropBorderColor(1, 0.82, 0, 1)
 		local label = mover:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		label:SetPoint("CENTER")
-		label:SetText(ns.L["Speech from behind you shows here.\nDrag it where you want it, right-click to reset."])
+		label:SetText(ns.L["Speech from behind you shows here.\nDrag it where you want it, left-click to set, right-click to reset."])
 		local close = CreateFrame("Button", nil, mover, "UIPanelCloseButton")
 		close:SetPoint("TOPRIGHT", 4, 4)
 		local function Snap()
 			mover:ClearAllPoints()
-			mover:SetPoint("BOTTOM", spot, "BOTTOM", 0, 0)
+			mover:SetPoint("BOTTOMLEFT", spot, "BOTTOMLEFT", 0, 0)
 		end
 		mover:SetScript("OnDragStart", mover.StartMoving)
 		mover:SetScript("OnDragStop", function(self)
 			self:StopMovingOrSizing()
-			local x = self:GetCenter()
-			local bottom = self:GetBottom()
-			if type(x) == "number" and type(bottom) == "number" then
+			local left, bottom = self:GetLeft(), self:GetBottom()
+			if type(left) == "number" and type(bottom) == "number" then
 				local scale = self:GetEffectiveScale() / holder:GetEffectiveScale()
-				ns.db.speechBehindX = math.floor((x * scale - holder:GetWidth() / 2) + 0.5)
-				ns.db.speechBehindY = math.floor(bottom * scale + 0.5)
+				ns.db.speechBehindLeft = math.floor(left * scale + 0.5)
+				ns.db.speechBehindBottom = math.floor(bottom * scale + 0.5)
 			end
 			PlaceSpot()
 			Snap()
-			self:Hide()
-			ns.ShowSpeechBehind("CHAT_MSG_SAY", nil, ns.L["Speech from behind you shows here."])
+			self.draggedAt = GetTime() -- (the button-up ending a drag isn't a click)
 		end)
-		mover:SetScript("OnClick", function()
-			ns.db.speechBehindX, ns.db.speechBehindY = nil, nil -- (the defaults)
-			PlaceSpot()
-			Snap()
+		mover:SetScript("OnClick", function(self, button)
+			if self.draggedAt and GetTime() - self.draggedAt < 0.2 then
+				return
+			elseif button == "RightButton" then
+				ns.db.speechBehindLeft, ns.db.speechBehindBottom = nil, nil -- (beside the chat window)
+				PlaceSpot()
+				Snap()
+			else
+				self:Hide()
+				ns.ShowSpeechBehind("CHAT_MSG_SAY", nil, ns.L["Speech from behind you shows here."])
+			end
 		end)
 		mover.Snap = Snap
 	end
@@ -330,7 +385,7 @@ function ns.ShowSpeechBehind(event, author, text, guid)
 	line.born, line.life, line.fading = now, math.min(MOST_TIME, BASE_TIME + #text * PER_LETTER), nil
 	line.most = most
 	-- (Rising: it starts below the screen's bottom edge and slides up into place.)
-	line.y = rise and -((tonumber(ns.db.speechBehindY) or 170) + RISE_FROM) or 0
+	line.y = rise and -(spotBottom + RISE_FROM) or 0
 	local info = _G.ChatTypeInfo and _G.ChatTypeInfo[chatType]
 	local r, g, b = 1, 1, 1
 	if info then r, g, b = info.r or 1, info.g or 1, info.b or 1 end
@@ -338,7 +393,7 @@ function ns.ShowSpeechBehind(event, author, text, guid)
 	line.text:SetTextColor(r, g, b, 1)
 	line.frame:SetAlpha(0)
 	line.frame:ClearAllPoints()
-	line.frame:SetPoint("BOTTOM", spot, "BOTTOM", 0, line.y)
+	line.frame:SetPoint(line.point, spot, line.point, 0, line.y)
 	line.frame:Show()
 	table.insert(lines, 1, line)
 	holder:SetScript("OnUpdate", OnHolderUpdate)

@@ -12,8 +12,8 @@ local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-23", page = "Chat", title = "Speech from behind you",
-		text = "Says and yells from people behind you or out of view show as bubbles low on the screen, " ..
-		"rising up from below, instead of bringing up chat." },
+		text = "Tick Show speech from behind you on the Chat page and says and yells from people behind you " ..
+		"or out of view show as bubbles low on the screen, rising up from below, instead of bringing up chat." },
 	{ date = "2026-10-23", page = "General", title = "Copy chat",
 		text = "Tick Copy chat button on the Quality of life page and a small icon in a chat window's corner " ..
 		"opens its lines, ready to select and copy with Ctrl+C." },

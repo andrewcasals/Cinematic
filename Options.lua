@@ -4892,20 +4892,25 @@ local function CreateBubblesPanel()
 	stack:Header(content, L["Behind you"])
 	stack:Help(content, L["Speech from behind you (on the Chat page) shows low on the screen, looking like " ..
 		"the bubbles above. These make it feel like it's coming from behind."])
-	stack:Add(Check(content, "speechBehindRise", L["Rise up from below the screen"],
+	-- (Grey while the Chat page's option is off.)
+	local function IfSpeechBehind(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end
+	local rise = stack:Add(Check(content, "speechBehindRise", L["Rise up from below the screen"],
 		L["Each line slides up from below the bottom of the screen, as if from behind the camera, " ..
 		"instead of just fading in."]), "check")
+	GreyUnless(rise, IfSpeechBehind)
 	local behindSize = stack:Add(Slider(content, "speechBehindScale", L["Size"], 50, 100, 5, "%d%%", 100),
 		"slider")
 	Tooltip(behindSize, L["How big speech from behind you is, next to a bubble overhead: smaller sounds " ..
 		"further away."])
+	GreyUnless(behindSize, IfSpeechBehind)
 	local behindAlpha = stack:Add(Slider(content, "speechBehindAlpha", L["Opacity"], 30, 100, 5, "%d%%", 100),
 		"slider")
 	Tooltip(behindAlpha, L["How solid speech from behind you is: fainter sounds muffled, out of view."])
+	GreyUnless(behindAlpha, IfSpeechBehind)
 	local tailTop = stack:Add(Check(content, "speechBehindTailTop", L["Tail on top"],
 		L["The bubble's tail sits on top, pointing up, instead of under it pointing down. (In a bubble only: " ..
 		"not with Text only.)"]), "check")
-	GreyUnless(tailTop, function(db) return not db.bubblesTextOnly end)
+	GreyUnless(tailTop, function(db) return IfSpeechBehind(db) and not db.bubblesTextOnly end)
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -6159,11 +6164,18 @@ do
 		moveSpeech:SetText(L["Move"])
 		Tooltip(moveSpeech, L["Shows a box where speech from behind you appears: drag it where you want the lines."])
 		moveSpeech:SetScript("OnClick", function() ns.MoveSpeechBehind() end)
+		moveSpeech.Refresh = function() end
+		controls[#controls + 1] = moveSpeech
+		local function IfSpeechBehind(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end
+		GreyUnless(moveSpeech, IfSpeechBehind)
+		-- (Ticking either greys out / enables the choices under them.)
+		hideBubbled:HookScript("OnClick", Refresh)
+		speechBehind:HookScript("OnClick", Refresh)
 
 		local speechName = Check(chatPanel, "speechBehindName", L["Show who said it"],
 			L["Speech from behind you starts with the speaker's name (\"Name says: ...\"). Unticked, just their words show."])
 		speechName:SetPoint("TOPLEFT", speechBehind, "BOTTOMLEFT", 16, -2)
-		GreyUnless(speechName, function(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end)
+		GreyUnless(speechName, IfSpeechBehind)
 
 		-- (On the same line as Show who said it.)
 		local speechClass = Check(chatPanel, "speechBehindClassColor", L["In class colour"],
@@ -6178,7 +6190,7 @@ do
 			L["Speech from behind you shows low on the screen even while the chat window is up (when you hover " ..
 			"it, type, or a message brought it up). Unticked, it shows only while chat is faded, and goes to chat otherwise."])
 		speechChatShown:SetPoint("TOPLEFT", speechName, "BOTTOMLEFT", 0, -2)
-		GreyUnless(speechChatShown, function(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end)
+		GreyUnless(speechChatShown, IfSpeechBehind)
 
 		-- The sections, each a band that opens and closes with a click and its
 		-- body under it (all open to start with). A setting found by search in a

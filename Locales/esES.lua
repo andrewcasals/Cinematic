@@ -843,7 +843,7 @@ L["Speech from behind you starts with the speaker's name (\"Name says: ...\"). U
 L["Show speech from behind you at the bottom"] = "Mostrar abajo lo que se dice a tu espalda"
 L["Shows a box where speech from behind you appears: drag it where you want the lines."] = "Muestra un recuadro donde aparece lo que se dice a tu espalda: arrástralo adonde quieras las líneas."
 L["Speech from behind you shows here."] = "Lo que se dice a tu espalda aparece aquí."
-L["Speech from behind you shows here.\nDrag it where you want it, right-click to reset."] = "Lo que se dice a tu espalda aparece aquí.\nArrástralo adonde quieras, clic derecho para restablecer."
+L["Speech from behind you shows here.\nDrag it where you want it, left-click to set, right-click to reset."] = "Lo que se dice a tu espalda aparece aquí.\nArrástralo adonde quieras, clic izquierdo para fijar, clic derecho para restablecer."
 L["Says and yells with no bubble on your screen (the speaker is behind you, or out of view) show as a line of text low in the middle of the screen, with the speaker's name, instead of bringing up chat. It uses the Chat bubbles page's outline and text size."] = "Lo que se dice y grita sin bocadillo en tu pantalla (quien habla está a tu espalda o fuera de vista) se muestra como una línea de texto abajo en el centro de la pantalla, con el nombre de quien habla, en lugar de mostrar el chat. Usa el contorno y el tamaño de texto de la página Bocadillos de chat."
 L["Says and yells (people's and NPCs') don't show chat when their chat bubble shows on your screen: you can read it there. Ones from out of view, or where bubbles are off, still do."] = "Lo que se dice y se grita (de jugadores y PNJ) no muestra el chat cuando su bocadillo aparece en tu pantalla: puedes leerlo ahí. Lo que llega desde fuera de la vista, o donde los bocadillos están desactivados, sí lo muestra."
 L["Show attacks on the screen"] = "Mostrar ataques en pantalla"
@@ -2001,4 +2001,4 @@ L["Tick Copy chat button on the Quality of life page and a small icon in a chat 
 
 -- What's new: Speech from behind you
 L["Speech from behind you"] = "Lo que se dice a tu espalda"
-L["Says and yells from people behind you or out of view show as bubbles low on the screen, rising up from below, instead of bringing up chat."] = "Lo que dicen y gritan quienes están a tu espalda o fuera de vista se muestra en bocadillos abajo en la pantalla, subiendo desde abajo, en lugar de mostrar el chat."
+L["Tick Show speech from behind you on the Chat page and says and yells from people behind you or out of view show as bubbles low on the screen, rising up from below, instead of bringing up chat."] = "Marca Mostrar abajo lo que se dice a tu espalda en la página Chat y lo que dicen y gritan quienes están a tu espalda o fuera de vista se muestra en bocadillos abajo en la pantalla, subiendo desde abajo, en lugar de mostrar el chat."
