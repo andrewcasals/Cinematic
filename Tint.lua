@@ -801,21 +801,24 @@ end
 local LIFT_KNEE = 0.8       -- share of the dark still there as the fast part starts
 local WAVE_SLOW, WAVE_FAST = 30, 5 -- seconds left: starts lifting, then fast
 local WAVE_LAST = 1         -- seconds left: the wave's bringing you back
+local WAVE_EASE = 0.5       -- the fast part's curve (see Lift)
 local CORPSE_FAST, CORPSE_NEAR = 80, 30 -- yards: fast from here, gone by here
                             -- (about where you can come back to life)
 local CORPSE_CHECK = 0.25   -- seconds between checks
-local CORPSE_FOLLOW = 1     -- seconds the vignette takes to follow a change as you walk...
-local CORPSE_CLOSE = 3      -- ...and to close in (released early, or walking away)
+local CORPSE_FOLLOW = 1     -- seconds the vignette takes to follow a change as you walk
+                            -- (closing in, never faster than deathVignetteTime)
 local corpse = { checkedAt = 0 }
 
 -- How much dark is left (0-1) with value (seconds or yards) still to go:
--- full at far, LIFT_KNEE at knee, none at near.
-local function Lift(value, far, knee, near)
+-- full at far, LIFT_KNEE at knee, none at near. ease under 1 keeps more of it
+-- through the fast part, gone right at near (the edges shrink and fade
+-- together, so a straight line looked gone well before the end: tested).
+local function Lift(value, far, knee, near, ease)
 	if value >= knee then
 		local slow = far > knee and math.min(1, (value - knee) / (far - knee)) or 1
 		return LIFT_KNEE + (1 - LIFT_KNEE) * slow
 	end
-	return LIFT_KNEE * math.max(0, (value - near) / (knee - near))
+	return LIFT_KNEE * math.max(0, (value - near) / (knee - near)) ^ (ease or 1)
 end
 
 local function Number(value)
@@ -899,7 +902,7 @@ local function WaveLevel(now)
 	-- Before that, a wave gone means you walked out of its circle: the corpse
 	-- run takes over (the edges went with it: tested).
 	corpse.waited = corpse.waveEnd - now < WAVE_LAST
-	return Lift(math.max(0, corpse.waveEnd - now), WAVE_SLOW, WAVE_FAST, 0)
+	return Lift(math.max(0, corpse.waveEnd - now), WAVE_SLOW, WAVE_FAST, 0, WAVE_EASE)
 end
 
 -- Keeps your body's position while dead, and the vignette wanted once
@@ -973,10 +976,12 @@ local function UpdateDeathScreen(elapsed)
 		deathLevel = Approach(deathLevel, target, elapsed,
 			target > deathLevel and DEATH_FADE_IN or DeathFadeOut(deathLevel, wave))
 		local creepTime
-		if run then
-			creepTime = creepTarget > deathCreep and CORPSE_CLOSE or CORPSE_FOLLOW
-		elseif creepTarget > deathCreep then
-			creepTime = db.deathVignetteTime
+		if creepTarget > deathCreep then
+			-- Closing in (after you die, released early, walking away, a new
+			-- wave): never faster than the creep after you die.
+			creepTime = math.max(db.deathVignetteTime, run and CORPSE_FOLLOW or 0)
+		elseif run then
+			creepTime = CORPSE_FOLLOW
 		else
 			creepTime = DeathFadeOut(deathCreep, wave)
 		end
