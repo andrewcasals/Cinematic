@@ -5746,7 +5746,7 @@ local function CreateNameStylePanel()
 			local ours = styledNames and db.plateNameColour
 			if sample.player then
 				if ours and db.plateNameFriends == "blue" then
-					r, g, b = 0, 0, 1
+					r, g, b = unpack(ns.PLATE_FRIEND_COLOURS.blue)
 				elseif classColor and not (ours and db.plateNameFriends == "white") then
 					r, g, b = classColor.r, classColor.g, classColor.b
 				end
@@ -5833,7 +5833,7 @@ local function CreateNameStylePanel()
 	GreyUnless(colour, On)
 	local friendsLabel = stack:Add(Label(content, "GameFontHighlight", L["Friendly players:"]), "label", 28)
 	local FRIENDS = {
-		{ "blue", L["Blue"], L["Blue, as the game's names over their heads."] },
+		{ "blue", L["Blue"], L["Blue, as the game's names over their heads (green while they're PvP flagged, as there too)."] },
 		{ "class", L["Class colours"], L["Their class's colour, as the plates draw them."] },
 		{ "white", L["White"], nil },
 	}

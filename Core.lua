@@ -598,7 +598,7 @@ DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the ga
 -- names over heads (Nameplates page's tick, the Name Style page; see PlateParts).
 DEFAULTS.plateNameStyle = true
 DEFAULTS.plateNameColour = true -- red hostile, yellow neutral, green friendly
-DEFAULTS.plateNameFriends = "blue" -- friendly players: "blue" (as over their heads), "class" or "white"
+DEFAULTS.plateNameFriends = "class" -- friendly players: "class" (as their plates' bars), "blue" (as over their heads) or "white"
 DEFAULTS.plateNameOutline = 0 -- 0 none, 1 thin, 2 thick
 DEFAULTS.plateNameSize = 1 -- times the game's
 DEFAULTS.plateNameAlpha = 1

@@ -164,16 +164,24 @@ local function Style(key)
 	return value
 end
 
--- Whether a unit's name is ours to colour, and "white" for one in white.
+-- Whether a unit's name is ours to colour: true for the game's colour for
+-- it, or a friendly player's colour of our own ("blue", "white").
 local function TintUnit(unit)
 	local okGuid, guid = pcall(UnitGUID, unit)
 	if okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-")
 		and not Ask(UnitCanAttack, "player", unit) then
 		local friends = Style("plateNameFriends")
-		return friends ~= "class" and (friends == "white" and "white" or true)
+		return friends ~= "class" and friends
 	end
 	return true
 end
+
+-- Friendly players' colours of our own. Blue as the game's names over their
+-- heads (read off a screenshot: the game's colour for them on plates is a
+-- far darker pure blue); green, its own, while they're PvP flagged, as
+-- there too.
+local FRIEND_COLOURS = { blue = { 0.4, 0.4, 1 }, white = { 1, 1, 1 } }
+ns.PLATE_FRIEND_COLOURS = FRIEND_COLOURS -- (the Name Style page's preview)
 
 -- Sets a name's colour, keeping its alpha.
 local painting -- (so our own setting doesn't paint it again)
@@ -186,9 +194,10 @@ local function SetNameColor(name, r, g, b)
 	painting = nil
 end
 
-local function PaintName(name, unit, white)
-	if white then
-		SetNameColor(name, 1, 1, 1)
+local function PaintName(name, unit, own)
+	local colour = FRIEND_COLOURS[own or ""]
+	if colour and not (own == "blue" and Ask(UnitIsPVP, unit)) then
+		SetNameColor(name, colour[1], colour[2], colour[3])
 	elseif UnitSelectionColor then
 		SetNameColor(name, UnitSelectionColor(unit))
 	else
@@ -359,7 +368,7 @@ local painter = CreateFrame("Frame")
 painter:Hide()
 painter:SetScript("OnUpdate", ns.Profiled("Plate name colours", function(self)
 	for name, saved in pairs(tinted) do
-		PaintName(name, saved.unit, saved.white)
+		PaintName(name, saved.unit, saved.own)
 	end
 	for name, saved in pairs(styled) do
 		KeepStyle(name, saved)
@@ -380,7 +389,7 @@ for _, event in ipairs({ "UPDATE_MOUSEOVER_UNIT", "CURSOR_CHANGED", "PLAYER_TARG
 end
 repainter:SetScript("OnEvent", function()
 	for name, saved in pairs(tinted) do
-		PaintName(name, saved.unit, saved.white)
+		PaintName(name, saved.unit, saved.own)
 	end
 end)
 
@@ -392,7 +401,7 @@ local hookedNames = {}
 local function Repaint(name)
 	local saved = tinted[name]
 	if saved and not painting then
-		pcall(PaintName, name, saved.unit, saved.white)
+		pcall(PaintName, name, saved.unit, saved.own)
 	end
 end
 
@@ -462,9 +471,9 @@ local function TintName(unitFrame, on)
 			end
 			tinted[name] = saved
 		end
-		saved.unit, saved.white = unit, tint == "white"
+		saved.unit, saved.own = unit, tint ~= true and tint or nil
 		HookName(name)
-		PaintName(name, unit, saved.white)
+		PaintName(name, unit, saved.own)
 		painter:Show()
 	elseif tinted[name] then
 		local saved = tinted[name]
@@ -484,7 +493,14 @@ local function ApplyPlate(plate, personal)
 		return
 	end
 	local body = bodyShare[plate] or 1
-	local nameOnly = nameShare[plate] ~= nil and body < 1
+	local kept = nameShare[plate]
+	-- A plate filling in round a name kept up (your target clicked) or
+	-- emptying back to it: the name crossfades, so its look never jumps.
+	-- Its name-only look fades out over the first half of the rest coming in,
+	-- the plate's own look fades in over the second half (and back).
+	local crossfading = kept ~= nil and body < 1
+	local nameOnly = crossfading and body < 0.5
+	local nameFade = crossfading and (nameOnly and 1 - 2 * body or 2 * body - 1) or 1
 	-- (Styled as the Name Style page says, with the Nameplates page's tick.)
 	local styledName = nameOnly and Style("plateNameStyle")
 	CentreName(unitFrame, nameOnly)
@@ -493,7 +509,13 @@ local function ApplyPlate(plate, personal)
 	for _, part in ipairs(ns.PLATE_PARTS) do
 		local level = plate ~= personal and levels[part] or 1
 		if part == "Name" then
-			level = math.max(level * body, nameShare[plate] or 0)
+			if nameOnly then
+				level = kept * nameFade
+			elseif crossfading then
+				level = math.max(level, kept) * nameFade
+			else
+				level = math.max(level * body, kept or 0)
+			end
 			if styledName then
 				level = level * Style("plateNameAlpha")
 			end
