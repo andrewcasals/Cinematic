@@ -629,7 +629,7 @@ DEFAULTS.questVision = true -- the Quest Vision page's switch: off, none of the 
 -- Effects): "plate" (their nameplates), "name" (just their names, on their
 -- plates), "mark" (a quest mark: added to a plate or name the Nameplates page
 -- shows, else alone) or "none" (as the Nameplates page's rows say).
-DEFAULTS.questMobsShow = "plate"
+DEFAULTS.questMobsShow = "mark"
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
 DEFAULTS.questObjectGlow = true -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
