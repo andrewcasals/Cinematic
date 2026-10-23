@@ -7450,8 +7450,8 @@ local function CreateVisionPanel()
 			Raids = { L["Raids"], L["in raids"] },
 			BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
 		}
-		-- (Each group beside its place: Party, Dungeons, then Raid, Raids, set
-		-- apart at the end.)
+		-- (The groups and their places set apart at the end: Party, Raid,
+		-- Dungeons, Raids.)
 		local COLUMNS = { { key = "", heading = L["Always"] } }
 		local function Place(where)
 			COLUMNS[#COLUMNS + 1] = { key = "In" .. where, heading = PLACES[where][1], where = where }
@@ -7460,8 +7460,8 @@ local function CreateVisionPanel()
 		Place("BGs")
 		local firstGroup = #COLUMNS + 1
 		COLUMNS[#COLUMNS + 1] = { key = "InParty", heading = L["Party"] }
-		Place("Dungeons")
 		COLUMNS[#COLUMNS + 1] = { key = "InRaid", heading = L["Raid"] }
+		Place("Dungeons")
 		Place("Raids")
 		local NAME_WIDTH, COLUMN_WIDTH, GAP = 90, 66, 10
 		local function ColumnX(c)
