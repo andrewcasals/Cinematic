@@ -1428,6 +1428,9 @@ L["Questie's quest tracker and its quest item buttons fade with the Quest tracke
 -- Support/RestedXP.lua
 L["RestedXP's guide window, waypoint arrow, quest item and target buttons and level splits fade with the Quest tracker row on the Standard Frames page."] = "La ventana de guía de RestedXP, su flecha de ruta, sus botones de objetos de misión y de objetivos y sus tiempos por nivel se desvanecen con la fila Seguimiento de misiones de la página Marcos estándar."
 
+-- Support/NaowhForever.lua
+L["its top bar along the top of the screen, with its FPS and MS readout"] = "su barra superior a lo largo de la parte de arriba de la pantalla, con su indicador de FPS y MS"
+
 -- Tint.lua
 L["None"] = "Ninguno"
 L["No colour tint."] = "Sin tinte de color."
@@ -1949,3 +1952,5 @@ L["Names kept up over faded nameplates in CineMode now look like the game's own 
 L["ElvUI, DBM and RestedXP support"] = "Compatibilidad con ElvUI, DBM y RestedXP"
 L["ElvUI's frames, Deadly Boss Mods' timer bars and RestedXP's guide window now fade in CineMode: ElvUI's following the Standard Frames rows of the frames they replace, RestedXP's with the Quest tracker row."] = "Los marcos de ElvUI, las barras de temporizador de Deadly Boss Mods y la ventana de guía de RestedXP ahora se desvanecen en CineMode: los de ElvUI siguiendo las filas de Marcos estándar de los marcos que sustituyen, y la de RestedXP con la fila Seguimiento de misiones."
 L["The minimap button glows while a vision is doing something, and its menu lists the visions in use with a link to each one's page."] = "El botón del minimapa brilla mientras una visión está haciendo algo, y su menú muestra las visiones en uso con un enlace a la página de cada una."
+L["Naowh Forever support"] = "Compatibilidad con Naowh Forever"
+L["Naowh Forever's top bar now fades in CineMode (a row on the Advanced Frames page), and its RestedXP guide window fades with the Quest tracker row."] = "La barra superior de Naowh Forever ahora se desvanece en CineMode (una fila en la página Marcos avanzados), y su ventana de guía de RestedXP se desvanece con la fila Seguimiento de misiones."

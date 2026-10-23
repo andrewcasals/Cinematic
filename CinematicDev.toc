@@ -38,6 +38,7 @@ Support\WeakAuras.lua
 Support\DBM.lua
 Support\Questie.lua
 Support\RestedXP.lua
+Support\NaowhForever.lua
 Frames.lua
 HealVisionFrames.lua
 Chat.lua
