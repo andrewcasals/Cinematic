@@ -2737,9 +2737,10 @@ function ns.EnablePlateRow(kind)
 	end
 end
 
--- At login, every row with anything ticked has its game settings switched on
--- (in case they were turned off in the game's options since). Rows with
--- nothing ticked are left alone.
+-- As the Nameplates page's master switch goes on (or another addon resets the
+-- plate settings), every row with anything ticked has its game settings
+-- switched on. Rows with nothing ticked are left alone. Not at login: plates
+-- switched off in the game's options since stay off (your choice wins).
 function ns.EnsurePlateRows()
 	if not ns.db.handlePlates then
 		return -- (the game's own options decide: Nameplates page's switch off)

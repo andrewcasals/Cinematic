@@ -3834,7 +3834,6 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			SetCVar("Sound_EnableMusic", 1)
 		end
 		ns.musicBackOn = nil
-		ns.EnsurePlateRows()
 		ns.RestoreMusicVolume()
 		ns.PruneBuiltInExtras()
 		ns.wasOnTaxi = UnitOnTaxi("player") -- don't re-center after a /reload mid-flight
