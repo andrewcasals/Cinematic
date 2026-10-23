@@ -666,6 +666,8 @@ if PlaceRaidMarker then
 		title = "Ground marker wheel",
 		binding = "Ground marker wheel (hold)",
 		slots = worldSlots,
+		linger = 0.6, -- (up a moment after a pick, showing the marker go down)
+		lingerPicks = true,
 		activeText = "down: pick it to move it",
 		Cant = function()
 			if not (IsInGroup and ns.Flag(IsInGroup())) then
