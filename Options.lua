@@ -7939,14 +7939,14 @@ local function CreateExtrasPanel()
 end
 
 -- Sub-page: keybinds. The same bindings as Key Bindings > AddOns, with two
--- key slots each like Blizzard's page.
+-- key slots each like Blizzard's page. section: a header above that row.
 local KEYBINDS = {
-	{ action = "CINEMATIC_HIDEUI", label = L["Hide the UI"],
+	{ action = "CINEMATIC_HIDEUI", label = L["Hide the UI"], section = L["General"],
 		tip = L["Like Blizzard's Alt+Z: hides the whole UI, but keeps the tint, letterbox " ..
 			"and time-of-day title. Press again (or Blizzard's key) to bring it back."] },
 	{ action = "CINEMATIC_TOGGLE", label = L["Toggle CineMode"],
 		tip = L["Turns CineMode on or off, like /cine."] },
-	{ action = "CLICK CinematicMasterWheelButton:LeftButton", label = L["Master wheel"],
+	{ action = "CLICK CinematicMasterWheelButton:LeftButton", label = L["Master wheel"], section = L["Wheels"],
 		tip = L["Hold to bring up a wheel of the wheels below (camera, menu, marker...): point at one and " ..
 			"let go to open it, then click what you want on it. Tap it instead and the wheel stays up for you " ..
 			"to click one. The camera wheel can't open in a fight."] },
@@ -7971,7 +7971,7 @@ local KEYBINDS = {
 		tip = L["Hold to bring up a wheel of the visions (Heal, Quest, Duel...), ringed while they're on: " ..
 			"point at one and let go to turn it on or off, in a fight too. Tap it instead and the wheel stays " ..
 			"up for you to click one."] },
-	{ action = "CINEMATIC_VISION_HEAL", label = L["Toggle Heal Vision"],
+	{ action = "CINEMATIC_VISION_HEAL", label = L["Toggle Heal Vision"], section = L["Visions"],
 		tip = L["Turns Heal Vision on or off (its Enable page switch), in a fight too: off, the party and " ..
 			"raid frames all show again."] },
 	{ action = "CINEMATIC_VISION_QUEST", label = L["Toggle Quest Vision"],
@@ -7981,7 +7981,7 @@ local KEYBINDS = {
 	{ action = "CINEMATIC_VISION_ROLL", label = L["Toggle Roll Vision"],
 		show = function() return ns.hasRollWindow end,
 		tip = L["Turns Roll Vision on or off."] },
-	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"],
+	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"], section = L["Cameras"],
 		tip = L["Starts the AFK camera now, without waiting out its delay. " ..
 			"Press again, move or jump to stop it."] },
 	{ action = "CINEMATIC_CAM_COZY", label = L["Cozy camera"],
@@ -7996,7 +7996,7 @@ local KEYBINDS = {
 	{ action = "CINEMATIC_CAM_DEATH", label = L["Death camera test"],
 		tip = L["Pretends you're dead for 30 seconds so the death camera runs. Press again to stop. " ..
 			"Like /cine deathtest."] },
-	{ action = "CINEMATIC_SHOWTOOLTIPS", label = L["Show hidden tooltips"],
+	{ action = "CINEMATIC_SHOWTOOLTIPS", label = L["Show hidden tooltips"], section = L["Tooltips"],
 		tip = L["Hold to see the tooltips the Tooltips page hides, in combat and in CineMode. Pressing it " ..
 			"while you're on a unit or something in the world brings its tooltip up; anything else, " ..
 			"hover it again with the key held."] },
@@ -8127,24 +8127,24 @@ local function CreateKeybindsPanel()
 		L["Keys for Cinematic. These are the same bindings as under Key Bindings > AddOns, " ..
 		"so setting them in either place works."])
 
-	local previous = Header(content, L["Keys"], subtitle, -20)
-	local rows = 0
+	local previous, afterHeader = subtitle, false
 	for _, bind in ipairs(KEYBINDS) do
+		if bind.section then
+			previous = Header(content, bind.section, previous, previous == subtitle and -20 or -26)
+			afterHeader = true
+		end
 		-- (A key for something this client doesn't have: no row.)
 		if not bind.show or bind.show() then
-			rows = rows + 1
 			local label = Label(content, "GameFontHighlight", bind.label)
-			label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, rows == 1 and -14 or -18)
+			label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, afterHeader and -14 or -12)
 			label:SetWidth(200)
 			local first = CreateKeybindButton(content, bind.action, 1)
 			first:SetPoint("LEFT", label, "RIGHT", 10, 0)
 			local second = CreateKeybindButton(content, bind.action, 2)
 			second:SetPoint("LEFT", first, "RIGHT", 8, 0)
-			local note = Label(content, "GameFontDisableSmall", bind.tip)
-			note:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -8)
-			note:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-			note:SetJustifyV("TOP")
-			previous = note
+			-- What the key does, behind a "?" after its slots.
+			previous = PageIntro(content, second, bind.tip, label)
+			afterHeader = false
 		end
 	end
 
