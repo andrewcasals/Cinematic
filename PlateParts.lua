@@ -380,12 +380,27 @@ local function DrawName(text, name, unit)
 	if ok then
 		pcall(text.SetText, text, words)
 	end
+	-- (Colour only: on WoW Forever a FontString's colour carries its alpha, and
+	-- the game's name is faded out under ours, so its alpha is 0, tested.)
+	local alpha = text:GetAlpha()
 	local tint = Style("plateNameColour") and TintUnit(unit)
 	if tint then
 		PaintName(text, unit, tint ~= true and tint or nil)
 	else
-		pcall(function() text:SetTextColor(name:GetTextColor()) end)
+		-- (A player's class colour from their class, not the game's name, which
+		-- it can turn white.)
+		local okClass, _, class = pcall(UnitClass, unit)
+		local colour = okClass and Known(class) and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+		if colour then
+			text:SetTextColor(colour.r, colour.g, colour.b)
+		else
+			pcall(function()
+				local r, g, b = name:GetTextColor()
+				text:SetTextColor(r, g, b)
+			end)
+		end
 	end
+	text:SetAlpha(alpha)
 	-- Retail's plates grow as their units come nearer: undone, for one size.
 	if ns.isRetail and text.SetScale then
 		local scale = 1
@@ -880,6 +895,41 @@ end))
 
 function ns.WatchFarNames()
 	farWatch:Show()
+end
+
+-- /cine debug names: every 0.1 s, each player's plate's name state, logged
+-- when it changes, to see why a name blinks on and off.
+local namesTicker
+local namesLast = {}
+function ns.ToggleNamesDebug()
+	if namesTicker then
+		namesTicker:Cancel()
+		namesTicker = nil
+		wipe(namesLast)
+		return false
+	end
+	namesTicker = C_Timer.NewTicker(0.1, function()
+		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+			local unit = UnitOf(plate)
+			local okGuid, guid = pcall(UnitGUID, unit)
+			if unit and okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-") then
+				local okName, who = pcall(UnitName, unit)
+				local okAlpha, alpha = pcall(plate.GetAlpha, plate)
+				local text = texts[plate.UnitFrame]
+				local line = ("%s: %s | name=%s body=%s plateAlpha=%s sight=%s band=%s swap=%s text=%s"):format(
+					okName and Known(who) and tostring(who) or unit, ns.DescribePlateNameKept(unit, plate),
+					tostring(nameShare[plate]), tostring(bodyShare[plate]),
+					okAlpha and Known(alpha) and ("%.2f"):format(alpha) or "?", tostring(sight[plate]),
+					tostring(bandOf[plate]), tostring(swaps[plate] and swaps[plate].to),
+					text and (text:IsShown() and ("%.2f"):format(text:GetAlpha()) or "hidden") or "none")
+				if namesLast[unit] ~= line then
+					namesLast[unit] = line
+					ns.Log("names", line)
+				end
+			end
+		end
+	end)
+	return true
 end
 
 local QUEST_ICONS_EVERY = 0.5

@@ -1218,7 +1218,18 @@ local function PlateKind(unit)
 	if not (okFriend and ok and Known(friend) and Known(isPlayer)) then
 		return nil
 	end
+	-- (WoW Forever: after you buff a player, UnitIsPlayer and UnitIsFriend can
+	-- say no for players, tested; their GUID still says Player, and their
+	-- reaction still says friendly.)
+	if not isPlayer then
+		local okGuid, guid = pcall(UnitGUID, unit)
+		isPlayer = okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-") ~= nil
+	end
 	if isPlayer then
+		if not friend then
+			local okReaction, reaction = pcall(UnitReaction, unit, "player")
+			friend = okReaction and Known(reaction) and type(reaction) == "number" and reaction >= 5
+		end
 		return friend and "Friends" or "Enemies"
 	end
 	local okType, creatureType = pcall(UnitCreatureType, unit)
@@ -2261,6 +2272,14 @@ local function PlateAlphas(unit, plate)
 		return 0, 1, 0
 	end
 	return alpha, body / alpha, name / alpha
+end
+
+-- (For /cine debug names: why a plate's name is kept or not.)
+function ns.DescribePlateNameKept(unit, plate)
+	local kind = unit and PlateKind(unit)
+	return ("kind=%s group=%s level=%s soft=%s forced=%s body=%.2f"):format(tostring(kind),
+		tostring(kind and KIND_NAME_GROUP[kind]), tostring(kind and nameLevel[KIND_NAME_GROUP[kind]]),
+		tostring(unit and ns.SoftPlateHidden(unit)), tostring(platesForced), PlateAlpha(unit, plate))
 end
 
 local function SetPlateAlphas(plate, alpha, body, name)
