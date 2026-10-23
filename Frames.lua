@@ -66,6 +66,9 @@ local FRAME_GROUPS = {
 		"GamepadPlayerCastingBarFrame",
 	},
 	meters = { "DamageMeter" },
+	-- Voice chat's notices of who's talking (above the chat): the game makes
+	-- them inside this frame.
+	voice = { "VoiceActivityManager" },
 	-- The Cooldown Manager (retail and Forever). Made when its addon loads,
 	-- so a later scan picks it up.
 	cooldowns = {
@@ -1662,6 +1665,9 @@ ns.COMBAT_SHOW = {
 	{ key = "micro", label = _G.BagsBar and L["Micro menu"] or L["Micro menu and bags"], default = true,
 		frames = { "MicroButtonAndBagsBar", "MicroMenuContainer" } },
 	{ key = "bags", label = L["Bags"], default = true, frames = { "BagsBar" } },
+	-- Always ticked to start with (CINE_SHOW_DEFAULT), as before it had a row.
+	{ key = "voice", label = L["Voice chat speakers"], default = false, frames = FRAME_GROUPS.voice,
+		tip = L["The names and portraits above the chat of who's talking in voice chat. Untick Always to hide them in CineMode."] },
 	-- (In gamepad mode the Gamepad page's row has them instead: notGamepad.)
 	{ key = "xp", label = L["Experience and reputation bars"], default = true, notGamepad = true, frames = {
 		"MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer",
@@ -1696,6 +1702,7 @@ local ROW_SECTIONS = {
 	minimap = "minimap", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap",
 	quests = "interface", waypoint = "interface", micro = "interface", bags = "interface", xp = "interface",
+	voice = "interface",
 }
 for _, item in ipairs(ns.COMBAT_SHOW) do
 	item.page = item.page or ROW_SECTIONS[item.key]
@@ -1791,7 +1798,7 @@ local HOVER_ROW_BY_GROUP = {
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", castbar = "castbar", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
-	chat = "chat", barart = "mainbar",
+	chat = "chat", barart = "mainbar", voice = "voice",
 }
 function ns.HoverRowFor(entry)
 	return (entry.name and HOVER_ROW_BY_NAME[entry.name]) or HOVER_ROW_BY_GROUP[entry.group] or entry.group
@@ -2108,7 +2115,7 @@ ns.CINE_SHOW_SETTING = { minimap = "alwaysShowMinimap", waypoint = "alwaysShowWa
 local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
-	raiddebuffs = true, raidthreat = true, raidtarget = true, raidready = true, extra = true,
+	raiddebuffs = true, raidthreat = true, raidtarget = true, raidready = true, extra = true, voice = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
