@@ -99,6 +99,7 @@ local FRAME_GROUPS = {
 	chat = {
 		"GeneralDockManager", "ChatFrameMenuButton", "ChatFrameChannelButton",
 		"QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton",
+		"FriendsMicroButton",
 	},
 }
 
@@ -591,6 +592,14 @@ end
 local NEVER_NESTED = { TargetFrameToT = true, FocusFrameToT = true, QuestTimerFrame = true }
 for _, name in ipairs(FRAME_GROUPS.castbar) do
 	NEVER_NESTED[name] = true
+end
+-- The chat buttons too (Classic clients put them inside the chat window):
+-- a window peeking for a message doesn't bring them up, their row
+-- ("Chat tabs and buttons", Mouseover groups) does.
+for _, name in ipairs(FRAME_GROUPS.chat) do
+	if name ~= "GeneralDockManager" then
+		NEVER_NESTED[name] = true
+	end
 end
 
 local function RecomputeNesting()
@@ -4613,7 +4622,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- and all, so it can be clicked (Chat page).
 	local whisperUnread = cinematic and ns.db.chatUntilWhisperRead and ns.HasUnreadWhisper()
 	ns.HoldScrolledChat(now)
-	-- A docked chat window peeking brings its tabs up with it.
+	-- A docked chat window peeking: just the window comes up, its tabs and
+	-- buttons only for Mouseover groups with "Chat message" ticked.
 	local dockPeek = false
 	for chatFrame, untilTime in pairs(ns.chatPeekUntil) do
 		if untilTime > now and (chatFrame.isDocked or chatFrame == DEFAULT_CHAT_FRAME) then
@@ -4756,7 +4766,6 @@ function ns.UpdateFrames(cinematic, elapsed)
 			-- (An unread whisper brings up the Mouseover groups with it ticked,
 			-- chat by default.)
 			or typingShown
-			or (dockPeek and entry.name == "GeneralDockManager")
 		entry.row = entry.row or ns.HoverRowFor(entry)
 		-- (Its own row's group is its row too: see ns.RAID_STYLE_PARTY.)
 		local ownRow = ownPartyRows and entry.rspGroup

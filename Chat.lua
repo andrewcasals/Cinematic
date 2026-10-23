@@ -307,6 +307,28 @@ local function ChannelBaseName(baseName, channelString)
 	name = name:gsub("^%d+%.%s*", ""):gsub("%s+%-%s+.*$", "")
 	return name
 end
+
+-- The Chat page's rows use GetChannelList's names, which a message's can
+-- differ from ("Trade (Services)" for "Services"): when the name isn't one
+-- of them, the channel's number finds it. (Cached: only found names.)
+local channelAliases = {}
+local function ChannelPeekName(number, baseName, channelString)
+	local name = ChannelBaseName(baseName, channelString)
+	if channelAliases[name] then
+		return channelAliases[name]
+	end
+	if type(number) ~= "number" or (issecretvalue and issecretvalue(number)) then
+		return name
+	end
+	local values = { GetChannelList() }
+	for i = 1, #values - 1 do
+		if values[i] == number and type(values[i + 1]) == "string" then
+			channelAliases[name] = values[i + 1]
+			return values[i + 1]
+		end
+	end
+	return name
+end
 ns.chatPeekUntil = {} -- [chat frame] = GetTime() when it may fade again
 ns.chatTypingUntil = 0 -- typing shows the whole chat group without leaving cinematic
 
@@ -401,7 +423,7 @@ end
 
 -- Message filters run once per chat window that will show the message, which
 -- tells us exactly which window to reveal. Never filters anything out.
-local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, _, _, _, _, channelBaseName,
+local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, _, _, _, channelNumber, channelBaseName,
 		_, _, guid)
 	if not ns.db.chatPeek then
 		return false
@@ -410,7 +432,7 @@ local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, 
 	if ns.db.chatHideOwn and IsFromPlayer(author, guid) then
 		wanted = false
 	elseif event == "CHAT_MSG_CHANNEL" then
-		wanted = IsChannelPeekNow(ChannelBaseName(channelBaseName, channelString))
+		wanted = IsChannelPeekNow(ChannelPeekName(channelNumber, channelBaseName, channelString))
 	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < ns.levelUpUntil and IsPeekTypeOn("levelup") then
 		wanted = true
 	elseif event == "CHAT_MSG_SYSTEM" and GetTime() < whoUntil and IsPeekTypeOn("who") then
