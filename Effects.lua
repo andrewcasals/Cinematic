@@ -276,10 +276,29 @@ function ns.UpdateCVars(cinematic, fightStarting)
 	end
 end
 
+-- Name and plate settings changed in a fight wait for it to end: a chat line
+-- says so on each change (not again for clicks a few seconds apart), and chat
+-- shows for it while the UI is faded.
+local plateWarnedAt = 0
+local PLATE_WARN_GAP = 5 -- seconds
+
 -- The last chance to switch names to the "In combat" choices before lockdown.
 function ns.UpdateCVarsForFight()
 	pvpNamesFight = ns.InPvPFight()
 	ns.UpdateCVars(lastCinematic, true)
+end
+
+-- From the Nameplates page, as a setting the game holds in fights changes.
+function ns.WarnPlatesInCombat()
+	if not InCombatLockdown() then
+		return
+	end
+	local now = GetTime()
+	if now - plateWarnedAt >= PLATE_WARN_GAP then
+		ns.Print(L["Some nameplate and name changes only take effect once the fight ends."])
+	end
+	plateWarnedAt = now
+	if ns.PeekChat then ns.PeekChat(DEFAULT_CHAT_FRAME, 8) end
 end
 
 -- Music fades by ramping the music volume from 0 up to the player's own

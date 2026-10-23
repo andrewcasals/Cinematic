@@ -5252,6 +5252,7 @@ local function CreatePlatesPanel()
 			if value and ns.EnsurePlateRows then
 				ns.EnsurePlateRows()
 			end
+			ns.WarnPlatesInCombat()
 			Refresh()
 		end)
 	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
@@ -5470,6 +5471,7 @@ local function CreatePlatesPanel()
 				if value then
 					ns.EnablePlateRow(kind[1])
 				end
+				ns.WarnPlatesInCombat()
 				Refresh()
 			end
 		end
@@ -5566,6 +5568,7 @@ local function CreatePlatesPanel()
 			if value ~= "hide" then
 				ns.EnablePlateRow(row[1])
 			end
+			ns.WarnPlatesInCombat()
 		end)
 		if dropdown then
 			dropdown:SetPoint("LEFT", rowLabel, "LEFT", GRID_LABEL + 30, 0)
@@ -5664,6 +5667,7 @@ local function CreatePlatesPanel()
 			return function(value)
 				ns.GetDB()[key] = value
 				ns.SyncNameRow(group)
+				ns.WarnPlatesInCombat()
 				Refresh()
 			end
 		end
