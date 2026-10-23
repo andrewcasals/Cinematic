@@ -118,7 +118,8 @@ local OPEN_SNIPPET = [[
 -- offColor (r, g, b, a: the ring always shows, in these, not just while
 -- active), linger (seconds
 -- the wheel stays up after a slot that calls wheel.Linger(index) is picked,
--- showing it turn on or off), OnOpen() (as the key goes down, before the
+-- showing it turn on or off), lingerPicks (true: every pick lingers, for
+-- slots whose secure actions can't call it), OnOpen() (as the key goes down, before the
 -- snippet: out of a fight our code may still change the buttons). Text is
 -- English, translated as it's shown (the language is only known later).
 local function MakeWheel(spec)
@@ -489,6 +490,12 @@ local function MakeWheel(spec)
 				slots[picked]:SetAlpha(math.min(1, lingering / LINGER_FADE))
 			end
 			Turn(elapsed)
+			-- (A mark shows a moment after the pick: the ring catches up.)
+			sinceRefresh = sinceRefresh + elapsed
+			if sinceRefresh >= 0.2 then
+				sinceRefresh = 0
+				Refresh()
+			end
 			return
 		end
 		local alpha = face:GetAlpha()
@@ -526,6 +533,19 @@ local function MakeWheel(spec)
 		lingering = spec.linger or 1
 		Pick(index)
 		Refresh()
+	end
+	-- (After the secure click: the slot picked is the one our side lit.)
+	if spec.lingerPicks then
+		keyButton:HookScript("PostClick", function(_, _, down)
+			if not down and picked then
+				wheel.Linger(picked)
+			end
+		end)
+		area:HookScript("PostClick", function(_, button)
+			if button ~= "Escape" and picked then
+				wheel.Linger(picked)
+			end
+		end)
 	end
 
 	wheel.keyButton, wheel.area, wheel.face = keyButton, area, face
@@ -594,6 +614,8 @@ markerWheel = MakeWheel({
 	title = "Marker wheel",
 	binding = "Marker wheel (hold)",
 	slots = unitSlots,
+	linger = 0.6, -- (up a moment after a pick, showing the marker go on)
+	lingerPicks = true,
 	OnOpen = function() SetUnit(MarkUnit()) end,
 	Title = function() return UnitName(unit) end,
 	-- Why they can't be marked now, or nil if they can.
