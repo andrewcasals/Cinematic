@@ -30,6 +30,8 @@ local PICKED_SCALE = 1.3
 local DEAD_ZONE = 64   -- the cursor this near the middle picks nothing (the middle circle)
 local OUTER = RADIUS + ICON_SIZE * 0.9 -- the disc's edge: a click past it picks nothing
 local FADE_TIME = 0.12
+local TURN_TIME = 0.3  -- a slot going from on to off (or back): its ring fading, its icon greying
+local LINGER_FADE = 0.3 -- the last of a linger (below): the picked slot fading away
 -- (The middle lights up while the cursor's in it: nothing picked, so letting
 -- go there leaves the wheel up.)
 local HUB_COLOR = { 0, 0, 0, 0.5 }
@@ -111,7 +113,10 @@ local OPEN_SNIPPET = [[
 -- Cant(), why that slot can't be used now), and these, all optional:
 -- Cant() (why it can't be used now, or nil), Active(slot) (true: shows its
 -- ring), Title() (the middle's text with nothing picked), activeText (under a
--- picked slot that's active), inactiveText (under one that isn't), OnOpen() (as the key goes down, before the
+-- picked slot that's active), inactiveText (under one that isn't),
+-- dimInactive (true: slots that aren't active are greyed), linger (seconds
+-- the wheel stays up after a slot that calls wheel.Linger(index) is picked,
+-- showing it turn on or off), OnOpen() (as the key goes down, before the
 -- snippet: out of a fight our code may still change the buttons). Text is
 -- English, translated as it's shown (the language is only known later).
 local function MakeWheel(spec)
@@ -119,7 +124,8 @@ local function MakeWheel(spec)
 	local list = spec.slots
 	local slots = {}
 	local picked -- the slot the cursor points at, or nil
-	local wheel, hub, centerText, stateText
+	local lingering -- seconds left showing a pick after the wheel's put away, or nil
+	local wheel, face, hub, centerText, stateText
 
 	-- (The art grows, not the secure button: that can't change in a fight.)
 	local function SizeSlot(slot, size)
@@ -159,12 +165,14 @@ local function MakeWheel(spec)
 			end
 			centerText:SetTextColor(1, 0.82, 0)
 		end
+		stateText:SetTextColor(1, 1, 1)
 		if cant then
 			stateText:SetText(cant)
 		elseif entry and spec.activeText and spec.Active and spec.Active(entry) then
 			stateText:SetText(L[spec.activeText])
 		elseif entry and spec.inactiveText and spec.Active and spec.Active(entry) == false then
 			stateText:SetText(L[spec.inactiveText])
+			stateText:SetTextColor(1, 0.4, 0.35)
 		else
 			stateText:SetText("")
 		end
@@ -175,11 +183,28 @@ local function MakeWheel(spec)
 		for i, entry in ipairs(list) do
 			local slot = slots[i]
 			local can = usable and not (entry.Cant and entry.Cant())
-			slot.ring:SetShown(can and spec.Active ~= nil and spec.Active(entry) == true)
-			slot.icon:SetDesaturated(not can)
-			slot.icon:SetAlpha(can and 1 or 0.5)
+			local active = spec.Active and spec.Active(entry)
+			slot.ringTo = (can and active == true) and 1 or 0
+			-- (Greyed: can't be used now, or with dimInactive, isn't active.)
+			slot.colorTo = (not can or (spec.dimInactive and active == false)) and 0 or 1
 		end
 		UpdateText()
+	end
+
+	-- Each slot's ring and colour towards what Refresh set (all the way at
+	-- once with no elapsed: as the wheel opens).
+	local function Turn(elapsed)
+		for _, slot in ipairs(slots) do
+			slot.ringLit = elapsed and ns.Approach(slot.ringLit, slot.ringTo, elapsed, TURN_TIME) or slot.ringTo
+			slot.colorLit = elapsed and ns.Approach(slot.colorLit, slot.colorTo, elapsed, TURN_TIME) or slot.colorTo
+			slot.ring:SetAlpha(slot.ringLit)
+			if slot.icon.SetDesaturation then
+				slot.icon:SetDesaturation(1 - slot.colorLit)
+			else
+				slot.icon:SetDesaturated(slot.colorLit < 0.5)
+			end
+			slot.icon:SetAlpha(0.5 + 0.5 * slot.colorLit)
+		end
 	end
 
 	-- Which slot the cursor points at: the nearest by angle, once it's out of
@@ -215,11 +240,20 @@ local function MakeWheel(spec)
 	wheel:SetAttribute("outer", OUTER)
 	wheel:Hide()
 
-	local disc = wheel:CreateTexture(nil, "BACKGROUND")
+	-- What's drawn: a plain frame of ours over the wheel, so it can stay up a
+	-- moment after the wheel's put away (linger), which our code can't keep
+	-- the secure wheel from in a fight. Scaled like it (see the watcher).
+	face = CreateFrame("Frame")
+	face:SetFrameStrata("FULLSCREEN_DIALOG")
+	face:SetAllPoints(wheel)
+	face:SetFrameLevel(wheel:GetFrameLevel() + 5)
+	face:Hide()
+
+	local disc = face:CreateTexture(nil, "BACKGROUND")
 	disc:SetPoint("CENTER")
 	disc:SetSize(OUTER * 2, OUTER * 2)
 	disc:SetColorTexture(0, 0, 0, 0.55)
-	hub = wheel:CreateTexture(nil, "BORDER")
+	hub = face:CreateTexture(nil, "BORDER")
 	hub:SetPoint("CENTER")
 	hub:SetSize(DEAD_ZONE * 2, DEAD_ZONE * 2)
 	hub:SetColorTexture(unpack(HUB_LIT)) -- (nothing picked yet)
@@ -233,13 +267,13 @@ local function MakeWheel(spec)
 			texture:AddMaskTexture(mask)
 		end
 	end
-	Round(wheel, disc)
-	Round(wheel, hub)
+	Round(face, disc)
+	Round(face, hub)
 
-	centerText = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	centerText = face:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	centerText:SetPoint("CENTER", 0, 6)
 	centerText:SetWidth(DEAD_ZONE * 2 - 10)
-	stateText = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	stateText = face:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	stateText:SetPoint("TOP", centerText, "BOTTOM", 0, -3)
 	stateText:SetWidth(DEAD_ZONE * 2 - 10)
 
@@ -267,11 +301,11 @@ local function MakeWheel(spec)
 	-- The icons: just art. Their actions are the key's button's and the
 	-- catcher's, as the "button" slotN.
 	for i, entry in ipairs(list) do
-		local slot = CreateFrame("Frame", nil, wheel)
+		local slot = CreateFrame("Frame", nil, face)
 		slot:SetSize(ICON_SIZE, ICON_SIZE)
-		slot:SetFrameLevel(wheel:GetFrameLevel() + 5)
+		slot:SetFrameLevel(face:GetFrameLevel() + 5)
 		local angle = math.rad(90 - (i - 1) * 360 / #list)
-		slot:SetPoint("CENTER", wheel, "CENTER", RADIUS * math.cos(angle), RADIUS * math.sin(angle))
+		slot:SetPoint("CENTER", face, "CENTER", RADIUS * math.cos(angle), RADIUS * math.sin(angle))
 		for key, value in pairs(entry.attributes or {}) do
 			keyButton:SetAttribute(key .. "-slot" .. i, value)
 			area:SetAttribute(key .. "-slot" .. i, value)
@@ -288,7 +322,7 @@ local function MakeWheel(spec)
 		local ring = art:CreateTexture(nil, "BORDER") -- active (theirs now, or down)
 		ring:SetPoint("CENTER")
 		ring:SetColorTexture(1, 1, 1, 0.3)
-		ring:Hide()
+		ring:SetAlpha(0)
 		local icon = art:CreateTexture(nil, "ARTWORK")
 		icon:SetAllPoints()
 		icon:SetTexture(entry.icon)
@@ -298,6 +332,7 @@ local function MakeWheel(spec)
 		Round(art, glow)
 		Round(art, ring)
 		slot.art, slot.glow, slot.ring, slot.icon = art, glow, ring, icon
+		slot.ringLit, slot.ringTo, slot.colorLit, slot.colorTo = 0, 0, 1, 1
 		slots[i] = slot
 		SizeSlot(slot, ICON_SIZE)
 	end
@@ -403,13 +438,48 @@ local function MakeWheel(spec)
 	]])
 	wheel:SetAttribute("_onattributechanged", OPEN_SNIPPET)
 
-	-- Our side: fades in, and shows what the cursor points at.
+	-- Our side: fades in, and shows what the cursor points at. Once the
+	-- wheel's put away, the face goes too, unless a pick lingers it: then the
+	-- rest goes at once, and the picked slot stays, turning on or off, then fades.
 	local sinceRefresh = 0
-	local function OnUpdate(_, elapsed)
-		local alpha = wheel:GetAlpha()
-		if alpha < 1 then
-			wheel:SetAlpha(math.min(1, alpha + elapsed / FADE_TIME))
+	local restAlpha = 1 -- all but the picked slot's, while lingering
+	local restParts = { disc, hub, centerText, stateText }
+	local function SetRest(alpha)
+		restAlpha = alpha
+		for _, part in ipairs(restParts) do
+			part:SetAlpha(alpha)
 		end
+		for i, slot in ipairs(slots) do
+			slot:SetAlpha(i == picked and 1 or alpha)
+		end
+	end
+	local function Away()
+		lingering = nil
+		face:Hide()
+		Pick(nil)
+	end
+	local function OnUpdate(_, elapsed)
+		if not wheel:IsShown() then
+			lingering = lingering and lingering - elapsed
+			if not lingering or lingering <= 0 then
+				Away()
+				return
+			end
+			-- (The rest goes at once; the picked slot stays, and fades last.)
+			if restAlpha > 0 then
+				SetRest(math.max(0, restAlpha - elapsed / FADE_TIME))
+			end
+			if picked then
+				slots[picked]:SetAlpha(math.min(1, lingering / LINGER_FADE))
+			end
+			Turn(elapsed)
+			return
+		end
+		local alpha = face:GetAlpha()
+		if alpha < 1 then
+			face:SetAlpha(math.min(1, alpha + elapsed / FADE_TIME))
+		end
+		Turn(elapsed)
 		Pick(SlotAtCursor(area:IsMouseEnabled()))
 		sinceRefresh = sinceRefresh + elapsed
 		if sinceRefresh >= 0.2 then
@@ -420,16 +490,29 @@ local function MakeWheel(spec)
 		end
 	end
 	wheel:HookScript("OnShow", function()
-		wheel:SetAlpha(0)
+		lingering = nil
+		face:SetAlpha(0)
+		face:Show()
 		Pick(nil)
+		SetRest(1)
 		Refresh()
+		Turn()
 	end)
-	wheel:HookScript("OnHide", function()
-		Pick(nil)
-	end)
-	wheel:SetScript("OnUpdate", ns.Profiled(spec.title, OnUpdate))
+	-- (The face goes on its next update: a pick's action, just after this,
+	-- may linger it first.)
+	face:SetScript("OnUpdate", ns.Profiled(spec.title, OnUpdate))
 
-	wheel.keyButton, wheel.area = keyButton, area
+	-- Called by a slot's action as it's picked: that slot stays up showing it.
+	function wheel.Linger(index)
+		if wheel:IsShown() or not face:IsShown() then
+			return
+		end
+		lingering = spec.linger or 1
+		Pick(index)
+		Refresh()
+	end
+
+	wheel.keyButton, wheel.area, wheel.face = keyButton, area, face
 	wheels[#wheels + 1] = wheel
 	return wheel
 end
@@ -655,19 +738,25 @@ ns.OnLanguage(SetVisionBindingNames)
 -- one turns it on or off. Each slot clicks a plain button of ours (no size:
 -- never seen) that does it, in a fight too.
 local visionSlots = {}
-for _, vision in ipairs(VISIONS) do
+local visionWheel
+for i, vision in ipairs(VISIONS) do
 	local toggler = CreateFrame("Button")
-	toggler:SetScript("OnClick", function() ToggleVision(vision, true) end)
+	toggler:SetScript("OnClick", function()
+		ToggleVision(vision, true)
+		visionWheel.Linger(i)
+	end)
 	visionSlots[#visionSlots + 1] = { icon = vision.icon, trim = vision.trim, color = vision.color,
 		label = vision.label, vision = vision, attributes = { type = "click", clickbutton = toggler } }
 end
-local visionWheel = MakeWheel({
+visionWheel = MakeWheel({
 	name = "CinematicVisionWheel",
 	title = "Vision wheel",
 	binding = "Vision wheel (hold)",
 	slots = visionSlots,
 	activeText = "on: pick it to turn it off",
 	inactiveText = "off: pick it to turn it on",
+	dimInactive = true, -- (the ones off greyed, so they stand out from the ones on)
+	linger = 1, -- (up a second after a pick, showing it turn on or off)
 	Active = function(entry) return VisionOn(entry.vision) end,
 })
 
@@ -737,6 +826,7 @@ watcher:SetScript("OnEvent", function()
 	end
 	for _, wheel in ipairs(wheels) do
 		wheel:SetScale(UIParent:GetEffectiveScale())
+		wheel.face:SetScale(UIParent:GetEffectiveScale())
 	end
 	SetUnit("target")
 end)
