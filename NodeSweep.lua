@@ -145,7 +145,7 @@ end
 
 -- The faded minimap's size and place back (see the top). Returns what puts it
 -- back as it was, or nil when it isn't shrunk or moved off the screen.
--- (Kept full size, it's moved off the screen while faded, Frames.lua
+-- (Kept full size, it's moved off the screen while faded with a quest area on it, Frames.lua
 -- ns.ParkFullSize: the sweep hears nothing out there, tested, so it's put
 -- back in its place for the sweep too.)
 local function Grow()
@@ -208,7 +208,7 @@ local function Probe(step, found, stop)
 										and type(color.r) == "number" and ("%02x%02x%02x"):format(color.r * 255,
 										color.g * 255, color.b * 255)) or nil
 									found[name] = entry
-									if stop and stop(name) then return end
+									if stop and stop(name, entry) then return end
 								end
 							end
 						end
@@ -265,9 +265,27 @@ local REVEAL = {
 	turnin = "minimapRevealTurnIns",
 	objective = "minimapRevealAreas", other = "minimapRevealIcons",
 }
-local function Wanted(name)
-	local option = REVEAL[ns.NodeKind(name)]
-	return option ~= nil and ns.db[option] == true
+-- (A quest's area off the minimap has an arrow on its rim pointing to it,
+-- named like the quest, there the whole time (Track Quest POIs): a quest name
+-- heard only near the rim is that arrow, and counts as nothing. The area
+-- counts once it reaches further in.)
+local QUEST_KINDS = { objective = true, turnin = true }
+local function OnlyAtRim(entry)
+	local half = (Minimap:GetWidth() or 0) / 2
+	local list = entry and entry.list
+	if not list or half <= 0 then return false end
+	local inner = (half - 2 * STEP) ^ 2
+	for i = 1, #list, 2 do
+		if list[i] ^ 2 + list[i + 1] ^ 2 < inner then return false end
+	end
+	return true
+end
+
+local function Wanted(name, entry)
+	local kind = ns.NodeKind(name)
+	local option = REVEAL[kind]
+	if not (option ~= nil and ns.db[option] == true) then return false end
+	return not (QUEST_KINDS[kind] and OnlyAtRim(entry))
 end
 
 local function AnyReveal()
@@ -375,6 +393,14 @@ end
 -- can't run (in combat, the mouse on the minimap), the last answer stands.
 local sweptAt, seenAt = -math.huge, -math.huge
 local last = {} -- the last sweep, for /cine debug tracking
+-- Whether the last sweep heard a quest's area on the minimap (not just its
+-- arrow on the rim): the faded minimap waits off the screen meanwhile
+-- (Frames.lua), since its blue outline shows through alpha 0. Elsewhere it
+-- stays in its place: off the screen the game adds no new dots, tested.
+local areaShown = false
+function ns.MinimapAreaShown()
+	return areaShown
+end
 
 -- Nearby ore, herbs and treasure's Ping where it is (minimapNodePing): a
 -- minimap ping where a node shows up, the same ping as clicking the minimap
@@ -500,9 +526,13 @@ function ns.IsMinimapRevealed(now)
 		last.at, last.why, last.grown, last.names = now, nil, grown, nil
 		if found then
 			local names = {}
-			for name in pairs(found) do
-				local wanted = Wanted(name)
-				names[#names + 1] = ("%s (%s%s)"):format(name, ns.NodeKind(name), wanted and ", reveals" or "")
+			areaShown = false
+			for name, entry in pairs(found) do
+				local wanted = Wanted(name, entry)
+				local kind = ns.NodeKind(name)
+				if kind == "objective" and not OnlyAtRim(entry) then areaShown = true end
+				names[#names + 1] = ("%s (%s%s%s)"):format(name, kind,
+					QUEST_KINDS[kind] and OnlyAtRim(entry) and ", at the rim" or "", wanted and ", reveals" or "")
 				if wanted then seenAt = now end
 			end
 			last.names, last.probes = table.concat(names, ", "), probes
@@ -526,8 +556,9 @@ function ns.NodeSweepReport()
 			or ("%s at %.0f, %.0f on the minimap (no world place)"):format(node.name, node.x, node.y)
 	end
 	if #places > 0 then ns.Print("nodes: " .. table.concat(places, "; ")) end
-	return ("minimap sweep: %.1fs ago%s: %s; last reveal %s"):format(GetTime() - last.at,
+	return ("minimap sweep: %.1fs ago%s%s: %s; last reveal %s"):format(GetTime() - last.at,
 		last.grown and ", minimap grown for it" or "",
+		areaShown and ", a quest area on it (waits off the screen while faded)" or "",
 		last.why and ("couldn't sweep (" .. tostring(last.why) .. ")")
 			or (("%d points, heard %s"):format(last.probes or 0, last.names ~= "" and last.names or "nothing")),
 		seenAt > -math.huge and ("%.1fs ago"):format(GetTime() - seenAt) or "never")

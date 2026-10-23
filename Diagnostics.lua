@@ -1110,6 +1110,9 @@ do
 				Minimap:SetScale(entry.savedScale or 1)
 				ns.UnparkShrunk(entry)
 				entry.shrunk = false
+			elseif entry.frame == Minimap and entry.parkedFullSize then
+				-- (Waiting off the screen for a Reveal tick: back in its place.)
+				ns.UnparkFullSize(entry)
 			end
 		end
 	end

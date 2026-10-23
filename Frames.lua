@@ -1303,11 +1303,16 @@ function ns.SetEntryAlpha(entry, alpha)
 				and ns.Flag(IsIndoors()) then
 				minimapNeedsRedraw = true
 			end
-			-- (Kept full size for the sweep: off the screen. Not for /cine
-			-- debug nodes stay, which tests it in its place.)
-			if not entry.shrunk and entry.frame == Minimap and not ns.ScaleBlocked(entry.frame)
-				and not ns.minimapStayFullSize then
-				ns.ParkFullSize(entry)
+			-- (Kept full size for the sweep: in its place, where the game adds
+			-- new dots to it; off the screen only while a quest's area (its
+			-- blue outline shows through alpha 0) is on it, tested. Not for
+			-- /cine debug nodes stay, which tests it in its place.)
+			if not entry.shrunk and entry.frame == Minimap and not ns.ScaleBlocked(entry.frame) then
+				if ns.MinimapAreaShown() and not ns.minimapStayFullSize then
+					ns.ParkFullSize(entry)
+				elseif entry.parkedFullSize then
+					ns.UnparkFullSize(entry)
+				end
 			end
 		elseif not entry.shrunk then
 			-- Shrink in the same step it reaches 0, so it's never at alpha 0
