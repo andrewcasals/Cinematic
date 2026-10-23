@@ -116,6 +116,7 @@ local function PrintDebugHelp()
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
 	print("  /cine debug slots [all] - profile slots and parts: anything with no slot or in the wrong one (in the log; all: also how each shared list is split)")
+	print("  /cine debug speech - show a sample line of speech from behind you, and print what happens to each say and yell (again to stop)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
 	print("  /cine debug settings <words> - list every option in the game's Settings panel named like the words, with the variable behind it and its value")
@@ -309,6 +310,12 @@ local function HandleSlash(msg)
 	elseif cmd == "debug" and arg == "names" then
 		ns.Print("log players' plate names as they change: " .. OnOff(ns.ToggleNamesDebug())
 			.. " (/reload afterwards to save the log)")
+	elseif cmd == "debug" and arg == "speech" then
+		ns.speechWatch = not ns.speechWatch
+		ns.Print("print what happens to each say and yell: " .. OnOff(ns.speechWatch) .. " (until you /reload)")
+		if ns.speechWatch and ns.ShowSpeechBehind then
+			ns.ShowSpeechBehind("CHAT_MSG_SAY", "Cinematic", "This is how speech from behind you looks.")
+		end
 	elseif cmd == "debug" and arg == "alpha" then
 		ns.alphaWatch = not ns.alphaWatch
 		ns.Print("print frames setting their own alpha: " .. OnOff(ns.alphaWatch) .. " (until you /reload)")

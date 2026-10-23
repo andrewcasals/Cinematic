@@ -4887,6 +4887,26 @@ local function CreateBubblesPanel()
 	Tooltip(size, L["How big the bubbles' text is. (Not in instances on retail.)"])
 	stack:Note(content, L["Bubbles already showing change with the next thing said."])
 
+	-- Speech from behind you (the Chat page's option): how it tells it's
+	-- from behind.
+	stack:Header(content, L["Behind you"])
+	stack:Help(content, L["Speech from behind you (on the Chat page) shows low on the screen, looking like " ..
+		"the bubbles above. These make it feel like it's coming from behind."])
+	stack:Add(Check(content, "speechBehindRise", L["Rise up from below the screen"],
+		L["Each line slides up from below the bottom of the screen, as if from behind the camera, " ..
+		"instead of just fading in."]), "check")
+	local behindSize = stack:Add(Slider(content, "speechBehindScale", L["Size"], 50, 100, 5, "%d%%", 100),
+		"slider")
+	Tooltip(behindSize, L["How big speech from behind you is, next to a bubble overhead: smaller sounds " ..
+		"further away."])
+	local behindAlpha = stack:Add(Slider(content, "speechBehindAlpha", L["Opacity"], 30, 100, 5, "%d%%", 100),
+		"slider")
+	Tooltip(behindAlpha, L["How solid speech from behind you is: fainter sounds muffled, out of view."])
+	local tailTop = stack:Add(Check(content, "speechBehindTailTop", L["Tail on top"],
+		L["The bubble's tail sits on top, pointing up, instead of under it pointing down. (In a bubble only: " ..
+		"not with Text only.)"]), "check")
+	GreyUnless(tailTop, function(db) return not db.bubblesTextOnly end)
+
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Chat bubbles")
@@ -6127,13 +6147,46 @@ do
 		hideBubbled:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 0, -2)
 		GreyUnless(hideBubbled, IfPeek)
 
+		local speechBehind = Check(chatPanel, "chatSpeechBehind", L["Show speech from behind you at the bottom"],
+			L["Says and yells with no bubble on your screen (the speaker is behind you, or out of view) show as " ..
+			"a line of text low in the middle of the screen, with the speaker's name, instead of bringing up chat. " ..
+			"It uses the Chat bubbles page's outline and text size."])
+		speechBehind:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 16, -2)
+		GreyUnless(speechBehind, function(db) return db.chatPeek and db.chatHideBubbled end)
+		local moveSpeech = CreateFrame("Button", nil, chatPanel, "UIPanelButtonTemplate")
+		moveSpeech:SetSize(70, 20)
+		moveSpeech:SetPoint("LEFT", speechBehind.Text or speechBehind.text, "RIGHT", 10, 0)
+		moveSpeech:SetText(L["Move"])
+		Tooltip(moveSpeech, L["Shows a box where speech from behind you appears: drag it where you want the lines."])
+		moveSpeech:SetScript("OnClick", function() ns.MoveSpeechBehind() end)
+
+		local speechName = Check(chatPanel, "speechBehindName", L["Show who said it"],
+			L["Speech from behind you starts with the speaker's name (\"Name says: ...\"). Unticked, just their words show."])
+		speechName:SetPoint("TOPLEFT", speechBehind, "BOTTOMLEFT", 16, -2)
+		GreyUnless(speechName, function(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end)
+
+		-- (On the same line as Show who said it.)
+		local speechClass = Check(chatPanel, "speechBehindClassColor", L["In class colour"],
+			L["Players' names show in their class colour, as in the chat window. NPCs' don't have one."])
+		speechClass:SetPoint("LEFT", speechName.Text or speechName.text, "RIGHT", 16, 0)
+		GreyUnless(speechClass, function(db)
+			return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind and db.speechBehindName
+		end)
+		speechName:HookScript("OnClick", Refresh) -- grey out / enable the class colour
+
+		local speechChatShown = Check(chatPanel, "speechBehindChatShown", L["Also while chat is showing"],
+			L["Speech from behind you shows low on the screen even while the chat window is up (when you hover " ..
+			"it, type, or a message brought it up). Unticked, it shows only while chat is faded, and goes to chat otherwise."])
+		speechChatShown:SetPoint("TOPLEFT", speechName, "BOTTOMLEFT", 0, -2)
+		GreyUnless(speechChatShown, function(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end)
+
 		-- The sections, each a band that opens and closes with a click and its
 		-- body under it (all open to start with). A setting found by search in a
 		-- closed one opens it.
 		local sections = {}
 		local top = CreateFrame("Frame", nil, chatPanel)
 		top:SetSize(1, 1)
-		top:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 2, -16) -- (back to the column edge)
+		top:SetPoint("TOPLEFT", speechChatShown, "BOTTOMLEFT", -30, -16) -- (back to the column edge)
 		local function LayoutNow()
 			local above
 			for _, section in ipairs(sections) do

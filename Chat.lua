@@ -386,7 +386,9 @@ end
 -- chat window: such a line waits BUBBLE_WAIT seconds for its
 -- bubble (it shows a frame or so after the message), and peeks only if none
 -- with its text showed on screen. Bubbles switched off, or kept from addons
--- (in instances, on retail), peek as before.
+-- (in instances, on retail), peek as before. With "Show speech from behind
+-- you" (db.chatSpeechBehind), one with no bubble shows low on the screen
+-- instead (Speech.lua), while its chat window is faded, and never keeps chat up.
 local BUBBLE_SPEECH = {
 	CHAT_MSG_SAY = true, CHAT_MSG_YELL = true, CHAT_MSG_MONSTER_SAY = true, CHAT_MSG_MONSTER_YELL = true,
 }
@@ -394,15 +396,49 @@ local BUBBLE_WAIT = 0.3
 local waiting = {} -- { chatFrame, text, until }
 local bubbleWatch = CreateFrame("Frame")
 
+-- A chat window you can't read now: faded or fading (in CineMode), or hidden
+-- with the UI.
+local function ChatUnseen(chatFrame)
+	if not ns.Flag(chatFrame:IsVisible()) then
+		return true
+	end
+	local alpha = chatFrame:GetEffectiveAlpha()
+	return type(alpha) == "number" and not (issecretvalue and issecretvalue(alpha)) and alpha < 0.95
+end
+
+-- /cine debug speech: prints what happens to each say and yell.
+local function SpeechTrace(text)
+	if ns.speechWatch then
+		ns.Print("speech: " .. text)
+	end
+end
+
+local function SpeakOrPeek(line)
+	local chatFrame = line[1]
+	if ns.speechWatch then
+		SpeechTrace(("no bubble on screen; %s shown %s visible %s alpha %s; option %s"):format(
+			tostring(chatFrame:GetName()), tostring(chatFrame:IsShown()), tostring(chatFrame:IsVisible()),
+			tostring(chatFrame:GetEffectiveAlpha()), tostring(ns.db.chatSpeechBehind)))
+	end
+	if not (ns.db.chatSpeechBehind and ns.ShowSpeechBehind and ns.Flag(chatFrame:IsShown())) then
+		PeekWindow(chatFrame)
+	elseif ChatUnseen(chatFrame) or ns.db.speechBehindChatShown then
+		ns.ShowSpeechBehind(line[4], line[5], line[2], line[6])
+	end
+	-- (Otherwise chat is up and the line is in it. Either way it doesn't keep
+	-- chat up: in a busy place the speech never stops, and chat never faded.)
+end
+
 local function WatchBubbles()
 	local now = GetTime()
 	for i = #waiting, 1, -1 do
 		local line = waiting[i]
 		if ns.IsBubbleOnScreen and ns.IsBubbleOnScreen(line[2]) then
+			SpeechTrace("its bubble is on screen")
 			table.remove(waiting, i)
 		elseif now >= line[3] then
 			table.remove(waiting, i)
-			PeekWindow(line[1])
+			SpeakOrPeek(line)
 		end
 	end
 	if #waiting == 0 then
@@ -411,13 +447,17 @@ local function WatchBubbles()
 end
 local OnBubbleWatch = ns.Profiled("Bubble watch", WatchBubbles)
 
-local function PeekUnlessBubble(chatFrame, event, text)
+local function PeekUnlessBubble(chatFrame, event, text, author, guid)
 	if not (ns.db.chatHideBubbled and BUBBLE_SPEECH[event] and type(text) == "string" and not (issecretvalue and issecretvalue(text))
 			and GetCVarBool and GetCVarBool("chatBubbles")) then
+		if BUBBLE_SPEECH[event] then
+			SpeechTrace(("not waiting for a bubble (hide bubbled %s, bubbles CVar %s)"):format(
+				tostring(ns.db.chatHideBubbled), tostring(GetCVar("chatBubbles"))))
+		end
 		PeekWindow(chatFrame)
 		return
 	end
-	waiting[#waiting + 1] = { chatFrame, text, GetTime() + BUBBLE_WAIT }
+	waiting[#waiting + 1] = { chatFrame, text, GetTime() + BUBBLE_WAIT, event, author, guid }
 	bubbleWatch:SetScript("OnUpdate", OnBubbleWatch)
 end
 
@@ -426,6 +466,7 @@ end
 local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, _, _, _, channelNumber, channelBaseName,
 		_, _, guid)
 	if not ns.db.chatPeek then
+		if BUBBLE_SPEECH[event] then SpeechTrace("\"Show chat when a message arrives\" is off") end
 		return false
 	end
 	local wanted
@@ -447,7 +488,9 @@ local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, 
 		wanted = IsPeekTypeOn(EVENT_PEEK_TYPE[event])
 	end
 	if wanted then
-		PeekUnlessBubble(chatFrame, event, text)
+		PeekUnlessBubble(chatFrame, event, text, author, guid)
+	elseif BUBBLE_SPEECH[event] then
+		SpeechTrace(event .. " not shown here (your own line, or that message type is off on the Chat page)")
 	end
 	return false
 end

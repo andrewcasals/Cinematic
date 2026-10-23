@@ -53,6 +53,7 @@ HealVisionFrames.lua
 Chat.lua
 ChatCopy.lua
 Bubbles.lua
+Speech.lua
 Campfire.lua
 HunterAmmo.lua
 DragEquip.lua
