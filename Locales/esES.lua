@@ -1747,7 +1747,7 @@ L["In CineMode, what shows of mobs and NPCs you still need for a quest objective
 	"sus nombres, en sus placas. Marca de misión: un ! dorado junto a la placa o el nombre con que " ..
 	"los muestre la página Placas de nombre, o el ! solo si no. Nada: lo que diga la configuración de la página Placas de nombre. Una vez " ..
 	"cumplido el objetivo, se desvanecen con las demás. Necesita la página Placas de nombre activada."
-L["Quest icon on their nameplates"] = "Icono de misión en sus placas de nombre"
+L["Quest icon by their nameplates or names"] = "Icono de misión junto a sus placas de nombre o nombres"
 L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show " ..
 	"(beside their names when just their names show). Always on with Quest mark above. Needs the " ..
 	"Nameplates page enabled."] = "Un signo de " ..

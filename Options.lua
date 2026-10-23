@@ -7407,7 +7407,7 @@ local function CreateVisionPanel()
 			GreyUnless(check, QuestPlatesOn)
 		end
 	end
-	local questIcon = Check(content, "plateAlwaysPartQuestIcon", L["Quest icon on their nameplates"],
+	local questIcon = Check(content, "plateAlwaysPartQuestIcon", L["Quest icon by their nameplates or names"],
 		L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show " ..
 		"(beside their names when just their names show). Always on with Quest mark above. Needs the " ..
 		"Nameplates page enabled."])
