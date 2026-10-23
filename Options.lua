@@ -5571,8 +5571,8 @@ local function CreatePlatesPanel()
 	namesNoteIcon:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
 	local namesNoteText = L["In CineMode, away from dungeons and raids, nameplates stay on (just faded), and the game takes its " ..
 		"own names away from over the heads of units with a plate. So where a name is kept up over a faded " ..
-		"plate, Cinematic draws it on the plate itself, made to look like the game's names: coloured, with a " ..
-		"soft shadow, smaller further off. Beyond nameplate range the game's own names show, so a name can " ..
+		"plate, Cinematic draws it on the plate itself, made to look like the game's names: coloured, and " ..
+		"smaller further off. Beyond nameplate range the game's own names show, so a name can " ..
 		"change a little in size or place as its unit crosses that range."]
 	Tooltip(namesNote, namesNoteText)
 	namesNote.searchNote = namesNoteText
@@ -5775,7 +5775,7 @@ local function CreateNameStylePanel()
 
 	-- Presets: a few looks to start from.
 	local PRESETS = {
-		{ L["Like the game's names"], L["Coloured, with a soft shadow (the defaults)."], {} },
+		{ L["Like the game's names"], L["Coloured, no outline or shadow (the defaults)."], {} },
 		{ L["Bold"], L["Coloured, with a thin black outline and no shadow, a little bigger."],
 			{ plateNameOutline = 1, plateNameShadow = false, plateNameSize = 1.1 } },
 		{ L["Subtle"], L["Coloured, a little smaller and see-through, with a lighter shadow."],
@@ -5874,7 +5874,7 @@ local function CreateNameStylePanel()
 	StyleSlider("plateNameY", L["Height"], -30, 30, 1, "%d", 1,
 		L["Moves the names up (or down, below 0) from where the plates put them."])
 	if not ns.isRetail then
-		StyleSlider("plateNameFarY", L["Far height"], -40, 10, 1, "%d", 1,
+		StyleSlider("plateNameFarY", L["Far height"], -60, 10, 1, "%d", 1,
 			L["Their height beyond about 28 yards (Height is for nearer), as the game's names over heads sit " ..
 			"closer to the head further off."])
 	end
