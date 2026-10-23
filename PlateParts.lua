@@ -135,16 +135,16 @@ local function CentreName(unitFrame, on)
 	end
 end
 
--- And coloured as the game colours names over heads (red hostile, yellow
--- neutral, green friendly): the plate's own name is white or grey, the
--- health bar giving its colour. Friendly players too: blue, or white, or
--- the class colours the game gives them (plateNameFriends). The game sets the name's colour again on its own updates, so ours
--- is put back every frame; WoW Forever's colours can be secret, so they go
--- straight from the game to the text. Its text and vertex colours both get
--- it (on WoW Forever they're one: the game sets both), their alpha left as
--- it is for the fades. [name text] = { unit, the game's text colour, its
--- vertex colour }.
-local tinted = {}
+-- Names on plates showing just the name are drawn by a text of our own (with
+-- the Nameplates page's tick), the game's name faded to nothing behind it:
+-- the game keeps setting its own name's colour, font and place (and on WoW
+-- Forever won't even say where it is), ours it leaves alone. Ours sits on the
+-- game's name, moved up or down as the Name Style page says, coloured as the
+-- game colours names over heads: red hostile, yellow neutral, green friendly,
+-- friendly players blue, white or in the class colours their plates give
+-- them (plateNameFriends). WoW Forever's colours and names can be secret: they
+-- go straight from the game to our text. [unit frame] = our text.
+local texts = {}
 
 local function Known(value)
 	return not (issecretvalue and issecretvalue(value))
@@ -164,8 +164,9 @@ local function Style(key)
 	return value
 end
 
--- Whether a unit's name is ours to colour: true for the game's colour for
--- it, or a friendly player's colour of our own ("blue", "white").
+-- Whether a unit's name takes a colour of ours: true for the game's colour
+-- for it over heads, a friendly player's colour of our own ("blue",
+-- "white"), or false for the plate's own (class colours).
 local function TintUnit(unit)
 	local okGuid, guid = pcall(UnitGUID, unit)
 	if okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-")
@@ -183,40 +184,20 @@ end
 local FRIEND_COLOURS = { blue = { 0.4, 0.4, 1 }, white = { 1, 1, 1 } }
 ns.PLATE_FRIEND_COLOURS = FRIEND_COLOURS -- (the Name Style page's preview)
 
--- Sets a name's colour, keeping its alpha.
-local painting -- (so our own setting doesn't paint it again)
-local function SetNameColor(name, r, g, b)
-	painting = true
-	pcall(name.SetTextColor, name, r, g, b, select(4, name:GetTextColor()))
-	if name.SetVertexColor and name.GetVertexColor then
-		pcall(name.SetVertexColor, name, r, g, b, select(4, name:GetVertexColor()))
-	end
-	painting = nil
-end
-
-local function PaintName(name, unit, own)
+local function PaintName(text, unit, own)
 	local colour = FRIEND_COLOURS[own or ""]
 	if colour and not (own == "blue" and Ask(UnitIsPVP, unit)) then
-		SetNameColor(name, colour[1], colour[2], colour[3])
+		text:SetTextColor(colour[1], colour[2], colour[3])
 	elseif UnitSelectionColor then
-		SetNameColor(name, UnitSelectionColor(unit))
+		pcall(function() text:SetTextColor(UnitSelectionColor(unit)) end)
 	else
 		local reaction = Ask(UnitReaction, unit, "player") and UnitReaction(unit, "player")
 		local color = reaction and FACTION_BAR_COLORS and FACTION_BAR_COLORS[reaction]
 		if color then
-			SetNameColor(name, color.r, color.g, color.b)
+			text:SetTextColor(color.r, color.g, color.b)
 		end
 	end
 end
-
--- Drawn like those names too: the nameplate font's outline taken off, a
--- drop shadow in its place. The game's font comes back with the rest of the
--- plate (by its font object where it has one: the object may hold other
--- alphabets than its file). [name text] = { font object, file, size, flags,
--- shadow colour, shadow offset; base, baseFlags: the game's size and flags
--- ours start from; oursSize, oursFlags: what ours came out as; points: the
--- game's anchors, oursY: our first anchor's height }.
-local styled = {}
 
 local OUTLINES = { [0] = "", "OUTLINE", "THICKOUTLINE" }
 
@@ -239,7 +220,6 @@ local ALPHABETS = { "roman", "russian", "korean", "simplifiedchinese", "traditio
 local ALPHABET_FILES = { russian = "Fonts\\FRIZQT___CYR.TTF", korean = "Fonts\\2002.TTF",
 	simplifiedchinese = "Fonts\\ARKai_T.ttf", traditionalchinese = "Fonts\\blei00d.TTF" }
 local families, familyCount = {}, 0
-local ourFamilies = {} -- [font object] = true
 
 -- object: the game's font object for the name (its other alphabets' fonts);
 -- file, size: its roman font as it is; scale: times that size.
@@ -271,9 +251,6 @@ local function NameFamily(object, file, size, scale, flags)
 		local ok, made = pcall(CreateFontFamily, "CinematicPlateName" .. familyCount, members)
 		family = ok and made or false
 		families[key] = family
-		if family then
-			ourFamilies[family] = true
-		end
 	end
 	return family or nil
 end
@@ -292,199 +269,144 @@ local function SetNameFont(text, object, file, size, scale, flags)
 end
 ns.SetPlateNameFont = SetNameFont
 
-local function KeepStyle(name, saved)
-	local file, size, flags = name:GetFont()
-	if file and (saved.dirty or flags ~= saved.oursFlags or size ~= saved.oursSize) then
-		if not saved.dirty or not saved.base then
-			-- (The game's own, set again: its font object too, unless it's ours.)
-			saved.base, saved.baseFile, saved.baseFlags = size, file, flags
-			local object = name.GetFontObject and name:GetFontObject()
-			if object and not ourFamilies[object] then
-				saved.object = object
-			end
+-- Further off, smaller: the game's names over heads shrink with distance,
+-- and take over from the plate's at the edge of nameplate range. WoW Forever
+-- won't say how far a unit is, nor scale its plates, but says whether it's
+-- within 28 yards (the follow distance, for any unit): beyond that a name
+-- takes the Name Style page's far size and height in place of its own
+-- (Size and Height are for nearer than that), so the handover at the
+-- edge is a small step. A unit has to stay over the line a moment first, and
+-- its name then swaps behind a quick crossfade (a size can't fade smoothly).
+-- Not looked at in fights (the game may not allow it), nor on retail, whose
+-- plates scale with distance themselves. [plate] = true while far.
+local FAR_USED = not ns.isRetail
+local FAR_CHECK, FAR_HOLD, FAR_SWAP = 0.25, 0.5, 0.35 -- seconds
+local farOf, farChecked = {}, {}
+local farSince = {} -- [plate] = when it was first seen over the line
+local swaps = {} -- [plate] = { started = time, to = far }
+
+-- Out of sight, gone: the game's names over heads hide behind walls, a
+-- plate shows through them. The game dims a plate whose unit is out of
+-- sight (nameplateOccludedAlphaMult, the plate's own alpha: WoW Forever
+-- does this much), so a name shown alone fades out while its plate is
+-- dimmed, and back as its unit comes into sight. Full plates are left
+-- dimmed as the game has them. [plate] = how far it shows (nil: all).
+local sight = {}
+local SIGHT_FADE = 0.4 -- seconds
+
+-- Whether a unit is within 28 yards: true, false, or nil when the game won't say.
+local function Near(unit)
+	if not unit or InCombatLockdown() then
+		return nil
+	end
+	local ok, near = pcall(CheckInteractDistance, unit, 4)
+	if not ok or not Known(near) or near == nil then
+		return nil
+	end
+	return near and true or false
+end
+
+-- How far a plate's name shows as it swaps size: out to the swap, then back in.
+local function SwapFade(plate)
+	local swap = swaps[plate]
+	if not swap then
+		return 1
+	end
+	local t = (GetTime() - swap.started) / FAR_SWAP
+	if t >= 1 then
+		return 1
+	end
+	return t < 0.5 and 1 - 2 * t or 2 * t - 1
+end
+
+local function UnitOf(plate)
+	return plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+end
+
+-- Draws our text over the game's name: its look when that changed (dirty),
+-- then its words and colour, which the game may change at any time.
+local function DrawName(text, name, unit)
+	if text.dirty then
+		text.dirty = nil
+		local object = name.GetFontObject and name:GetFontObject()
+		local file, size, flags = name:GetFont()
+		if not file then
+			object = _G.SystemFont_NamePlate or _G.GameFontNormal
+			file, size, flags = object:GetFont()
 		end
-		saved.dirty = nil
-		SetNameFont(name, saved.object, saved.baseFile, saved.base, Style("plateNameSize"),
-			Outlined(saved.baseFlags, Style("plateNameOutline")))
-		local _
-		_, saved.oursSize, saved.oursFlags = name:GetFont()
+		SetNameFont(text, object, file, size,
+			Style(text.far and "plateNameFarSize" or "plateNameSize"),
+			Outlined(flags, Style("plateNameOutline")))
+		if Style("plateNameShadow") then
+			text:SetShadowOffset(Style("plateNameShadowX"), Style("plateNameShadowY"))
+			text:SetShadowColor(0, 0, 0, Style("plateNameShadowAlpha"))
+		else
+			text:SetShadowOffset(0, 0)
+		end
+		-- (Far off, a height of its own: a plate's name sits a fixed height over
+		-- the unit's head, and the game's names over heads come down closer to it
+		-- with distance.)
+		text:ClearAllPoints()
+		text:SetPoint("BOTTOM", name, "BOTTOM", 0, Style(text.far and "plateNameFarY" or "plateNameY"))
 	end
-	local x, y, alpha = 0, 0, 0
-	if Style("plateNameShadow") then
-		x, y, alpha = Style("plateNameShadowX"), Style("plateNameShadowY"), Style("plateNameShadowAlpha")
+	-- (The game's own words: a secret name shows all the same.)
+	local ok, words = pcall(name.GetText, name)
+	if not ok then
+		ok, words = pcall(UnitName, unit)
 	end
-	local nowX, nowY = name:GetShadowOffset()
-	local nowAlpha = select(4, name:GetShadowColor())
-	if nowX ~= x or nowY ~= y or nowAlpha ~= alpha then
-		name:SetShadowOffset(x, y)
-		name:SetShadowColor(0, 0, 0, alpha)
+	if ok then
+		pcall(text.SetText, text, words)
 	end
-	-- Its size at any distance: the plate's scale undone.
-	if name.SetScale then
+	local tint = Style("plateNameColour") and TintUnit(unit)
+	if tint then
+		PaintName(text, unit, tint ~= true and tint or nil)
+	else
+		pcall(function() text:SetTextColor(name:GetTextColor()) end)
+	end
+	-- Retail's plates grow as their units come nearer: undone, for one size.
+	if ns.isRetail and text.SetScale then
 		local scale = 1
-		local parent = name:GetParent()
+		local parent = text:GetParent()
 		if Style("plateNameFixedSize") and parent and parent.GetEffectiveScale then
 			local plateScale, uiScale = parent:GetEffectiveScale(), UIParent:GetEffectiveScale()
 			if Known(plateScale) and Known(uiScale) and plateScale > 0 then
 				scale = uiScale / plateScale
 			end
 		end
-		local now = name:GetScale()
-		if not Known(now) or math.abs(now - scale) > 0.001 then
-			name:SetScale(scale)
-		end
-	end
-	-- Its height: the game's anchors, moved. (Anchored anew by the game: those
-	-- are its anchors now. Where the game won't say, left as it is.)
-	-- (A restricted plate's name can't be measured: GetPoint errors.)
-	local count = name:GetNumPoints()
-	local ok, _, _, _, _, firstY = pcall(name.GetPoint, name, 1)
-	if not ok or count == 0 or not Known(firstY)
-		or (firstY == saved.oursY and not saved.dirtyPoints) then
-		return
-	end
-	if not (saved.dirtyPoints and saved.points) then
-		local points = {}
-		for i = 1, count do
-			local point = { pcall(name.GetPoint, name, i) }
-			if not table.remove(point, 1) then
-				return
-			end
-			points[i] = point
-		end
-		saved.points = points
-	end
-	saved.dirtyPoints = nil
-	local shift = Style("plateNameY")
-	name:ClearAllPoints()
-	for _, point in ipairs(saved.points) do
-		name:SetPoint(point[1], point[2], point[3], point[4], point[5] + shift)
-	end
-	ok, _, _, _, _, firstY = pcall(name.GetPoint, name, 1)
-	saved.oursY = ok and firstY or nil
-end
-
-local painter = CreateFrame("Frame")
-painter:Hide()
-painter:SetScript("OnUpdate", ns.Profiled("Plate name colours", function(self)
-	for name, saved in pairs(tinted) do
-		PaintName(name, saved.unit, saved.own)
-	end
-	for name, saved in pairs(styled) do
-		KeepStyle(name, saved)
-	end
-	if not (next(tinted) or next(styled)) then
-		self:Hide()
-	end
-end))
-
--- The game sets the name's colour again as the mouse goes over a unit or the
--- target changes, after this frame's OnUpdate: shown white for a frame
--- before the painter caught it. Painted again on those events too.
-local repainter = CreateFrame("Frame")
-for _, event in ipairs({ "UPDATE_MOUSEOVER_UNIT", "CURSOR_CHANGED", "PLAYER_TARGET_CHANGED",
-	"PLAYER_FOCUS_CHANGED", "PLAYER_SOFT_ENEMY_CHANGED", "PLAYER_SOFT_FRIEND_CHANGED",
-	"PLAYER_SOFT_INTERACT_CHANGED", "UNIT_NAME_UPDATE" }) do
-	pcall(repainter.RegisterEvent, repainter, event) -- (not every client has them all)
-end
-repainter:SetScript("OnEvent", function()
-	for name, saved in pairs(tinted) do
-		PaintName(name, saved.unit, saved.own)
-	end
-end)
-
--- It also sets it again on its own while units move, at any time in the
--- frame: shown white for a frame, again and again (a flicker). So ours goes
--- back on the moment the game sets its colour. [name text] = true once hooked.
-local hookedNames = {}
-
-local function Repaint(name)
-	local saved = tinted[name]
-	if saved and not painting then
-		pcall(PaintName, name, saved.unit, saved.own)
+		text:SetScale(scale)
 	end
 end
 
-local function HookName(name)
-	if hookedNames[name] then
-		return
-	end
-	hookedNames[name] = true
-	for _, method in ipairs({ "SetTextColor", "SetVertexColor", "SetFontObject" }) do
-		if name[method] then
-			hooksecurefunc(name, method, Repaint)
-		end
-	end
-end
-
-local function StyleName(unitFrame, on)
+-- Shows or hides our text for a plate, at alpha (nil: hidden).
+local function OwnName(plate, alpha)
+	local unitFrame = plate.UnitFrame
+	local text = texts[unitFrame]
 	local name = unitFrame.name
-	if not (Usable(name) and name.GetFont and name.SetFont and name.SetShadowOffset) then
+	local unit = UnitOf(plate)
+	if not (alpha and alpha > 0 and unit and Usable(name)) then
+		if text then
+			text:Hide()
+		end
 		return
 	end
-	if on then
-		if not styled[name] then
-			local file, size, flags = name:GetFont()
-			local saved = { object = name.GetFontObject and name:GetFontObject(), file = file, size = size,
-				flags = flags, shadow = { name:GetShadowColor() }, offset = { name:GetShadowOffset() } }
-			styled[name] = saved
-		end
-		KeepStyle(name, styled[name])
-		painter:Show()
-	elseif styled[name] then
-		local saved = styled[name]
-		styled[name] = nil
-		if saved.object then
-			name:SetFontObject(saved.object)
-			-- (Set again, so it takes the object's alphabet for its letters.)
-			pcall(function() name:SetText(name:GetText()) end)
-		elseif saved.file then
-			pcall(name.SetFont, name, saved.file, saved.size, saved.flags)
-		end
-		pcall(name.SetShadowColor, name, unpack(saved.shadow))
-		pcall(name.SetShadowOffset, name, unpack(saved.offset))
-		if name.SetScale then
-			name:SetScale(1)
-		end
-		if saved.points then
-			name:ClearAllPoints()
-			for _, point in ipairs(saved.points) do
-				name:SetPoint(unpack(point))
-			end
-		end
+	if not text then
+		text = unitFrame:CreateFontString(nil, "OVERLAY")
+		text.dirty = true
+		texts[unitFrame] = text
 	end
+	local far = farOf[plate] or false
+	if text.far ~= far then
+		text.far, text.dirty = far, true
+	end
+	DrawName(text, name, unit)
+	text:SetAlpha(alpha)
+	text:Show()
 end
 
-local function TintName(unitFrame, on)
-	local name = unitFrame.name
-	if not (Usable(name) and name.SetTextColor and name.GetTextColor) then
-		return
-	end
-	local unit = unitFrame.unit
-	local tint = on and unit and Style("plateNameColour") and TintUnit(unit)
-	if tint then
-		local saved = tinted[name]
-		if not saved then
-			saved = { text = { name:GetTextColor() } }
-			if name.GetVertexColor then
-				saved.vertex = { name:GetVertexColor() }
-			end
-			tinted[name] = saved
-		end
-		saved.unit, saved.own = unit, tint ~= true and tint or nil
-		HookName(name)
-		PaintName(name, unit, saved.own)
-		painter:Show()
-	elseif tinted[name] then
-		local saved = tinted[name]
-		tinted[name] = nil
-		local r, g, b = unpack(saved.text)
-		pcall(name.SetTextColor, name, r, g, b, select(4, name:GetTextColor()))
-		if saved.vertex then
-			r, g, b = unpack(saved.vertex)
-			pcall(name.SetVertexColor, name, r, g, b, select(4, name:GetVertexColor()))
-		end
-	end
+-- Our text for a plate while it shows (the guild line goes under it).
+function ns.PlateNameText(plate)
+	local text = plate and plate.UnitFrame and texts[plate.UnitFrame]
+	return text and text:IsShown() and text or nil
 end
 
 local function ApplyPlate(plate, personal)
@@ -501,23 +423,22 @@ local function ApplyPlate(plate, personal)
 	local crossfading = kept ~= nil and body < 1
 	local nameOnly = crossfading and body < 0.5
 	local nameFade = crossfading and (nameOnly and 1 - 2 * body or 2 * body - 1) or 1
-	-- (Styled as the Name Style page says, with the Nameplates page's tick.)
-	local styledName = nameOnly and Style("plateNameStyle")
-	CentreName(unitFrame, nameOnly)
-	TintName(unitFrame, styledName)
-	StyleName(unitFrame, styledName)
+	local nameAlpha = nameOnly and kept * nameFade * SwapFade(plate) * (sight[plate] or 1) or 0
+	-- (Our own text in its place, with the Nameplates page's tick: see texts.)
+	local ours = nameOnly and plate ~= personal and Style("plateNameStyle")
+	CentreName(unitFrame, nameOnly and not ours)
+	OwnName(plate, ours and nameAlpha * Style("plateNameAlpha") or nil)
 	for _, part in ipairs(ns.PLATE_PARTS) do
 		local level = plate ~= personal and levels[part] or 1
 		if part == "Name" then
-			if nameOnly then
-				level = kept * nameFade
+			if ours then
+				level = 0
+			elseif nameOnly then
+				level = nameAlpha
 			elseif crossfading then
 				level = math.max(level, kept) * nameFade
 			else
 				level = math.max(level * body, kept or 0)
-			end
-			if styledName then
-				level = level * Style("plateNameAlpha")
 			end
 		else
 			level = level * body
@@ -525,7 +446,7 @@ local function ApplyPlate(plate, personal)
 		EachPartFrame(unitFrame, part, Fade, level)
 	end
 	-- (And the guild line under a name shown alone: PlateGuild.lua.)
-	ns.SetPlateGuild(plate, plate ~= personal and nameOnly and kept * nameFade or 0)
+	ns.SetPlateGuild(plate, plate ~= personal and nameAlpha or 0)
 	if next(held) then
 		keeper:Show()
 	end
@@ -542,11 +463,10 @@ local function ApplyAll()
 end
 ApplyAll = ns.Profiled("Plate parts", ApplyAll)
 
--- After a name style change (the Name Style page): every name-only
--- plate's name drawn again from the game's.
+-- After a name style change (the Name Style page): our texts drawn anew.
 function ns.RefreshPlateNameStyle()
-	for _, saved in pairs(styled) do
-		saved.dirty, saved.dirtyPoints = true, true
+	for _, text in pairs(texts) do
+		text.dirty = true
 	end
 	ApplyAll()
 end
@@ -802,10 +722,11 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 	if event == "NAME_PLATE_UNIT_REMOVED" then
 		plateClass[plate], plateRole[plate] = nil, nil
 		bodyShare[plate], nameShare[plate] = nil, nil
+		farOf[plate], farChecked[plate], farSince[plate], swaps[plate] = nil, nil, nil, nil
+		sight[plate] = nil
 		if Usable(plate.UnitFrame) then
 			CentreName(plate.UnitFrame, false)
-			TintName(plate.UnitFrame, false)
-			StyleName(plate.UnitFrame, false)
+			OwnName(plate, nil)
 		end
 		if icons[plate] then
 			icons[plate]:Hide()
@@ -840,10 +761,84 @@ function ns.SetPlateBody(plate, body, name)
 		return
 	end
 	bodyShare[plate], nameShare[plate] = body, name
+	-- (A name first kept up: far or not straight away, no swap.)
+	if FAR_USED and name and not farChecked[plate] then
+		farChecked[plate] = true
+		farOf[plate] = Near(plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)) == false or nil
+	end
+	if name then
+		ns.WatchFarNames()
+	end
 	ApplyPlate(plate, PersonalPlate())
 	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] then
 		ns.RefreshClassIcon(plate)
 	end
+end
+
+-- Each frame while names show alone: names out of sight faded, swaps
+-- under way faded, and every FAR_CHECK our texts' words and colours looked
+-- at again (a unit changing sides, a name read late) and, on Forever, each
+-- name-only plate's 28 yards.
+-- Only plates showing nothing but the name (a target's filling in has its
+-- own crossfade).
+local farWatch = CreateFrame("Frame")
+farWatch:Hide()
+local farCheckAt = 0
+farWatch:SetScript("OnUpdate", ns.Profiled("Plate names", function(self, elapsed)
+	local now = GetTime()
+	local personal
+	-- (In sight or not: see sight. Plates showing just a name.)
+	for plate in pairs(nameShare) do
+		local level = sight[plate] or 1
+		local okAlpha, alpha = pcall(plate.GetAlpha, plate)
+		local target = ((bodyShare[plate] or 1) < 0.5 and okAlpha and Known(alpha) and alpha < 0.99) and 0 or 1
+		if level ~= target then
+			level = ns.Approach(level, target, elapsed, SIGHT_FADE)
+			sight[plate] = level < 1 and level or nil
+			personal = personal or PersonalPlate()
+			ApplyPlate(plate, personal)
+		end
+	end
+	for plate, swap in pairs(swaps) do
+		personal = personal or PersonalPlate()
+		local t = (now - swap.started) / FAR_SWAP
+		if t >= 0.5 and (farOf[plate] or false) ~= swap.to then
+			farOf[plate] = swap.to or nil -- (at the swap's darkest)
+		end
+		if t >= 1 then
+			swaps[plate] = nil
+		end
+		ApplyPlate(plate, personal)
+	end
+	if now >= farCheckAt then
+		farCheckAt = now + FAR_CHECK
+		for unitFrame, text in pairs(texts) do
+			if text:IsShown() and Usable(unitFrame.name) and unitFrame.unit then
+				DrawName(text, unitFrame.name, unitFrame.unit)
+			end
+		end
+		for plate in pairs(FAR_USED and nameShare or {}) do
+			if (bodyShare[plate] or 1) <= 0 and not swaps[plate] then
+				local near = Near(plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
+				local far = near == false
+				if near == nil or far == (farOf[plate] or false) then
+					farSince[plate] = nil
+				elseif not farSince[plate] then
+					farSince[plate] = now
+				elseif now - farSince[plate] >= FAR_HOLD then
+					farSince[plate] = nil
+					swaps[plate] = { started = now, to = far }
+				end
+			end
+		end
+	end
+	if not (next(nameShare) or next(swaps)) then
+		self:Hide()
+	end
+end))
+
+function ns.WatchFarNames()
+	farWatch:Show()
 end
 
 local QUEST_ICONS_EVERY = 0.5
@@ -962,17 +957,18 @@ function ns.DescribePlateName(unitFrame)
 	end
 	local plate = unitFrame:GetParent()
 	local unit = unitFrame.unit
-	local ok, text = pcall(function()
-		return "text " .. Rgb(name:GetTextColor())
-			.. (name.GetVertexColor and (" vertex " .. Rgb(name:GetVertexColor())) or "")
+	local text = texts[unitFrame]
+	local ok, colours = pcall(function()
+		return "game's text " .. Rgb(name:GetTextColor())
+			.. (text and (", ours " .. Rgb(text:GetTextColor())) or "")
 	end)
 	local okGame, game = pcall(function()
 		return UnitSelectionColor and Rgb(UnitSelectionColor(unit)) or "no UnitSelectionColor"
 	end)
-	return ("%s, game %s, ours=%s unit=%s tint unit=%s body=%s name=%s"):format(
-		ok and text or ("error " .. tostring(text)), okGame and game or ("error " .. tostring(game)),
-		tostring(tinted[name] ~= nil), tostring(unit), tostring(unit and TintUnit(unit)),
-		tostring(bodyShare[plate]), tostring(nameShare[plate]))
+	return ("%s, game %s, ours=%s far=%s unit=%s tint unit=%s body=%s name=%s"):format(
+		ok and colours or ("error " .. tostring(colours)), okGame and game or ("error " .. tostring(game)),
+		tostring(text ~= nil and text:IsShown()), tostring(farOf[plate] or false), tostring(unit),
+		tostring(unit and TintUnit(unit)), tostring(bodyShare[plate]), tostring(nameShare[plate]))
 end
 
 function ns.DescribePlateParts(unitFrame)

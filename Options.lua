@@ -1028,7 +1028,6 @@ do
 			end },
 			{ "Advanced Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
 			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot" },
-			{ "Name Style", "Interface\\Icons\\INV_Scroll_05" },
 			{ "Unit Frames", "Interface\\Icons\\INV_Misc_Head_Dwarf_01" },
 			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision" },
 			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01" },
@@ -5563,6 +5562,21 @@ local function CreatePlatesPanel()
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
 	local namesHeader = Header(content, L["Names"], lastLabel, -24)
+	-- (A warning beside it: on faded plates the names are ours. See PlateParts.)
+	local namesNote = CreateFrame("Button", nil, content)
+	namesNote:SetSize(16, 16)
+	namesNote:SetPoint("LEFT", namesHeader, "RIGHT", 6, 0)
+	local namesNoteIcon = namesNote:CreateTexture(nil, "ARTWORK")
+	namesNoteIcon:SetAllPoints()
+	namesNoteIcon:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
+	local namesNoteText = L["In CineMode, away from dungeons and raids, nameplates stay on (just faded), and the game takes its " ..
+		"own names away from over the heads of units with a plate. So where a name is kept up over a faded " ..
+		"plate, Cinematic draws it on the plate itself, made to look like the game's names: coloured, with a " ..
+		"soft shadow, smaller further off. Beyond nameplate range the game's own names show, so a name can " ..
+		"change a little in size or place as its unit crosses that range."]
+	Tooltip(namesNote, namesNoteText)
+	namesNote.searchNote = namesNoteText
+	namesNote.searchEdges = { top = namesHeader, bottom = namesHeader, left = namesHeader, right = namesNote }
 	local namesTop = TableTop(namesHeader, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
 	local nameTip = L[" Ticking any box turns these names on in the game's options. Ticking none turns them off."]
 	-- (Units with plates show a kept name on theirs in CineMode: see Effects.)
@@ -5616,25 +5630,6 @@ local function CreatePlatesPanel()
 		"Unticked, they fade with the plates (the Plate Parts row decides them on the plates that are up)."]
 		.. markerRangeTip
 	AddPlateRow(namesTop, #ns.NAME_GROUPS + 1, { "PartMarker", L["Raid Marker"], rulePath = "Raid markers" })
-	-- Names kept up over faded plates, drawn like the game's own names (the
-	-- Name Style page has the rest: see PlateParts).
-	local nameStyleCheck = Check(content, "plateNameStyle", L["Style names like the game's"],
-		L["In CineMode a name kept up over a faded nameplate is drawn by the nameplate, not by the game's " ..
-		"names over heads. Ticked, it looks like those: red, yellow or green by how the unit sees you, with " ..
-		"a soft shadow, and one size at any distance. Unticked, it's as the nameplate draws it: white or grey " ..
-		"for every unit, with a heavy black outline, growing and shrinking with distance."],
-		function(value)
-			ns.GetDB().plateNameStyle = value
-			ns.RefreshPlateNameStyle()
-			Refresh()
-		end)
-	nameStyleCheck:SetPoint("TOPLEFT", lastLabel, "BOTTOMLEFT", -(lastLabel.indentX or 0) - 2, -12)
-	local adjustNames = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-	adjustNames:SetSize(100, 22)
-	adjustNames:SetText(L["Adjust..."])
-	adjustNames:SetPoint("LEFT", nameStyleCheck.Text or nameStyleCheck.text, "RIGHT", 12, 0)
-	Tooltip(adjustNames, L["These names' colours, size, outline, height and shadow, with a preview: the Name Style page."])
-	adjustNames:SetScript("OnClick", function() ns.OpenOptions("Name Style") end)
 
 	-- Laid out top to bottom: the master switch, then the grids (friendly
 	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
@@ -5655,13 +5650,13 @@ local function CreatePlatesPanel()
 	RegisterSubpage(canvas, "Nameplates")
 end
 
--- Sub-page: how names look on nameplates showing just the name (CineMode),
--- with a preview of them at the top. The Nameplates page's tick turns it on
--- (PlateParts draws them; settings in Core's DEFAULTS).
+-- Dev build's page: how names look on nameplates showing just the name
+-- (CineMode), with a preview of them at the top, to tune the defaults
+-- (Core's DEFAULTS) players get. PlateParts draws them.
 local function CreateNameStylePanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Name Style"])
+	local title = Label(content, "GameFontNormalLarge", "|cffff4040DEV ONLY|r Name Style")
 	title:SetPoint("TOPLEFT", 16, -16)
 	local subtitle = PageIntro(content, title,
 		L["How names look on nameplates showing just the name: in CineMode, away from dungeons and raids, " ..
@@ -5780,7 +5775,7 @@ local function CreateNameStylePanel()
 
 	-- Presets: a few looks to start from.
 	local PRESETS = {
-		{ L["Like the game's names"], L["Coloured, with a soft shadow, one size at any distance (the defaults)."], {} },
+		{ L["Like the game's names"], L["Coloured, with a soft shadow (the defaults)."], {} },
 		{ L["Bold"], L["Coloured, with a thin black outline and no shadow, a little bigger."],
 			{ plateNameOutline = 1, plateNameShadow = false, plateNameSize = 1.1 } },
 		{ L["Subtle"], L["Coloured, a little smaller and see-through, with a lighter shadow."],
@@ -5788,7 +5783,7 @@ local function CreateNameStylePanel()
 	}
 	local PRESET_KEYS = { "plateNameColour", "plateNameFriends", "plateNameOutline", "plateNameSize",
 		"plateNameAlpha", "plateNameY", "plateNameFixedSize", "plateNameShadow", "plateNameShadowX",
-		"plateNameShadowY", "plateNameShadowAlpha" }
+		"plateNameShadowY", "plateNameShadowAlpha", "plateNameFarSize", "plateNameFarY" }
 	local presetRow = CreateFrame("Frame", nil, content)
 	presetRow:SetSize(PREVIEW_W, 24)
 	stack:Add(presetRow, "label")
@@ -5855,19 +5850,34 @@ local function CreateNameStylePanel()
 	local OUTLINE_NAMES = { [0] = L["None"], L["Thin"], L["Thick"] }
 	StyleSlider("plateNameSize", L["Size"], 50, 200, 5, "%d%%", 100,
 		L["How big the names are, next to the plates' own."])
+	-- (WoW Forever: its plates don't scale with distance, so names beyond 28
+	-- yards take a far size instead. Retail's plates scale themselves.)
+	if not ns.isRetail then
+		StyleSlider("plateNameFarSize", L["Far size"], 30, 100, 5, "%d%%", 100,
+			L["Their size beyond about 28 yards (Size is for nearer), as the game's names over heads shrink " ..
+			"with distance: about the same size as the game's where those take over, at the edge of " ..
+			"nameplate range. (Not changed in fights.)"])
+	end
 	StyleSlider("plateNameOutline", L["Outline"], 0, 2, 1,
 		function(value) return OUTLINE_NAMES[value] or "" end, 1,
 		L["A black border round the letters. The game's names over heads have none, just the shadow."])
 	StyleSlider("plateNameAlpha", L["Opacity"], 20, 100, 5, "%d%%", 100,
 		L["How see-through the names are, on top of their fades."])
-	local fixed = stack:Add(StyleCheck("plateNameFixedSize", L["Same size at any distance"],
-		L["Like the game's names over heads. Unticked, a name grows as its unit comes nearer and shrinks " ..
-		"as it goes, with its plate."]), "check")
-	GreyUnless(fixed, On)
+	if ns.isRetail then
+		local fixed = stack:Add(StyleCheck("plateNameFixedSize", L["Same size at any distance"],
+			L["One size at any distance. Unticked, a name grows and shrinks with its plate as its unit comes " ..
+			"nearer or goes."]), "check")
+		GreyUnless(fixed, On)
+	end
 
 	stack:Header(content, L["Position"])
 	StyleSlider("plateNameY", L["Height"], -30, 30, 1, "%d", 1,
 		L["Moves the names up (or down, below 0) from where the plates put them."])
+	if not ns.isRetail then
+		StyleSlider("plateNameFarY", L["Far height"], -40, 10, 1, "%d", 1,
+			L["Their height beyond about 28 yards (Height is for nearer), as the game's names over heads sit " ..
+			"closer to the head further off."])
+	end
 
 	stack:Header(content, L["Shadow"])
 	local shadow = stack:Add(StyleCheck("plateNameShadow", L["Drop shadow"],
@@ -5885,7 +5895,7 @@ local function CreateNameStylePanel()
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Name Style")
+	RegisterSubpage(canvas, "Name Style", "Name Style")
 end
 
 -- Sub-page for everything chat: fading, new-message peeks (by message type and
@@ -9368,7 +9378,6 @@ ns.OnLanguage(function()
 	CreateVisionPanel()
 	CreateBuffsPanel()
 	CreatePlatesPanel()
-	CreateNameStylePanel()
 	CreateChatPanel()
 	CreateBubblesPanel()
 	CreateFishingPanel()
@@ -9387,7 +9396,11 @@ ns.OnLanguage(function()
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
-	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua).
+	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua,
+	-- and the Name Style page here).
+	if ns.isDev then
+		CreateNameStylePanel()
+	end
 	if ns.isDev and ns.CreateProfileBuilder then
 		ns.CreateProfileBuilder({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })

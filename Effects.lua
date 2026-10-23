@@ -2232,6 +2232,8 @@ function ns.PrintPlatesDebug()
 	end
 	ns.Print(cvar("nameplateShowEnemies") .. ", " .. cvar("nameplateShowFriends") .. ", " ..
 		cvar("nameplateShowFriendlyNPCs") .. ", " .. cvar("nameplateMaxDistance"))
+	-- (Plates of units out of sight, behind a wall: dimmed by the game, where it does.)
+	ns.Print(cvar("nameplateOccludedAlphaMult"))
 	-- Settings only some clients have, listed where they exist.
 	local extra = {}
 	for _, name in ipairs({ "nameplateShowEnemyPlayers", "nameplateShowFriendlyPlayers", "nameplateShowAll",
@@ -2343,7 +2345,9 @@ function ns.PrintPlatesDebug()
 		if i > 8 then break end
 		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 		local shown = plate.UnitFrame and ("%.2f"):format(plate.UnitFrame:GetAlpha()) or "-"
-		ns.Print(("  %s (unit %s, frame alpha %s)"):format(unit and describe(unit) or "?", tostring(unit), shown))
+		local okPlate, plateAlpha = pcall(function() return ("%.2f"):format(plate:GetAlpha()) end)
+		ns.Print(("  %s (unit %s, frame alpha %s, plate alpha %s)"):format(unit and describe(unit) or "?",
+			tostring(unit), shown, okPlate and plateAlpha or "secret"))
 	end
 	-- What still shows on the plate of the unit under the mouse (all of the
 	-- plate, not just its unit frame): a part outside the unit frame, or one

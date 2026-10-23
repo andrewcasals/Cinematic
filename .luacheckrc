@@ -269,7 +269,7 @@ read_globals = {
 	"UnitReaction",
 	"UnitSelectionColor",
 	"CreateFontFamily",
-	"CheckInteractDistance", "IsItemInRange",
+	"CheckInteractDistance", "IsItemInRange", "LEVEL",
 	"FACTION_BAR_COLORS",
 	"UnitIsGhost",
 	"GetAreaSpiritHealerTime",

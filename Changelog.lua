@@ -15,10 +15,9 @@ ns.CHANGELOG_FEATURES = {
 		text = "ElvUI's frames, Deadly Boss Mods' timer bars and RestedXP's guide window now fade in CineMode: " ..
 		"ElvUI's following the Standard Frames rows of the frames they replace, RestedXP's with the Quest " ..
 		"tracker row." },
-	{ date = "2026-10-23", page = "Name Style", title = "Name Style",
+	{ date = "2026-10-23", page = "Nameplates", title = "Names on faded nameplates",
 		text = "Names kept up over faded nameplates in CineMode now look like the game's own names over " ..
-		"heads: coloured, with a soft shadow, the same size at any distance. Fine-tune them, with a preview, " ..
-		"on the new Name Style page." },
+		"heads: coloured by who they are, with a soft shadow, and smaller further off." },
 	{ date = "2026-10-23", page = "Keybinds", title = "Vision wheel",
 		text = "Hold a key to bring up a wheel of the visions and turn Heal, Quest, Duel or Roll Vision on or " ..
 		"off, even in a fight. It's on the master wheel too, and each vision has a toggle key of its own on " ..
